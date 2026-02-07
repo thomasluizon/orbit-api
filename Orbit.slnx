@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Orbit.Api/Orbit.Api.csproj" />
+    <Project Path="src/Orbit.Application/Orbit.Application.csproj" />
+    <Project Path="src/Orbit.Domain/Orbit.Domain.csproj" />
+    <Project Path="src/Orbit.Infrastructure/Orbit.Infrastructure.csproj" />
+  </Folder>
+</Solution>

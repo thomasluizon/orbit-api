@@ -1,0 +1,48 @@
+﻿
+## Build Results
+[Bb]in/
+[Oo]bj/
+.config/
+.fake/
+
+## JetBrains / Rider
+.idea/
+*.sln.iml
+*.DotSettings.user
+
+## Visual Studio (caso abra via VS algum dia)
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Visual Studio Code
+.vscode/
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.tooling
+
+## Test results
+TestResults/
+*.trhx
+
+## Environment Variables & Secrets (CRÍTICO PARA SEU PROJETO)
+.env
+appsettings.Development.json
+appsettings.Local.json
+*.pfx
+*.key
+
+## OS Generated
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Publish
+*.pubxml
+*.publishsettings
