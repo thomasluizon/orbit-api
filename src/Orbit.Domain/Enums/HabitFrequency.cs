@@ -5,5 +5,6 @@ public enum HabitFrequency
     Daily,
     Weekly,
     Monthly,
-    Custom
+    Custom,
+    Flexible
 }

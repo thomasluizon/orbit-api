@@ -1,10 +1,12 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Orbit.Api.Middleware;
+using Orbit.Api.Extensions;
 using Orbit.Application.Chat.Commands;
 
 namespace Orbit.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class ChatController(IMediator mediator) : ControllerBase

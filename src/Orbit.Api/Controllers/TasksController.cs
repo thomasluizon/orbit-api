@@ -1,12 +1,14 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Orbit.Api.Middleware;
+using Orbit.Api.Extensions;
 using Orbit.Application.Tasks.Commands;
 using Orbit.Application.Tasks.Queries;
 using Orbit.Domain.Enums;
 
 namespace Orbit.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class TasksController(IMediator mediator) : ControllerBase
