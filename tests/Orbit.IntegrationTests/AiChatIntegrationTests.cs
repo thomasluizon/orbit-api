@@ -9,8 +9,9 @@ using Xunit;
 namespace Orbit.IntegrationTests;
 
 /// <summary>
-/// Core integration tests for the AI Chat endpoint (15 essential scenarios).
+/// Core integration tests for the AI Chat endpoint (12 essential scenarios).
 /// Tests are fully repeatable - they create a test user, run tests, and clean up everything.
+/// Habits-only: no task creation or task completion tests.
 /// </summary>
 [Collection("Sequential")]
 public class AiChatIntegrationTests : IAsyncLifetime
@@ -78,17 +79,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
                     }
                 }
 
-                // Delete all tasks
-                var tasksResponse = await _client.GetAsync("/api/tasks?includeCompleted=true");
-                if (tasksResponse.IsSuccessStatusCode)
-                {
-                    var tasks = await tasksResponse.Content.ReadFromJsonAsync<List<TaskDto>>();
-                    foreach (var task in tasks ?? [])
-                    {
-                        await _client.DeleteAsync($"/api/tasks/{task.Id}");
-                    }
-                }
-
                 // Delete the test user
                 await _client.DeleteAsync($"/api/users/{_testUserId}");
             }
@@ -100,46 +90,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
         _client.Dispose();
     }
-
-    #region Task Creation Tests (3)
-
-    [Fact]
-    public async Task Chat_CreateTask_WithToday_ShouldSucceed()
-    {
-        // Act
-        var response = await SendChatMessage("i need to buy milk today");
-
-        // Assert
-        response.ExecutedActions.Should().ContainSingle()
-            .Which.Should().StartWith("CreateTask:");
-        response.AiMessage.Should().NotBeNullOrEmpty();
-        response.AiMessage.Should().Match(s => s.ToLower().Contains("milk"));
-    }
-
-    [Fact]
-    public async Task Chat_CreateTask_WithTomorrow_ShouldSucceed()
-    {
-        // Act
-        var response = await SendChatMessage("remind me to call mom tomorrow");
-
-        // Assert
-        response.ExecutedActions.Should().ContainSingle()
-            .Which.Should().StartWith("CreateTask:");
-        response.AiMessage.Should().NotBeNullOrEmpty();
-    }
-
-    [Fact]
-    public async Task Chat_CreateMultipleTasks_ShouldSucceed()
-    {
-        // Act
-        var response = await SendChatMessage("i need to buy eggs, call dentist, and pay bills");
-
-        // Assert
-        response.ExecutedActions.Should().HaveCountGreaterThan(1);
-        response.AiMessage.Should().NotBeNullOrEmpty();
-    }
-
-    #endregion
 
     #region Habit Creation Tests (3)
 
@@ -218,26 +168,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     #endregion
 
-    #region Task Completion Tests (1)
-
-    [Fact]
-    public async Task Chat_CompleteTask_ShouldSucceed()
-    {
-        // Arrange - Create a task
-        await SendChatMessage("i need to water plants");
-
-        // Act - Complete it
-        var response = await SendChatMessage("i finished watering plants");
-
-        // Assert
-        response.ExecutedActions.Should().ContainSingle()
-            .Which.Should().StartWith("UpdateTask:");
-        response.AiMessage.Should().NotBeNullOrEmpty();
-        response.AiMessage.Should().Match(s => s.ToLower().Contains("complet"));
-    }
-
-    #endregion
-
     #region Out-of-Scope Tests (2)
 
     [Fact]
@@ -249,7 +179,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
         // Assert
         response.ExecutedActions.Should().BeEmpty();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        response.AiMessage.ToLower().Should().MatchRegex("(habit|task|can't|cannot|only)");
+        response.AiMessage.ToLower().Should().MatchRegex("(habit|can't|cannot|only)");
     }
 
     [Fact]
@@ -261,7 +191,22 @@ public class AiChatIntegrationTests : IAsyncLifetime
         // Assert
         response.ExecutedActions.Should().BeEmpty();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        response.AiMessage.ToLower().Should().MatchRegex("(habit|task|can't|homework)");
+        response.AiMessage.ToLower().Should().MatchRegex("(habit|can't|homework)");
+    }
+
+    #endregion
+
+    #region Task-like Request Rejection (1)
+
+    [Fact]
+    public async Task Chat_TaskLikeRequest_ShouldRedirectToHabits()
+    {
+        // Act
+        var response = await SendChatMessage("i need to buy milk today");
+
+        // Assert - should return no actions and a redirect message
+        response.ExecutedActions.Should().BeEmpty();
+        response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
     #endregion
@@ -307,10 +252,10 @@ public class AiChatIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Chat_MixedActionsInOneMessage_ShouldHandleAll()
+    public async Task Chat_MixedHabitActionsInOneMessage_ShouldHandleAll()
     {
-        // Act
-        var response = await SendChatMessage("i need to buy milk, i want to start meditating daily, and i ran 5km");
+        // Act - multiple habit-related actions (no tasks)
+        var response = await SendChatMessage("i want to start meditating daily and i ran 5km today");
 
         // Assert
         response.ExecutedActions.Should().HaveCountGreaterThan(1);
@@ -333,7 +278,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
             if (timeSinceLastCall < minDelay)
             {
                 var remainingDelay = minDelay - timeSinceLastCall;
-                Console.WriteLine($"⏱️  Rate limiting: Waiting {remainingDelay.TotalSeconds:F1}s before next API call...");
+                Console.WriteLine($"Rate limiting: Waiting {remainingDelay.TotalSeconds:F1}s before next API call...");
                 await Task.Delay(remainingDelay);
             }
 
@@ -343,7 +288,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
             if (!httpResponse.IsSuccessStatusCode)
             {
                 var errorContent = await httpResponse.Content.ReadAsStringAsync();
-                Console.WriteLine($"❌ API ERROR ({httpResponse.StatusCode}): {errorContent}");
+                Console.WriteLine($"API ERROR ({httpResponse.StatusCode}): {errorContent}");
                 Console.WriteLine($"   For message: '{message}'");
             }
 
@@ -372,7 +317,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
     private record LoginResponse(string UserId, string Token, string Name, string Email);
     private record ChatResponse(List<string> ExecutedActions, string? AiMessage);
     private record HabitDto(Guid Id, string Title);
-    private record TaskDto(Guid Id, string Title);
 
     #endregion
 }
