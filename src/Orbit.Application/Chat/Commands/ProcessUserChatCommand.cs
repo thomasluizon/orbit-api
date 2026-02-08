@@ -118,7 +118,7 @@ public class ProcessUserChatCommandHandler(
             return Result.Failure("Habit does not belong to this user.");
 
         var date = DateOnly.FromDateTime(DateTime.UtcNow);
-        var logResult = habit.Log(date, action.Value);
+        var logResult = habit.Log(date, action.Value, action.Note);
 
         if (logResult.IsFailure)
             return Result.Failure(logResult.Error);
@@ -141,7 +141,8 @@ public class ProcessUserChatCommandHandler(
             action.HabitType ?? HabitType.Boolean,
             action.Description,
             action.Unit,
-            days: action.Days);
+            days: action.Days,
+            isNegative: action.IsNegative ?? false);
 
         if (habitResult.IsFailure)
             return Result.Failure(habitResult.Error);

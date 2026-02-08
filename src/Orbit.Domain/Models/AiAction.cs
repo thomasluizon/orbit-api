@@ -14,4 +14,6 @@ public record AiAction
     public HabitType? HabitType { get; init; }
     public string? Unit { get; init; }
     public List<System.DayOfWeek>? Days { get; init; }
+    public bool? IsNegative { get; init; }
+    public string? Note { get; init; }
 }

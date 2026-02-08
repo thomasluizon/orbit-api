@@ -21,9 +21,17 @@ public class HabitsController(IMediator mediator) : ControllerBase
         HabitType Type,
         string? Unit,
         decimal? TargetValue,
-        IReadOnlyList<System.DayOfWeek>? Days = null);
+        IReadOnlyList<System.DayOfWeek>? Days = null,
+        bool IsNegative = false,
+        IReadOnlyList<string>? SubHabits = null);
 
-    public record LogHabitRequest(DateOnly Date, decimal? Value);
+    public record LogHabitRequest(DateOnly Date, decimal? Value, string? Note = null);
+
+    public record AddSubHabitRequest(string Title, int SortOrder = 0);
+
+    public record SubHabitCompletionRequest(Guid SubHabitId, bool IsCompleted);
+
+    public record LogSubHabitsRequest(DateOnly Date, IReadOnlyList<SubHabitCompletionRequest> Completions);
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(CancellationToken cancellationToken)
@@ -47,7 +55,9 @@ public class HabitsController(IMediator mediator) : ControllerBase
             request.Type,
             request.Unit,
             request.TargetValue,
-            request.Days);
+            request.Days,
+            request.IsNegative,
+            request.SubHabits);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -66,12 +76,73 @@ public class HabitsController(IMediator mediator) : ControllerBase
             HttpContext.GetUserId(),
             id,
             request.Date,
-            request.Value);
+            request.Value,
+            request.Note);
 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Ok(new { logId = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("{id:guid}/sub-habits")]
+    public async Task<IActionResult> AddSubHabit(
+        Guid id,
+        [FromBody] AddSubHabitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new AddSubHabitCommand(
+            HttpContext.GetUserId(),
+            id,
+            request.Title,
+            request.SortOrder);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(new { subHabitId = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpDelete("{id:guid}/sub-habits/{subHabitId:guid}")]
+    public async Task<IActionResult> RemoveSubHabit(
+        Guid id,
+        Guid subHabitId,
+        CancellationToken cancellationToken)
+    {
+        var command = new RemoveSubHabitCommand(
+            HttpContext.GetUserId(),
+            id,
+            subHabitId);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("{id:guid}/sub-habits/log")]
+    public async Task<IActionResult> LogSubHabits(
+        Guid id,
+        [FromBody] LogSubHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var completions = request.Completions
+            .Select(c => new SubHabitCompletion(c.SubHabitId, c.IsCompleted))
+            .ToList();
+
+        var command = new LogSubHabitCommand(
+            HttpContext.GetUserId(),
+            id,
+            request.Date,
+            completions);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok()
             : BadRequest(new { error = result.Error });
     }
 

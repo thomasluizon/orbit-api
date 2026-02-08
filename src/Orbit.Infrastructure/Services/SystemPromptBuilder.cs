@@ -21,7 +21,8 @@ public static class SystemPromptBuilder
 
             ### What You CAN Do:
             - Create and track habits (e.g., "I want to meditate daily", "I want to run 5km every week")
-            - Log habit completions (e.g., "I ran 5km today", "I meditated")
+            - Create negative habits to track things users want to avoid (e.g., "I want to stop smoking", "Track when I bite my nails")
+            - Log habit completions with optional notes (e.g., "I ran 5km today, felt great!", "I meditated - was hard to focus")
             - Interpret natural language about personal routines and recurring activities
             - Track quantifiable activities (distance, count, time, etc.)
 
@@ -63,6 +64,9 @@ public static class SystemPromptBuilder
             16. If days is empty array [], the habit occurs every day/week/month/year without day restrictions
             17. Example: Daily habit for Mon/Wed/Fri = frequencyUnit: Day, frequencyQuantity: 1, days: [Monday, Wednesday, Friday]
             18. Days CANNOT be set if frequencyQuantity > 1 (e.g., "every 2 weeks" cannot have specific days)
+            19. NEGATIVE HABITS: Set isNegative to true for habits the user wants to AVOID or STOP doing
+            20. Negative habits track slip-ups/occurrences of bad habits (smoking, nail biting, etc.)
+            21. When logging habits, include a note if the user provides context or feelings about the activity
             """);
 
         sb.AppendLine();
@@ -84,7 +88,9 @@ public static class SystemPromptBuilder
                     ? $"Every {habit.FrequencyUnit.ToString().ToLower()}"
                     : $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString().ToLower()}s";
 
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Unit: {typeLabel} | Frequency: {freqLabel}");
+                var negativeLabel = habit.IsNegative ? " | NEGATIVE (tracking to avoid)" : "";
+
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Unit: {typeLabel} | Frequency: {freqLabel}{negativeLabel}");
             }
             sb.AppendLine();
             sb.AppendLine("When user mentions an existing habit activity -> use LogHabit with the exact ID above");
@@ -172,6 +178,36 @@ public static class SystemPromptBuilder
               "aiMessage": "Created a gym habit for Mondays and Fridays!"
             }
 
+            User: "I want to stop smoking"
+            {
+              "actions": [
+                {
+                  "type": "CreateHabit",
+                  "title": "Smoking",
+                  "habitType": "Boolean",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "isNegative": true
+                }
+              ],
+              "aiMessage": "Created a negative habit to track smoking. Log each time you slip up so we can track your progress in quitting!"
+            }
+
+            User: "I want to track nail biting"
+            {
+              "actions": [
+                {
+                  "type": "CreateHabit",
+                  "title": "Nail Biting",
+                  "habitType": "Boolean",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "isNegative": true
+                }
+              ],
+              "aiMessage": "Created a negative habit to track nail biting. Log whenever it happens to help you become more aware!"
+            }
+
             User: "I ran 3km today" (Running habit EXISTS with ID "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
             {
               "actions": [
@@ -182,6 +218,30 @@ public static class SystemPromptBuilder
                 }
               ],
               "aiMessage": "Logged 3km for your running habit!"
+            }
+
+            User: "I meditated today, felt really calm afterwards" (Meditation habit EXISTS with ID "b2c3d4e5-f6a7-8901-bcde-f23456789012")
+            {
+              "actions": [
+                {
+                  "type": "LogHabit",
+                  "habitId": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+                  "note": "felt really calm afterwards"
+                }
+              ],
+              "aiMessage": "Logged your meditation session with your note!"
+            }
+
+            User: "I smoked a cigarette, was stressed at work" (Smoking NEGATIVE habit EXISTS with ID "c3d4e5f6-a7b8-9012-cdef-345678901234")
+            {
+              "actions": [
+                {
+                  "type": "LogHabit",
+                  "habitId": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+                  "note": "was stressed at work"
+                }
+              ],
+              "aiMessage": "Logged the slip-up. Noting the stress trigger can help you manage it better next time!"
             }
 
             CRITICAL: For LogHabit, copy the EXACT ID from Active Habits list above!
@@ -215,8 +275,8 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year), frequencyQuantity (integer, defaults to 1), description (optional), days (optional - only when frequencyQuantity is 1)
-            LogHabit: type, habitId, value (if quantifiable)
+            CreateHabit: type, title, habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year), frequencyQuantity (integer, defaults to 1), description (optional), days (optional - only when frequencyQuantity is 1), isNegative (optional, true for habits to avoid/stop)
+            LogHabit: type, habitId, value (if quantifiable), note (optional - include if user shares context/feelings)
 
             ### Frequency Examples:
             - Daily = frequencyUnit: "Day", frequencyQuantity: 1
