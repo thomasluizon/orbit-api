@@ -62,12 +62,11 @@ Plans:
   3. User can see progress trends over time for quantifiable habits
   4. AI gracefully refuses out-of-scope requests with helpful messages instead of attempting invalid actions
   5. AI can create sub-habits and suggest/assign tags when creating habits via chat
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md -- Habit metrics: frequency-aware streaks, completion rates, and quantifiable trends (Wave 1)
+- [ ] 03-02-PLAN.md -- AI enhancement: sub-habit creation, tag suggestion/assignment, refined refusal (Wave 1)
 
 ## Progress
 
@@ -78,4 +77,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Foundation | 3/3 | ✓ Complete | 2026-02-08 |
 | 2. Habit Domain Extensions | 3/3 | ✓ Complete | 2026-02-08 |
-| 3. Metrics and AI Enhancement | 0/3 | Not started | - |
+| 3. Metrics and AI Enhancement | 0/2 | Not started | - |
