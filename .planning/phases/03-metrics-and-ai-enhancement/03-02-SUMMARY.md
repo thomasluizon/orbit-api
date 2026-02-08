@@ -123,6 +123,14 @@ AI expansion infrastructure complete. Ready for:
 - Ollama reliability with longer prompts (user tags section added ~15 lines per tag) - may degrade JSON consistency
 - Tag suggestion quality depends on Gemini's understanding of user's habit patterns (not tested yet)
 
+## Self-Check: PASSED
+
+All claimed files exist and contain expected changes:
+- AiActionType.cs has CreateSubHabit and AssignTag
+- AiAction.cs has SubHabits, TagNames, TagIds fields
+- SystemPromptBuilder.cs has user tags section and new examples
+- All commits verified in git log (6a3623b, 0ff8cf5, 90bad46)
+
 ---
 *Phase: 03-metrics-and-ai-enhancement*
 *Completed: 2026-02-08*
