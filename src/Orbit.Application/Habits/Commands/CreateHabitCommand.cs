@@ -15,7 +15,9 @@ public record CreateHabitCommand(
     HabitType Type,
     string? Unit,
     decimal? TargetValue,
-    IReadOnlyList<System.DayOfWeek>? Days = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<System.DayOfWeek>? Days = null,
+    bool IsNegative = false,
+    IReadOnlyList<string>? SubHabits = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -32,14 +34,27 @@ public class CreateHabitCommandHandler(
             request.Description,
             request.Unit,
             request.TargetValue,
-            request.Days);
+            request.Days,
+            request.IsNegative);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
 
-        await habitRepository.AddAsync(habitResult.Value, cancellationToken);
+        var habit = habitResult.Value;
+
+        if (request.SubHabits is { Count: > 0 })
+        {
+            for (var i = 0; i < request.SubHabits.Count; i++)
+            {
+                var subResult = habit.AddSubHabit(request.SubHabits[i], i);
+                if (subResult.IsFailure)
+                    return Result.Failure<Guid>(subResult.Error);
+            }
+        }
+
+        await habitRepository.AddAsync(habit, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(habitResult.Value.Id);
+        return Result.Success(habit.Id);
     }
 }

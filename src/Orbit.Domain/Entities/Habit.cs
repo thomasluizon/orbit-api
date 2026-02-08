@@ -107,6 +107,27 @@ public class Habit : Entity
         return Result.Success();
     }
 
+    public Result<IReadOnlyList<SubHabitLog>> LogSubHabitCompletions(
+        DateOnly date,
+        IReadOnlyList<(Guid SubHabitId, bool IsCompleted)> completions)
+    {
+        if (!IsActive)
+            return Result.Failure<IReadOnlyList<SubHabitLog>>("Cannot log an inactive habit.");
+
+        var logs = new List<SubHabitLog>();
+
+        foreach (var (subHabitId, isCompleted) in completions)
+        {
+            var subHabit = _subHabits.Find(sh => sh.Id == subHabitId && sh.IsActive);
+            if (subHabit is null)
+                return Result.Failure<IReadOnlyList<SubHabitLog>>($"Sub-habit {subHabitId} not found or inactive.");
+
+            logs.Add(SubHabitLog.Create(subHabitId, date, isCompleted));
+        }
+
+        return Result.Success<IReadOnlyList<SubHabitLog>>(logs.AsReadOnly());
+    }
+
     public void Deactivate() => IsActive = false;
 
     public void Activate() => IsActive = true;

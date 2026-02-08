@@ -37,6 +37,17 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await query.Where(predicate).ToListAsync(cancellationToken);
     }
 
+    public async Task<T?> FindOneTrackedAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<T>>? includes = null,
+        CancellationToken cancellationToken = default)
+    {
+        IQueryable<T> query = _dbSet;
+        if (includes is not null)
+            query = includes(query);
+        return await query.FirstOrDefaultAsync(predicate, cancellationToken);
+    }
+
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
         await _dbSet.AddAsync(entity, cancellationToken);

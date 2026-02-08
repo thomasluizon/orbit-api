@@ -9,7 +9,8 @@ public record LogHabitCommand(
     Guid UserId,
     Guid HabitId,
     DateOnly Date,
-    decimal? Value) : IRequest<Result<Guid>>;
+    decimal? Value,
+    string? Note = null) : IRequest<Result<Guid>>;
 
 public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -25,7 +26,7 @@ public class LogHabitCommandHandler(
         if (habit.UserId != request.UserId)
             return Result.Failure<Guid>("Habit does not belong to this user.");
 
-        var logResult = habit.Log(request.Date, request.Value);
+        var logResult = habit.Log(request.Date, request.Value, request.Note);
 
         if (logResult.IsFailure)
             return Result.Failure<Guid>(logResult.Error);

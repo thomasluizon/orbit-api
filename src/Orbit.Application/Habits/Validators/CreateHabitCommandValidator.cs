@@ -26,5 +26,15 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .NotEmpty()
             .When(x => x.Type == HabitType.Quantifiable)
             .WithMessage("Unit is required for quantifiable habits");
+
+        RuleFor(x => x.SubHabits)
+            .Must(subs => subs is null || subs.Count <= 20)
+            .WithMessage("A habit can have at most 20 sub-habits");
+
+        RuleForEach(x => x.SubHabits)
+            .NotEmpty()
+            .WithMessage("Sub-habit title must not be empty")
+            .MaximumLength(200)
+            .WithMessage("Sub-habit title must not exceed 200 characters");
     }
 }

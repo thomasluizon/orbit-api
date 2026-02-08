@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -13,6 +14,8 @@ public class GetHabitsQueryHandler(
     {
         return await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
+            q => q.Include(h => h.SubHabits.Where(sh => sh.IsActive).OrderBy(sh => sh.SortOrder))
+                  .Include(h => h.Tags),
             cancellationToken);
     }
 }
