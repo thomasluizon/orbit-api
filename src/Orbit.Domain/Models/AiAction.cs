@@ -16,4 +16,7 @@ public record AiAction
     public List<System.DayOfWeek>? Days { get; init; }
     public bool? IsNegative { get; init; }
     public string? Note { get; init; }
+    public List<string>? SubHabits { get; init; }
+    public List<string>? TagNames { get; init; }
+    public List<Guid>? TagIds { get; init; }
 }

@@ -7,7 +7,8 @@ namespace Orbit.Infrastructure.Services;
 public static class SystemPromptBuilder
 {
     public static string BuildSystemPrompt(
-        IReadOnlyList<Habit> activeHabits)
+        IReadOnlyList<Habit> activeHabits,
+        IReadOnlyList<Tag> userTags)
     {
         var sb = new StringBuilder();
 
@@ -25,6 +26,9 @@ public static class SystemPromptBuilder
             - Log habit completions with optional notes (e.g., "I ran 5km today, felt great!", "I meditated - was hard to focus")
             - Interpret natural language about personal routines and recurring activities
             - Track quantifiable activities (distance, count, time, etc.)
+            - Create habits with sub-habits/checklists (e.g., "morning routine with meditate, journal, stretch")
+            - Suggest relevant tags when creating habits
+            - Assign existing tags to habits when user requests
 
             ### What You CANNOT Do:
             - Answer general questions (trivia, facts, explanations)
@@ -95,6 +99,24 @@ public static class SystemPromptBuilder
             sb.AppendLine();
             sb.AppendLine("When user mentions an existing habit activity -> use LogHabit with the exact ID above");
             sb.AppendLine("When user mentions a NEW activity -> use CreateHabit");
+        }
+
+        sb.AppendLine();
+
+        sb.AppendLine("## User's Tags");
+        if (userTags.Count == 0)
+        {
+            sb.AppendLine("(none - user hasn't created tags yet)");
+        }
+        else
+        {
+            foreach (var tag in userTags)
+            {
+                sb.AppendLine($"- \"{tag.Name}\" | ID: {tag.Id} | Color: {tag.Color}");
+            }
+            sb.AppendLine();
+            sb.AppendLine("When user wants to tag a habit with an EXISTING tag -> use AssignTag with the exact ID above");
+            sb.AppendLine("When user mentions a NEW tag that doesn't exist -> include tagNames in aiMessage as suggestions (user creates tags manually)");
         }
 
         sb.AppendLine();
@@ -247,6 +269,59 @@ public static class SystemPromptBuilder
             CRITICAL: For LogHabit, copy the EXACT ID from Active Habits list above!
             Do NOT make up IDs, do NOT use "00000000-0000-0000-0000-000000000000"!
 
+            User: "Create morning routine with meditate, journal, and stretch"
+            {
+              "actions": [
+                {
+                  "type": "CreateHabit",
+                  "title": "Morning Routine",
+                  "habitType": "Boolean",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "subHabits": ["Meditate", "Journal", "Stretch"]
+                }
+              ],
+              "aiMessage": "Created your morning routine with 3 sub-habits: Meditate, Journal, and Stretch!"
+            }
+
+            User: "Add 'cool down' and 'warm up' to my gym habit" (Gym habit EXISTS with ID "xxx")
+            {
+              "actions": [
+                {
+                  "type": "CreateSubHabit",
+                  "habitId": "xxx-guid-here",
+                  "subHabits": ["Warm Up", "Cool Down"]
+                }
+              ],
+              "aiMessage": "Added 2 sub-habits to your Gym habit: Warm Up and Cool Down!"
+            }
+
+            User: "Add the wellness tag to my meditation habit" (Meditation habit ID: "abc...", wellness tag ID: "def...")
+            {
+              "actions": [
+                {
+                  "type": "AssignTag",
+                  "habitId": "abc-123-guid",
+                  "tagIds": ["def-456-guid"]
+                }
+              ],
+              "aiMessage": "Added 'wellness' tag to your meditation habit!"
+            }
+
+            User: "I want to start doing yoga every morning"
+            {
+              "actions": [
+                {
+                  "type": "CreateHabit",
+                  "title": "Yoga",
+                  "habitType": "Boolean",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1
+                }
+              ],
+              "aiMessage": "Created your daily yoga habit! You might want to add tags like 'morning', 'wellness', or 'fitness' to organize it."
+            }
+
             ### Out-of-Scope Request Examples:
 
             User: "What's the capital of France?"
@@ -275,8 +350,10 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year), frequencyQuantity (integer, defaults to 1), description (optional), days (optional - only when frequencyQuantity is 1), isNegative (optional, true for habits to avoid/stop)
+            CreateHabit: type, title, habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year), frequencyQuantity (integer, defaults to 1), description (optional), days (optional - only when frequencyQuantity is 1), isNegative (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles)
             LogHabit: type, habitId, value (if quantifiable), note (optional - include if user shares context/feelings)
+            CreateSubHabit: type, habitId, subHabits (array of titles)
+            AssignTag: type, habitId, tagIds (array of existing tag IDs from the list above)
 
             ### Frequency Examples:
             - Daily = frequencyUnit: "Day", frequencyQuantity: 1
