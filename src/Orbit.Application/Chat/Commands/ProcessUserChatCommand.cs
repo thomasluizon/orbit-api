@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -14,6 +15,7 @@ public record ChatResponse(IReadOnlyList<string> ExecutedActions, string? AiMess
 
 public class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<Tag> tagRepository,
     IAiIntentService aiIntentService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
@@ -37,6 +39,18 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
             dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
+        // 1b. Retrieve user's tags as context for the AI
+        logger.LogInformation("Fetching tags from database...");
+        var tagDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var userTags = await tagRepository.FindAsync(
+            t => t.UserId == request.UserId,
+            cancellationToken);
+
+        tagDbStopwatch.Stop();
+        logger.LogInformation("Tag query completed in {ElapsedMs}ms (Tags: {TagCount})",
+            tagDbStopwatch.ElapsedMilliseconds, userTags.Count);
+
         // 2. Send text + context to the AI intent service for interpretation
         logger.LogInformation("Calling AI intent service...");
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -44,6 +58,7 @@ public class ProcessUserChatCommandHandler(
         var planResult = await aiIntentService.InterpretAsync(
             request.Message,
             activeHabits,
+            userTags,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -67,6 +82,8 @@ public class ProcessUserChatCommandHandler(
             {
                 AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
                 AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
+                AiActionType.CreateSubHabit => await ExecuteCreateSubHabitAsync(action, request.UserId, cancellationToken),
+                AiActionType.AssignTag => await ExecuteAssignTagAsync(action, request.UserId, cancellationToken),
                 _ => Result.Failure($"Unknown action type: {action.Type}")
             };
 
@@ -147,7 +164,73 @@ public class ProcessUserChatCommandHandler(
         if (habitResult.IsFailure)
             return Result.Failure(habitResult.Error);
 
-        await habitRepository.AddAsync(habitResult.Value, ct);
+        var habit = habitResult.Value;
+
+        // Handle inline sub-habits creation
+        if (action.SubHabits is not null && action.SubHabits.Count > 0)
+        {
+            int sortOrder = 0;
+            foreach (var subHabitTitle in action.SubHabits)
+            {
+                var subHabitResult = habit.AddSubHabit(subHabitTitle, sortOrder++);
+                if (subHabitResult.IsFailure)
+                    return Result.Failure(subHabitResult.Error);
+            }
+        }
+
+        await habitRepository.AddAsync(habit, ct);
+        return Result.Success();
+    }
+
+    private async Task<Result> ExecuteCreateSubHabitAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null || action.SubHabits is null || action.SubHabits.Count == 0)
+            return Result.Failure("HabitId and SubHabits are required for CreateSubHabit.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId && h.UserId == userId,
+            q => q.Include(h => h.SubHabits),
+            ct);
+
+        if (habit is null)
+            return Result.Failure("Habit not found.");
+
+        int sortOrder = habit.SubHabits.Count;
+        foreach (var title in action.SubHabits)
+        {
+            var result = habit.AddSubHabit(title, sortOrder++);
+            if (result.IsFailure)
+                return Result.Failure(result.Error);
+        }
+
+        return Result.Success();
+    }
+
+    private async Task<Result> ExecuteAssignTagAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null || action.TagIds is null || action.TagIds.Count == 0)
+            return Result.Failure("HabitId and TagIds are required for AssignTag.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId && h.UserId == userId,
+            q => q.Include(h => h.Tags),
+            ct);
+
+        if (habit is null)
+            return Result.Failure("Habit not found.");
+
+        foreach (var tagId in action.TagIds)
+        {
+            var tag = await tagRepository.GetByIdAsync(tagId, ct);
+            if (tag is null || tag.UserId != userId)
+                continue; // Skip invalid/unauthorized tags silently
+
+            if (!habit.Tags.Any(t => t.Id == tagId))
+                habit.Tags.Add(tag);
+        }
+
         return Result.Success();
     }
 }
