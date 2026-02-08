@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure Foundation** - Modernize schema management, validation, deprecated libraries, and remove task code
 - [x] **Phase 2: Habit Domain Extensions** - Sub-habits, negative habits, tags, notes, and user timezone
-- [ ] **Phase 3: Metrics and AI Enhancement** - Progress metrics and expanded AI capabilities
+- [x] **Phase 3: Metrics and AI Enhancement** - Progress metrics and expanded AI capabilities
 
 ## Phase Details
 
@@ -65,8 +65,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Habit metrics: frequency-aware streaks, completion rates, and quantifiable trends (Wave 1)
-- [ ] 03-02-PLAN.md -- AI enhancement: sub-habit creation, tag suggestion/assignment, refined refusal (Wave 1)
+- [x] 03-01-PLAN.md -- Habit metrics: frequency-aware streaks, completion rates, and quantifiable trends (Wave 1)
+- [x] 03-02-PLAN.md -- AI enhancement: sub-habit creation, tag suggestion/assignment, refined refusal (Wave 1)
 
 ## Progress
 
@@ -77,4 +77,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Foundation | 3/3 | ✓ Complete | 2026-02-08 |
 | 2. Habit Domain Extensions | 3/3 | ✓ Complete | 2026-02-08 |
-| 3. Metrics and AI Enhancement | 0/2 | Not started | - |
+| 3. Metrics and AI Enhancement | 2/2 | ✓ Complete | 2026-02-08 |

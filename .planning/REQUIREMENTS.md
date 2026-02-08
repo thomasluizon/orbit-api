@@ -30,9 +30,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Metrics
 
-- [ ] **METR-01**: User can see current streak and longest streak for any habit (frequency-aware)
-- [ ] **METR-02**: User can see weekly and monthly completion rate for any habit
-- [ ] **METR-03**: User can see progress trends over time for quantifiable habits
+- [x] **METR-01**: User can see current streak and longest streak for any habit (frequency-aware)
+- [x] **METR-02**: User can see weekly and monthly completion rate for any habit
+- [x] **METR-03**: User can see progress trends over time for quantifiable habits
 
 ### Profile
 
@@ -40,9 +40,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### AI
 
-- [ ] **AI-01**: AI gracefully refuses out-of-scope requests instead of attempting invalid actions
-- [ ] **AI-02**: AI can create sub-habits via chat (e.g., "create morning routine with meditate, journal, stretch")
-- [ ] **AI-03**: AI suggests and assigns tags when creating habits via chat
+- [x] **AI-01**: AI gracefully refuses out-of-scope requests instead of attempting invalid actions
+- [x] **AI-02**: AI can create sub-habits via chat (e.g., "create morning routine with meditate, journal, stretch")
+- [x] **AI-03**: AI suggests and assigns tags when creating habits via chat
 
 ### Cleanup
 
@@ -107,12 +107,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TAG-02 | Phase 2 | ✓ Done |
 | TAG-03 | Phase 2 | ✓ Done |
 | PROF-01 | Phase 2 | ✓ Done |
-| METR-01 | Phase 3 | Pending |
-| METR-02 | Phase 3 | Pending |
-| METR-03 | Phase 3 | Pending |
-| AI-01 | Phase 3 | Pending |
-| AI-02 | Phase 3 | Pending |
-| AI-03 | Phase 3 | Pending |
+| METR-01 | Phase 3 | ✓ Done |
+| METR-02 | Phase 3 | ✓ Done |
+| METR-03 | Phase 3 | ✓ Done |
+| AI-01 | Phase 3 | ✓ Done |
+| AI-02 | Phase 3 | ✓ Done |
+| AI-03 | Phase 3 | ✓ Done |
 
 **Coverage:**
 - v1 requirements: 20 total
