@@ -9,7 +9,6 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<User> Users => Set<User>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
-    public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,11 +41,6 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         modelBuilder.Entity<HabitLog>(entity =>
         {
             entity.HasIndex(l => new { l.HabitId, l.Date });
-        });
-
-        modelBuilder.Entity<TaskItem>(entity =>
-        {
-            entity.HasIndex(t => new { t.UserId, t.Status });
         });
     }
 }

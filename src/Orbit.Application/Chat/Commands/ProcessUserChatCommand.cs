@@ -14,7 +14,6 @@ public record ChatResponse(IReadOnlyList<string> ExecutedActions, string? AiMess
 
 public class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<TaskItem> taskRepository,
     IAiIntentService aiIntentService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
@@ -24,38 +23,31 @@ public class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        logger.LogInformation("🚀 Processing chat message: '{Message}'", request.Message);
+        logger.LogInformation("Processing chat message: '{Message}'", request.Message);
 
-        // 1. Retrieve user's active habits and pending tasks as context for the AI
-        logger.LogInformation("🔵 Fetching habits and tasks from database...");
+        // 1. Retrieve user's active habits as context for the AI
+        logger.LogInformation("Fetching habits from database...");
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
             cancellationToken);
 
-        var pendingTasks = await taskRepository.FindAsync(
-            t => t.UserId == request.UserId
-                 && t.Status != TaskItemStatus.Completed
-                 && t.Status != TaskItemStatus.Cancelled,
-            cancellationToken);
-
         dbStopwatch.Stop();
-        logger.LogInformation("✅ Database queries completed in {ElapsedMs}ms (Habits: {HabitCount}, Tasks: {TaskCount})",
-            dbStopwatch.ElapsedMilliseconds, activeHabits.Count, pendingTasks.Count);
+        logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
+            dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
         // 2. Send text + context to the AI intent service for interpretation
-        logger.LogInformation("🔵 Calling AI intent service...");
+        logger.LogInformation("Calling AI intent service...");
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var planResult = await aiIntentService.InterpretAsync(
             request.Message,
             activeHabits,
-            pendingTasks,
             cancellationToken);
 
         aiStopwatch.Stop();
-        logger.LogInformation("✅ AI intent service completed in {ElapsedMs}ms", aiStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("AI intent service completed in {ElapsedMs}ms", aiStopwatch.ElapsedMilliseconds);
 
         if (planResult.IsFailure)
             return Result.Failure<ChatResponse>(planResult.Error);
@@ -64,51 +56,49 @@ public class ProcessUserChatCommandHandler(
         var executedActions = new List<string>();
 
         // 3. Execute each action returned by the AI
-        logger.LogInformation("🔵 Executing {ActionCount} actions...", plan.Actions.Count);
+        logger.LogInformation("Executing {ActionCount} actions...", plan.Actions.Count);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         foreach (var action in plan.Actions)
         {
-            logger.LogInformation("▶️  Executing action: {ActionType} - {Title}", action.Type, action.Title ?? action.HabitId?.ToString() ?? "N/A");
+            logger.LogInformation("Executing action: {ActionType} - {Title}", action.Type, action.Title ?? action.HabitId?.ToString() ?? "N/A");
 
             var actionResult = action.Type switch
             {
                 AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
                 AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
-                AiActionType.CreateTask => await ExecuteCreateTaskAsync(action, request.UserId, cancellationToken),
-                AiActionType.UpdateTask => await ExecuteUpdateTaskAsync(action, cancellationToken),
                 _ => Result.Failure($"Unknown action type: {action.Type}")
             };
 
             if (actionResult.IsSuccess)
             {
                 executedActions.Add($"{action.Type}: {action.Title ?? action.HabitId?.ToString() ?? "N/A"}");
-                logger.LogInformation("✅ Action succeeded: {ActionType}", action.Type);
+                logger.LogInformation("Action succeeded: {ActionType}", action.Type);
             }
             else
             {
-                logger.LogError("❌ Action failed: {ActionType} - Error: {Error}", action.Type, actionResult.Error);
+                logger.LogError("Action failed: {ActionType} - Error: {Error}", action.Type, actionResult.Error);
             }
         }
 
         actionsStopwatch.Stop();
-        logger.LogInformation("✅ Actions executed in {ElapsedMs}ms", actionsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("Actions executed in {ElapsedMs}ms", actionsStopwatch.ElapsedMilliseconds);
 
         // 4. Persist all changes in a single unit of work
-        logger.LogInformation("🔵 Saving changes to database...");
+        logger.LogInformation("Saving changes to database...");
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         saveStopwatch.Stop();
-        logger.LogInformation("✅ Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         totalStopwatch.Stop();
-        logger.LogInformation("🎯 TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   ├─ DB queries: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   ├─ AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   ├─ Execute actions: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   └─ Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   DB queries: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Execute actions: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         return Result.Success(new ChatResponse(executedActions, plan.AiMessage));
     }
@@ -127,7 +117,7 @@ public class ProcessUserChatCommandHandler(
         if (habit.UserId != userId)
             return Result.Failure("Habit does not belong to this user.");
 
-        var date = action.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = DateOnly.FromDateTime(DateTime.UtcNow);
         var logResult = habit.Log(date, action.Value);
 
         if (logResult.IsFailure)
@@ -158,47 +148,5 @@ public class ProcessUserChatCommandHandler(
 
         await habitRepository.AddAsync(habitResult.Value, ct);
         return Result.Success();
-    }
-
-    private async Task<Result> ExecuteCreateTaskAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(action.Title))
-            return Result.Failure("Title is required to create a task.");
-
-        var taskResult = TaskItem.Create(userId, action.Title, action.Description, action.DueDate);
-
-        if (taskResult.IsFailure)
-            return Result.Failure(taskResult.Error);
-
-        await taskRepository.AddAsync(taskResult.Value, ct);
-        return Result.Success();
-    }
-
-    private async Task<Result> ExecuteUpdateTaskAsync(AiAction action, CancellationToken ct)
-    {
-        if (action.TaskId is null)
-            return Result.Failure("Task ID is required for updating.");
-
-        var task = await taskRepository.GetByIdAsync(action.TaskId.Value, ct);
-
-        if (task is null)
-            return Result.Failure($"Task {action.TaskId} not found.");
-
-        if (action.NewStatus is null)
-            return Result.Failure("New status is required for updating a task.");
-
-        var result = action.NewStatus switch
-        {
-            TaskItemStatus.Completed => task.MarkCompleted(),
-            TaskItemStatus.Cancelled => task.Cancel(),
-            TaskItemStatus.InProgress => task.StartProgress(),
-            _ => Result.Failure($"Cannot transition to status: {action.NewStatus}")
-        };
-
-        if (result.IsSuccess)
-            taskRepository.Update(task);
-
-        return result;
     }
 }

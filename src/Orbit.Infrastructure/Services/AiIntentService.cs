@@ -1,12 +1,10 @@
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
@@ -29,14 +27,13 @@ public sealed class OllamaIntentService(
     public async Task<Result<AiActionPlan>> InterpretAsync(
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<TaskItem> pendingTasks,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         logger.LogInformation("🔵 START: Building system prompt...");
         var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, pendingTasks);
+        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);

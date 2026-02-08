@@ -9,6 +9,5 @@ public interface IAiIntentService
     Task<Result<AiActionPlan>> InterpretAsync(
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<TaskItem> pendingTasks,
         CancellationToken cancellationToken = default);
 }
