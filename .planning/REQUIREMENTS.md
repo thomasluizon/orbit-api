@@ -78,14 +78,14 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Frontend/UI | Backend must be solid first — separate milestone |
+| Frontend/UI | Backend must be solid first -- separate milestone |
 | Mobile app | Web API only for now |
 | Social features (sharing, challenges) | Adds complexity without core value |
 | Voice input | Deferred to post-frontend milestone |
 | Habit templates (predefined) | Using user-defined tags instead |
-| Email notifications | Deferred — no email service in stack yet |
+| Email notifications | Deferred -- no email service in stack yet |
 | Real-time features (WebSockets) | Not needed for API-only backend |
-| Habit categories (predefined) | Tags are more flexible — user-defined |
+| Habit categories (predefined) | Tags are more flexible -- user-defined |
 
 ## Traceability
 
@@ -93,32 +93,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | — | Pending |
-| INFRA-02 | — | Pending |
-| INFRA-03 | — | Pending |
-| INFRA-04 | — | Pending |
-| HABIT-01 | — | Pending |
-| HABIT-02 | — | Pending |
-| HABIT-03 | — | Pending |
-| HABIT-04 | — | Pending |
-| HABIT-05 | — | Pending |
-| TAG-01 | — | Pending |
-| TAG-02 | — | Pending |
-| TAG-03 | — | Pending |
-| METR-01 | — | Pending |
-| METR-02 | — | Pending |
-| METR-03 | — | Pending |
-| PROF-01 | — | Pending |
-| AI-01 | — | Pending |
-| AI-02 | — | Pending |
-| AI-03 | — | Pending |
-| CLEAN-01 | — | Pending |
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| INFRA-03 | Phase 1 | Pending |
+| INFRA-04 | Phase 1 | Pending |
+| CLEAN-01 | Phase 1 | Pending |
+| HABIT-01 | Phase 2 | Pending |
+| HABIT-02 | Phase 2 | Pending |
+| HABIT-03 | Phase 2 | Pending |
+| HABIT-04 | Phase 2 | Pending |
+| HABIT-05 | Phase 2 | Pending |
+| TAG-01 | Phase 2 | Pending |
+| TAG-02 | Phase 2 | Pending |
+| TAG-03 | Phase 2 | Pending |
+| PROF-01 | Phase 2 | Pending |
+| METR-01 | Phase 3 | Pending |
+| METR-02 | Phase 3 | Pending |
+| METR-03 | Phase 3 | Pending |
+| AI-01 | Phase 3 | Pending |
+| AI-02 | Phase 3 | Pending |
+| AI-03 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 20 total
-- Mapped to phases: 0
-- Unmapped: 20
+- Mapped to phases: 20
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after initial definition*
+*Last updated: 2026-02-07 after roadmap creation*
