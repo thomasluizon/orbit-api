@@ -9,10 +9,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Database schema managed via EF Core migrations (replace EnsureCreated)
-- [ ] **INFRA-02**: Request validation via FluentValidation + MediatR pipeline behavior
-- [ ] **INFRA-03**: API documentation via Scalar + Microsoft.AspNetCore.OpenApi (replace Swashbuckle)
-- [ ] **INFRA-04**: JWT token handling via Microsoft.IdentityModel.JsonWebTokens (replace legacy library)
+- [x] **INFRA-01**: Database schema managed via EF Core migrations (replace EnsureCreated)
+- [x] **INFRA-02**: Request validation via FluentValidation + MediatR pipeline behavior
+- [x] **INFRA-03**: API documentation via Scalar + Microsoft.AspNetCore.OpenApi (replace Swashbuckle)
+- [x] **INFRA-04**: JWT token handling via Microsoft.IdentityModel.JsonWebTokens (replace legacy library)
 
 ### Habits
 
@@ -46,7 +46,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Cleanup
 
-- [ ] **CLEAN-01**: All task management code removed (entities, commands, queries, controllers, tests)
+- [x] **CLEAN-01**: All task management code removed (entities, commands, queries, controllers, tests)
 
 ## v2 Requirements
 
@@ -93,11 +93,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| CLEAN-01 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | ✓ Done |
+| INFRA-02 | Phase 1 | ✓ Done |
+| INFRA-03 | Phase 1 | ✓ Done |
+| INFRA-04 | Phase 1 | ✓ Done |
+| CLEAN-01 | Phase 1 | ✓ Done |
 | HABIT-01 | Phase 2 | Pending |
 | HABIT-02 | Phase 2 | Pending |
 | HABIT-03 | Phase 2 | Pending |

@@ -12,7 +12,7 @@ Orbit's backend solidification milestone transforms the existing MVP into a full
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Infrastructure Foundation** - Modernize schema management, validation, deprecated libraries, and remove task code
+- [x] **Phase 1: Infrastructure Foundation** - Modernize schema management, validation, deprecated libraries, and remove task code
 - [ ] **Phase 2: Habit Domain Extensions** - Sub-habits, negative habits, tags, notes, and user timezone
 - [ ] **Phase 3: Metrics and AI Enhancement** - Progress metrics and expanded AI capabilities
 
@@ -31,9 +31,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Migrations baseline + OpenAPI/Scalar swap + JWT upgrade (Wave 1)
-- [ ] 01-02-PLAN.md -- FluentValidation pipeline + validators (Wave 2)
-- [ ] 01-03-PLAN.md -- Task removal across all layers + RemoveTaskItems migration (Wave 2)
+- [x] 01-01-PLAN.md -- Migrations baseline + OpenAPI/Scalar swap + JWT upgrade (Wave 1)
+- [x] 01-02-PLAN.md -- FluentValidation pipeline + validators (Wave 2)
+- [x] 01-03-PLAN.md -- Task removal across all layers + RemoveTaskItems migration (Wave 2)
 
 ### Phase 2: Habit Domain Extensions
 **Goal**: Users can manage sub-habits, negative habits, tags, notes, and their timezone -- the complete habit model
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Foundation | 0/3 | Planned | - |
+| 1. Infrastructure Foundation | 3/3 | ✓ Complete | 2026-02-08 |
 | 2. Habit Domain Extensions | 0/3 | Not started | - |
 | 3. Metrics and AI Enhancement | 0/3 | Not started | - |
