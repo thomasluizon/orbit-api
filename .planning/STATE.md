@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Users can track, build, and break habits with flexible scheduling, progress metrics, and AI-assisted management
-**Current focus:** Phase 2 - Habit Domain Extensions (In progress)
+**Current focus:** Phase 2 - Habit Domain Extensions (Complete)
 
 ## Current Position
 
 Phase: 2 of 3 (Habit Domain Extensions)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-08 -- Completed 02-02-PLAN.md (application logic for sub-habits, negative habits, and log notes)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-08 -- Completed 02-03-PLAN.md (tags CRUD, profile/timezone, habit tag filtering)
 
-Progress: [######....] 56%
+Progress: [########..] 78%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 6min
-- Total execution time: 0.53 hours
+- Total plans completed: 6
+- Average duration: 5min
+- Total execution time: 0.6 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 3/3 | 20min | 7min |
-| 02-habit-domain-extensions | 2/3 | 12min | 6min |
+| 02-habit-domain-extensions | 3/3 | 16min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 8min, 5min, 7min
+- Last 5 plans: 4min, 8min, 5min, 7min, 4min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -61,6 +61,9 @@ Recent decisions affecting current work:
 - 02-02: Added Microsoft.EntityFrameworkCore to Application project for Include support -- pragmatic clean architecture tradeoff
 - 02-02: Used FindOneTrackedAsync instead of OrbitDbContext injection to keep Application independent of Infrastructure
 - 02-02: Added Habit.LogSubHabitCompletions domain method because SubHabitLog.Create is internal to Domain
+- 02-03: Tag assignment via EF navigation property manipulation (habit.Tags.Add/Remove) instead of OrbitDbContext injection
+- 02-03: Tag filtering via repository predicate with h.Tags.Any() -- EF translates to SQL without DbContext
+- 02-03: Comma-separated GUID query parameter pattern for filtering (GET /api/habits?tags=id1,id2)
 
 ### Pending Todos
 
@@ -75,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed plan 02-02 (application logic), ready for plan 02-03
-Resume file: .planning/phases/02-habit-domain-extensions/02-03-PLAN.md
+Stopped at: Completed plan 02-03 (tags, profile, filtering) -- Phase 2 complete
+Resume file: .planning/phases/03-ai-chat-metrics/ (Phase 3 ready)
