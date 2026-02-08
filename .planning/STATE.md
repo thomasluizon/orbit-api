@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Users can track, build, and break habits with flexible scheduling, progress metrics, and AI-assisted management
-**Current focus:** Phase 1 - Infrastructure Foundation
+**Current focus:** Phase 1 - Infrastructure Foundation (COMPLETE)
 
 ## Current Position
 
 Phase: 1 of 3 (Infrastructure Foundation)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-08 -- Completed 01-02-PLAN.md (request validation pipeline)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-08 -- Completed 01-03-PLAN.md (remove task management)
 
-Progress: [##........] 22%
+Progress: [###.......] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 6min
-- Total execution time: 0.20 hours
+- Total plans completed: 3
+- Average duration: 7min
+- Total execution time: 0.33 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-infrastructure-foundation | 2/3 | 12min | 6min |
+| 01-infrastructure-foundation | 3/3 | 20min | 7min |
 
 **Recent Trend:**
-- Last 5 plans: 8min, 4min
-- Trend: improving
+- Last 5 plans: 8min, 4min, 8min
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - 01-02: Used FluentValidation.DependencyInjectionExtensions (not deprecated FluentValidation.AspNetCore) for DI scanning
 - 01-02: ValidationBehavior throws FluentValidation.ValidationException, caught by ValidationExceptionHandler -- clean separation
 - 01-02: Validators auto-discovered via AddValidatorsFromAssemblyContaining -- no manual registration for future validators
+- 01-03: Habits-only domain -- removed all task management code (entity, enum, commands, queries, controller)
+- 01-03: AI prompt explicitly rejects task-like requests with habit redirect suggestions
+- 01-03: AiAction record no longer has DueDate, TaskId, or NewStatus properties
 
 ### Pending Todos
 
@@ -60,10 +63,9 @@ None.
 - EnsureCreated-to-migrations transition COMPLETED successfully (baseline migration applied, __EFMigrationsHistory populated)
 - Ollama reliability with expanded AI prompts is uncertain -- may need Gemini-only for some features
 - Pre-existing MSB3277 warning in IntegrationTests (EF Core Relational version conflict) -- cosmetic, not blocking
-- Stale working directory changes detected (deleted TaskItem files from unrelated session) -- restored via git checkout, not indicative of a persistent issue
 
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed plan 01-02 (request validation pipeline), ready for plan 01-03
-Resume file: .planning/phases/01-infrastructure-foundation/01-03-PLAN.md
+Stopped at: Completed plan 01-03 (remove task management), Phase 1 complete, ready for Phase 2
+Resume file: .planning/phases/02-habit-enhancements/
