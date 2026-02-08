@@ -12,9 +12,8 @@ public class Habit : Entity
     public int? FrequencyQuantity { get; private set; }
     public HabitType Type { get; private set; }
     public string? Unit { get; private set; }
-    public decimal? TargetValue { get; private set; }
     public bool IsActive { get; private set; } = true;
-    public bool IsNegative { get; private set; }
+    public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
@@ -40,9 +39,8 @@ public class Habit : Entity
         HabitType type,
         string? description = null,
         string? unit = null,
-        decimal? targetValue = null,
         IReadOnlyList<System.DayOfWeek>? days = null,
-        bool isNegative = false,
+        bool isBadHabit = false,
         DateOnly? dueDate = null,
         Guid? parentHabitId = null)
     {
@@ -70,9 +68,8 @@ public class Habit : Entity
             FrequencyQuantity = frequencyQuantity,
             Type = type,
             Unit = unit?.Trim(),
-            TargetValue = targetValue,
             Days = days?.ToList() ?? [],
-            IsNegative = isNegative,
+            IsBadHabit = isBadHabit,
             DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             ParentHabitId = parentHabitId,
             CreatedAtUtc = DateTime.UtcNow
@@ -90,7 +87,7 @@ public class Habit : Entity
         if (Type == HabitType.Quantifiable && value is null)
             return Result.Failure<HabitLog>("A value is required for quantifiable habits.");
 
-        if (Type == HabitType.Boolean && !IsNegative && _logs.Exists(l => l.Date == date))
+        if (Type == HabitType.Boolean && !IsBadHabit && _logs.Exists(l => l.Date == date))
             return Result.Failure<HabitLog>("This habit has already been logged for this date.");
 
         var log = HabitLog.Create(Id, date, Type == HabitType.Boolean ? 1 : value!.Value, note);

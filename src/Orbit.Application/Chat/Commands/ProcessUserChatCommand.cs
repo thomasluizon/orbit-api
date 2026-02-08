@@ -15,6 +15,8 @@ public record ChatResponse(IReadOnlyList<string> ExecutedActions, string? AiMess
 
 public class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
+    IGenericRepository<User> userRepository,
     IGenericRepository<Tag> tagRepository,
     IAiIntentService aiIntentService,
     IUnitOfWork unitOfWork,
@@ -133,14 +135,24 @@ public class ProcessUserChatCommandHandler(
         if (habit.UserId != userId)
             return Result.Failure("Habit does not belong to this user.");
 
-        var date = DateOnly.FromDateTime(DateTime.UtcNow);
-        var logResult = habit.Log(date, action.Value, action.Note);
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        var today = GetUserToday(user);
+        var logResult = habit.Log(today, action.Value, action.Note);
 
         if (logResult.IsFailure)
             return Result.Failure(logResult.Error);
 
-        habitRepository.Update(habit);
+        await habitLogRepository.AddAsync(logResult.Value, ct);
         return Result.Success();
+    }
+
+    private static DateOnly GetUserToday(User? user)
+    {
+        var timeZone = user?.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
+
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
     }
 
     private async Task<Result> ExecuteCreateHabitAsync(
@@ -158,7 +170,7 @@ public class ProcessUserChatCommandHandler(
             action.Description,
             action.Unit,
             days: action.Days,
-            isNegative: action.IsNegative ?? false,
+            isBadHabit: action.IsBadHabit ?? false,
             dueDate: action.DueDate);
 
         if (habitResult.IsFailure)

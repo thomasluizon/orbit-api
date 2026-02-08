@@ -20,13 +20,12 @@ public class HabitsController(IMediator mediator) : ControllerBase
         int? FrequencyQuantity,
         HabitType Type,
         string? Unit,
-        decimal? TargetValue,
         IReadOnlyList<System.DayOfWeek>? Days = null,
-        bool IsNegative = false,
+        bool IsBadHabit = false,
         IReadOnlyList<string>? SubHabits = null,
         DateOnly? DueDate = null);
 
-    public record LogHabitRequest(DateOnly Date, decimal? Value, string? Note = null);
+    public record LogHabitRequest(decimal? Value = null, string? Note = null);
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
@@ -61,9 +60,8 @@ public class HabitsController(IMediator mediator) : ControllerBase
             request.FrequencyQuantity,
             request.Type,
             request.Unit,
-            request.TargetValue,
             request.Days,
-            request.IsNegative,
+            request.IsBadHabit,
             request.SubHabits,
             request.DueDate);
 
@@ -77,15 +75,14 @@ public class HabitsController(IMediator mediator) : ControllerBase
     [HttpPost("{id:guid}/log")]
     public async Task<IActionResult> LogHabit(
         Guid id,
-        [FromBody] LogHabitRequest request,
+        [FromBody] LogHabitRequest? request,
         CancellationToken cancellationToken)
     {
         var command = new LogHabitCommand(
             HttpContext.GetUserId(),
             id,
-            request.Date,
-            request.Value,
-            request.Note);
+            request?.Value,
+            request?.Note);
 
         var result = await mediator.Send(command, cancellationToken);
 

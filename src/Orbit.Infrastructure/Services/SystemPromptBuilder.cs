@@ -22,7 +22,6 @@ public static class SystemPromptBuilder
 
             ### What You CAN Do:
             - Create and track habits (e.g., "I want to meditate daily", "I want to run 5km every week")
-            - Create negative habits to track things users want to avoid (e.g., "I want to stop smoking", "Track when I bite my nails")
             - Log habit completions with optional notes (e.g., "I ran 5km today, felt great!", "I meditated - was hard to focus")
             - Interpret natural language about personal routines and recurring activities
             - Track quantifiable activities (distance, count, time, etc.)
@@ -70,8 +69,8 @@ public static class SystemPromptBuilder
             16. If days is empty array [], the habit occurs every day/week/month/year without day restrictions
             17. Example: Daily habit for Mon/Wed/Fri = frequencyUnit: Day, frequencyQuantity: 1, days: [Monday, Wednesday, Friday]
             18. Days CANNOT be set if frequencyQuantity > 1 (e.g., "every 2 weeks" cannot have specific days)
-            19. NEGATIVE HABITS: Set isNegative to true for habits the user wants to AVOID or STOP doing
-            20. Negative habits track slip-ups/occurrences of bad habits (smoking, nail biting, etc.)
+            19. BAD HABITS: Set isBadHabit to true for habits the user wants to AVOID or STOP doing
+            20. Bad habits track slip-ups/occurrences of bad habits (smoking, nail biting, etc.)
             21. When logging habits, include a note if the user provides context or feelings about the activity
             """);
 
@@ -96,10 +95,10 @@ public static class SystemPromptBuilder
                         ? $"Every {habit.FrequencyUnit.ToString()!.ToLower()}"
                         : $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString()!.ToLower()}s";
 
-                var negativeLabel = habit.IsNegative ? " | NEGATIVE (tracking to avoid)" : "";
+                var badHabitLabel = habit.IsBadHabit ? " | BAD HABIT (tracking to avoid)" : "";
                 var completedLabel = habit.IsCompleted ? " | COMPLETED" : "";
 
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Unit: {typeLabel} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{negativeLabel}{completedLabel}");
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Unit: {typeLabel} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{badHabitLabel}{completedLabel}");
 
                 foreach (var child in habit.Children)
                 {
@@ -225,7 +224,7 @@ public static class SystemPromptBuilder
                   "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "isNegative": true,
+                  "isBadHabit": true,
                   "dueDate": "2026-02-08"
                 }
               ],
@@ -241,7 +240,7 @@ public static class SystemPromptBuilder
                   "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "isNegative": true,
+                  "isBadHabit": true,
                   "dueDate": "2026-02-08"
                 }
               ],
@@ -378,7 +377,7 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isNegative (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles, creates child habits under this parent)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles, creates child habits under this parent)
             LogHabit: type, habitId, value (if quantifiable), note (optional - include if user shares context/feelings)
             AssignTag: type, habitId, tagIds (array of existing tag IDs from the list above)
 

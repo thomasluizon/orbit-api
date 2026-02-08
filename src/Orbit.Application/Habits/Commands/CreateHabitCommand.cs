@@ -14,9 +14,8 @@ public record CreateHabitCommand(
     int? FrequencyQuantity,
     HabitType Type,
     string? Unit,
-    decimal? TargetValue,
     IReadOnlyList<System.DayOfWeek>? Days = null,
-    bool IsNegative = false,
+    bool IsBadHabit = false,
     IReadOnlyList<string>? SubHabits = null,
     DateOnly? DueDate = null) : IRequest<Result<Guid>>;
 
@@ -34,9 +33,8 @@ public class CreateHabitCommandHandler(
             request.Type,
             request.Description,
             request.Unit,
-            request.TargetValue,
             request.Days,
-            request.IsNegative,
+            request.IsBadHabit,
             request.DueDate);
 
         if (habitResult.IsFailure)

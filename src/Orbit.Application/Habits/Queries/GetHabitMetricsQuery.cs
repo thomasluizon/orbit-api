@@ -129,18 +129,14 @@ public class GetHabitMetricsQueryHandler(
         {
             var isLogged = logDates.Contains(date);
 
-            if (habit.IsNegative)
+            if (habit.IsBadHabit)
             {
-                // For negative habits, streak continues while date is NOT logged
                 if (isLogged)
                     break;
                 streak++;
             }
             else
             {
-                // For positive habits, streak continues while date IS logged
-                // Special case: if the most recent expected date is today and it hasn't been logged yet,
-                // don't count it but don't break the streak either
                 if (date == today && !isLogged && streak == 0)
                     continue;
 
@@ -167,32 +163,16 @@ public class GetHabitMetricsQueryHandler(
         foreach (var date in expectedDates.OrderByDescending(d => d))
         {
             var isLogged = logDates.Contains(date);
+            var breaksStreak = habit.IsBadHabit ? isLogged : !isLogged;
 
-            if (habit.IsNegative)
+            if (breaksStreak)
             {
-                // For negative habits, count consecutive dates NOT logged
-                if (isLogged)
-                {
-                    maxStreak = Math.Max(maxStreak, currentStreak);
-                    currentStreak = 0;
-                }
-                else
-                {
-                    currentStreak++;
-                }
+                maxStreak = Math.Max(maxStreak, currentStreak);
+                currentStreak = 0;
             }
             else
             {
-                // For positive habits, count consecutive dates logged
-                if (!isLogged)
-                {
-                    maxStreak = Math.Max(maxStreak, currentStreak);
-                    currentStreak = 0;
-                }
-                else
-                {
-                    currentStreak++;
-                }
+                currentStreak++;
             }
         }
 
@@ -214,7 +194,7 @@ public class GetHabitMetricsQueryHandler(
         if (expectedInRange.Count == 0)
             return 0;
 
-        var completedCount = habit.IsNegative
+        var completedCount = habit.IsBadHabit
             ? expectedInRange.Count(d => !logDates.Contains(d))
             : expectedInRange.Count(d => logDates.Contains(d));
 
