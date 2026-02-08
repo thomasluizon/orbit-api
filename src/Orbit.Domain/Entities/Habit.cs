@@ -14,11 +14,17 @@ public class Habit : Entity
     public string? Unit { get; private set; }
     public decimal? TargetValue { get; private set; }
     public bool IsActive { get; private set; } = true;
+    public bool IsNegative { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
 
     private readonly List<HabitLog> _logs = [];
     public IReadOnlyCollection<HabitLog> Logs => _logs.AsReadOnly();
+
+    private readonly List<SubHabit> _subHabits = [];
+    public IReadOnlyCollection<SubHabit> SubHabits => _subHabits.AsReadOnly();
+
+    public ICollection<Tag> Tags { get; private set; } = [];
 
     private Habit() { }
 
@@ -31,7 +37,8 @@ public class Habit : Entity
         string? description = null,
         string? unit = null,
         decimal? targetValue = null,
-        IReadOnlyList<System.DayOfWeek>? days = null)
+        IReadOnlyList<System.DayOfWeek>? days = null,
+        bool isNegative = false)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -59,11 +66,12 @@ public class Habit : Entity
             Unit = unit?.Trim(),
             TargetValue = targetValue,
             Days = days?.ToList() ?? [],
+            IsNegative = isNegative,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
 
-    public Result<HabitLog> Log(DateOnly date, decimal? value = null)
+    public Result<HabitLog> Log(DateOnly date, decimal? value = null, string? note = null)
     {
         if (!IsActive)
             return Result.Failure<HabitLog>("Cannot log an inactive habit.");
@@ -71,12 +79,32 @@ public class Habit : Entity
         if (Type == HabitType.Quantifiable && value is null)
             return Result.Failure<HabitLog>("A value is required for quantifiable habits.");
 
-        if (Type == HabitType.Boolean && _logs.Exists(l => l.Date == date))
+        if (Type == HabitType.Boolean && !IsNegative && _logs.Exists(l => l.Date == date))
             return Result.Failure<HabitLog>("This habit has already been logged for this date.");
 
-        var log = HabitLog.Create(Id, date, Type == HabitType.Boolean ? 1 : value!.Value);
+        var log = HabitLog.Create(Id, date, Type == HabitType.Boolean ? 1 : value!.Value, note);
         _logs.Add(log);
         return Result.Success(log);
+    }
+
+    public Result<SubHabit> AddSubHabit(string title, int sortOrder)
+    {
+        var result = SubHabit.Create(Id, title, sortOrder);
+        if (result.IsFailure)
+            return result;
+
+        _subHabits.Add(result.Value);
+        return result;
+    }
+
+    public Result RemoveSubHabit(Guid subHabitId)
+    {
+        var subHabit = _subHabits.Find(sh => sh.Id == subHabitId);
+        if (subHabit is null)
+            return Result.Failure("Sub-habit not found.");
+
+        subHabit.Deactivate();
+        return Result.Success();
     }
 
     public void Deactivate() => IsActive = false;

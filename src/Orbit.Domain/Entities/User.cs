@@ -12,6 +12,7 @@ public class User : Entity
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
     public string PasswordHash { get; private set; } = string.Empty;
+    public string? TimeZone { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
     private User() { }
@@ -73,4 +74,20 @@ public class User : Entity
         Name = name.Trim();
         Email = email.Trim().ToLowerInvariant();
     }
+
+    public Result SetTimeZone(string ianaTimeZoneId)
+    {
+        try
+        {
+            TimeZoneInfo.FindSystemTimeZoneById(ianaTimeZoneId);
+            TimeZone = ianaTimeZoneId;
+            return Result.Success();
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return Result.Failure($"Invalid timezone: {ianaTimeZoneId}");
+        }
+    }
+
+    public void ClearTimeZone() => TimeZone = null;
 }
