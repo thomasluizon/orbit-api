@@ -9,28 +9,29 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 
 ## Current Position
 
-Phase: 1 of 3 (Infrastructure Foundation)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-02-08 -- Completed 01-03-PLAN.md (remove task management)
+Phase: 2 of 3 (Habit Domain Extensions)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-08 -- Completed 02-01-PLAN.md (domain model extensions)
 
-Progress: [###.......] 33%
+Progress: [####......] 44%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 7min
-- Total execution time: 0.33 hours
+- Total plans completed: 4
+- Average duration: 6min
+- Total execution time: 0.42 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 3/3 | 20min | 7min |
+| 02-habit-domain-extensions | 1/3 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 8min, 4min, 8min
+- Last 5 plans: 8min, 4min, 8min, 5min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -53,6 +54,10 @@ Recent decisions affecting current work:
 - 01-03: Habits-only domain -- removed all task management code (entity, enum, commands, queries, controller)
 - 01-03: AI prompt explicitly rejects task-like requests with habit redirect suggestions
 - 01-03: AiAction record no longer has DueDate, TaskId, or NewStatus properties
+- 02-01: SubHabit is a separate entity (not self-referencing Habit) for simplicity
+- 02-01: HabitTag does not extend Entity base class -- uses composite key (HabitId, TagId)
+- 02-01: Negative boolean habits allow multiple logs per day (slip-up tracking)
+- 02-01: User.TimeZone validated via TimeZoneInfo.FindSystemTimeZoneById for cross-platform IANA support
 
 ### Pending Todos
 
@@ -67,5 +72,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed plan 01-03 (remove task management), Phase 1 complete, ready for Phase 2
-Resume file: .planning/phases/02-habit-enhancements/
+Stopped at: Completed plan 02-01 (domain model extensions), ready for plan 02-02
+Resume file: .planning/phases/02-habit-domain-extensions/02-02-PLAN.md
