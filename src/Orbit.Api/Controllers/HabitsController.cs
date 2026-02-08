@@ -168,4 +168,20 @@ public class HabitsController(IMediator mediator) : ControllerBase
             ? NoContent()
             : BadRequest(new { error = result.Error });
     }
+
+    [HttpGet("{id:guid}/metrics")]
+    public async Task<IActionResult> GetMetrics(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetHabitMetricsQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("{id:guid}/trends")]
+    public async Task<IActionResult> GetTrends(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetHabitTrendQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
 }
