@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Users can track, build, and break habits with flexible scheduling, progress metrics, and AI-assisted management
-**Current focus:** Phase 1 - Infrastructure Foundation (COMPLETE)
+**Current focus:** Phase 2 - Habit Domain Extensions (In progress)
 
 ## Current Position
 
 Phase: 2 of 3 (Habit Domain Extensions)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-08 -- Completed 02-01-PLAN.md (domain model extensions)
+Last activity: 2026-02-08 -- Completed 02-02-PLAN.md (application logic for sub-habits, negative habits, and log notes)
 
-Progress: [####......] 44%
+Progress: [######....] 56%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 6min
-- Total execution time: 0.42 hours
+- Total execution time: 0.53 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 3/3 | 20min | 7min |
-| 02-habit-domain-extensions | 1/3 | 5min | 5min |
+| 02-habit-domain-extensions | 2/3 | 12min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 8min, 4min, 8min, 5min
+- Last 5 plans: 4min, 8min, 5min, 7min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -58,6 +58,9 @@ Recent decisions affecting current work:
 - 02-01: HabitTag does not extend Entity base class -- uses composite key (HabitId, TagId)
 - 02-01: Negative boolean habits allow multiple logs per day (slip-up tracking)
 - 02-01: User.TimeZone validated via TimeZoneInfo.FindSystemTimeZoneById for cross-platform IANA support
+- 02-02: Added Microsoft.EntityFrameworkCore to Application project for Include support -- pragmatic clean architecture tradeoff
+- 02-02: Used FindOneTrackedAsync instead of OrbitDbContext injection to keep Application independent of Infrastructure
+- 02-02: Added Habit.LogSubHabitCompletions domain method because SubHabitLog.Create is internal to Domain
 
 ### Pending Todos
 
@@ -72,5 +75,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed plan 02-01 (domain model extensions), ready for plan 02-02
-Resume file: .planning/phases/02-habit-domain-extensions/02-02-PLAN.md
+Stopped at: Completed plan 02-02 (application logic), ready for plan 02-03
+Resume file: .planning/phases/02-habit-domain-extensions/02-03-PLAN.md
