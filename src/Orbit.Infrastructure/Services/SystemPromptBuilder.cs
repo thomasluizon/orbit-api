@@ -1,6 +1,5 @@
 using System.Text;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -22,9 +21,8 @@ public static class SystemPromptBuilder
 
             ### What You CAN Do:
             - Create and track habits (e.g., "I want to meditate daily", "I want to run 5km every week")
-            - Log habit completions with optional notes (e.g., "I ran 5km today, felt great!", "I meditated - was hard to focus")
+            - Log habit completions with optional notes (e.g., "I ran today, felt great!", "I meditated - was hard to focus")
             - Interpret natural language about personal routines and recurring activities
-            - Track quantifiable activities (distance, count, time, etc.)
             - Create habits with sub-habits/checklists (e.g., "morning routine with meditate, journal, stretch")
             - Suggest relevant tags when creating habits
             - Assign existing tags to habits when user requests
@@ -56,8 +54,7 @@ public static class SystemPromptBuilder
             6. A single message may contain MULTIPLE actions - extract ALL of them
             7. ONLY use LogHabit if the user mentions an activity matching an EXISTING habit from the list below
             8. If activity doesn't match existing habit, use CreateHabit first
-            9. For quantifiable activities (km, glasses, minutes, etc.), use habitType: Quantifiable
-            10. Default dates to TODAY when not specified
+            9. Default dates to TODAY when not specified
             22. ALWAYS include dueDate (YYYY-MM-DD) when creating habits - this is when the habit is first due
             23. For recurring habits, dueDate is when it starts. For one-time tasks, dueDate is when it's due by
             24. When user says "tomorrow", "next week", "in 3 days", calculate the correct date relative to today
@@ -85,10 +82,6 @@ public static class SystemPromptBuilder
         {
             foreach (var habit in activeHabits)
             {
-                var typeLabel = habit.Type == HabitType.Quantifiable
-                    ? $"{habit.Unit}"
-                    : "Boolean";
-
                 var freqLabel = habit.FrequencyUnit is null
                     ? "One-time"
                     : habit.FrequencyQuantity == 1
@@ -98,7 +91,7 @@ public static class SystemPromptBuilder
                 var badHabitLabel = habit.IsBadHabit ? " | BAD HABIT (tracking to avoid)" : "";
                 var completedLabel = habit.IsCompleted ? " | COMPLETED" : "";
 
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Unit: {typeLabel} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{badHabitLabel}{completedLabel}");
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{badHabitLabel}{completedLabel}");
 
                 foreach (var child in habit.Children)
                 {
@@ -137,20 +130,18 @@ public static class SystemPromptBuilder
         sb.AppendLine("""
             ### In-Scope Request Examples:
 
-            User: "I ran 5km today" (NO running habit exists)
+            User: "I want to run every day"
             {
               "actions": [
                 {
                   "type": "CreateHabit",
                   "title": "Running",
-                  "habitType": "Quantifiable",
-                  "unit": "km",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "dueDate": "2026-02-08"
                 }
               ],
-              "aiMessage": "Created a new running habit! I'll track your km daily."
+              "aiMessage": "Created a new daily running habit!"
             }
 
             User: "Track my friend's birthday on 25/06 yearly"
@@ -159,7 +150,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Friend's Birthday (25/06)",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Year",
                   "frequencyQuantity": 1,
                   "dueDate": "2026-06-25"
@@ -174,7 +164,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Yoga",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Week",
                   "frequencyQuantity": 2,
                   "dueDate": "2026-02-08"
@@ -189,7 +178,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Meditation",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
@@ -205,7 +193,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Gym",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "days": ["Monday", "Friday"],
@@ -221,7 +208,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Smoking",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "isBadHabit": true,
@@ -237,7 +223,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Nail Biting",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "isBadHabit": true,
@@ -247,16 +232,15 @@ public static class SystemPromptBuilder
               "aiMessage": "Created a negative habit to track nail biting. Log whenever it happens to help you become more aware!"
             }
 
-            User: "I ran 3km today" (Running habit EXISTS with ID "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+            User: "I ran today" (Running habit EXISTS with ID "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
             {
               "actions": [
                 {
                   "type": "LogHabit",
-                  "habitId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-                  "value": 3
+                  "habitId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
                 }
               ],
-              "aiMessage": "Logged 3km for your running habit!"
+              "aiMessage": "Logged your running habit!"
             }
 
             User: "I meditated today, felt really calm afterwards" (Meditation habit EXISTS with ID "b2c3d4e5-f6a7-8901-bcde-f23456789012")
@@ -292,7 +276,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Morning Routine",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "subHabits": ["Meditate", "Journal", "Stretch"],
@@ -320,7 +303,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Yoga",
-                  "habitType": "Boolean",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
                   "dueDate": "2026-02-08"
@@ -355,7 +337,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Buy Milk",
-                  "habitType": "Boolean",
                   "dueDate": "2026-02-08"
                 }
               ],
@@ -368,7 +349,6 @@ public static class SystemPromptBuilder
                 {
                   "type": "CreateHabit",
                   "title": "Buy Eggs",
-                  "habitType": "Boolean",
                   "dueDate": "2026-02-09"
                 }
               ],
@@ -377,8 +357,8 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), habitType (optional), unit (if Quantifiable), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles, creates child habits under this parent)
-            LogHabit: type, habitId, value (if quantifiable), note (optional - include if user shares context/feelings)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles, creates child habits under this parent)
+            LogHabit: type, habitId, note (optional - include if user shares context/feelings)
             AssignTag: type, habitId, tagIds (array of existing tag IDs from the list above)
 
             ### Frequency Examples:

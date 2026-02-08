@@ -12,8 +12,6 @@ public record CreateHabitCommand(
     string? Description,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
-    HabitType Type,
-    string? Unit,
     IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
     IReadOnlyList<string>? SubHabits = null,
@@ -30,9 +28,7 @@ public class CreateHabitCommandHandler(
             request.Title,
             request.FrequencyUnit,
             request.FrequencyQuantity,
-            request.Type,
             request.Description,
-            request.Unit,
             request.Days,
             request.IsBadHabit,
             request.DueDate);
@@ -51,7 +47,6 @@ public class CreateHabitCommandHandler(
                     subTitle,
                     request.FrequencyUnit,
                     request.FrequencyQuantity,
-                    HabitType.Boolean,
                     dueDate: request.DueDate,
                     parentHabitId: habit.Id);
 

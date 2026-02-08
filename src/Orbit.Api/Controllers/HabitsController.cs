@@ -18,14 +18,12 @@ public class HabitsController(IMediator mediator) : ControllerBase
         string? Description,
         FrequencyUnit? FrequencyUnit,
         int? FrequencyQuantity,
-        HabitType Type,
-        string? Unit,
         IReadOnlyList<System.DayOfWeek>? Days = null,
         bool IsBadHabit = false,
         IReadOnlyList<string>? SubHabits = null,
         DateOnly? DueDate = null);
 
-    public record LogHabitRequest(decimal? Value = null, string? Note = null);
+    public record LogHabitRequest(string? Note = null);
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
@@ -58,8 +56,6 @@ public class HabitsController(IMediator mediator) : ControllerBase
             request.Description,
             request.FrequencyUnit,
             request.FrequencyQuantity,
-            request.Type,
-            request.Unit,
             request.Days,
             request.IsBadHabit,
             request.SubHabits,
@@ -81,7 +77,6 @@ public class HabitsController(IMediator mediator) : ControllerBase
         var command = new LogHabitCommand(
             HttpContext.GetUserId(),
             id,
-            request?.Value,
             request?.Note);
 
         var result = await mediator.Send(command, cancellationToken);
@@ -110,11 +105,4 @@ public class HabitsController(IMediator mediator) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
-    [HttpGet("{id:guid}/trends")]
-    public async Task<IActionResult> GetTrends(Guid id, CancellationToken cancellationToken)
-    {
-        var query = new GetHabitTrendQuery(HttpContext.GetUserId(), id);
-        var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
-    }
 }

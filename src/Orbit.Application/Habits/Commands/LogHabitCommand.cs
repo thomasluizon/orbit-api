@@ -9,7 +9,6 @@ namespace Orbit.Application.Habits.Commands;
 public record LogHabitCommand(
     Guid UserId,
     Guid HabitId,
-    decimal? Value,
     string? Note = null) : IRequest<Result<Guid>>;
 
 public class LogHabitCommandHandler(
@@ -34,7 +33,7 @@ public class LogHabitCommandHandler(
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         var today = GetUserToday(user);
 
-        var logResult = habit.Log(today, request.Value, request.Note);
+        var logResult = habit.Log(today, request.Note);
 
         if (logResult.IsFailure)
             return Result.Failure<Guid>(logResult.Error);

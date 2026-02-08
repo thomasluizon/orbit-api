@@ -8,11 +8,8 @@ public record AiAction
     public Guid? HabitId { get; init; }
     public string? Title { get; init; }
     public string? Description { get; init; }
-    public decimal? Value { get; init; }
     public FrequencyUnit? FrequencyUnit { get; init; }
     public int? FrequencyQuantity { get; init; }
-    public HabitType? HabitType { get; init; }
-    public string? Unit { get; init; }
     public List<System.DayOfWeek>? Days { get; init; }
     public bool? IsBadHabit { get; init; }
     public DateOnly? DueDate { get; init; }

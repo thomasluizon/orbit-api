@@ -13,11 +13,6 @@ public class LogHabitCommandValidator : AbstractValidator<LogHabitCommand>
         RuleFor(x => x.HabitId)
             .NotEmpty();
 
-        RuleFor(x => x.Value)
-            .GreaterThan(0)
-            .When(x => x.Value.HasValue)
-            .WithMessage("Log value must be positive");
-
         RuleFor(x => x.Note)
             .MaximumLength(500)
             .When(x => x.Note is not null)

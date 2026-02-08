@@ -10,8 +10,6 @@ public class Habit : Entity
     public string? Description { get; private set; }
     public FrequencyUnit? FrequencyUnit { get; private set; }
     public int? FrequencyQuantity { get; private set; }
-    public HabitType Type { get; private set; }
-    public string? Unit { get; private set; }
     public bool IsActive { get; private set; } = true;
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
@@ -36,9 +34,7 @@ public class Habit : Entity
         string title,
         FrequencyUnit? frequencyUnit,
         int? frequencyQuantity,
-        HabitType type,
         string? description = null,
-        string? unit = null,
         IReadOnlyList<System.DayOfWeek>? days = null,
         bool isBadHabit = false,
         DateOnly? dueDate = null,
@@ -53,9 +49,6 @@ public class Habit : Entity
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
 
-        if (type == HabitType.Quantifiable && string.IsNullOrWhiteSpace(unit))
-            return Result.Failure<Habit>("Unit is required for quantifiable habits.");
-
         if (days?.Count > 0 && frequencyQuantity != 1)
             return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
 
@@ -66,8 +59,6 @@ public class Habit : Entity
             Description = description?.Trim(),
             FrequencyUnit = frequencyUnit,
             FrequencyQuantity = frequencyQuantity,
-            Type = type,
-            Unit = unit?.Trim(),
             Days = days?.ToList() ?? [],
             IsBadHabit = isBadHabit,
             DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
@@ -76,7 +67,7 @@ public class Habit : Entity
         });
     }
 
-    public Result<HabitLog> Log(DateOnly date, decimal? value = null, string? note = null)
+    public Result<HabitLog> Log(DateOnly date, string? note = null)
     {
         if (!IsActive)
             return Result.Failure<HabitLog>("Cannot log an inactive habit.");
@@ -84,13 +75,10 @@ public class Habit : Entity
         if (IsCompleted)
             return Result.Failure<HabitLog>("Cannot log a completed habit.");
 
-        if (Type == HabitType.Quantifiable && value is null)
-            return Result.Failure<HabitLog>("A value is required for quantifiable habits.");
-
-        if (Type == HabitType.Boolean && !IsBadHabit && _logs.Exists(l => l.Date == date))
+        if (!IsBadHabit && _logs.Exists(l => l.Date == date))
             return Result.Failure<HabitLog>("This habit has already been logged for this date.");
 
-        var log = HabitLog.Create(Id, date, Type == HabitType.Boolean ? 1 : value!.Value, note);
+        var log = HabitLog.Create(Id, date, 1, note);
         _logs.Add(log);
 
         // One-time task: mark as completed

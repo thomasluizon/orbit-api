@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260208051431_RenameIsNegativeAndDropTargetValue")]
-    partial class RenameIsNegativeAndDropTargetValue
+    [Migration("20260208052110_SimplifyHabitModel")]
+    partial class SimplifyHabitModel
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -64,12 +64,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Unit")
                         .HasColumnType("text");
 
                     b.Property<Guid>("UserId")

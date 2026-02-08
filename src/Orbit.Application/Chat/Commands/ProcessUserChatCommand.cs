@@ -137,7 +137,7 @@ public class ProcessUserChatCommandHandler(
 
         var user = await userRepository.GetByIdAsync(userId, ct);
         var today = GetUserToday(user);
-        var logResult = habit.Log(today, action.Value, action.Note);
+        var logResult = habit.Log(today, action.Note);
 
         if (logResult.IsFailure)
             return Result.Failure(logResult.Error);
@@ -166,9 +166,7 @@ public class ProcessUserChatCommandHandler(
             action.Title,
             action.FrequencyUnit,
             action.FrequencyQuantity,
-            action.HabitType ?? HabitType.Boolean,
             action.Description,
-            action.Unit,
             days: action.Days,
             isBadHabit: action.IsBadHabit ?? false,
             dueDate: action.DueDate);
@@ -188,7 +186,6 @@ public class ProcessUserChatCommandHandler(
                     subTitle,
                     action.FrequencyUnit,
                     action.FrequencyQuantity,
-                    HabitType.Boolean,
                     dueDate: action.DueDate,
                     parentHabitId: habit.Id);
 
