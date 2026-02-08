@@ -34,9 +34,21 @@ public class HabitsController(IMediator mediator) : ControllerBase
     public record LogSubHabitsRequest(DateOnly Date, IReadOnlyList<SubHabitCompletionRequest> Completions);
 
     [HttpGet]
-    public async Task<IActionResult> GetHabits(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetHabits(
+        [FromQuery] string? tags,
+        CancellationToken cancellationToken)
     {
-        var query = new GetHabitsQuery(HttpContext.GetUserId());
+        IReadOnlyList<Guid>? tagIds = null;
+
+        if (!string.IsNullOrWhiteSpace(tags))
+        {
+            tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(s => Guid.TryParse(s, out _))
+                .Select(Guid.Parse)
+                .ToList();
+        }
+
+        var query = new GetHabitsQuery(HttpContext.GetUserId(), tagIds);
         var habits = await mediator.Send(query, cancellationToken);
         return Ok(habits);
     }
