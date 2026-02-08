@@ -1,8 +1,12 @@
 using System.Text;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
+using Orbit.Application.Behaviors;
+using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
@@ -78,9 +82,15 @@ else
     });
 }
 
+// --- Validation ---
+builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
+
 // --- MediatR ---
 builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly));
+{
+    cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly);
+    cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+});
 
 // --- Controllers ---
 builder.Services.AddControllers()
@@ -88,6 +98,10 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
+
+// --- Exception Handling ---
+builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // --- OpenAPI + Scalar ---
 builder.Services.AddOpenApi(options =>
@@ -111,6 +125,7 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
+app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
