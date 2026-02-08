@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Orbit.Domain.Entities;
 
 namespace Orbit.Infrastructure.Persistence;
@@ -23,6 +24,17 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                 .WithOne()
                 .HasForeignKey(l => l.HabitId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(h => h.Days)
+                .HasConversion(
+                    v => v.ToList(),
+                    v => v.ToList())
+                .HasColumnType("text[]")
+                .Metadata.SetValueComparer(
+                    new ValueComparer<ICollection<System.DayOfWeek>>(
+                        (l1, l2) => l1!.SequenceEqual(l2!),
+                        c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                        c => c.ToList()));
 
             entity.HasIndex(h => new { h.UserId, h.IsActive });
         });

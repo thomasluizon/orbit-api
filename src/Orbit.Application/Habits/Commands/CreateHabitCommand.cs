@@ -10,10 +10,12 @@ public record CreateHabitCommand(
     Guid UserId,
     string Title,
     string? Description,
-    HabitFrequency Frequency,
+    FrequencyUnit FrequencyUnit,
+    int FrequencyQuantity,
     HabitType Type,
     string? Unit,
-    decimal? TargetValue) : IRequest<Result<Guid>>;
+    decimal? TargetValue,
+    IReadOnlyList<System.DayOfWeek>? Days = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -24,11 +26,13 @@ public class CreateHabitCommandHandler(
         var habitResult = Habit.Create(
             request.UserId,
             request.Title,
-            request.Frequency,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
             request.Type,
             request.Description,
             request.Unit,
-            request.TargetValue);
+            request.TargetValue,
+            request.Days);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

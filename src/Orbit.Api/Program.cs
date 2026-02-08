@@ -52,17 +52,30 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// --- AI (Claude via Anthropic Messages API) ---
-builder.Services.Configure<ClaudeSettings>(
-    builder.Configuration.GetSection(ClaudeSettings.SectionName));
+// --- AI Provider Configuration ---
+var aiProvider = builder.Configuration.GetValue<string>("AiProvider") ?? "Ollama";
 
-builder.Services.AddHttpClient<IAiIntentService, ClaudeIntentService>((sp, client) =>
+if (aiProvider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
 {
-    var settings = builder.Configuration.GetSection(ClaudeSettings.SectionName).Get<ClaudeSettings>()!;
-    client.BaseAddress = new Uri("https://api.anthropic.com/");
-    client.DefaultRequestHeaders.Add("x-api-key", settings.ApiKey);
-    client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-});
+    // Gemini (Google) API
+    builder.Services.Configure<GeminiSettings>(
+        builder.Configuration.GetSection(GeminiSettings.SectionName));
+
+    builder.Services.AddHttpClient<IAiIntentService, GeminiIntentService>();
+}
+else
+{
+    // Ollama (Local LLM) - Default
+    builder.Services.Configure<OllamaSettings>(
+        builder.Configuration.GetSection(OllamaSettings.SectionName));
+
+    builder.Services.AddHttpClient<IAiIntentService, OllamaIntentService>((sp, client) =>
+    {
+        var settings = builder.Configuration.GetSection(OllamaSettings.SectionName).Get<OllamaSettings>()
+                       ?? new OllamaSettings();
+        client.BaseAddress = new Uri(settings.BaseUrl);
+    });
+}
 
 // --- MediatR ---
 builder.Services.AddMediatR(cfg =>
@@ -122,17 +135,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-
-    if (app.Environment.IsDevelopment())
-    {
-        // Drop and recreate to add PasswordHash column
-        await db.Database.EnsureDeletedAsync();
-        await db.Database.EnsureCreatedAsync();
-    }
-    else
-    {
-        await db.Database.EnsureCreatedAsync();
-    }
+    await db.Database.EnsureCreatedAsync();
 }
 
 // --- Pipeline ---
@@ -152,3 +155,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Make Program class accessible to integration tests
+public partial class Program { }

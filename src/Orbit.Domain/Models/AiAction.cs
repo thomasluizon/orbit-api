@@ -12,7 +12,9 @@ public record AiAction
     public DateOnly? DueDate { get; init; }
     public Guid? TaskId { get; init; }
     public TaskItemStatus? NewStatus { get; init; }
-    public HabitFrequency? Frequency { get; init; }
+    public FrequencyUnit? FrequencyUnit { get; init; }
+    public int? FrequencyQuantity { get; init; }
     public HabitType? HabitType { get; init; }
     public string? Unit { get; init; }
+    public List<System.DayOfWeek>? Days { get; init; }
 }

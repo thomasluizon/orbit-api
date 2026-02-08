@@ -30,7 +30,7 @@ public class LogHabitCommandHandler(
         if (logResult.IsFailure)
             return Result.Failure<Guid>(logResult.Error);
 
-        habitRepository.Update(habit);
+        // No need to call Update - EF tracks the new HabitLog automatically
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(logResult.Value.Id);

@@ -1,0 +1,184 @@
+Test run for C:\Users\thoma\Documents\Programming\Projects\Orbit\tests\Orbit.IntegrationTests\bin\Debug\net10.0\Orbit.IntegrationTests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.1 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+C:\Users\thoma\Documents\Programming\Projects\Orbit\tests\Orbit.IntegrationTests\bin\Debug\net10.0\Orbit.IntegrationTests.dll
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.2)
+[xUnit.net 00:00:01.38]   Discovering: Orbit.IntegrationTests
+[xUnit.net 00:00:01.41]   Discovered:  Orbit.IntegrationTests
+[xUnit.net 00:00:01.42]   Starting:    Orbit.IntegrationTests
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (14ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (18ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT CASE WHEN COUNT(*) = 0 THEN FALSE ELSE TRUE END
+FROM pg_class AS cls
+JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
+WHERE
+        cls.relkind IN ('r', 'v', 'm', 'f', 'p') AND
+        ns.nspname NOT IN ('pg_catalog', 'information_schema') AND
+        -- Exclude tables which are members of PG extensions
+        NOT EXISTS (
+            SELECT 1 FROM pg_depend WHERE
+                classid=(
+                    SELECT cls.oid
+                    FROM pg_class AS cls
+                             JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
+                    WHERE relname='pg_class' AND ns.nspname='pg_catalog'
+                ) AND
+                objid=cls.oid AND
+                deptype IN ('e', 'x')
+        )
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\Users\thoma\Documents\Programming\Projects\Orbit\src\Orbit.Api
+warn: Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware[3]
+      Failed to determine the https port for redirect.
+warn: LuckyPennySoftware.MediatR.License[0]
+      You do not have a valid license key for the Lucky Penny software MediatR. This is allowed for development and testing scenarios. If you are running in production you are required to have a licensed version. Please visit https://luckypennysoftware.com to obtain a valid license.
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT u."Id", u."CreatedAtUtc", u."Email", u."Name", u."PasswordHash"
+      FROM "Users" AS u
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (9ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?', @p3='?', @p4='?'], CommandType='Text', CommandTimeout='30']
+      INSERT INTO "Users" ("Id", "CreatedAtUtc", "Email", "Name", "PasswordHash")
+      VALUES (@p0, @p1, @p2, @p3, @p4);
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT u."Id", u."CreatedAtUtc", u."Email", u."Name", u."PasswordHash"
+      FROM "Users" AS u
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ?? Processing chat message: 'i want to meditate daily'
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ?? Fetching habits and tasks from database...
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@request_UserId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT h."Id", h."CreatedAtUtc", h."Description", h."FrequencyQuantity", h."FrequencyUnit", h."IsActive", h."TargetValue", h."Title", h."Type", h."Unit", h."UserId"
+      FROM "Habits" AS h
+      WHERE h."UserId" = @request_UserId AND h."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@request_UserId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT t."Id", t."CompletedAtUtc", t."CreatedAtUtc", t."Description", t."DueDate", t."Status", t."Title", t."UserId"
+      FROM "Tasks" AS t
+      WHERE t."UserId" = @request_UserId AND t."Status" <> 2 AND t."Status" <> 3
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ? Database queries completed in 51ms (Habits: 0, Tasks: 0)
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ?? Calling AI intent service...
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ?? START: Building system prompt...
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ? System prompt built in 0ms (length: 5906 chars)
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ?? Calling Gemini API (Model: gemini-2.5-flash)...
+info: System.Net.Http.HttpClient.IAiIntentService.LogicalHandler[100]
+      Start processing HTTP request POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?*
+info: System.Net.Http.HttpClient.IAiIntentService.ClientHandler[100]
+      Sending HTTP request POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?*
+info: System.Net.Http.HttpClient.IAiIntentService.ClientHandler[101]
+      Received HTTP response headers after 1582.9683ms - 200
+info: System.Net.Http.HttpClient.IAiIntentService.LogicalHandler[101]
+      End processing HTTP request after 1588.3775ms - 200
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ? Gemini API responded in 1593ms
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ?? Deserializing Gemini response...
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      Gemini response (length: 260 chars)
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ?? GEMINI RAW JSON: {
+  "actions": [
+    {
+      "type": "CreateHabit",
+      "title": "Meditate",
+      "habitType": "Boolean",
+      "frequencyUnit": "Day",
+      "frequencyQuantity": 1
+    }
+  ],
+  "aiMessage": "Created a new habit to meditate daily! I'll help you track it."
+}
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ? Deserialized 1 actions: CreateHabit
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ? Deserialization completed in 31ms
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+      ?? TOTAL InterpretAsync time: 1626ms
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+         �� Prompt build: 0ms
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+         �� Gemini call: 1593ms
+info: Orbit.Infrastructure.Services.GeminiIntentService[0]
+         �� Deserialize: 31ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ? AI intent service completed in 1627ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ?? Executing 1 actions...
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ??  Executing action: CreateHabit - Meditate
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ? Action succeeded: CreateHabit
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ? Actions executed in 30ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ?? Saving changes to database...
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (5ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?', @p3='?' (DbType = Int32), @p4='?' (DbType = Int32), @p5='?' (DbType = Boolean), @p6='?' (DbType = Decimal), @p7='?', @p8='?' (DbType = Int32), @p9='?', @p10='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      INSERT INTO "Habits" ("Id", "CreatedAtUtc", "Description", "FrequencyQuantity", "FrequencyUnit", "IsActive", "TargetValue", "Title", "Type", "Unit", "UserId")
+      VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10);
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ? Changes saved in 24ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+      ?? TOTAL request processing time: 1734ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+         �� DB queries: 51ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+         �� AI service: 1627ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+         �� Execute actions: 30ms
+info: Orbit.Application.Chat.Commands.ProcessUserChatCommandHandler[0]
+         �� Save changes: 24ms
+     Warning:
+     The component "Fluent Assertions" is governed by the rules defined in the Xceed License Agreement and
+     the Xceed Fluent Assertions Community License. You may use Fluent Assertions free of charge for
+     non-commercial use only. An active subscription is required to use Fluent Assertions for commercial use.
+     Please contact Xceed Sales mailto:sales@xceed.com to acquire a subscription at a very low cost.
+     A paid commercial license supports the development and continued increasing support of
+     Fluent Assertions users under both commercial and community licenses. Help us
+     keep Fluent Assertions at the forefront of unit testing.
+     For more information, visit https://xceed.com/products/unit-testing/fluent-assertions/
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@request_UserId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT h."Id", h."CreatedAtUtc", h."Description", h."FrequencyQuantity", h."FrequencyUnit", h."IsActive", h."TargetValue", h."Title", h."Type", h."Unit", h."UserId"
+      FROM "Habits" AS h
+      WHERE h."UserId" = @request_UserId AND h."IsActive"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@p='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT h."Id", h."CreatedAtUtc", h."Description", h."FrequencyQuantity", h."FrequencyUnit", h."IsActive", h."TargetValue", h."Title", h."Type", h."Unit", h."UserId"
+      FROM "Habits" AS h
+      WHERE h."Id" = @p
+      LIMIT 1
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (2ms) [Parameters=[@p0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      DELETE FROM "Habits"
+      WHERE "Id" = @p0;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[@request_UserId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+      SELECT t."Id", t."CompletedAtUtc", t."CreatedAtUtc", t."Description", t."DueDate", t."Status", t."Title", t."UserId"
+      FROM "Tasks" AS t
+      WHERE t."UserId" = @request_UserId
+info: Microsoft.Hosting.Lifetime[0]
+      Application is shutting down...
+[xUnit.net 00:00:05.91]   Finished:    Orbit.IntegrationTests
+  Passed Orbit.IntegrationTests.AiChatIntegrationTests.Chat_CreateBooleanHabit_ShouldSucceed [3 s]
+
+Test Run Successful.
+Total tests: 1
+     Passed: 1
+ Total time: 6.2644 Seconds

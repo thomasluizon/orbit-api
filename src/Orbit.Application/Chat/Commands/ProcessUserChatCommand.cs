@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -15,13 +16,20 @@ public class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<TaskItem> taskRepository,
     IAiIntentService aiIntentService,
-    IUnitOfWork unitOfWork) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
+    IUnitOfWork unitOfWork,
+    ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     public async Task<Result<ChatResponse>> Handle(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        logger.LogInformation("🚀 Processing chat message: '{Message}'", request.Message);
+
         // 1. Retrieve user's active habits and pending tasks as context for the AI
+        logger.LogInformation("🔵 Fetching habits and tasks from database...");
+        var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
             cancellationToken);
@@ -32,12 +40,22 @@ public class ProcessUserChatCommandHandler(
                  && t.Status != TaskItemStatus.Cancelled,
             cancellationToken);
 
+        dbStopwatch.Stop();
+        logger.LogInformation("✅ Database queries completed in {ElapsedMs}ms (Habits: {HabitCount}, Tasks: {TaskCount})",
+            dbStopwatch.ElapsedMilliseconds, activeHabits.Count, pendingTasks.Count);
+
         // 2. Send text + context to the AI intent service for interpretation
+        logger.LogInformation("🔵 Calling AI intent service...");
+        var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         var planResult = await aiIntentService.InterpretAsync(
             request.Message,
             activeHabits,
             pendingTasks,
             cancellationToken);
+
+        aiStopwatch.Stop();
+        logger.LogInformation("✅ AI intent service completed in {ElapsedMs}ms", aiStopwatch.ElapsedMilliseconds);
 
         if (planResult.IsFailure)
             return Result.Failure<ChatResponse>(planResult.Error);
@@ -46,8 +64,13 @@ public class ProcessUserChatCommandHandler(
         var executedActions = new List<string>();
 
         // 3. Execute each action returned by the AI
+        logger.LogInformation("🔵 Executing {ActionCount} actions...", plan.Actions.Count);
+        var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         foreach (var action in plan.Actions)
         {
+            logger.LogInformation("▶️  Executing action: {ActionType} - {Title}", action.Type, action.Title ?? action.HabitId?.ToString() ?? "N/A");
+
             var actionResult = action.Type switch
             {
                 AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
@@ -58,11 +81,34 @@ public class ProcessUserChatCommandHandler(
             };
 
             if (actionResult.IsSuccess)
+            {
                 executedActions.Add($"{action.Type}: {action.Title ?? action.HabitId?.ToString() ?? "N/A"}");
+                logger.LogInformation("✅ Action succeeded: {ActionType}", action.Type);
+            }
+            else
+            {
+                logger.LogError("❌ Action failed: {ActionType} - Error: {Error}", action.Type, actionResult.Error);
+            }
         }
 
+        actionsStopwatch.Stop();
+        logger.LogInformation("✅ Actions executed in {ElapsedMs}ms", actionsStopwatch.ElapsedMilliseconds);
+
         // 4. Persist all changes in a single unit of work
+        logger.LogInformation("🔵 Saving changes to database...");
+        var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        saveStopwatch.Stop();
+        logger.LogInformation("✅ Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
+
+        totalStopwatch.Stop();
+        logger.LogInformation("🎯 TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   ├─ DB queries: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   ├─ AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   ├─ Execute actions: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   └─ Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         return Result.Success(new ChatResponse(executedActions, plan.AiMessage));
     }
@@ -100,10 +146,12 @@ public class ProcessUserChatCommandHandler(
         var habitResult = Habit.Create(
             userId,
             action.Title,
-            action.Frequency ?? HabitFrequency.Daily,
+            action.FrequencyUnit ?? FrequencyUnit.Day,
+            action.FrequencyQuantity ?? 1,
             action.HabitType ?? HabitType.Boolean,
             action.Description,
-            action.Unit);
+            action.Unit,
+            days: action.Days);
 
         if (habitResult.IsFailure)
             return Result.Failure(habitResult.Error);

@@ -8,12 +8,14 @@ public class Habit : Entity
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
     public string? Description { get; private set; }
-    public HabitFrequency Frequency { get; private set; }
+    public FrequencyUnit FrequencyUnit { get; private set; }
+    public int FrequencyQuantity { get; private set; }
     public HabitType Type { get; private set; }
     public string? Unit { get; private set; }
     public decimal? TargetValue { get; private set; }
     public bool IsActive { get; private set; } = true;
     public DateTime CreatedAtUtc { get; private set; }
+    public ICollection<System.DayOfWeek> Days { get; private set; } = [];
 
     private readonly List<HabitLog> _logs = [];
     public IReadOnlyCollection<HabitLog> Logs => _logs.AsReadOnly();
@@ -23,11 +25,13 @@ public class Habit : Entity
     public static Result<Habit> Create(
         Guid userId,
         string title,
-        HabitFrequency frequency,
+        FrequencyUnit frequencyUnit,
+        int frequencyQuantity,
         HabitType type,
         string? description = null,
         string? unit = null,
-        decimal? targetValue = null)
+        decimal? targetValue = null,
+        IReadOnlyList<System.DayOfWeek>? days = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -35,18 +39,26 @@ public class Habit : Entity
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure<Habit>("Title is required.");
 
+        if (frequencyQuantity <= 0)
+            return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
+
         if (type == HabitType.Quantifiable && string.IsNullOrWhiteSpace(unit))
             return Result.Failure<Habit>("Unit is required for quantifiable habits.");
+
+        if (days?.Count > 0 && frequencyQuantity != 1)
+            return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
 
         return Result.Success(new Habit
         {
             UserId = userId,
             Title = title.Trim(),
             Description = description?.Trim(),
-            Frequency = frequency,
+            FrequencyUnit = frequencyUnit,
+            FrequencyQuantity = frequencyQuantity,
             Type = type,
             Unit = unit?.Trim(),
             TargetValue = targetValue,
+            Days = days?.ToList() ?? [],
             CreatedAtUtc = DateTime.UtcNow
         });
     }

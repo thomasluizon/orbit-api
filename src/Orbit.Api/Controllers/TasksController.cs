@@ -61,4 +61,15 @@ public class TasksController(IMediator mediator) : ControllerBase
             ? NoContent()
             : BadRequest(new { error = result.Error });
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteTask(Guid id, CancellationToken cancellationToken)
+    {
+        var command = new DeleteTaskCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
 }

@@ -16,10 +16,12 @@ public class HabitsController(IMediator mediator) : ControllerBase
     public record CreateHabitRequest(
         string Title,
         string? Description,
-        HabitFrequency Frequency,
+        FrequencyUnit FrequencyUnit,
+        int FrequencyQuantity,
         HabitType Type,
         string? Unit,
-        decimal? TargetValue);
+        decimal? TargetValue,
+        IReadOnlyList<System.DayOfWeek>? Days = null);
 
     public record LogHabitRequest(DateOnly Date, decimal? Value);
 
@@ -40,10 +42,12 @@ public class HabitsController(IMediator mediator) : ControllerBase
             HttpContext.GetUserId(),
             request.Title,
             request.Description,
-            request.Frequency,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
             request.Type,
             request.Unit,
-            request.TargetValue);
+            request.TargetValue,
+            request.Days);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -68,6 +72,17 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         return result.IsSuccess
             ? Ok(new { logId = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteHabit(Guid id, CancellationToken cancellationToken)
+    {
+        var command = new DeleteHabitCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 }
