@@ -45,12 +45,12 @@ Plans:
   3. User can add a text note when logging any habit
   4. User can create tags with name and color, assign them to habits, and filter habits by tag
   5. User can set their timezone for correct date-based calculations
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md -- Domain entities, DbContext config, repository includes, and migration (Wave 1)
+- [ ] 02-02-PLAN.md -- Habit extensions: sub-habits, negative habits, notes, AI prompt update (Wave 2)
+- [ ] 02-03-PLAN.md -- Tags CRUD + assignment + filtering, profile/timezone (Wave 2)
 
 ### Phase 3: Metrics and AI Enhancement
 **Goal**: Users can see progress metrics for their habits and the AI handles expanded capabilities correctly
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Foundation | 3/3 | ✓ Complete | 2026-02-08 |
+| 1. Infrastructure Foundation | 3/3 | Complete | 2026-02-08 |
 | 2. Habit Domain Extensions | 0/3 | Not started | - |
 | 3. Metrics and AI Enhancement | 0/3 | Not started | - |
