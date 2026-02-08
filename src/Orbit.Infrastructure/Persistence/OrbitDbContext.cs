@@ -9,8 +9,6 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<User> Users => Set<User>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
-    public DbSet<SubHabit> SubHabits => Set<SubHabit>();
-    public DbSet<SubHabitLog> SubHabitLogs => Set<SubHabitLog>();
     public DbSet<Tag> Tags => Set<Tag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -25,6 +23,11 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
             entity.HasMany(h => h.Logs)
                 .WithOne()
                 .HasForeignKey(l => l.HabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(h => h.Children)
+                .WithOne()
+                .HasForeignKey(h => h.ParentHabitId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.Property(h => h.Days)
@@ -44,26 +47,6 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         modelBuilder.Entity<HabitLog>(entity =>
         {
             entity.HasIndex(l => new { l.HabitId, l.Date });
-        });
-
-        modelBuilder.Entity<SubHabit>(entity =>
-        {
-            entity.HasOne<Habit>()
-                .WithMany(h => h.SubHabits)
-                .HasForeignKey(sh => sh.HabitId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(sh => new { sh.HabitId, sh.SortOrder });
-        });
-
-        modelBuilder.Entity<SubHabitLog>(entity =>
-        {
-            entity.HasOne<SubHabit>()
-                .WithMany()
-                .HasForeignKey(sl => sl.SubHabitId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(sl => new { sl.SubHabitId, sl.Date });
         });
 
         modelBuilder.Entity<Tag>(entity =>

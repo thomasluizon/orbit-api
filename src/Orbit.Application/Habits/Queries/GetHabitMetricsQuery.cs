@@ -64,6 +64,13 @@ public class GetHabitMetricsQueryHandler(
         var habitStartDate = DateOnly.FromDateTime(habit.CreatedAtUtc);
         var expectedDates = new List<DateOnly>();
 
+        // One-time habit: only expected on the creation date
+        if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
+        {
+            expectedDates.Add(habitStartDate);
+            return expectedDates;
+        }
+
         if (habit.Days.Count > 0 && habit.FrequencyQuantity == 1)
         {
             // Day-of-week filtering mode
@@ -93,10 +100,10 @@ public class GetHabitMetricsQueryHandler(
 
                 current = habit.FrequencyUnit switch
                 {
-                    FrequencyUnit.Day => current.AddDays(-habit.FrequencyQuantity),
-                    FrequencyUnit.Week => current.AddDays(-7 * habit.FrequencyQuantity),
-                    FrequencyUnit.Month => current.AddMonths(-habit.FrequencyQuantity),
-                    FrequencyUnit.Year => current.AddYears(-habit.FrequencyQuantity),
+                    FrequencyUnit.Day => current.AddDays(-habit.FrequencyQuantity.Value),
+                    FrequencyUnit.Week => current.AddDays(-7 * habit.FrequencyQuantity.Value),
+                    FrequencyUnit.Month => current.AddMonths(-habit.FrequencyQuantity.Value),
+                    FrequencyUnit.Year => current.AddYears(-habit.FrequencyQuantity.Value),
                     _ => throw new InvalidOperationException($"Unknown frequency unit: {habit.FrequencyUnit}")
                 };
 

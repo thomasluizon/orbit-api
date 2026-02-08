@@ -4,6 +4,5 @@ public enum AiActionType
 {
     LogHabit,
     CreateHabit,
-    CreateSubHabit,
     AssignTag
 }

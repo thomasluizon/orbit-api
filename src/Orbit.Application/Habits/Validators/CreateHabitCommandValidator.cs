@@ -16,7 +16,8 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .MaximumLength(200);
 
         RuleFor(x => x.FrequencyQuantity)
-            .GreaterThan(0);
+            .GreaterThan(0)
+            .When(x => x.FrequencyQuantity is not null);
 
         RuleFor(x => x.Days)
             .Must((command, days) => days is null || days.Count == 0 || command.FrequencyQuantity == 1)

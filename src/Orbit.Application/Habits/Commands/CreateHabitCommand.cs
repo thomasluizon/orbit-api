@@ -10,14 +10,15 @@ public record CreateHabitCommand(
     Guid UserId,
     string Title,
     string? Description,
-    FrequencyUnit FrequencyUnit,
-    int FrequencyQuantity,
+    FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
     HabitType Type,
     string? Unit,
     decimal? TargetValue,
     IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsNegative = false,
-    IReadOnlyList<string>? SubHabits = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<string>? SubHabits = null,
+    DateOnly? DueDate = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -35,7 +36,8 @@ public class CreateHabitCommandHandler(
             request.Unit,
             request.TargetValue,
             request.Days,
-            request.IsNegative);
+            request.IsNegative,
+            request.DueDate);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -44,11 +46,21 @@ public class CreateHabitCommandHandler(
 
         if (request.SubHabits is { Count: > 0 })
         {
-            for (var i = 0; i < request.SubHabits.Count; i++)
+            foreach (var subTitle in request.SubHabits)
             {
-                var subResult = habit.AddSubHabit(request.SubHabits[i], i);
-                if (subResult.IsFailure)
-                    return Result.Failure<Guid>(subResult.Error);
+                var childResult = Habit.Create(
+                    request.UserId,
+                    subTitle,
+                    request.FrequencyUnit,
+                    request.FrequencyQuantity,
+                    HabitType.Boolean,
+                    dueDate: request.DueDate,
+                    parentHabitId: habit.Id);
+
+                if (childResult.IsFailure)
+                    return Result.Failure<Guid>(childResult.Error);
+
+                await habitRepository.AddAsync(childResult.Value, cancellationToken);
             }
         }
 

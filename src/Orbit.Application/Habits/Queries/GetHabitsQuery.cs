@@ -15,16 +15,16 @@ public class GetHabitsQueryHandler(
         if (request.TagIds is { Count: > 0 })
         {
             return await habitRepository.FindAsync(
-                h => h.UserId == request.UserId && h.IsActive
+                h => h.UserId == request.UserId && h.IsActive && h.ParentHabitId == null
                      && h.Tags.Any(t => request.TagIds.Contains(t.Id)),
-                q => q.Include(h => h.SubHabits.Where(sh => sh.IsActive).OrderBy(sh => sh.SortOrder))
+                q => q.Include(h => h.Children.Where(c => c.IsActive))
                       .Include(h => h.Tags),
                 cancellationToken);
         }
 
         return await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
-            q => q.Include(h => h.SubHabits.Where(sh => sh.IsActive).OrderBy(sh => sh.SortOrder))
+            h => h.UserId == request.UserId && h.IsActive && h.ParentHabitId == null,
+            q => q.Include(h => h.Children.Where(c => c.IsActive))
                   .Include(h => h.Tags),
             cancellationToken);
     }

@@ -8,21 +8,25 @@ public class Habit : Entity
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
     public string? Description { get; private set; }
-    public FrequencyUnit FrequencyUnit { get; private set; }
-    public int FrequencyQuantity { get; private set; }
+    public FrequencyUnit? FrequencyUnit { get; private set; }
+    public int? FrequencyQuantity { get; private set; }
     public HabitType Type { get; private set; }
     public string? Unit { get; private set; }
     public decimal? TargetValue { get; private set; }
     public bool IsActive { get; private set; } = true;
     public bool IsNegative { get; private set; }
+    public bool IsCompleted { get; private set; }
+    public DateOnly DueDate { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
+
+    public Guid? ParentHabitId { get; private set; }
 
     private readonly List<HabitLog> _logs = [];
     public IReadOnlyCollection<HabitLog> Logs => _logs.AsReadOnly();
 
-    private readonly List<SubHabit> _subHabits = [];
-    public IReadOnlyCollection<SubHabit> SubHabits => _subHabits.AsReadOnly();
+    private readonly List<Habit> _children = [];
+    public IReadOnlyCollection<Habit> Children => _children.AsReadOnly();
 
     public ICollection<Tag> Tags { get; private set; } = [];
 
@@ -31,14 +35,16 @@ public class Habit : Entity
     public static Result<Habit> Create(
         Guid userId,
         string title,
-        FrequencyUnit frequencyUnit,
-        int frequencyQuantity,
+        FrequencyUnit? frequencyUnit,
+        int? frequencyQuantity,
         HabitType type,
         string? description = null,
         string? unit = null,
         decimal? targetValue = null,
         IReadOnlyList<System.DayOfWeek>? days = null,
-        bool isNegative = false)
+        bool isNegative = false,
+        DateOnly? dueDate = null,
+        Guid? parentHabitId = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -46,7 +52,7 @@ public class Habit : Entity
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure<Habit>("Title is required.");
 
-        if (frequencyQuantity <= 0)
+        if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
 
         if (type == HabitType.Quantifiable && string.IsNullOrWhiteSpace(unit))
@@ -67,6 +73,8 @@ public class Habit : Entity
             TargetValue = targetValue,
             Days = days?.ToList() ?? [],
             IsNegative = isNegative,
+            DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            ParentHabitId = parentHabitId,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -76,6 +84,9 @@ public class Habit : Entity
         if (!IsActive)
             return Result.Failure<HabitLog>("Cannot log an inactive habit.");
 
+        if (IsCompleted)
+            return Result.Failure<HabitLog>("Cannot log a completed habit.");
+
         if (Type == HabitType.Quantifiable && value is null)
             return Result.Failure<HabitLog>("A value is required for quantifiable habits.");
 
@@ -84,48 +95,42 @@ public class Habit : Entity
 
         var log = HabitLog.Create(Id, date, Type == HabitType.Boolean ? 1 : value!.Value, note);
         _logs.Add(log);
+
+        // One-time task: mark as completed
+        if (FrequencyUnit is null)
+        {
+            IsCompleted = true;
+        }
+        else
+        {
+            // Recurring habit: advance DueDate to next occurrence
+            AdvanceDueDate();
+        }
+
         return Result.Success(log);
     }
 
-    public Result<SubHabit> AddSubHabit(string title, int sortOrder)
+    private void AdvanceDueDate()
     {
-        var result = SubHabit.Create(Id, title, sortOrder);
-        if (result.IsFailure)
-            return result;
-
-        _subHabits.Add(result.Value);
-        return result;
-    }
-
-    public Result RemoveSubHabit(Guid subHabitId)
-    {
-        var subHabit = _subHabits.Find(sh => sh.Id == subHabitId);
-        if (subHabit is null)
-            return Result.Failure("Sub-habit not found.");
-
-        subHabit.Deactivate();
-        return Result.Success();
-    }
-
-    public Result<IReadOnlyList<SubHabitLog>> LogSubHabitCompletions(
-        DateOnly date,
-        IReadOnlyList<(Guid SubHabitId, bool IsCompleted)> completions)
-    {
-        if (!IsActive)
-            return Result.Failure<IReadOnlyList<SubHabitLog>>("Cannot log an inactive habit.");
-
-        var logs = new List<SubHabitLog>();
-
-        foreach (var (subHabitId, isCompleted) in completions)
+        var next = (FrequencyUnit, FrequencyQuantity) switch
         {
-            var subHabit = _subHabits.Find(sh => sh.Id == subHabitId && sh.IsActive);
-            if (subHabit is null)
-                return Result.Failure<IReadOnlyList<SubHabitLog>>($"Sub-habit {subHabitId} not found or inactive.");
+            (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
+            (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
+            (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
+            (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
+            _ => DueDate
+        };
 
-            logs.Add(SubHabitLog.Create(subHabitId, date, isCompleted));
+        // If Days are specified, find the next matching day
+        if (Days.Count > 0)
+        {
+            while (!Days.Contains(next.DayOfWeek))
+            {
+                next = next.AddDays(1);
+            }
         }
 
-        return Result.Success<IReadOnlyList<SubHabitLog>>(logs.AsReadOnly());
+        DueDate = next;
     }
 
     public void Deactivate() => IsActive = false;

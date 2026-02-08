@@ -82,7 +82,6 @@ public class ProcessUserChatCommandHandler(
             {
                 AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
                 AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
-                AiActionType.CreateSubHabit => await ExecuteCreateSubHabitAsync(action, request.UserId, cancellationToken),
                 AiActionType.AssignTag => await ExecuteAssignTagAsync(action, request.UserId, cancellationToken),
                 _ => Result.Failure($"Unknown action type: {action.Type}")
             };
@@ -153,57 +152,42 @@ public class ProcessUserChatCommandHandler(
         var habitResult = Habit.Create(
             userId,
             action.Title,
-            action.FrequencyUnit ?? FrequencyUnit.Day,
-            action.FrequencyQuantity ?? 1,
+            action.FrequencyUnit,
+            action.FrequencyQuantity,
             action.HabitType ?? HabitType.Boolean,
             action.Description,
             action.Unit,
             days: action.Days,
-            isNegative: action.IsNegative ?? false);
+            isNegative: action.IsNegative ?? false,
+            dueDate: action.DueDate);
 
         if (habitResult.IsFailure)
             return Result.Failure(habitResult.Error);
 
         var habit = habitResult.Value;
 
-        // Handle inline sub-habits creation
-        if (action.SubHabits is not null && action.SubHabits.Count > 0)
+        // Handle inline sub-habits as child Habit entities
+        if (action.SubHabits is { Count: > 0 })
         {
-            int sortOrder = 0;
-            foreach (var subHabitTitle in action.SubHabits)
+            foreach (var subTitle in action.SubHabits)
             {
-                var subHabitResult = habit.AddSubHabit(subHabitTitle, sortOrder++);
-                if (subHabitResult.IsFailure)
-                    return Result.Failure(subHabitResult.Error);
+                var childResult = Habit.Create(
+                    userId,
+                    subTitle,
+                    action.FrequencyUnit,
+                    action.FrequencyQuantity,
+                    HabitType.Boolean,
+                    dueDate: action.DueDate,
+                    parentHabitId: habit.Id);
+
+                if (childResult.IsFailure)
+                    return Result.Failure(childResult.Error);
+
+                await habitRepository.AddAsync(childResult.Value, ct);
             }
         }
 
         await habitRepository.AddAsync(habit, ct);
-        return Result.Success();
-    }
-
-    private async Task<Result> ExecuteCreateSubHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null || action.SubHabits is null || action.SubHabits.Count == 0)
-            return Result.Failure("HabitId and SubHabits are required for CreateSubHabit.");
-
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == action.HabitId && h.UserId == userId,
-            q => q.Include(h => h.SubHabits),
-            ct);
-
-        if (habit is null)
-            return Result.Failure("Habit not found.");
-
-        int sortOrder = habit.SubHabits.Count;
-        foreach (var title in action.SubHabits)
-        {
-            var result = habit.AddSubHabit(title, sortOrder++);
-            if (result.IsFailure)
-                return Result.Failure(result.Error);
-        }
-
         return Result.Success();
     }
 

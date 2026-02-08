@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260208040913_AddDueDateAndIsCompleted")]
+    partial class AddDueDateAndIsCompleted
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -56,9 +59,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("IsNegative")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid?>("ParentHabitId")
-                        .HasColumnType("uuid");
-
                     b.Property<decimal?>("TargetValue")
                         .HasColumnType("numeric");
 
@@ -76,8 +76,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ParentHabitId");
 
                     b.HasIndex("UserId", "IsActive");
 
@@ -125,6 +123,60 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("HabitTag");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.SubHabit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HabitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HabitId", "SortOrder");
+
+                    b.ToTable("SubHabits");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.SubHabitLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("SubHabitId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubHabitId", "Date");
+
+                    b.ToTable("SubHabitLogs");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Tag", b =>
@@ -187,14 +239,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Habit", null)
-                        .WithMany("Children")
-                        .HasForeignKey("ParentHabitId")
-                        .OnDelete(DeleteBehavior.Cascade);
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.HabitLog", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
@@ -219,11 +263,29 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.SubHabit", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.Habit", null)
+                        .WithMany("SubHabits")
+                        .HasForeignKey("HabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.SubHabitLog", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.SubHabit", null)
+                        .WithMany()
+                        .HasForeignKey("SubHabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
                 {
-                    b.Navigation("Children");
-
                     b.Navigation("Logs");
+
+                    b.Navigation("SubHabits");
                 });
 #pragma warning restore 612, 618
         }
