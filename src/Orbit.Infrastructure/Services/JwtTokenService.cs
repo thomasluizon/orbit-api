@@ -1,7 +1,7 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -14,24 +14,23 @@ public class JwtTokenService(IOptions<JwtSettings> options) : ITokenService
 
     public string GenerateToken(Guid userId, string email)
     {
-        var claims = new[]
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SecretKey));
+
+        var descriptor = new SecurityTokenDescriptor
         {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            Subject = new ClaimsIdentity(
+            [
+                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                new Claim(ClaimTypes.Email, email),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            ]),
+            Expires = DateTime.UtcNow.AddHours(_settings.ExpiryHours),
+            Issuer = _settings.Issuer,
+            Audience = _settings.Audience,
+            SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
         };
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SecretKey));
-        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var token = new JwtSecurityToken(
-            issuer: _settings.Issuer,
-            audience: _settings.Audience,
-            claims: claims,
-            expires: DateTime.UtcNow.AddHours(_settings.ExpiryHours),
-            signingCredentials: credentials
-        );
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var handler = new JsonWebTokenHandler();
+        return handler.CreateToken(descriptor);
     }
 }
