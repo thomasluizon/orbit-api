@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Orbit is an AI-powered habit tracking application. Users manage their habits through a visual interface with optional AI chat as a convenience layer for quick actions. Built with .NET 10.0, PostgreSQL, and multi-provider AI (Gemini/Ollama), it's a backend API that will eventually power a frontend client.
+Orbit is an AI-powered habit tracking backend API. Users manage habits with flexible scheduling (daily, weekly, monthly, yearly, specific days), sub-habit checklists, negative habit tracking, tags, and progress metrics. An AI chat layer enables quick actions via natural language with multi-provider support (Gemini/Ollama). Built with .NET 10.0, PostgreSQL, and Clean Architecture with CQRS.
 
 ## Core Value
 
@@ -12,60 +12,72 @@ Users can track, build, and break habits with flexible scheduling, progress metr
 
 ### Validated
 
-- User registration and login with JWT authentication — existing
-- AI chat processing with multi-provider support (Gemini/Ollama) — existing
-- Basic habit CRUD (create, list, log, delete) — existing
-- Flexible frequency system (FrequencyUnit + FrequencyQuantity + optional days) — existing
-- Boolean and quantifiable habit types — existing
-- Integration test suite (15+ scenarios) — existing
-- Clean Architecture with CQRS via MediatR — existing
+- ✓ User registration and login with JWT authentication — v1.0
+- ✓ AI chat processing with multi-provider support (Gemini/Ollama) — v1.0
+- ✓ Basic habit CRUD (create, list, log, delete) — v1.0
+- ✓ Flexible frequency system (FrequencyUnit + FrequencyQuantity + optional days) — v1.0
+- ✓ Boolean and quantifiable habit types — v1.0
+- ✓ Integration test suite (15+ scenarios) — v1.0
+- ✓ Clean Architecture with CQRS via MediatR — v1.0
+- ✓ EF Core migrations for schema management — v1.0
+- ✓ Request validation via FluentValidation pipeline — v1.0
+- ✓ API documentation via Scalar UI — v1.0
+- ✓ Sub-habits as parent-child checklists — v1.0
+- ✓ Negative habit tracking with slip-up logging — v1.0
+- ✓ User-defined tags with color for habit organization — v1.0
+- ✓ Frequency-aware streaks, completion rates, and trend analysis — v1.0
+- ✓ AI sub-habit creation and tag suggestion via chat — v1.0
+- ✓ AI graceful refusal of out-of-scope requests — v1.0
+- ✓ User timezone for correct date-based calculations — v1.0
+- ✓ Task management code fully removed — v1.0
 
 ### Active
 
-- [ ] Remove task management entirely — Orbit is a habit tracker, not a life management suite
-- [ ] Sub-habits — parent habit with child habits as checklist (e.g., "Morning routine" with meditate, journal, stretch)
-- [ ] Bad habits — negative tracking where users log slip-ups, goal is zero logs, track "days since last slip"
-- [ ] User-defined tags for habit organization
-- [ ] Progress metrics — trends over time, improvement tracking for quantifiable habits
-- [ ] User profiles — view/edit name, email, preferences
-- [ ] EF Core migrations — replace EnsureCreated() with proper migration-based schema management
-- [ ] Improved AI prompt — fix out-of-scope failures where AI tries to execute actions for things it can't do
+(None — define with `/gsd:new-milestone`)
 
 ### Out of Scope
 
 - Frontend/UI — backend must be solid first, frontend is a future milestone
 - Mobile app — web API only for now
-- Notifications/reminders — deferred to post-MVP
-- Email verification — not needed for MVP
-- Password reset — deferred to post-MVP
+- Notifications/reminders — no email service in stack yet
+- Email verification — deferred
+- Password reset — deferred
 - Social features (sharing, challenges) — deferred
 - Voice input — deferred
 - Habit templates/categories (predefined) — using user-defined tags instead
+- Offline mode — real-time API is the architecture
 
 ## Context
 
-- Existing MVP backend is functional but incomplete — tasks need removal, habits need depth features
-- AI chat is a feature, not the core interface — users will primarily interact visually with habits
-- Gemini is the primary AI provider (~95% reliable, 1.6s), Ollama is fallback (~65% reliable, 30s)
-- Current schema uses EnsureCreated() which won't survive the schema changes needed for sub-habits, tags, and bad habits
-- Codebase is well-structured with Clean Architecture but has known concerns (see .planning/codebase/CONCERNS.md)
+Shipped v1.0 with 4,764 LOC C# across 91 files.
+Tech stack: .NET 10.0, PostgreSQL (Npgsql 10.0.0), MediatR 14.0.0, FluentValidation, Gemini 2.5 Flash / Ollama phi3.5:3.8b.
+20/20 v1 requirements delivered. All 3 phases verified.
+
+Known concerns:
+- Ollama reliability with expanded AI prompts uncertain (Gemini is highly reliable)
+- Microsoft.EntityFrameworkCore in Application project (pragmatic clean architecture tradeoff)
+- Pre-existing MSB3277 warning in IntegrationTests (cosmetic)
 
 ## Constraints
 
 - **Tech stack**: .NET 10.0, C# 13, PostgreSQL, Clean Architecture with CQRS — established, not changing
 - **AI providers**: Gemini (cloud, primary) and Ollama (local, fallback) — both must be supported
 - **Backend only**: No frontend work in this milestone — API endpoints and business logic only
-- **Schema changes**: Must migrate to EF Core migrations before any domain model changes
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Remove tasks entirely | Orbit is a habit tracker — tasks dilute focus and add complexity | — Pending |
-| Sub-habits as parent-child | Users want "Morning routine" with sub-habits, not just flat list | — Pending |
-| Bad habits via slip-up logging | Track when user DOES the bad thing, goal is zero — simpler than daily check-ins | — Pending |
-| Tags over categories | User-defined tags are more flexible than predefined categories | — Pending |
-| EF Core migrations before features | Schema changes for sub-habits/tags/bad-habits require proper migration support | — Pending |
+| Remove tasks entirely | Orbit is a habit tracker — tasks dilute focus | ✓ Good — cleaner domain model |
+| Sub-habits as separate entity | Simpler than self-referencing Habit for checklist use case | ✓ Good — clean separation |
+| Negative habits via slip-up logging | Track when user DOES the bad thing, goal is zero | ✓ Good — inverted streak logic works well |
+| Tags over categories | User-defined tags are more flexible than predefined categories | ✓ Good — HabitTag join table with color |
+| EF Core migrations before features | Schema changes require proper migration support | ✓ Good — enabled all Phase 2/3 work |
+| HabitTag plain class (no Entity base) | Composite key doesn't need Guid Id | ✓ Good — simpler |
+| FindOneTrackedAsync pattern | Keeps Application independent of Infrastructure | ✓ Good — clean architecture preserved |
+| Microsoft.EntityFrameworkCore in Application | Needed for Include support in queries | ⚠️ Revisit — pragmatic but breaks strict layering |
+| Tag suggestions informational only | AI suggests names in aiMessage, not auto-create | ✓ Good — user controls tag creation |
+| Real-time metrics (no cache) | Calculate on-demand from logs with indexes | ✓ Good — simpler, accurate, fast enough |
 
 ---
-*Last updated: 2026-02-07 after initialization*
+*Last updated: 2026-02-08 after v1.0 milestone*
