@@ -16,17 +16,17 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Habits
 
-- [ ] **HABIT-01**: User can create a parent habit with child sub-habits as a checklist
-- [ ] **HABIT-02**: User can log individual sub-habits within a parent habit
-- [ ] **HABIT-03**: User can create a negative/bad habit that tracks slip-ups
-- [ ] **HABIT-04**: User can see "days since last slip" for negative habits
-- [ ] **HABIT-05**: User can add optional text notes when logging a habit
+- [x] **HABIT-01**: User can create a parent habit with child sub-habits as a checklist
+- [x] **HABIT-02**: User can log individual sub-habits within a parent habit
+- [x] **HABIT-03**: User can create a negative/bad habit that tracks slip-ups
+- [x] **HABIT-04**: User can see "days since last slip" for negative habits
+- [x] **HABIT-05**: User can add optional text notes when logging a habit
 
 ### Tags
 
-- [ ] **TAG-01**: User can create tags with a name and color
-- [ ] **TAG-02**: User can assign tags to habits
-- [ ] **TAG-03**: User can filter habits by one or more tags
+- [x] **TAG-01**: User can create tags with a name and color
+- [x] **TAG-02**: User can assign tags to habits
+- [x] **TAG-03**: User can filter habits by one or more tags
 
 ### Metrics
 
@@ -36,7 +36,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Profile
 
-- [ ] **PROF-01**: User can set their timezone for correct streak/metric calculation
+- [x] **PROF-01**: User can set their timezone for correct streak/metric calculation
 
 ### AI
 
@@ -98,15 +98,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-03 | Phase 1 | ✓ Done |
 | INFRA-04 | Phase 1 | ✓ Done |
 | CLEAN-01 | Phase 1 | ✓ Done |
-| HABIT-01 | Phase 2 | Pending |
-| HABIT-02 | Phase 2 | Pending |
-| HABIT-03 | Phase 2 | Pending |
-| HABIT-04 | Phase 2 | Pending |
-| HABIT-05 | Phase 2 | Pending |
-| TAG-01 | Phase 2 | Pending |
-| TAG-02 | Phase 2 | Pending |
-| TAG-03 | Phase 2 | Pending |
-| PROF-01 | Phase 2 | Pending |
+| HABIT-01 | Phase 2 | ✓ Done |
+| HABIT-02 | Phase 2 | ✓ Done |
+| HABIT-03 | Phase 2 | ✓ Done |
+| HABIT-04 | Phase 2 | ✓ Done |
+| HABIT-05 | Phase 2 | ✓ Done |
+| TAG-01 | Phase 2 | ✓ Done |
+| TAG-02 | Phase 2 | ✓ Done |
+| TAG-03 | Phase 2 | ✓ Done |
+| PROF-01 | Phase 2 | ✓ Done |
 | METR-01 | Phase 3 | Pending |
 | METR-02 | Phase 3 | Pending |
 | METR-03 | Phase 3 | Pending |

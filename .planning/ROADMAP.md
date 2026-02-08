@@ -13,7 +13,7 @@ Orbit's backend solidification milestone transforms the existing MVP into a full
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure Foundation** - Modernize schema management, validation, deprecated libraries, and remove task code
-- [ ] **Phase 2: Habit Domain Extensions** - Sub-habits, negative habits, tags, notes, and user timezone
+- [x] **Phase 2: Habit Domain Extensions** - Sub-habits, negative habits, tags, notes, and user timezone
 - [ ] **Phase 3: Metrics and AI Enhancement** - Progress metrics and expanded AI capabilities
 
 ## Phase Details
@@ -48,9 +48,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Domain entities, DbContext config, repository includes, and migration (Wave 1)
-- [ ] 02-02-PLAN.md -- Habit extensions: sub-habits, negative habits, notes, AI prompt update (Wave 2)
-- [ ] 02-03-PLAN.md -- Tags CRUD + assignment + filtering, profile/timezone (Wave 2)
+- [x] 02-01-PLAN.md -- Domain entities, DbContext config, repository includes, and migration (Wave 1)
+- [x] 02-02-PLAN.md -- Habit extensions: sub-habits, negative habits, notes, AI prompt update (Wave 2)
+- [x] 02-03-PLAN.md -- Tags CRUD + assignment + filtering, profile/timezone (Wave 2)
 
 ### Phase 3: Metrics and AI Enhancement
 **Goal**: Users can see progress metrics for their habits and the AI handles expanded capabilities correctly
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Foundation | 3/3 | Complete | 2026-02-08 |
-| 2. Habit Domain Extensions | 0/3 | Not started | - |
+| 1. Infrastructure Foundation | 3/3 | ✓ Complete | 2026-02-08 |
+| 2. Habit Domain Extensions | 3/3 | ✓ Complete | 2026-02-08 |
 | 3. Metrics and AI Enhancement | 0/3 | Not started | - |
