@@ -9,6 +9,9 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<User> Users => Set<User>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
+    public DbSet<SubHabit> SubHabits => Set<SubHabit>();
+    public DbSet<SubHabitLog> SubHabitLogs => Set<SubHabitLog>();
+    public DbSet<Tag> Tags => Set<Tag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,5 +45,40 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         {
             entity.HasIndex(l => new { l.HabitId, l.Date });
         });
+
+        modelBuilder.Entity<SubHabit>(entity =>
+        {
+            entity.HasOne<Habit>()
+                .WithMany(h => h.SubHabits)
+                .HasForeignKey(sh => sh.HabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(sh => new { sh.HabitId, sh.SortOrder });
+        });
+
+        modelBuilder.Entity<SubHabitLog>(entity =>
+        {
+            entity.HasOne<SubHabit>()
+                .WithMany()
+                .HasForeignKey(sl => sl.SubHabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(sl => new { sl.SubHabitId, sl.Date });
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<Habit>()
+            .HasMany(h => h.Tags)
+            .WithMany(t => t.Habits)
+            .UsingEntity<HabitTag>(
+                r => r.HasOne<Tag>().WithMany().HasForeignKey(ht => ht.TagId)
+                    .OnDelete(DeleteBehavior.Cascade),
+                l => l.HasOne<Habit>().WithMany().HasForeignKey(ht => ht.HabitId)
+                    .OnDelete(DeleteBehavior.Cascade),
+                j => j.HasKey(ht => new { ht.HabitId, ht.TagId }));
     }
 }
