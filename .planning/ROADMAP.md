@@ -28,12 +28,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. API documentation is browsable via Scalar UI at /scalar/v1
   4. JWT authentication works with the updated Microsoft.IdentityModel.JsonWebTokens library
   5. All task management code (entities, commands, queries, controllers, tests) is removed from the codebase
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md -- Migrations baseline + OpenAPI/Scalar swap + JWT upgrade (Wave 1)
+- [ ] 01-02-PLAN.md -- FluentValidation pipeline + validators (Wave 2)
+- [ ] 01-03-PLAN.md -- Task removal across all layers + RemoveTaskItems migration (Wave 2)
 
 ### Phase 2: Habit Domain Extensions
 **Goal**: Users can manage sub-habits, negative habits, tags, notes, and their timezone -- the complete habit model
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Foundation | 0/3 | Not started | - |
+| 1. Infrastructure Foundation | 0/3 | Planned | - |
 | 2. Habit Domain Extensions | 0/3 | Not started | - |
 | 3. Metrics and AI Enhancement | 0/3 | Not started | - |
