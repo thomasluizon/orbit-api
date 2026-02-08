@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Users can track, build, and break habits with flexible scheduling, progress metrics, and AI-assisted management
-**Current focus:** Phase 2 - Habit Domain Extensions (Complete)
+**Current focus:** Phase 3 - Metrics and AI Enhancement (In progress)
 
 ## Current Position
 
-Phase: 2 of 3 (Habit Domain Extensions)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-02-08 -- Completed 02-03-PLAN.md (tags CRUD, profile/timezone, habit tag filtering)
+Phase: 3 of 3 (Metrics and AI Enhancement)
+Plan: 2 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-08 -- Completed 03-02-PLAN.md (AI sub-habit/tag capabilities)
 
-Progress: [########..] 78%
+Progress: [########.#] 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 8
 - Average duration: 5min
-- Total execution time: 0.6 hours
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [########..] 78%
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 3/3 | 20min | 7min |
 | 02-habit-domain-extensions | 3/3 | 16min | 5min |
+| 03-metrics-and-ai-enhancement | 2/3 | 10min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 8min, 5min, 7min, 4min
-- Trend: stable
+- Last 5 plans: 5min, 7min, 4min, 5min, 5min
+- Trend: stable at 5min average
 
 *Updated after each plan completion*
 
@@ -64,6 +65,9 @@ Recent decisions affecting current work:
 - 02-03: Tag assignment via EF navigation property manipulation (habit.Tags.Add/Remove) instead of OrbitDbContext injection
 - 02-03: Tag filtering via repository predicate with h.Tags.Any() -- EF translates to SQL without DbContext
 - 02-03: Comma-separated GUID query parameter pattern for filtering (GET /api/habits?tags=id1,id2)
+- 03-02: AI can create sub-habits inline (SubHabits field on CreateHabit) OR add to existing habits (CreateSubHabit action)
+- 03-02: Tag suggestions informational only in aiMessage - tag assignment requires existing tag IDs
+- 03-02: Invalid tag IDs during AssignTag silently skipped to allow partial success
 
 ### Pending Todos
 
@@ -78,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed plan 02-03 (tags, profile, filtering) -- Phase 2 complete
-Resume file: .planning/phases/03-ai-chat-metrics/ (Phase 3 ready)
+Stopped at: Completed plan 03-02 (AI sub-habit/tag capabilities) -- Phase 3 in progress
+Resume file: .planning/phases/03-metrics-and-ai-enhancement/03-03-PLAN.md (next plan ready)
