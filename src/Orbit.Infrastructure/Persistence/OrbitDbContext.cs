@@ -10,6 +10,7 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<UserFact> UserFacts => Set<UserFact>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,5 +64,11 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                 l => l.HasOne<Habit>().WithMany().HasForeignKey(ht => ht.HabitId)
                     .OnDelete(DeleteBehavior.Cascade),
                 j => j.HasKey(ht => new { ht.HabitId, ht.TagId }));
+
+        modelBuilder.Entity<UserFact>(entity =>
+        {
+            entity.HasIndex(f => new { f.UserId, f.IsDeleted });
+            entity.HasQueryFilter(f => !f.IsDeleted);
+        });
     }
 }
