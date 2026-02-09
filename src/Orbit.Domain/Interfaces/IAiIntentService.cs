@@ -13,5 +13,6 @@ public interface IAiIntentService
         IReadOnlyList<UserFact> userFacts,
         byte[]? imageData = null,
         string? imageMimeType = null,
+        IReadOnlyList<RoutinePattern>? routinePatterns = null,
         CancellationToken cancellationToken = default);
 }

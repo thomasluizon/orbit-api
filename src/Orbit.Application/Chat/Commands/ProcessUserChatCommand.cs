@@ -24,7 +24,8 @@ public record ActionResult(
     string? EntityName = null,
     string? Error = null,
     string? Field = null,
-    IReadOnlyList<AiAction>? SuggestedSubHabits = null);
+    IReadOnlyList<AiAction>? SuggestedSubHabits = null,
+    ConflictWarning? ConflictWarning = null);
 
 public enum ActionStatus { Success, Failed, Suggestion }
 
@@ -36,6 +37,7 @@ public class ProcessUserChatCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
     IAiIntentService aiIntentService,
     IFactExtractionService factExtractionService,
+    IRoutineAnalysisService routineAnalysisService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -82,6 +84,27 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
             factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
 
+        // 1d. Analyze user's routine patterns for AI context (non-critical)
+        logger.LogInformation("Fetching user's routine patterns...");
+        var routineStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        IReadOnlyList<RoutinePattern> routinePatterns = [];
+        try
+        {
+            var routineResult = await routineAnalysisService.AnalyzeRoutinesAsync(request.UserId, cancellationToken);
+            if (routineResult.IsSuccess)
+                routinePatterns = routineResult.Value.Patterns;
+
+            routineStopwatch.Stop();
+            logger.LogInformation("Routine analysis completed in {ElapsedMs}ms (Patterns: {PatternCount})",
+                routineStopwatch.ElapsedMilliseconds, routinePatterns.Count);
+        }
+        catch (Exception ex)
+        {
+            routineStopwatch.Stop();
+            logger.LogWarning(ex, "Routine analysis failed in {ElapsedMs}ms - non-critical, continuing without patterns",
+                routineStopwatch.ElapsedMilliseconds);
+        }
+
         // 2. Send text + context to the AI intent service for interpretation
         logger.LogInformation("Calling AI intent service...");
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -93,6 +116,7 @@ public class ProcessUserChatCommandHandler(
             userFacts,
             request.ImageData,
             request.ImageMimeType,
+            routinePatterns,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -103,13 +127,15 @@ public class ProcessUserChatCommandHandler(
 
         var plan = planResult.Value;
         var actionResults = new List<ActionResult>();
+        var conflictWarnings = new Dictionary<int, ConflictWarning?>();
 
         // 3. Execute each action returned by the AI
         logger.LogInformation("Executing {ActionCount} actions...", plan.Actions.Count);
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        foreach (var action in plan.Actions)
+        for (int i = 0; i < plan.Actions.Count; i++)
         {
+            var action = plan.Actions[i];
             logger.LogInformation("Executing action: {ActionType} - {Title}", action.Type, action.Title ?? action.HabitId?.ToString() ?? "N/A");
 
             try
@@ -127,6 +153,22 @@ public class ProcessUserChatCommandHandler(
                 {
                     var (id, name) = actionResult.Value;
 
+                    // Detect conflicts for CreateHabit actions (non-critical)
+                    if (action.Type == AiActionType.CreateHabit && action.FrequencyUnit.HasValue)
+                    {
+                        try
+                        {
+                            var conflictResult = await routineAnalysisService.DetectConflictsAsync(
+                                request.UserId, action.FrequencyUnit, action.FrequencyQuantity, action.Days, cancellationToken);
+                            if (conflictResult.IsSuccess)
+                                conflictWarnings[i] = conflictResult.Value;
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Conflict detection failed - non-critical");
+                        }
+                    }
+
                     if (action.Type == AiActionType.SuggestBreakdown)
                     {
                         actionResults.Add(new ActionResult(
@@ -137,7 +179,12 @@ public class ProcessUserChatCommandHandler(
                     }
                     else
                     {
-                        actionResults.Add(new ActionResult(action.Type, ActionStatus.Success, id, name));
+                        actionResults.Add(new ActionResult(
+                            action.Type,
+                            ActionStatus.Success,
+                            id,
+                            name,
+                            ConflictWarning: conflictWarnings.GetValueOrDefault(i)));
                     }
 
                     logger.LogInformation("Action succeeded: {ActionType}", action.Type);
