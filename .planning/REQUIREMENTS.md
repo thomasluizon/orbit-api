@@ -24,10 +24,10 @@ Requirements for AI Intelligence & Multi-Action milestone. Each maps to roadmap 
 
 ### Image Processing
 
-- [ ] **IMGP-01**: Chat endpoint accepts image uploads (multipart/form-data)
-- [ ] **IMGP-02**: Images are sent to Gemini Vision multimodal API for analysis
-- [ ] **IMGP-03**: AI extracts structured information from images (titles, dates, amounts) and suggests habit creation
-- [ ] **IMGP-04**: Image-based suggestions require user confirmation before creating habits
+- [x] **IMGP-01**: Chat endpoint accepts image uploads (multipart/form-data)
+- [x] **IMGP-02**: Images are sent to Gemini Vision multimodal API for analysis
+- [x] **IMGP-03**: AI extracts structured information from images (titles, dates, amounts) and suggests habit creation
+- [x] **IMGP-04**: Image-based suggestions require user confirmation before creating habits
 
 ### Routine Intelligence
 
@@ -76,10 +76,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ULRN-02 | Phase 5 | ✓ Done |
 | ULRN-03 | Phase 5 | ✓ Done |
 | ULRN-04 | Phase 5 | ✓ Done |
-| IMGP-01 | Phase 6 | Pending |
-| IMGP-02 | Phase 6 | Pending |
-| IMGP-03 | Phase 6 | Pending |
-| IMGP-04 | Phase 6 | Pending |
+| IMGP-01 | Phase 6 | ✓ Done |
+| IMGP-02 | Phase 6 | ✓ Done |
+| IMGP-03 | Phase 6 | ✓ Done |
+| IMGP-04 | Phase 6 | ✓ Done |
 | RTNI-01 | Phase 7 | Pending |
 | RTNI-02 | Phase 7 | Pending |
 | RTNI-03 | Phase 7 | Pending |
