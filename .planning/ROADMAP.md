@@ -35,8 +35,8 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Multi-action chat pipeline (domain models, handler refactor, prompt update, chat tests)
-- [ ] 04-02-PLAN.md — Bulk endpoints (POST/DELETE /api/habits/bulk with partial success, endpoint tests)
+- [x] 04-01-PLAN.md — Multi-action chat pipeline (domain models, handler refactor, prompt update, chat tests)
+- [x] 04-02-PLAN.md — Bulk endpoints (POST/DELETE /api/habits/bulk with partial success, endpoint tests)
 
 #### Phase 5: User Learning System
 **Goal**: AI learns and personalizes based on user facts extracted from conversations
@@ -93,7 +93,7 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 1. Infrastructure Foundation | v1.0 | 3/3 | ✓ Complete | 2026-02-08 |
 | 2. Habit Domain Extensions | v1.0 | 3/3 | ✓ Complete | 2026-02-08 |
 | 3. Metrics and AI Enhancement | v1.0 | 2/2 | ✓ Complete | 2026-02-08 |
-| 4. Multi-Action Foundation | v1.1 | 0/2 | In progress | - |
+| 4. Multi-Action Foundation | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 5. User Learning System | v1.1 | 0/TBD | Not started | - |
 | 6. Image Intelligence | v1.1 | 0/TBD | Not started | - |
 | 7. Routine Intelligence | v1.1 | 0/TBD | Not started | - |
