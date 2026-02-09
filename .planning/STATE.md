@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-09)
 ## Current Position
 
 Phase: 5 of 7 (User Learning System)
-Plan: Ready to plan
-Status: Phase 4 complete, Phase 5 ready to plan
-Last activity: 2026-02-09 — Completed Phase 4 Multi-Action Foundation (2/2 plans)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-02-09 — Completed 05-01-PLAN.md (Fact Extraction Foundation)
 
-Progress: [███░░░░░░░] 25% (2 of ~8 v1.1 plans)
+Progress: [███░░░░░░░] 33% (3 of ~9 v1.1 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (8 v1.0 + 2 v1.1)
+- Total plans completed: 11 (8 v1.0 + 3 v1.1)
 - Average duration: 6min
-- Total execution time: 1.0 hours
+- Total execution time: 1.1 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [███░░░░░░░] 25% (2 of ~8 v1.1 plans)
 | 02-habit-domain-extensions | 3/3 | 16min | 5min |
 | 03-metrics-and-ai-enhancement | 2/2 | 10min | 5min |
 | 04-multi-action-foundation | 2/2 | 13min | 7min |
+| 05-user-learning-system | 1/2 | 6min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 5min, 5min, 5min, 8min, 5min
+- Last 5 plans: 5min, 5min, 8min, 5min, 6min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -52,6 +53,9 @@ Recent decisions affecting v1.1:
 - Per-action error handling with ActionResult — Enables detailed feedback for batch operations (04-01)
 - SuggestBreakdown as suggestion-only action — Requires explicit user confirmation before creation (04-01)
 - Bulk validation at structural level only — Per-item domain validation in handler enables partial success (04-02)
+- Fact extraction always uses Gemini — Structured JSON output reliability, even when Ollama is main provider (05-01)
+- Fact extraction is non-critical — Failures logged as warning, don't affect chat response (05-01)
+- Soft delete for UserFacts — Global query filter, allows cleanup without losing history (05-01)
 
 ### Pending Todos
 
@@ -62,9 +66,12 @@ None.
 - Ollama reliability with expanded AI prompts uncertain — Gemini is highly reliable, may need Gemini-only for image features
 - Pre-existing MSB3277 warning in IntegrationTests (cosmetic)
 - Phase 7 routine inference requires experimentation for threshold tuning (pattern detection confidence levels)
+- No integration tests yet for fact extraction (05-01)
+- Fact deduplication not implemented - same fact can be extracted multiple times (05-01)
+- Category validation not enforced - accepts any string, not just "preference", "routine", "context" (05-01)
 
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed Phase 4 Multi-Action Foundation — all 5 MACT requirements verified
-Resume file: Ready for `/gsd:plan-phase 5`
+Stopped at: Completed 05-01-PLAN.md — UserFact entity, fact extraction service, dual-pass chat pipeline
+Resume file: .planning/phases/05-user-learning-system/05-02-PLAN.md (Fact Management Endpoints)
