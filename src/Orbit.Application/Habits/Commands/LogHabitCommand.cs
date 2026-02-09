@@ -33,6 +33,19 @@ public class LogHabitCommandHandler(
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         var today = GetUserToday(user);
 
+        // Toggle: if already logged for today, unlog it
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == today);
+        if (existingLog is not null)
+        {
+            var unlogResult = habit.Unlog(today);
+            if (unlogResult.IsFailure)
+                return Result.Failure<Guid>(unlogResult.Error);
+
+            habitLogRepository.Remove(unlogResult.Value);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return Result.Success(unlogResult.Value.Id);
+        }
+
         var logResult = habit.Log(today, request.Note);
 
         if (logResult.IsFailure)

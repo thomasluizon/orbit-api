@@ -118,6 +118,60 @@ public class Habit : Entity
         DueDate = next;
     }
 
+    public Result<HabitLog> Unlog(DateOnly date)
+    {
+        if (!IsActive)
+            return Result.Failure<HabitLog>("Cannot unlog an inactive habit.");
+
+        var log = _logs.Find(l => l.Date == date);
+        if (log is null)
+            return Result.Failure<HabitLog>("No log found for this date.");
+
+        _logs.Remove(log);
+
+        if (FrequencyUnit is null)
+        {
+            IsCompleted = false;
+        }
+        else
+        {
+            DueDate = date;
+        }
+
+        return Result.Success(log);
+    }
+
+    public Result Update(
+        string title,
+        string? description,
+        FrequencyUnit? frequencyUnit,
+        int? frequencyQuantity,
+        IReadOnlyList<System.DayOfWeek>? days,
+        bool isBadHabit,
+        DateOnly? dueDate)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return Result.Failure("Title is required.");
+
+        if (frequencyQuantity is not null && frequencyQuantity <= 0)
+            return Result.Failure("Frequency quantity must be greater than 0.");
+
+        if (days?.Count > 0 && frequencyQuantity != 1)
+            return Result.Failure("Days can only be set when frequency quantity is 1.");
+
+        Title = title.Trim();
+        Description = description?.Trim();
+        FrequencyUnit = frequencyUnit;
+        FrequencyQuantity = frequencyQuantity;
+        Days = days?.ToList() ?? [];
+        IsBadHabit = isBadHabit;
+
+        if (dueDate is not null)
+            DueDate = dueDate.Value;
+
+        return Result.Success();
+    }
+
     public void Deactivate() => IsActive = false;
 
     public void Activate() => IsActive = true;

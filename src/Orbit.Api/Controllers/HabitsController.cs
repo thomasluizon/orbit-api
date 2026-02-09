@@ -23,6 +23,15 @@ public class HabitsController(IMediator mediator) : ControllerBase
         IReadOnlyList<string>? SubHabits = null,
         DateOnly? DueDate = null);
 
+    public record UpdateHabitRequest(
+        string Title,
+        string? Description,
+        FrequencyUnit? FrequencyUnit,
+        int? FrequencyQuantity,
+        IReadOnlyList<System.DayOfWeek>? Days = null,
+        bool IsBadHabit = false,
+        DateOnly? DueDate = null);
+
     public record LogHabitRequest(string? Note = null);
 
     [HttpGet]
@@ -83,6 +92,30 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         return result.IsSuccess
             ? Ok(new { logId = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateHabit(
+        Guid id,
+        [FromBody] UpdateHabitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateHabitCommand(
+            HttpContext.GetUserId(),
+            id,
+            request.Title,
+            request.Description,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
+            request.Days,
+            request.IsBadHabit,
+            request.DueDate);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 

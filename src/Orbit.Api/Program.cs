@@ -92,6 +92,17 @@ builder.Services.AddMediatR(cfg =>
     cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 });
 
+// --- CORS ---
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // --- Controllers ---
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -126,6 +137,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
+app.UseCors();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
