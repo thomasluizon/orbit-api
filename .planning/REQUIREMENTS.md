@@ -67,29 +67,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MACT-01 | TBD | Pending |
-| MACT-02 | TBD | Pending |
-| MACT-03 | TBD | Pending |
-| MACT-04 | TBD | Pending |
-| MACT-05 | TBD | Pending |
-| ULRN-01 | TBD | Pending |
-| ULRN-02 | TBD | Pending |
-| ULRN-03 | TBD | Pending |
-| ULRN-04 | TBD | Pending |
-| IMGP-01 | TBD | Pending |
-| IMGP-02 | TBD | Pending |
-| IMGP-03 | TBD | Pending |
-| IMGP-04 | TBD | Pending |
-| RTNI-01 | TBD | Pending |
-| RTNI-02 | TBD | Pending |
-| RTNI-03 | TBD | Pending |
-| RTNI-04 | TBD | Pending |
+| MACT-01 | Phase 4 | Pending |
+| MACT-02 | Phase 4 | Pending |
+| MACT-03 | Phase 4 | Pending |
+| MACT-04 | Phase 4 | Pending |
+| MACT-05 | Phase 4 | Pending |
+| ULRN-01 | Phase 5 | Pending |
+| ULRN-02 | Phase 5 | Pending |
+| ULRN-03 | Phase 5 | Pending |
+| ULRN-04 | Phase 5 | Pending |
+| IMGP-01 | Phase 6 | Pending |
+| IMGP-02 | Phase 6 | Pending |
+| IMGP-03 | Phase 6 | Pending |
+| IMGP-04 | Phase 6 | Pending |
+| RTNI-01 | Phase 7 | Pending |
+| RTNI-02 | Phase 7 | Pending |
+| RTNI-03 | Phase 7 | Pending |
+| RTNI-04 | Phase 7 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17 (pending roadmap creation)
+- Mapped to phases: 17 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-09*
-*Last updated: 2026-02-09 after initial definition*
+*Last updated: 2026-02-09 after roadmap creation*
