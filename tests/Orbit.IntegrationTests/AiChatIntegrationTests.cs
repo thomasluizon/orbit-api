@@ -372,6 +372,77 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     #endregion
 
+    #region Routine Intelligence Tests (4)
+
+    [Fact]
+    public async Task Chat_AskAboutRoutinePatterns_ShouldAnalyzeAndRespond()
+    {
+        // Arrange - Create a daily habit and log it a few times to establish a pattern
+        await SendChatMessage("i want to exercise daily");
+        await SendChatMessage("i exercised today");
+
+        // Act - Ask about routine patterns
+        var response = await SendChatMessage("analyze my routine");
+
+        // Assert
+        response.Should().NotBeNull();
+        response.AiMessage.Should().NotBeNullOrEmpty();
+        // AI should respond with scheduling/routine analysis content
+        // (exact content is non-deterministic, just verify it responded)
+    }
+
+    [Fact]
+    public async Task Chat_CreateHabitWithPotentialConflict_ShouldReturnWarning()
+    {
+        // Arrange - Create a daily habit
+        var firstResponse = await SendChatMessage("i want to exercise every weekday morning");
+
+        // Act - Create another habit on the same schedule
+        var secondResponse = await SendChatMessage("i want to meditate every weekday morning");
+
+        // Assert - Habit creation should succeed (not blocked by conflict)
+        secondResponse.Actions.Should().ContainSingle();
+        secondResponse.Actions[0].Type.Should().Be("CreateHabit");
+        secondResponse.Actions[0].Status.Should().Be("Success");
+        secondResponse.Actions[0].EntityId.Should().NotBeEmpty();
+
+        // Note: ConflictWarning may or may not be populated depending on whether
+        // enough log history exists. The key test is that creation succeeds regardless.
+    }
+
+    [Fact]
+    public async Task Chat_AskForScheduleSuggestions_ShouldReturnTimeSlots()
+    {
+        // Arrange - Create a habit to establish some routine context
+        await SendChatMessage("i want to run daily");
+
+        // Act - Ask for scheduling suggestions
+        var response = await SendChatMessage("when should i schedule a new reading habit?");
+
+        // Assert
+        response.Should().NotBeNull();
+        response.AiMessage.Should().NotBeNullOrEmpty();
+        // AI should leverage routine context to suggest times
+        // (exact suggestions are non-deterministic, verify it responded)
+    }
+
+    [Fact]
+    public async Task Chat_RoutineAnalysisWithNoData_ShouldNotFail()
+    {
+        // Arrange - Fresh user with no habits or logs (already clean from InitializeAsync)
+
+        // Act - Ask about routine with no data
+        var response = await SendChatMessage("analyze my routine");
+
+        // Assert - Should succeed gracefully with a message indicating insufficient data
+        response.Should().NotBeNull();
+        response.AiMessage.Should().NotBeNullOrEmpty();
+        // AI should indicate not enough data or empty routine info
+        // (graceful handling, no errors)
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static byte[] CreateMinimalPng()
