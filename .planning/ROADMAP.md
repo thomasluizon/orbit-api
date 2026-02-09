@@ -62,11 +62,11 @@ Plans:
   2. Image is processed by Gemini Vision API and AI can describe visual content
   3. AI extracts structured data from images (habit titles, dates, frequencies) and suggests habit creation
   4. Image-based habit suggestions require explicit user confirmation before creating any habits
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Image upload infrastructure (validation, multipart binding, Gemini Vision integration)
+- [ ] 06-02-PLAN.md — Image-aware AI prompting and integration tests
 
 #### Phase 7: Routine Intelligence
 **Goal**: AI detects user logging patterns and suggests optimal scheduling with conflict detection
@@ -95,5 +95,5 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 3. Metrics and AI Enhancement | v1.0 | 2/2 | ✓ Complete | 2026-02-08 |
 | 4. Multi-Action Foundation | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 5. User Learning System | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
-| 6. Image Intelligence | v1.1 | 0/TBD | Not started | - |
+| 6. Image Intelligence | v1.1 | 0/2 | Not started | - |
 | 7. Routine Intelligence | v1.1 | 0/TBD | Not started | - |
