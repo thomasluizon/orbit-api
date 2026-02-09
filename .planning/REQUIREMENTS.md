@@ -9,18 +9,18 @@ Requirements for AI Intelligence & Multi-Action milestone. Each maps to roadmap 
 
 ### Multi-Action AI
 
-- [ ] **MACT-01**: AI can return multiple actions in a single response (e.g., create 3 habits from one prompt)
-- [ ] **MACT-02**: Each action executes independently with per-action error handling (partial success supported)
-- [ ] **MACT-03**: AI can decompose a user intent into a parent habit with auto-generated sub-habits
-- [ ] **MACT-04**: AI can log multiple habits at once from a single user message (e.g., "finished my morning routine")
-- [ ] **MACT-05**: Chat response includes per-action success/failure status in structured format
+- [x] **MACT-01**: AI can return multiple actions in a single response (e.g., create 3 habits from one prompt)
+- [x] **MACT-02**: Each action executes independently with per-action error handling (partial success supported)
+- [x] **MACT-03**: AI can decompose a user intent into a parent habit with auto-generated sub-habits
+- [x] **MACT-04**: AI can log multiple habits at once from a single user message (e.g., "finished my morning routine")
+- [x] **MACT-05**: Chat response includes per-action success/failure status in structured format
 
 ### User Learning
 
-- [ ] **ULRN-01**: AI extracts key facts from chat messages and persists them to database
-- [ ] **ULRN-02**: Stored user facts are loaded into AI system prompt for personalized responses
-- [ ] **ULRN-03**: User can view all stored facts about themselves via API
-- [ ] **ULRN-04**: User can delete individual stored facts via API
+- [x] **ULRN-01**: AI extracts key facts from chat messages and persists them to database
+- [x] **ULRN-02**: Stored user facts are loaded into AI system prompt for personalized responses
+- [x] **ULRN-03**: User can view all stored facts about themselves via API
+- [x] **ULRN-04**: User can delete individual stored facts via API
 
 ### Image Processing
 
@@ -31,10 +31,10 @@ Requirements for AI Intelligence & Multi-Action milestone. Each maps to roadmap 
 
 ### Routine Intelligence
 
-- [ ] **RTNI-01**: System analyzes habit log timestamps to detect recurring time-of-day patterns
-- [ ] **RTNI-02**: System warns when a new habit's scheduling conflicts with detected routine blocks
-- [ ] **RTNI-03**: System suggests available time slots for new habits based on routine gaps (triple-choice format)
-- [ ] **RTNI-04**: Routine suggestions include confidence scores based on pattern consistency
+- [x] **RTNI-01**: System analyzes habit log timestamps to detect recurring time-of-day patterns
+- [x] **RTNI-02**: System warns when a new habit's scheduling conflicts with detected routine blocks
+- [x] **RTNI-03**: System suggests available time slots for new habits based on routine gaps (triple-choice format)
+- [x] **RTNI-04**: Routine suggestions include confidence scores based on pattern consistency
 
 ## Future Requirements
 
@@ -67,11 +67,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MACT-01 | Phase 4 | Pending |
-| MACT-02 | Phase 4 | Pending |
-| MACT-03 | Phase 4 | Pending |
-| MACT-04 | Phase 4 | Pending |
-| MACT-05 | Phase 4 | Pending |
+| MACT-01 | Phase 4 | ✓ Done |
+| MACT-02 | Phase 4 | ✓ Done |
+| MACT-03 | Phase 4 | ✓ Done |
+| MACT-04 | Phase 4 | ✓ Done |
+| MACT-05 | Phase 4 | ✓ Done |
 | ULRN-01 | Phase 5 | ✓ Done |
 | ULRN-02 | Phase 5 | ✓ Done |
 | ULRN-03 | Phase 5 | ✓ Done |
@@ -80,10 +80,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IMGP-02 | Phase 6 | ✓ Done |
 | IMGP-03 | Phase 6 | ✓ Done |
 | IMGP-04 | Phase 6 | ✓ Done |
-| RTNI-01 | Phase 7 | Pending |
-| RTNI-02 | Phase 7 | Pending |
-| RTNI-03 | Phase 7 | Pending |
-| RTNI-04 | Phase 7 | Pending |
+| RTNI-01 | Phase 7 | ✓ Done |
+| RTNI-02 | Phase 7 | ✓ Done |
+| RTNI-03 | Phase 7 | ✓ Done |
+| RTNI-04 | Phase 7 | ✓ Done |
 
 **Coverage:**
 - v1.1 requirements: 17 total
