@@ -11,5 +11,7 @@ public interface IAiIntentService
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
+        byte[]? imageData = null,
+        string? imageMimeType = null,
         CancellationToken cancellationToken = default);
 }
