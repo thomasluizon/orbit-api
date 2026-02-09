@@ -72,10 +72,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MACT-03 | Phase 4 | Pending |
 | MACT-04 | Phase 4 | Pending |
 | MACT-05 | Phase 4 | Pending |
-| ULRN-01 | Phase 5 | Pending |
-| ULRN-02 | Phase 5 | Pending |
-| ULRN-03 | Phase 5 | Pending |
-| ULRN-04 | Phase 5 | Pending |
+| ULRN-01 | Phase 5 | ✓ Done |
+| ULRN-02 | Phase 5 | ✓ Done |
+| ULRN-03 | Phase 5 | ✓ Done |
+| ULRN-04 | Phase 5 | ✓ Done |
 | IMGP-01 | Phase 6 | Pending |
 | IMGP-02 | Phase 6 | Pending |
 | IMGP-03 | Phase 6 | Pending |

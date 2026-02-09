@@ -50,8 +50,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — UserFact entity, extraction service, and chat pipeline integration (ULRN-01, ULRN-02)
-- [ ] 05-02-PLAN.md — UserFacts API endpoints and integration tests (ULRN-03, ULRN-04)
+- [x] 05-01-PLAN.md — UserFact entity, extraction service, and chat pipeline integration (ULRN-01, ULRN-02)
+- [x] 05-02-PLAN.md — UserFacts API endpoints and integration tests (ULRN-03, ULRN-04)
 
 #### Phase 6: Image Intelligence
 **Goal**: AI can analyze uploaded images and suggest habit creation from visual content
@@ -94,6 +94,6 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 2. Habit Domain Extensions | v1.0 | 3/3 | ✓ Complete | 2026-02-08 |
 | 3. Metrics and AI Enhancement | v1.0 | 2/2 | ✓ Complete | 2026-02-08 |
 | 4. Multi-Action Foundation | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
-| 5. User Learning System | v1.1 | 0/2 | Not started | - |
+| 5. User Learning System | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 6. Image Intelligence | v1.1 | 0/TBD | Not started | - |
 | 7. Routine Intelligence | v1.1 | 0/TBD | Not started | - |

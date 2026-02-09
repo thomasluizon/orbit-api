@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-09)
 
 **Core value:** Users can track, build, and break habits with flexible scheduling, progress metrics, and AI-assisted management
-**Current focus:** Phase 5: User Learning System
+**Current focus:** Phase 6: Image Intelligence
 
 ## Current Position
 
