@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-09)
 ## Current Position
 
 Phase: 6 of 7 (Image Intelligence)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-02-09 — Completed 06-01-PLAN.md (Image Upload Infrastructure)
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-02-09 — Completed 06-02-PLAN.md (Image-Aware AI Prompting)
 
-Progress: [█████░░░░░] 56% (5 of ~9 v1.1 plans)
+Progress: [██████░░░░] 67% (6 of ~9 v1.1 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13 (8 v1.0 + 5 v1.1)
+- Total plans completed: 14 (8 v1.0 + 6 v1.1)
 - Average duration: 6min
-- Total execution time: 1.4 hours
+- Total execution time: 1.5 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [█████░░░░░] 56% (5 of ~9 v1.1 plans)
 | 03-metrics-and-ai-enhancement | 2/2 | 10min | 5min |
 | 04-multi-action-foundation | 2/2 | 13min | 7min |
 | 05-user-learning-system | 2/2 | 16min | 8min |
-| 06-image-intelligence | 1/2 | 5min | 5min |
+| 06-image-intelligence | 2/2 | 13min | 7min |
 
 **Recent Trend:**
-- Last 5 plans: 8min, 5min, 6min, 10min, 5min
+- Last 5 plans: 5min, 6min, 10min, 5min, 8min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -68,7 +68,6 @@ None.
 
 ### Blockers/Concerns
 
-- Chat endpoint breaking change — Changed from [FromBody] JSON to [FromForm] multipart, integration tests will fail until updated (06-01)
 - Ollama image support not implemented — Logs warning, continues text-only (Ollama doesn't support vision APIs) (06-01)
 - Ollama reliability with expanded AI prompts uncertain — Gemini is highly reliable, may need Gemini-only for image features
 - Pre-existing MSB3277 warning in IntegrationTests (cosmetic)
@@ -80,12 +79,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed 06-01-PLAN.md — Image upload infrastructure with secure validation and Gemini Vision integration
-Resume file: Phase 6 plan 1 complete, ready for 06-02 (Image Upload Integration Tests)
+Stopped at: Completed 06-02-PLAN.md — Image-aware AI prompting with SuggestBreakdown enforcement and multipart test coverage
+Resume file: Phase 6 complete, ready for Phase 7 (Routine Intelligence)
 
-06-01-SUMMARY.md Key Info:
-- Commits: 96ab16b (task 1), dedc986 (task 2)
-- Key files created: IImageValidationService.cs, ImageValidationService.cs
-- Key files modified: IAiIntentService.cs, ProcessUserChatCommand.cs, GeminiIntentService.cs, ChatController.cs
-- Patterns: Multipart form-data binding, magic byte validation (FileSignatures), base64 inline_data for Gemini Vision
-- Breaking change: ChatController now requires [FromForm] multipart instead of [FromBody] JSON
+06-02-SUMMARY.md Key Info:
+- Commits: 657c8b1 (task 1), 60230c0 (task 2)
+- Key files modified: SystemPromptBuilder.cs, GeminiIntentService.cs, AiChatIntegrationTests.cs
+- Patterns: Conditional prompt injection (hasImage flag), multipart form testing
+- Image analysis instructions mandate SuggestBreakdown (never auto-create from images)
+- All 14 existing tests updated to multipart format, 2 new image tests added
+- Phase 6 Image Intelligence complete: upload → validate → analyze → suggest → confirm
