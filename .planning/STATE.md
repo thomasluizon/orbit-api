@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-09)
 
 ## Current Position
 
-Phase: 6 of 7 (Image Intelligence)
-Plan: 2 of 2 complete
-Status: Phase complete
-Last activity: 2026-02-09 — Completed 06-02-PLAN.md (Image-Aware AI Prompting)
+Phase: 7 of 7 (Routine Intelligence)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-02-09 — Completed 07-01-PLAN.md (Routine Intelligence Infrastructure)
 
-Progress: [██████░░░░] 67% (6 of ~9 v1.1 plans)
+Progress: [███████░░░] 78% (7 of ~9 v1.1 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14 (8 v1.0 + 6 v1.1)
+- Total plans completed: 15 (8 v1.0 + 7 v1.1)
 - Average duration: 6min
-- Total execution time: 1.5 hours
+- Total execution time: 1.6 hours
 
 **By Phase:**
 
@@ -33,9 +33,10 @@ Progress: [██████░░░░] 67% (6 of ~9 v1.1 plans)
 | 04-multi-action-foundation | 2/2 | 13min | 7min |
 | 05-user-learning-system | 2/2 | 16min | 8min |
 | 06-image-intelligence | 2/2 | 13min | 7min |
+| 07-routine-intelligence | 1/2 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 5min, 6min, 10min, 5min, 8min
+- Last 5 plans: 6min, 10min, 5min, 8min, 5min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -47,6 +48,10 @@ Progress: [██████░░░░] 67% (6 of ~9 v1.1 plans)
 See PROJECT.md Key Decisions table for full history.
 
 Recent decisions affecting v1.1:
+- LLM-first pattern analysis over statistical methods — Gemini handles temporal reasoning natively, produces human-readable patterns without ML.NET complexity (07-01)
+- Routine analysis always uses Gemini — Structured JSON output reliability, follows fact extraction pattern (07-01)
+- Fallback generic time slot suggestions — UX consistency, users get actionable recommendations even with insufficient data (07-01)
+- Routine patterns optional in SystemPromptBuilder — Backward compatible, enables gradual Plan 02 rollout (07-01)
 - IFormFile in Domain layer — Pragmatic tradeoff similar to EF Core in Application, needed for IImageValidationService (06-01)
 - Multipart form-data over separate endpoints — Single endpoint maintains conversational flow, better UX despite breaking change (06-01)
 - Base64 inline_data over File API — Simpler for images <20MB, avoids upload/reference/cleanup overhead (06-01)
@@ -79,13 +84,13 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed 06-02-PLAN.md — Image-aware AI prompting with SuggestBreakdown enforcement and multipart test coverage
-Resume file: Phase 6 complete, ready for Phase 7 (Routine Intelligence)
+Stopped at: Completed 07-01-PLAN.md — Routine intelligence infrastructure with LLM-based pattern detection
+Resume file: .planning/phases/07-routine-intelligence/07-02-PLAN.md (integrate routine analysis into CreateHabitCommand)
 
-06-02-SUMMARY.md Key Info:
-- Commits: 657c8b1 (task 1), 60230c0 (task 2)
-- Key files modified: SystemPromptBuilder.cs, GeminiIntentService.cs, AiChatIntegrationTests.cs
-- Patterns: Conditional prompt injection (hasImage flag), multipart form testing
-- Image analysis instructions mandate SuggestBreakdown (never auto-create from images)
-- All 14 existing tests updated to multipart format, 2 new image tests added
-- Phase 6 Image Intelligence complete: upload → validate → analyze → suggest → confirm
+07-01-SUMMARY.md Key Info:
+- Commits: 8d75ab0 (task 1), 23ee5d5 (task 2)
+- Key files created: RoutineAnalysis.cs (6 records), IRoutineAnalysisService.cs, GeminiRoutineAnalysisService.cs
+- Key files modified: SystemPromptBuilder.cs (optional routinePatterns parameter), Program.cs (DI registration)
+- Patterns: UTC-to-local timezone conversion, minimum data thresholds (7 days, 5 logs/habit), retry logic with exponential backoff
+- Infrastructure ready for Plan 02: conflict detection + time slot suggestions via Gemini
+- Phase 7 Plan 1 complete: routine pattern detection foundation established
