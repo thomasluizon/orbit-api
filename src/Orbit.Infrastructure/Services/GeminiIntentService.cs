@@ -29,6 +29,8 @@ public sealed class GeminiIntentService(
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
+        byte[]? imageData = null,
+        string? imageMimeType = null,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -40,16 +42,30 @@ public sealed class GeminiIntentService(
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);
 
+        var parts = new List<GeminiPart>
+        {
+            new GeminiPart { Text = $"{systemPrompt}\n\nUser: {userMessage}" }
+        };
+
+        if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
+        {
+            parts.Add(new GeminiPart
+            {
+                InlineData = new InlineData
+                {
+                    MimeType = imageMimeType,
+                    Data = Convert.ToBase64String(imageData)
+                }
+            });
+        }
+
         var request = new GeminiRequest
         {
             Contents = new[]
             {
                 new GeminiContent
                 {
-                    Parts = new[]
-                    {
-                        new GeminiPart { Text = $"{systemPrompt}\n\nUser: {userMessage}" }
-                    }
+                    Parts = parts.ToArray()
                 }
             },
             GenerationConfig = new GeminiGenerationConfig
@@ -167,7 +183,19 @@ public sealed class GeminiIntentService(
     private record GeminiPart
     {
         [JsonPropertyName("text")]
-        public string Text { get; init; } = string.Empty;
+        public string? Text { get; init; }
+
+        [JsonPropertyName("inline_data")]
+        public InlineData? InlineData { get; init; }
+    }
+
+    private record InlineData
+    {
+        [JsonPropertyName("mime_type")]
+        public string MimeType { get; init; } = string.Empty;
+
+        [JsonPropertyName("data")]
+        public string Data { get; init; } = string.Empty;
     }
 
     private record GeminiGenerationConfig

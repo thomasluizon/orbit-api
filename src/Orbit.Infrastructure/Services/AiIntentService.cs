@@ -29,9 +29,18 @@ public sealed class OllamaIntentService(
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
+        byte[]? imageData = null,
+        string? imageMimeType = null,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        // Ollama doesn't support image processing
+        if (imageData != null)
+        {
+            logger.LogWarning("Image data provided but Ollama doesn't support vision - ignoring image");
+            // We could return failure here, but for now we'll just log a warning and continue with text-only
+        }
 
         logger.LogInformation("🔵 START: Building system prompt...");
         var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();

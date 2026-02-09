@@ -9,7 +9,11 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Chat.Commands;
 
-public record ProcessUserChatCommand(Guid UserId, string Message) : IRequest<Result<ChatResponse>>;
+public record ProcessUserChatCommand(
+    Guid UserId,
+    string Message,
+    byte[]? ImageData = null,
+    string? ImageMimeType = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(string? AiMessage, IReadOnlyList<ActionResult> Actions);
 
@@ -87,6 +91,8 @@ public class ProcessUserChatCommandHandler(
             activeHabits,
             userTags,
             userFacts,
+            request.ImageData,
+            request.ImageMimeType,
             cancellationToken);
 
         aiStopwatch.Stop();

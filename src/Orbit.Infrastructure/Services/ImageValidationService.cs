@@ -14,6 +14,13 @@ public sealed class ImageValidationService : IImageValidationService
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
+    private static readonly IEnumerable<FileFormat> AllowedFormats = new FileFormat[]
+    {
+        new Jpeg(),
+        new Png(),
+        new Webp()
+    };
+
     private static readonly FileFormatInspector Inspector = new();
 
     public async Task<Result<(string MimeType, long Size)>> ValidateAsync(IFormFile file)
@@ -32,23 +39,16 @@ public sealed class ImageValidationService : IImageValidationService
 
         // 3. Magic bytes signature check using FileSignatures library
         using var stream = file.OpenReadStream();
-        var format = await Inspector.DetermineFileFormatAsync(stream);
+        var format = Inspector.DetermineFileFormat(stream);
 
         if (format == null)
             return Result.Failure<(string, long)>("Unable to determine file format from magic bytes.");
 
-        // Map FileSignatures format to MIME type
-        var mimeType = format switch
-        {
-            Jpeg => "image/jpeg",
-            Png => "image/png",
-            WebP => "image/webp",
-            _ => null
-        };
+        // Validate against allowed formats
+        if (!AllowedFormats.Any(f => f.GetType() == format.GetType()))
+            return Result.Failure<(string, long)>($"File signature does not match allowed image formats. Detected: {format.GetType().Name}");
 
-        if (mimeType == null)
-            return Result.Failure<(string, long)>($"File format '{format.GetType().Name}' is not a supported image type.");
-
-        return Result.Success((mimeType, file.Length));
+        // Return the media type from the detected format
+        return await Task.FromResult(Result.Success((format.MediaType, file.Length)));
     }
 }
