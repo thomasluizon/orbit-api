@@ -58,14 +58,15 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // --- AI Provider Configuration ---
+// Always configure Gemini settings (used for fact extraction even with Ollama)
+builder.Services.Configure<GeminiSettings>(
+    builder.Configuration.GetSection(GeminiSettings.SectionName));
+
 var aiProvider = builder.Configuration.GetValue<string>("AiProvider") ?? "Ollama";
 
 if (aiProvider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
 {
     // Gemini (Google) API
-    builder.Services.Configure<GeminiSettings>(
-        builder.Configuration.GetSection(GeminiSettings.SectionName));
-
     builder.Services.AddHttpClient<IAiIntentService, GeminiIntentService>();
 }
 else
@@ -81,6 +82,9 @@ else
         client.BaseAddress = new Uri(settings.BaseUrl);
     });
 }
+
+// Fact extraction always uses Gemini (structured output reliability)
+builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionService>();
 
 // --- Validation ---
 builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();

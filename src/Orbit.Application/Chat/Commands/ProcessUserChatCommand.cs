@@ -29,7 +29,9 @@ public class ProcessUserChatCommandHandler(
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<Tag> tagRepository,
+    IGenericRepository<UserFact> userFactRepository,
     IAiIntentService aiIntentService,
+    IFactExtractionService factExtractionService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -64,6 +66,18 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Tag query completed in {ElapsedMs}ms (Tags: {TagCount})",
             tagDbStopwatch.ElapsedMilliseconds, userTags.Count);
 
+        // 1c. Retrieve user's facts as context for the AI
+        logger.LogInformation("Fetching user facts from database...");
+        var factDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var userFacts = await userFactRepository.FindAsync(
+            f => f.UserId == request.UserId,
+            cancellationToken);
+
+        factDbStopwatch.Stop();
+        logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
+            factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
+
         // 2. Send text + context to the AI intent service for interpretation
         logger.LogInformation("Calling AI intent service...");
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -72,6 +86,7 @@ public class ProcessUserChatCommandHandler(
             request.Message,
             activeHabits,
             userTags,
+            userFacts,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -145,6 +160,51 @@ public class ProcessUserChatCommandHandler(
 
         saveStopwatch.Stop();
         logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
+
+        // 5. Extract facts from conversation (non-blocking - failure doesn't affect response)
+        try
+        {
+            logger.LogInformation("Extracting facts from conversation...");
+            var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var extractionResult = await factExtractionService.ExtractFactsAsync(
+                request.Message,
+                plan.AiMessage,
+                cancellationToken);
+
+            extractionStopwatch.Stop();
+
+            if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
+            {
+                logger.LogInformation("Extracted {FactCount} facts in {ElapsedMs}ms",
+                    extractionResult.Value.Facts.Count, extractionStopwatch.ElapsedMilliseconds);
+
+                foreach (var candidate in extractionResult.Value.Facts)
+                {
+                    var factResult = UserFact.Create(request.UserId, candidate.FactText, candidate.Category);
+                    if (factResult.IsSuccess)
+                    {
+                        await userFactRepository.AddAsync(factResult.Value, cancellationToken);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to create fact: {Error}", factResult.Error);
+                    }
+                }
+
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                logger.LogInformation("Facts persisted to database");
+            }
+            else
+            {
+                logger.LogInformation("No facts extracted from conversation in {ElapsedMs}ms",
+                    extractionStopwatch.ElapsedMilliseconds);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Fact extraction failed - non-critical, continuing");
+        }
 
         totalStopwatch.Stop();
         logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);

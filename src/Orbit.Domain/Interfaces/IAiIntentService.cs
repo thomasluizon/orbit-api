@@ -10,5 +10,6 @@ public interface IAiIntentService
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
+        IReadOnlyList<UserFact> userFacts,
         CancellationToken cancellationToken = default);
 }

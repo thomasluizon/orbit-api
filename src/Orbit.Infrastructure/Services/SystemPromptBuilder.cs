@@ -7,7 +7,8 @@ public static class SystemPromptBuilder
 {
     public static string BuildSystemPrompt(
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<Tag> userTags)
+        IReadOnlyList<Tag> userTags,
+        IReadOnlyList<UserFact> userFacts)
     {
         var sb = new StringBuilder();
 
@@ -126,6 +127,23 @@ public static class SystemPromptBuilder
             sb.AppendLine("When user wants to tag a habit with an EXISTING tag -> use AssignTag with the exact ID above");
             sb.AppendLine("When user mentions a NEW tag that doesn't exist -> include tagNames in aiMessage as suggestions (user creates tags manually)");
         }
+
+        sb.AppendLine();
+
+        sb.AppendLine("## What You Know About This User");
+        if (userFacts.Count == 0)
+        {
+            sb.AppendLine("(nothing yet - learn as you go)");
+        }
+        else
+        {
+            foreach (var fact in userFacts.OrderByDescending(f => f.ExtractedAtUtc))
+            {
+                sb.AppendLine($"- {fact.FactText}");
+            }
+        }
+        sb.AppendLine();
+        sb.AppendLine("Use these facts to personalize your responses. Do NOT repeat these facts back to the user unless relevant.");
 
         sb.AppendLine();
         sb.AppendLine($"## Today's Date: {DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}");

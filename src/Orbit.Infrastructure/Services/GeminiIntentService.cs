@@ -28,13 +28,14 @@ public sealed class GeminiIntentService(
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
+        IReadOnlyList<UserFact> userFacts,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         logger.LogInformation("🔵 START: Building system prompt...");
         var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, userTags);
+        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, userTags, userFacts);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);
