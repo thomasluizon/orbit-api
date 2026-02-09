@@ -8,7 +8,8 @@ public static class SystemPromptBuilder
     public static string BuildSystemPrompt(
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
-        IReadOnlyList<UserFact> userFacts)
+        IReadOnlyList<UserFact> userFacts,
+        bool hasImage = false)
     {
         var sb = new StringBuilder();
 
@@ -148,6 +149,46 @@ public static class SystemPromptBuilder
         sb.AppendLine();
         sb.AppendLine($"## Today's Date: {DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}");
         sb.AppendLine();
+
+        if (hasImage)
+        {
+            sb.AppendLine($$"""
+                ## Image Analysis Instructions
+                When the user uploads an image (photo of schedule, bill, to-do list, calendar):
+                1. Extract all habit-like items (tasks, recurring events, goals, responsibilities)
+                2. Infer frequency from visual cues:
+                   - Daily checkboxes or daily columns -> FrequencyUnit: Day, FrequencyQuantity: 1
+                   - Week columns (Mon-Sun) or weekly markers -> FrequencyUnit: Week, FrequencyQuantity: 1
+                   - Month labels or monthly markers -> FrequencyUnit: Month, FrequencyQuantity: 1
+                   - Specific days listed -> Use Days array (Monday, Tuesday, etc.)
+                3. Extract due dates from dates visible in image (format: YYYY-MM-DD)
+                4. Extract amounts for financial habits (bill amount, subscription cost) and include in description
+                5. CRITICAL: For image-based habit extraction, ALWAYS use SuggestBreakdown action type
+                   - NEVER create habits directly from image analysis
+                   - User must explicitly confirm which suggestions to create
+                6. Include extracted text/context in habit descriptions for clarity
+                7. If the image contains no habit-relevant information, return empty actions with an aiMessage explaining what you see
+
+                Example image analysis response:
+                {
+                  "aiMessage": "I found 3 recurring tasks in your schedule image.",
+                  "actions": [
+                    {
+                      "type": "SuggestBreakdown",
+                      "title": "Schedule from Image",
+                      "frequencyUnit": "Day",
+                      "frequencyQuantity": 1,
+                      "dueDate": "YYYY-MM-DD",
+                      "suggestedSubHabits": [
+                        { "type": "CreateHabit", "title": "Morning jog", "frequencyUnit": "Week", "frequencyQuantity": 3, "days": ["Monday", "Wednesday", "Friday"], "dueDate": "YYYY-MM-DD" },
+                        { "type": "CreateHabit", "title": "Team meeting", "frequencyUnit": "Week", "frequencyQuantity": 1, "days": ["Tuesday"], "dueDate": "YYYY-MM-DD" }
+                      ]
+                    }
+                  ]
+                }
+
+                """);
+        }
 
         sb.AppendLine("## Response JSON Schema & Examples");
         sb.AppendLine("""
