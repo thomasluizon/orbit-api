@@ -77,11 +77,11 @@ Plans:
   2. When user creates new habit with conflicting schedule, system warns about detected time conflicts
   3. AI suggests available time slots for new habits based on routine gaps in triple-choice format
   4. Routine suggestions include confidence scores showing pattern consistency (e.g., "70% confidence - logged 7 of last 10 Mondays")
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md — Routine analysis service (domain models, IRoutineAnalysisService, GeminiRoutineAnalysisService, SystemPromptBuilder routine context, DI wiring)
+- [ ] 07-02-PLAN.md — Chat pipeline integration and tests (conflict warnings on CreateHabit, routine patterns in AI context, 4 integration tests)
 
 ## Progress
 
@@ -96,4 +96,4 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 4. Multi-Action Foundation | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 5. User Learning System | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 6. Image Intelligence | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
-| 7. Routine Intelligence | v1.1 | 0/TBD | Not started | - |
+| 7. Routine Intelligence | v1.1 | 0/2 | Not started | - |
