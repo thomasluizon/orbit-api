@@ -1,532 +1,1295 @@
-# Architecture Patterns
+# Architecture Patterns: AI Intelligence Enhancements
 
-**Domain:** AI-powered habit tracking -- extending existing Clean Architecture backend
-**Researched:** 2026-02-07
+**Domain:** AI-powered habit tracking API enhancements
+**Researched:** 2026-02-09
+**Confidence:** HIGH
 
-## Current Architecture Snapshot
+## System Overview
 
-Before recommending extensions, here is how the system works today:
+This research covers architectural integration of four new AI capabilities into the existing Clean Architecture + CQRS system:
 
-```
-API Layer (Controllers + JWT Auth)
-  |
-  v  MediatR Commands/Queries
-Application Layer (Handlers)
-  |
-  v  IGenericRepository<T>, IUnitOfWork, IAiIntentService
-Domain Layer (Entities, Result, Enums, Interfaces)
-  ^
-  |  Implementations
-Infrastructure Layer (EF Core DbContext, GenericRepository, AI Services)
-```
+1. **Multi-action execution** with partial failure handling
+2. **Gemini Vision** multimodal API integration for image processing
+3. **User fact storage** (semantic memory) for AI personalization
+4. **Routine inference** from HabitLog time-series pattern analysis
 
-**Entities:** User, Habit (with HabitLog child collection), TaskItem (being removed)
-**Patterns:** Factory methods with Result return, private setters, private constructors, CQRS via MediatR, GenericRepository with AsNoTracking reads, single UnitOfWork per request
-**AI Flow:** User message -> ProcessUserChatCommand -> IAiIntentService.InterpretAsync (sends user context + habits/tasks) -> AiActionPlan -> execute actions -> save
-
-## Recommended Architecture for New Features
-
-### Design Principle: Extend, Do Not Restructure
-
-The existing architecture is sound. The new features (sub-habits, bad habits, tags, progress metrics) integrate as domain extensions and new Application-layer handlers. No layer boundary changes needed.
-
-### Component Boundaries
-
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **Habit (Entity)** | Core habit state, logging, activation, parent-child relationship | HabitLog, Tag (via HabitTag join) |
-| **HabitLog (Entity)** | Individual log entries with date and value | Habit (parent) |
-| **Tag (Entity)** | User-defined categorization labels | Habit (via HabitTag join), User (owner) |
-| **HabitTag (Join Entity)** | Many-to-many link between Habit and Tag | Habit, Tag |
-| **HabitProgressService (Domain Service)** | Computes streaks, completion rates, metrics from HabitLog data | Habit, HabitLog (read-only) |
-| **ProcessUserChatCommand (Handler)** | AI intent routing, action execution | All repositories, IAiIntentService |
-| **SystemPromptBuilder (Infra Service)** | Builds AI context with habit/tag/sub-habit info | Habit, Tag (read-only) |
-| **Progress Queries (Handlers)** | Fetches and returns computed metrics | HabitProgressService, Repositories |
-| **GenericRepository** | CRUD for all entities | OrbitDbContext |
-
-### High-Level Component Diagram
+### Existing Architecture Foundation
 
 ```
-Controllers
-  |
-  +-- HabitsController -----> CreateHabitCommand (+ ParentHabitId, IsNegative, TagIds)
-  |                    -----> GetHabitsQuery (includes sub-habits, tags)
-  |                    -----> GetHabitProgressQuery -> HabitProgressService
-  |
-  +-- TagsController -------> CreateTagCommand
-  |                    -----> GetTagsQuery
-  |                    -----> UpdateTagCommand / DeleteTagCommand
-  |
-  +-- ChatController -------> ProcessUserChatCommand (extended with tag/sub-habit actions)
-  |
-  +-- ProfileController ----> GetProfileQuery / UpdateProfileCommand
+Domain (Entities, Interfaces, Models)
+    ↓
+Application (Commands/Queries via MediatR)
+    ↓
+Infrastructure (Services, Repositories, DbContext)
+    ↓
+Api (Controllers)
 ```
+
+**Key Components:**
+- `IAiIntentService` → `GeminiIntentService` (HTTP to Gemini API)
+- `SystemPromptBuilder` → constructs prompts with habit/tag context
+- `ProcessUserChatCommand` → orchestrates AI chat flow
+- `AiActionPlan` → contains `Actions[]` + `AiMessage`
+- `GenericRepository<T>` + `UnitOfWork` → data access pattern
+
+**Current Limitation:** Single action execution mindset (though Actions is already a list), text-only input, no user memory, no pattern detection.
 
 ---
 
-## Feature 1: Sub-Habits (Parent-Child Hierarchy)
+## Component Responsibilities
 
-### Data Model
+### 1. Multi-Action Execution
 
-Self-referencing one-to-many on the Habit entity. A habit optionally has a parent. A parent can have many children. Depth is limited to one level (parent -> children, no grandchildren) to keep complexity manageable.
+**Current State:**
+- `ProcessUserChatCommand.Handle()` iterates `plan.Actions` (lines 79-100)
+- Calls action executors: `ExecuteLogHabitAsync`, `ExecuteCreateHabitAsync`, `ExecuteAssignTagAsync`
+- Logs failures but continues execution
+- Single `UnitOfWork.SaveChangesAsync()` at end (line 109)
 
+**Problem:** All-or-nothing transaction. If SaveChanges fails, ALL actions fail. No granular feedback.
+
+**Solution Pattern:** Partial commit with compensating actions
+
+| Approach | Pros | Cons | Recommendation |
+|----------|------|------|----------------|
+| **Single transaction (current)** | Atomic consistency | All-or-nothing, poor UX | Keep for simple cases |
+| **Per-action commits** | Granular control, partial success | Complexity, inconsistency risk | Use for multi-action chat |
+| **Saga orchestration** | Compensating actions, resilience | High complexity, overkill | Not needed for this scale |
+
+**Recommended Architecture:**
 ```csharp
-// Added to Habit entity
-public Guid? ParentHabitId { get; private set; }
-public Habit? ParentHabit { get; private set; }  // Navigation (not exposed via API)
-
-private readonly List<Habit> _subHabits = [];
-public IReadOnlyCollection<Habit> SubHabits => _subHabits.AsReadOnly();
-```
-
-### Domain Rules (enforced in Habit.Create and new methods)
-
-1. A sub-habit cannot itself be a parent (depth = 1 max)
-2. A sub-habit must belong to the same user as its parent
-3. A sub-habit inherits frequency from parent by default but can override
-4. Deactivating a parent deactivates all sub-habits
-5. Deleting a parent cascades to sub-habits (via EF DeleteBehavior.Cascade)
-
-### EF Configuration
-
-```csharp
-modelBuilder.Entity<Habit>(entity =>
+// NEW: Multi-action executor with partial failure
+public class ActionExecutionResult
 {
-    // Existing config...
+    public bool Success { get; init; }
+    public string ActionType { get; init; }
+    public string ActionDescription { get; init; }
+    public string? ErrorMessage { get; init; }
+}
 
-    entity.HasOne(h => h.ParentHabit)
-        .WithMany(h => h.SubHabits)
-        .HasForeignKey(h => h.ParentHabitId)
-        .IsRequired(false)
-        .OnDelete(DeleteBehavior.Cascade);
+// Modified ProcessUserChatCommand handler
+foreach (var action in plan.Actions)
+{
+    var result = await ExecuteActionAsync(action, userId, ct);
+    executionResults.Add(result);
 
-    entity.HasIndex(h => h.ParentHabitId);
-});
+    if (result.Success)
+    {
+        await unitOfWork.SaveChangesAsync(ct); // Commit per action
+    }
+    else
+    {
+        // Log failure, continue with next action
+        logger.LogWarning("Action failed: {Error}", result.ErrorMessage);
+    }
+}
 ```
 
-### Why This Approach
+**Integration Point:** Modify `ProcessUserChatCommandHandler` to support per-action commits with detailed result tracking.
 
-- Self-referencing FK is the standard EF Core pattern for parent-child. No separate SubHabit entity needed because sub-habits are habits (same fields, same logging behavior).
-- One-level depth limit avoids recursive query complexity while satisfying the use case ("Exercise" -> "Push-ups", "Running", "Yoga").
-- Cascade delete is safe here because orphaned sub-habits have no meaning.
+**New Components:**
+- `ActionExecutionResult` record (Domain/Models)
+- Enhanced `ChatResponse` with `IReadOnlyList<ActionExecutionResult>` instead of `string[]`
 
-### Query Impact
-
-GetHabitsQuery must be updated to eager-load sub-habits for top-level habits. Use `.Include(h => h.SubHabits)` and filter to `ParentHabitId == null` for the top-level list, with sub-habits nested inside.
-
-### AI Impact
-
-The AiAction model needs an optional `ParentHabitId` field. SystemPromptBuilder shows sub-habits indented under parents. When creating a habit that sounds like a sub-category of an existing habit, the AI should set the parent.
+**References:**
+- [Domain events: Design and implementation - .NET](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/domain-events-design-implementation)
+- [CQRS and exception handling · Enterprise Craftsmanship](https://enterprisecraftsmanship.com/posts/cqrs-exception-handling/)
 
 ---
 
-## Feature 2: Bad Habits (Negative Tracking)
+### 2. Gemini Vision Multimodal Integration
 
-### Data Model
+**Current State:**
+- `GeminiIntentService` sends text-only requests
+- Request structure: `GeminiContent.Parts[] = [{ Text }]`
+- No image handling
 
-Add an `IsNegative` boolean to the Habit entity. This is simpler and more flexible than adding a new enum value to HabitType because the positive/negative dimension is orthogonal to Boolean/Quantifiable.
+**Gemini Vision API Structure:**
 
-```csharp
-// Added to Habit entity
-public bool IsNegative { get; private set; }
+```json
+{
+  "contents": [{
+    "parts": [
+      {"text": "Analyze this image"},
+      {
+        "inline_data": {
+          "mime_type": "image/jpeg",
+          "data": "base64_encoded_string"
+        }
+      }
+    ]
+  }],
+  "generationConfig": {
+    "temperature": 0.1,
+    "responseMimeType": "application/json"
+  }
+}
 ```
 
-### Why Boolean Instead of Extending HabitType
+**Supported formats:** PNG, JPEG, WEBP, HEIC, HEIF
+**Size limit:** 20MB total request (inline), or use File API for larger files
+**Model:** `gemini-2.5-flash` supports multimodal (already configured)
 
-HabitType currently tracks *how* a habit is measured (Boolean vs. Quantifiable). Whether a habit is positive or negative tracks *intent*. These are orthogonal:
-- "Smoke cigarettes" = Negative + Quantifiable (count per day)
-- "Bite nails" = Negative + Boolean (did it or not)
-- "Drink water" = Positive + Quantifiable
-- "Meditate" = Positive + Boolean
+**Architectural Components:**
 
-A single boolean keeps the domain clean. No enum explosion.
+| Layer | Component | Responsibility |
+|-------|-----------|----------------|
+| **Api** | `ChatController.ProcessChat()` | Accept `IFormFile` images with message |
+| **Application** | `ProcessUserChatCommand` | Add `byte[]? ImageData, string? ImageMimeType` properties |
+| **Infrastructure** | `GeminiIntentService.InterpretAsync()` | Add image parameter, construct multimodal request |
+| **Domain** | `IAiIntentService` | Add image parameters to signature |
 
-### Domain Rules
+**New DTOs:**
 
-1. Negative habits track slip-ups rather than completions
-2. For negative habits, logging means "I slipped up" -- the value represents magnitude (e.g., 3 cigarettes)
-3. Streaks for negative habits count consecutive days *without* a log (days clean)
-4. Progress for negative habits is measured as "days since last slip" and "total slip-free days in period"
-5. The Log method on Habit does not change -- logging is logging. The *interpretation* changes in HabitProgressService.
+```csharp
+// Domain/Models/GeminiImageData.cs
+public record GeminiImageData
+{
+    public required byte[] Data { get; init; }
+    public required string MimeType { get; init; } // image/jpeg, image/png
+}
 
-### Why No Separate "SlipLog" Entity
+// Modified IAiIntentService
+Task<Result<AiActionPlan>> InterpretAsync(
+    string userMessage,
+    IReadOnlyList<Habit> activeHabits,
+    IReadOnlyList<Tag> userTags,
+    GeminiImageData? image = null, // NEW
+    CancellationToken cancellationToken = default);
+```
 
-A slip-up log has the same structure as a positive log: date + optional value. Creating a separate entity would duplicate HabitLog. Instead, the same HabitLog entity serves both, and the `IsNegative` flag on the parent Habit drives how metrics are computed.
+**GeminiIntentService Enhancement:**
 
-### AI Impact
+```csharp
+// Add to existing GeminiRequest DTOs
+private record GeminiPart
+{
+    [JsonPropertyName("text")]
+    public string? Text { get; init; }
 
-AiAction gets an optional `IsNegative` boolean. SystemPromptBuilder explains the concept. The AI must distinguish "I smoked 3 cigarettes" (log a negative habit) from "I ran 5km" (log a positive habit).
+    [JsonPropertyName("inline_data")] // NEW
+    public GeminiInlineData? InlineData { get; init; }
+}
+
+private record GeminiInlineData
+{
+    [JsonPropertyName("mime_type")]
+    public required string MimeType { get; init; }
+
+    [JsonPropertyName("data")]
+    public required string Data { get; init; } // Base64
+}
+
+// Modified request building
+var parts = new List<GeminiPart>
+{
+    new() { Text = $"{systemPrompt}\n\nUser: {userMessage}" }
+};
+
+if (image is not null)
+{
+    parts.Add(new GeminiPart
+    {
+        InlineData = new GeminiInlineData
+        {
+            MimeType = image.MimeType,
+            Data = Convert.ToBase64String(image.Data)
+        }
+    });
+}
+
+var request = new GeminiRequest
+{
+    Contents = [new GeminiContent { Parts = parts.ToArray() }],
+    GenerationConfig = new() { Temperature = 0.1, ResponseMimeType = "application/json" }
+};
+```
+
+**Controller Enhancement:**
+
+```csharp
+// Api/Controllers/ChatController.cs
+[HttpPost]
+public async Task<IActionResult> ProcessChat(
+    [FromForm] string message,
+    [FromForm] IFormFile? image) // NEW
+{
+    byte[]? imageData = null;
+    string? mimeType = null;
+
+    if (image is not null)
+    {
+        // Validate size (20MB limit)
+        if (image.Length > 20 * 1024 * 1024)
+            return BadRequest("Image too large (max 20MB)");
+
+        // Validate format
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/webp" };
+        if (!allowedTypes.Contains(image.ContentType))
+            return BadRequest("Unsupported image format");
+
+        using var ms = new MemoryStream();
+        await image.CopyToAsync(ms);
+        imageData = ms.ToArray();
+        mimeType = image.ContentType;
+    }
+
+    var command = new ProcessUserChatCommand(
+        UserId: userId,
+        Message: message,
+        ImageData: imageData,
+        ImageMimeType: mimeType
+    );
+
+    // ... execute command
+}
+```
+
+**Integration Point:** Flow is Api → Application → Infrastructure. Add optional image parameters at each layer.
+
+**References:**
+- [Image understanding | Gemini API | Google AI for Developers](https://ai.google.dev/gemini-api/docs/image-understanding)
+- [Multimodal Prompting with Gemini: Working with Images](https://googlecloudplatform.github.io/applied-ai-engineering-samples/genai-on-vertex-ai/gemini/prompting_recipes/multimodal/multimodal_prompting_image/)
 
 ---
 
-## Feature 3: Tags
+### 3. User Fact Storage (Semantic Memory)
 
-### Data Model
+**Purpose:** AI learns user preferences, key facts, context for better personalization.
 
-Tags are user-scoped entities with a many-to-many relationship to Habits via an explicit join entity.
+**Examples:**
+- "I prefer morning workouts"
+- "I'm trying to quit caffeine"
+- "I have a dog named Max"
+- "I work night shifts"
+
+**Architecture Pattern:** Semantic memory with embedding-based retrieval
+
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| **Storage** | PostgreSQL (existing) + pgvector extension | Reuse existing DB, avoid new infrastructure |
+| **Embeddings** | Gemini text-embedding-004 | Same provider, simple HTTP API |
+| **Retrieval** | Cosine similarity search | Standard semantic search |
+| **Fallback** | Simple keyword search | No embeddings needed initially |
+
+**New Domain Entity:**
 
 ```csharp
-// New entity: Tag
-public class Tag : Entity
+// Domain/Entities/UserFact.cs
+public class UserFact : Entity
 {
     public Guid UserId { get; private set; }
-    public string Name { get; private set; } = null!;
-    public string? Color { get; private set; }  // Hex color for UI
+    public string Content { get; private set; } = null!; // "I prefer morning workouts"
+    public string? Category { get; private set; } // "Preferences", "Context", "Goals"
+    public float[]? Embedding { get; private set; } // Vector for semantic search
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime? LastReferencedUtc { get; private set; } // Track usage
 
-    private readonly List<HabitTag> _habitTags = [];
-    public IReadOnlyCollection<HabitTag> HabitTags => _habitTags.AsReadOnly();
+    private UserFact() { }
 
-    private Tag() { }
+    public static Result<UserFact> Create(Guid userId, string content, string? category = null)
+    {
+        if (userId == Guid.Empty)
+            return Result.Failure<UserFact>("User ID is required");
 
-    public static Result<Tag> Create(Guid userId, string name, string? color = null) { ... }
-}
+        if (string.IsNullOrWhiteSpace(content))
+            return Result.Failure<UserFact>("Content is required");
 
-// Join entity: HabitTag
-public class HabitTag : Entity
-{
-    public Guid HabitId { get; private set; }
-    public Guid TagId { get; private set; }
-    public Habit Habit { get; private set; } = null!;
-    public Tag Tag { get; private set; } = null!;
+        return Result.Success(new UserFact
+        {
+            UserId = userId,
+            Content = content.Trim(),
+            Category = category?.Trim(),
+            CreatedAtUtc = DateTime.UtcNow
+        });
+    }
 
-    private HabitTag() { }
+    public void SetEmbedding(float[] embedding)
+    {
+        Embedding = embedding;
+    }
 
-    internal static HabitTag Create(Guid habitId, Guid tagId) { ... }
-}
-```
-
-### Why Explicit Join Entity Instead of Skip Navigation
-
-EF Core supports implicit many-to-many (skip navigations), but an explicit HabitTag entity gives us:
-- Consistency with the existing Entity base class pattern (all entities have Guid Id)
-- Room to add metadata later (e.g., tagged-at timestamp)
-- Clearer DbContext configuration
-- Easier to work with in the GenericRepository pattern
-
-### EF Configuration
-
-```csharp
-modelBuilder.Entity<Tag>(entity =>
-{
-    entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
-});
-
-modelBuilder.Entity<HabitTag>(entity =>
-{
-    entity.HasIndex(ht => new { ht.HabitId, ht.TagId }).IsUnique();
-
-    entity.HasOne(ht => ht.Habit)
-        .WithMany()
-        .HasForeignKey(ht => ht.HabitId)
-        .OnDelete(DeleteBehavior.Cascade);
-
-    entity.HasOne(ht => ht.Tag)
-        .WithMany(t => t.HabitTags)
-        .HasForeignKey(ht => ht.TagId)
-        .OnDelete(DeleteBehavior.Cascade);
-});
-```
-
-### Domain Rules
-
-1. Tag names are unique per user (enforced at DB level via unique index)
-2. A habit can have 0-N tags
-3. A tag can be applied to 0-N habits
-4. Deleting a tag removes all HabitTag associations (cascade)
-5. Deleting a habit removes all HabitTag associations (cascade)
-6. Tags have an optional color for UI rendering
-
-### Query Patterns
-
-- `GET /api/tags` -- all tags for current user
-- `GET /api/habits?tag=fitness` -- filter habits by tag name
-- Tags are included in habit responses via eager loading
-
-### AI Impact
-
-AiAction gets an optional `Tags` string array. When the AI creates a habit, it can suggest tags based on the habit description. SystemPromptBuilder includes the user's existing tags so the AI reuses them rather than creating duplicates.
-
----
-
-## Feature 4: Progress Metrics
-
-### Architecture: Domain Service, Not Entity Method
-
-Progress computation involves reading collections of HabitLogs and applying algorithms (streak calculation, completion rate). This is a read-only computation that does not modify state. It belongs in a **Domain Service**, not on the Habit entity, because:
-
-1. The Habit entity should not need to load all its logs to compute metrics
-2. Progress calculation varies by habit type (boolean vs. quantifiable) and polarity (positive vs. negative)
-3. Keeping computation separate makes it independently testable
-4. The repository provides the log data; the domain service computes metrics
-
-### Domain Service Interface
-
-```csharp
-// In Domain/Interfaces/
-public interface IHabitProgressService
-{
-    HabitProgress CalculateProgress(
-        Habit habit,
-        IReadOnlyList<HabitLog> logs,
-        DateOnly periodStart,
-        DateOnly periodEnd);
+    public void MarkReferenced()
+    {
+        LastReferencedUtc = DateTime.UtcNow;
+    }
 }
 ```
 
-### Progress Model (Value Object in Domain)
+**Database Schema (EF Core Migration):**
 
 ```csharp
-// In Domain/Models/
-public record HabitProgress
+// OrbitDbContext.cs
+public DbSet<UserFact> UserFacts => Set<UserFact>();
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    public int CurrentStreak { get; init; }
-    public int LongestStreak { get; init; }
-    public decimal CompletionRate { get; init; }     // 0.0 to 1.0
-    public int TotalLogs { get; init; }
-    public int ExpectedLogs { get; init; }           // Based on frequency within period
-    public decimal? AverageValue { get; init; }      // For quantifiable habits
-    public decimal? TotalValue { get; init; }        // For quantifiable habits
-    public DateOnly? LastLogDate { get; init; }
-    // Negative habit specific
-    public int? DaysSinceLastSlip { get; init; }     // For negative habits
-    public int? SlipFreeDays { get; init; }          // For negative habits in period
+    // ...existing
+
+    modelBuilder.Entity<UserFact>(entity =>
+    {
+        entity.HasIndex(uf => new { uf.UserId, uf.CreatedAtUtc });
+        entity.HasIndex(uf => uf.Category);
+
+        // PostgreSQL pgvector extension support (optional)
+        entity.Property(uf => uf.Embedding)
+            .HasColumnType("vector(768)"); // Gemini embedding dimension
+    });
 }
 ```
 
-### Streak Calculation Algorithm
-
-For **positive** habits:
-1. Sort logs by date descending
-2. Walk backward from today, checking each expected date (based on frequency + days)
-3. Current streak = consecutive expected dates with a matching log
-4. Longest streak = max consecutive run in the full log history
-
-For **negative** habits:
-1. Current streak = days from last log to today (days since last slip)
-2. Longest streak = largest gap between consecutive logs
-3. If no logs exist, streak = days since habit creation
-
-For **quantifiable** habits:
-- Additionally compute average value, total value, and trend (comparing recent period to prior period)
-
-### Implementation Location
-
-The `IHabitProgressService` interface lives in `Domain/Interfaces/`. The implementation `HabitProgressService` lives in `Application/Services/` (it is pure computation, no infrastructure dependency, but it orchestrates domain logic above what a single entity should own). Alternatively, it can live in `Domain/Services/` as a true domain service since it has zero infrastructure dependencies -- this is the better choice for this project.
-
-### Query Pattern
+**New Application Layer Commands/Queries:**
 
 ```csharp
-public record GetHabitProgressQuery(
+// Application/UserFacts/Commands/CreateUserFactCommand.cs
+public record CreateUserFactCommand(
     Guid UserId,
-    Guid HabitId,
-    DateOnly? PeriodStart = null,
-    DateOnly? PeriodEnd = null) : IRequest<Result<HabitProgress>>;
+    string Content,
+    string? Category = null
+) : IRequest<Result<Guid>>;
+
+// Application/UserFacts/Queries/GetRelevantFactsQuery.cs
+public record GetRelevantFactsQuery(
+    Guid UserId,
+    string Context, // Current user message for semantic matching
+    int MaxResults = 5
+) : IRequest<Result<IReadOnlyList<UserFact>>>;
 ```
 
-The handler fetches the habit and its logs from the repository, then delegates to `IHabitProgressService` for computation.
+**New Infrastructure Service:**
 
-### Why Not Computed Columns or Materialized Views
+```csharp
+// Infrastructure/Services/IUserFactService.cs (Domain/Interfaces)
+public interface IUserFactService
+{
+    Task<Result<float[]>> GenerateEmbeddingAsync(string text, CancellationToken ct = default);
+    Task<Result<IReadOnlyList<UserFact>>> SearchSimilarFactsAsync(
+        Guid userId,
+        float[] queryEmbedding,
+        int maxResults = 5,
+        CancellationToken ct = default);
+}
 
-Streaks and completion rates depend on frequency rules, day-of-week filters, and habit polarity -- business logic that does not belong in SQL. Computing in the domain service keeps the logic testable and the database simple. If performance becomes an issue at scale, a caching layer or periodic snapshot table can be added later without changing the domain model.
+// Infrastructure/Services/GeminiUserFactService.cs
+public class GeminiUserFactService : IUserFactService
+{
+    // Use Gemini text-embedding-004 model
+    // https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent
+
+    public async Task<Result<float[]>> GenerateEmbeddingAsync(string text, CancellationToken ct)
+    {
+        var request = new { content = new { parts = new[] { new { text } } } };
+        var response = await httpClient.PostAsJsonAsync($"{baseUrl}/models/text-embedding-004:embedContent?key={apiKey}", request, ct);
+        // Parse response.embedding.values (float[])
+    }
+
+    public async Task<Result<IReadOnlyList<UserFact>>> SearchSimilarFactsAsync(...)
+    {
+        // Use PostgreSQL pgvector cosine similarity
+        // SELECT *, (embedding <=> @queryEmbedding) AS distance
+        // FROM UserFacts
+        // WHERE UserId = @userId
+        // ORDER BY distance
+        // LIMIT @maxResults
+    }
+}
+```
+
+**Integration into SystemPromptBuilder:**
+
+```csharp
+// SystemPromptBuilder.cs
+public static string BuildSystemPrompt(
+    IReadOnlyList<Habit> activeHabits,
+    IReadOnlyList<Tag> userTags,
+    IReadOnlyList<UserFact> relevantFacts) // NEW
+{
+    var sb = new StringBuilder();
+
+    // ...existing sections
+
+    if (relevantFacts.Count > 0)
+    {
+        sb.AppendLine();
+        sb.AppendLine("## User Context & Preferences");
+        sb.AppendLine("Consider these facts about the user:");
+        foreach (var fact in relevantFacts)
+        {
+            sb.AppendLine($"- {fact.Content}");
+        }
+        sb.AppendLine();
+    }
+
+    // ...rest of prompt
+}
+```
+
+**Data Flow:**
+
+```
+User Message → GetRelevantFactsQuery
+    → Generate embedding for message
+    → Search similar UserFacts by embedding
+    → Load into SystemPromptBuilder
+    → Send to Gemini
+
+AI Response → Extract new facts (if any)
+    → CreateUserFactCommand
+    → Generate embedding
+    → Store UserFact
+```
+
+**Extraction Strategy:** Add new AiActionType for fact capture:
+
+```csharp
+// Domain/Enums/AiActionType.cs
+public enum AiActionType
+{
+    LogHabit,
+    CreateHabit,
+    AssignTag,
+    StoreFact // NEW - AI captures notable user information
+}
+
+// Domain/Models/AiAction.cs
+public record AiAction
+{
+    // ...existing
+    public string? FactContent { get; init; } // For StoreFact action
+    public string? FactCategory { get; init; } // Optional category
+}
+```
+
+**Alternative (Simpler) Implementation:** No embeddings initially, use simple keyword search or chronological retrieval:
+
+```csharp
+// Simpler GetRelevantFactsQuery (no embeddings)
+var facts = await factRepository.FindAsync(
+    f => f.UserId == userId,
+    ct,
+    orderBy: q => q.OrderByDescending(f => f.LastReferencedUtc ?? f.CreatedAtUtc),
+    take: 10
+);
+```
+
+**Recommendation:** Start simple (no embeddings), add semantic search in later phase if needed.
+
+**References:**
+- [What Is AI Agent Memory? | IBM](https://www.ibm.com/think/topics/ai-agent-memory)
+- [Design Patterns for Long-Term Memory in LLM-Powered Architectures](https://serokell.io/blog/design-patterns-for-long-term-memory-in-llm-powered-architectures)
+- [Build a .NET AI vector search app](https://learn.microsoft.com/en-us/dotnet/ai/quickstarts/build-vector-search-app)
 
 ---
 
-## Feature 5: User Profile
+### 4. Routine Inference (Pattern Detection)
 
-### Data Model
+**Purpose:** Detect patterns in HabitLog timestamps to suggest routines.
 
-The User entity already has `Name`, `Email`, `CreatedAtUtc`, and `UpdateProfile` method. Extend with:
+**Examples:**
+- User logs "Gym" every Monday/Wednesday/Friday at 6am → Suggest "Create weekly gym routine for MWF mornings"
+- User logs "Coffee" daily at 2pm → Detect potential caffeine dependency pattern
+- User logs "Reading" inconsistently → Suggest setting a recurring habit
+
+**Architecture Pattern:** Analytical service with time-series pattern detection
+
+| Component | Responsibility |
+|-----------|----------------|
+| **RoutineAnalysisService** | Analyze HabitLog data for patterns |
+| **RoutineInferenceQuery** | Trigger analysis, return suggestions |
+| **RoutineSuggestion model** | Structured suggestion for UI |
+
+**Pattern Detection Algorithms:**
+
+| Pattern Type | Detection Method | Complexity |
+|--------------|------------------|------------|
+| **Day-of-week regularity** | Group logs by DayOfWeek, calculate frequency | Low |
+| **Time-of-day clustering** | Group logs by hour window, find peaks | Medium |
+| **Consistency analysis** | Calculate streaks, gaps, standard deviation | Low |
+| **Frequency recommendation** | Analyze intervals between logs, suggest FrequencyUnit | Medium |
+
+**New Domain Models:**
 
 ```csharp
-// Added to User entity
-public string? Timezone { get; private set; }      // IANA timezone (e.g., "Europe/London")
-public string? AvatarUrl { get; private set; }     // URL or null
+// Domain/Models/RoutineSuggestion.cs
+public record RoutineSuggestion
+{
+    public required string Title { get; init; } // "Gym Routine"
+    public required string Description { get; init; } // "You go to the gym every Mon/Wed/Fri at 6am"
+    public required string SuggestedAction { get; init; } // "Create a weekly habit for MWF mornings?"
+    public FrequencyUnit? SuggestedFrequency { get; init; }
+    public int? SuggestedQuantity { get; init; }
+    public List<DayOfWeek>? SuggestedDays { get; init; }
+    public TimeOnly? SuggestedTime { get; init; } // For time-based prompts
+    public Guid? RelatedHabitId { get; init; } // If analyzing existing habit
+    public ConfidenceLevel Confidence { get; init; } // High/Medium/Low
+}
+
+// Domain/Enums/ConfidenceLevel.cs
+public enum ConfidenceLevel
+{
+    Low,    // 50-70% pattern match
+    Medium, // 70-85% pattern match
+    High    // 85%+ pattern match
+}
 ```
 
-### Why Timezone on User
+**New Infrastructure Service:**
 
-Streak calculations and "today" depend on the user's timezone. Currently the system uses `DateTime.UtcNow` everywhere. With timezone stored on the profile, the progress service can determine "today" correctly for each user. This is critical for streak accuracy.
+```csharp
+// Domain/Interfaces/IRoutineAnalysisService.cs
+public interface IRoutineAnalysisService
+{
+    Task<Result<IReadOnlyList<RoutineSuggestion>>> AnalyzeUserRoutinesAsync(
+        Guid userId,
+        CancellationToken ct = default);
 
-### Commands/Queries
+    Task<Result<IReadOnlyList<RoutineSuggestion>>> AnalyzeHabitPatternsAsync(
+        Guid habitId,
+        CancellationToken ct = default);
+}
 
+// Infrastructure/Services/RoutineAnalysisService.cs
+public class RoutineAnalysisService : IRoutineAnalysisService
+{
+    private readonly IGenericRepository<HabitLog> _logRepository;
+    private readonly IGenericRepository<Habit> _habitRepository;
+
+    public async Task<Result<IReadOnlyList<RoutineSuggestion>>> AnalyzeUserRoutinesAsync(
+        Guid userId,
+        CancellationToken ct)
+    {
+        // 1. Load all HabitLogs for user's habits (last 90 days)
+        var cutoffDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+
+        var logs = await _logRepository.FindAsync(
+            l => l.Date >= cutoffDate && _habitRepository
+                .GetQueryable()
+                .Where(h => h.UserId == userId)
+                .Select(h => h.Id)
+                .Contains(l.HabitId),
+            ct
+        );
+
+        // 2. Group by HabitId
+        var habitGroups = logs.GroupBy(l => l.HabitId);
+
+        var suggestions = new List<RoutineSuggestion>();
+
+        foreach (var group in habitGroups)
+        {
+            // 3. Analyze patterns
+            var dayOfWeekPattern = AnalyzeDayOfWeekPattern(group);
+            var timeOfDayPattern = AnalyzeTimeOfDayPattern(group);
+            var consistencyPattern = AnalyzeConsistency(group);
+
+            // 4. Generate suggestions based on patterns
+            if (dayOfWeekPattern.Confidence >= ConfidenceLevel.Medium)
+            {
+                suggestions.Add(dayOfWeekPattern);
+            }
+        }
+
+        return Result.Success<IReadOnlyList<RoutineSuggestion>>(suggestions);
+    }
+
+    private RoutineSuggestion AnalyzeDayOfWeekPattern(IEnumerable<HabitLog> logs)
+    {
+        // Group by DayOfWeek
+        var dayFrequency = logs
+            .GroupBy(l => l.Date.DayOfWeek)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var totalLogs = logs.Count();
+        var dominantDays = dayFrequency
+            .Where(kvp => kvp.Value / (double)totalLogs >= 0.7) // 70% threshold
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        if (dominantDays.Count >= 2 && dominantDays.Count <= 5)
+        {
+            // High confidence weekly pattern
+            var habit = await _habitRepository.GetByIdAsync(logs.First().HabitId);
+
+            return new RoutineSuggestion
+            {
+                Title = $"{habit.Title} Routine",
+                Description = $"You typically do this on {string.Join(", ", dominantDays)}",
+                SuggestedAction = "Create a weekly habit with specific days?",
+                SuggestedFrequency = FrequencyUnit.Day,
+                SuggestedQuantity = 1,
+                SuggestedDays = dominantDays,
+                RelatedHabitId = habit.Id,
+                Confidence = ConfidenceLevel.High
+            };
+        }
+
+        // ...return low confidence default
+    }
+
+    private RoutineSuggestion AnalyzeTimeOfDayPattern(IEnumerable<HabitLog> logs)
+    {
+        // Group by hour of CreatedAtUtc (proxy for log time)
+        var hourFrequency = logs
+            .GroupBy(l => l.CreatedAtUtc.Hour)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var dominantHour = hourFrequency.MaxBy(kvp => kvp.Value);
+
+        if (dominantHour.Value / (double)logs.Count() >= 0.6) // 60% threshold
+        {
+            // Consistent time pattern
+            return new RoutineSuggestion
+            {
+                Title = "Time Pattern Detected",
+                Description = $"You usually log this around {dominantHour.Key}:00",
+                SuggestedAction = "Set a reminder for this time?",
+                SuggestedTime = new TimeOnly(dominantHour.Key, 0),
+                Confidence = ConfidenceLevel.Medium
+            };
+        }
+
+        // ...return low confidence
+    }
+}
 ```
-UpdateProfileCommand(UserId, Name?, Timezone?, AvatarUrl?)
-GetProfileQuery(UserId) -> UserProfile DTO
+
+**New Application Query:**
+
+```csharp
+// Application/Routines/Queries/GetRoutineSuggestionsQuery.cs
+public record GetRoutineSuggestionsQuery(Guid UserId) : IRequest<Result<IReadOnlyList<RoutineSuggestion>>>;
+
+public class GetRoutineSuggestionsQueryHandler : IRequestHandler<GetRoutineSuggestionsQuery, Result<IReadOnlyList<RoutineSuggestion>>>
+{
+    private readonly IRoutineAnalysisService _analysisService;
+
+    public async Task<Result<IReadOnlyList<RoutineSuggestion>>> Handle(
+        GetRoutineSuggestionsQuery request,
+        CancellationToken ct)
+    {
+        return await _analysisService.AnalyzeUserRoutinesAsync(request.UserId, ct);
+    }
+}
 ```
+
+**API Endpoint:**
+
+```csharp
+// Api/Controllers/RoutinesController.cs
+[ApiController]
+[Route("api/routines")]
+[Authorize]
+public class RoutinesController : ControllerBase
+{
+    private readonly IMediator _mediator;
+
+    [HttpGet("suggestions")]
+    public async Task<IActionResult> GetSuggestions()
+    {
+        var userId = GetUserIdFromClaims();
+        var query = new GetRoutineSuggestionsQuery(userId);
+        var result = await _mediator.Send(query);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(result.Error);
+    }
+}
+```
+
+**Integration with AI Chat:**
+
+Option 1: Proactive suggestions in AI responses
+```csharp
+// SystemPromptBuilder enhancement
+if (routineSuggestions.Count > 0)
+{
+    sb.AppendLine("## Detected Patterns");
+    sb.AppendLine("You may want to suggest these based on user's logging history:");
+    foreach (var suggestion in routineSuggestions)
+    {
+        sb.AppendLine($"- {suggestion.Description}");
+    }
+}
+```
+
+Option 2: Separate endpoint for frontend to poll
+```
+GET /api/routines/suggestions → Frontend displays suggestions
+User accepts → POST /api/habits with suggested parameters
+```
+
+**Recommendation:** Start with separate endpoint (Option 2), add to AI context in later phase.
+
+**References:**
+- [Pattern Recognition in Time Series | Baeldung](https://www.baeldung.com/cs/pattern-recognition-time-series)
+- [Time Traveling with Data Science: Pattern Recognition, Motifs Discovery and the Matrix Profile](https://www.iese.fraunhofer.de/blog/pattern-recognition/)
 
 ---
 
 ## Data Flow Diagrams
 
-### Flow 1: Creating a Habit with Sub-Habit and Tags (via Chat)
+### Current Chat Flow (Text Only)
 
 ```
-User: "I want to track exercise with sub-habits for running and yoga, tag it fitness"
-  |
-  v
-ChatController.ProcessChat
-  |
-  v
-ProcessUserChatCommand
-  |
-  v
-IAiIntentService.InterpretAsync
-  -> Returns AiActionPlan with 3 actions:
-     1. CreateHabit: "Exercise" (parent, tags: ["fitness"])
-     2. CreateHabit: "Running" (parentHabitId: <exercise-id>, tags: ["fitness"])
-     3. CreateHabit: "Yoga" (parentHabitId: <exercise-id>, tags: ["fitness"])
-  |
-  v
-ExecuteCreateHabitAsync (for each action)
-  -> Habit.Create(..., parentHabitId, isNegative: false)
-  -> For each tag name: find or create Tag, create HabitTag
-  -> habitRepository.AddAsync(habit)
-  |
-  v
-UnitOfWork.SaveChangesAsync (single transaction)
+User: "I want to run daily"
+    ↓
+ChatController.ProcessChat(message)
+    ↓
+ProcessUserChatCommand { UserId, Message }
+    ↓
+1. Load Habits + Tags from DB
+    ↓
+2. Build system prompt with context
+    ↓
+3. GeminiIntentService.InterpretAsync(message, habits, tags)
+    ↓
+4. Gemini API returns AiActionPlan { Actions[], AiMessage }
+    ↓
+5. Execute each action (CreateHabit, LogHabit, etc.)
+    ↓
+6. UnitOfWork.SaveChangesAsync() - single transaction
+    ↓
+ChatResponse { ExecutedActions[], AiMessage }
 ```
 
-### Flow 2: Getting Habit Progress
+### Enhanced Chat Flow (All Features)
 
 ```
-GET /api/habits/{id}/progress?from=2026-01-01&to=2026-02-07
-  |
-  v
-HabitsController.GetProgress
-  |
-  v
-GetHabitProgressQuery(UserId, HabitId, PeriodStart, PeriodEnd)
-  |
-  v
-GetHabitProgressQueryHandler
-  |
-  +-- habitRepository.GetByIdAsync(id)  -> Habit
-  +-- habitLogRepository.FindAsync(l => l.HabitId == id && l.Date >= start && l.Date <= end)  -> logs
-  |
-  v
-IHabitProgressService.CalculateProgress(habit, logs, start, end)
-  -> Pure computation, no DB access
-  -> Returns HabitProgress record
-  |
-  v
-Return HabitProgress to controller -> 200 OK
+User: "I want to run daily" + [image of running shoes]
+    ↓
+ChatController.ProcessChat(message, image)
+    ↓
+ProcessUserChatCommand { UserId, Message, ImageData?, ImageMimeType? }
+    ↓
+1. Load Habits + Tags + UserFacts from DB
+    ├─ GetRelevantFactsQuery → Search similar facts (optional: by embedding)
+    ↓
+2. Build system prompt with habits, tags, facts, routine suggestions
+    ↓
+3. GeminiIntentService.InterpretAsync(message, habits, tags, facts, image)
+    ├─ Construct multimodal request with text + image
+    ├─ Send to Gemini API
+    ↓
+4. Gemini returns AiActionPlan { Actions[], AiMessage }
+    ├─ Actions may include: CreateHabit, LogHabit, AssignTag, StoreFact
+    ↓
+5. Execute actions with per-action commits
+    ├─ For each action:
+    │   ├─ Execute (CreateHabit, LogHabit, etc.)
+    │   ├─ If success: SaveChangesAsync(), add to success list
+    │   ├─ If failure: Log error, add to failure list, continue
+    ↓
+6. Build ChatResponse with ActionExecutionResult[] + AiMessage
+    ↓
+ChatResponse {
+    Results: [
+        { Success: true, Type: "CreateHabit", Description: "Created 'Running' habit" },
+        { Success: false, Type: "AssignTag", ErrorMessage: "Tag not found" }
+    ],
+    AiMessage: "Created your running habit!"
+}
 ```
 
-### Flow 3: Logging a Negative Habit (Slip-Up)
+### Routine Suggestion Flow
 
 ```
-User: "I smoked 3 cigarettes today"
-  |
-  v
-AI interprets -> LogHabit action for existing "Smoking" habit (IsNegative: true), value: 3
-  |
-  v
-ExecuteLogHabitAsync
-  -> habit.Log(today, 3)  -- same method as positive habits
-  -> The value 3 means "3 slip-ups" because habit.IsNegative is true
-  |
-  v
-Later: GetHabitProgressQuery
-  -> HabitProgressService sees IsNegative = true
-  -> Streak = days since last log (days clean)
-  -> CompletionRate inverted: fewer logs = better
+User: Opens app / navigates to "Suggestions"
+    ↓
+Frontend: GET /api/routines/suggestions
+    ↓
+GetRoutineSuggestionsQuery { UserId }
+    ↓
+RoutineAnalysisService.AnalyzeUserRoutinesAsync()
+    ├─ Load HabitLogs (last 90 days) for user
+    ├─ Group by HabitId
+    ├─ For each habit:
+    │   ├─ AnalyzeDayOfWeekPattern()
+    │   ├─ AnalyzeTimeOfDayPattern()
+    │   ├─ AnalyzeConsistency()
+    │   └─ Generate RoutineSuggestion if confidence >= Medium
+    ↓
+RoutineSuggestion[] { Title, Description, SuggestedAction, Confidence, ... }
+    ↓
+Frontend: Display suggestions as triple-choice format
+    ├─ Option 1: "Create weekly habit for MWF"
+    ├─ Option 2: "Set reminder for 6am"
+    ├─ Option 3: "Dismiss"
+    ↓
+User selects: POST /api/habits with pre-filled data
 ```
 
 ---
 
-## Patterns to Follow
+## Integration Points
 
-### Pattern 1: Rich Domain Entity with Factory Method
+### 1. Domain Layer
 
-**What:** All entity creation goes through a static `Create` method that returns `Result<T>`. Validation lives in the factory.
-**When:** Always, for every new entity (Tag, HabitTag).
-**Why:** Already established in the codebase. Keeps validation centralized. The private constructor prevents invalid state.
+**New Entities:**
+- `UserFact` (user memory storage)
 
+**New Models:**
+- `GeminiImageData` (multimodal request wrapper)
+- `ActionExecutionResult` (detailed action feedback)
+- `RoutineSuggestion` (pattern detection output)
+
+**New Enums:**
+- `ConfidenceLevel` (High/Medium/Low)
+- Add `StoreFact` to `AiActionType`
+
+**Modified Interfaces:**
+- `IAiIntentService.InterpretAsync()` → add `GeminiImageData? image, IReadOnlyList<UserFact> facts`
+
+**New Interfaces:**
+- `IUserFactService` (embedding + semantic search)
+- `IRoutineAnalysisService` (pattern detection)
+
+### 2. Application Layer
+
+**New Commands:**
+- `CreateUserFactCommand` (store user memory)
+- `DeleteUserFactCommand` (forget specific fact)
+
+**New Queries:**
+- `GetRelevantFactsQuery` (load facts for AI context)
+- `GetAllUserFactsQuery` (list all facts for UI)
+- `GetRoutineSuggestionsQuery` (trigger pattern analysis)
+
+**Modified Commands:**
+- `ProcessUserChatCommand` → add `byte[]? ImageData, string? ImageMimeType, bool EnableRoutineSuggestions`
+
+**Modified Handlers:**
+- `ProcessUserChatCommandHandler` → integrate facts loading, per-action commits, fact storage action
+
+### 3. Infrastructure Layer
+
+**New Services:**
+- `GeminiUserFactService : IUserFactService` (embeddings + semantic search)
+- `RoutineAnalysisService : IRoutineAnalysisService` (pattern detection algorithms)
+
+**Modified Services:**
+- `GeminiIntentService` → add multimodal request building (inline_data support)
+- `SystemPromptBuilder` → add facts section, routine suggestions section
+
+**Database Changes:**
+- Add `UserFacts` DbSet to `OrbitDbContext`
+- EF Core migration for `UserFact` table
+- Add pgvector extension (optional, for embeddings)
+- Configure `Embedding` property as `vector(768)` column (if using pgvector)
+
+### 4. Api Layer
+
+**Modified Controllers:**
+- `ChatController.ProcessChat()` → accept `[FromForm] IFormFile? image`
+
+**New Controllers:**
+- `UserFactsController` (CRUD for user memory)
+  - `GET /api/facts` → list all facts
+  - `POST /api/facts` → manually add fact
+  - `DELETE /api/facts/{id}` → remove fact
+- `RoutinesController` (pattern suggestions)
+  - `GET /api/routines/suggestions` → get suggestions
+
+### 5. Configuration
+
+**Modified Settings:**
+- `GeminiSettings` → optionally add `EmbeddingModel = "text-embedding-004"`
+
+**New Settings (if using separate embedding service):**
+- `UserFactSettings` → `EnableEmbeddings`, `SimilarityThreshold`, `MaxFactsInContext`
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Multimodal Request Builder
+
+**What:** Construct Gemini requests with flexible content parts (text + images)
+
+**When:** User uploads image with chat message
+
+**Example:**
 ```csharp
-public static Result<Tag> Create(Guid userId, string name, string? color = null)
+public static class GeminiRequestBuilder
 {
-    if (userId == Guid.Empty)
-        return Result.Failure<Tag>("User ID is required.");
-    if (string.IsNullOrWhiteSpace(name))
-        return Result.Failure<Tag>("Tag name is required.");
-    if (name.Length > 50)
-        return Result.Failure<Tag>("Tag name must be 50 characters or less.");
-    if (color is not null && !System.Text.RegularExpressions.Regex.IsMatch(color, @"^#[0-9A-Fa-f]{6}$"))
-        return Result.Failure<Tag>("Color must be a valid hex color (e.g., #FF5733).");
-
-    return Result.Success(new Tag
+    public static GeminiRequest BuildMultimodalRequest(
+        string systemPrompt,
+        string userMessage,
+        GeminiImageData? image = null)
     {
-        UserId = userId,
-        Name = name.Trim(),
-        Color = color,
-        CreatedAtUtc = DateTime.UtcNow
-    });
+        var parts = new List<GeminiPart>
+        {
+            new() { Text = $"{systemPrompt}\n\nUser: {userMessage}" }
+        };
+
+        if (image is not null)
+        {
+            parts.Add(new GeminiPart
+            {
+                InlineData = new GeminiInlineData
+                {
+                    MimeType = image.MimeType,
+                    Data = Convert.ToBase64String(image.Data)
+                }
+            });
+        }
+
+        return new GeminiRequest
+        {
+            Contents = [new GeminiContent { Parts = parts.ToArray() }],
+            GenerationConfig = new GeminiGenerationConfig
+            {
+                Temperature = 0.1,
+                ResponseMimeType = "application/json"
+            }
+        };
+    }
 }
 ```
 
-### Pattern 2: Domain Service for Cross-Entity Computation
+### Pattern 2: Per-Action Transaction Commit
 
-**What:** When computation spans multiple entities or requires data the entity should not load, use a domain service.
-**When:** Progress metrics, streak calculation, completion rates.
-**Why:** Keeps entities focused on their own state. Avoids loading entire log collections into the Habit entity just to compute a number.
+**What:** Commit database changes after each action succeeds, allowing partial success
 
-### Pattern 3: Extending AiAction for New Capabilities
+**When:** AI returns multiple actions, some may fail
 
-**What:** Add optional nullable properties to `AiAction` for new fields. Update `AiActionType` enum for new action types. Update `SystemPromptBuilder` to document new capabilities.
-**When:** Each feature that the AI needs to interact with.
-**Why:** The existing AI architecture is additive -- new fields do not break existing actions because they are all optional.
-
-### Pattern 4: Eager Loading for Related Data
-
-**What:** Use `.Include()` in repository queries when related entities are needed.
-**When:** Loading habits with their sub-habits and tags.
-**Why:** The current GenericRepository uses `AsNoTracking()` which means navigation properties are not loaded by default. The repository needs methods that support includes.
-
-**Repository Extension Needed:**
+**Example:**
 ```csharp
-// Add to IGenericRepository<T>
-Task<IReadOnlyList<T>> FindAsync(
-    Expression<Func<T, bool>> predicate,
-    Func<IQueryable<T>, IQueryable<T>>? include = null,
-    CancellationToken cancellationToken = default);
+var executionResults = new List<ActionExecutionResult>();
+
+foreach (var action in plan.Actions)
+{
+    try
+    {
+        var actionResult = await ExecuteActionAsync(action, userId, ct);
+
+        if (actionResult.IsSuccess)
+        {
+            await unitOfWork.SaveChangesAsync(ct); // Commit per action
+
+            executionResults.Add(new ActionExecutionResult
+            {
+                Success = true,
+                ActionType = action.Type.ToString(),
+                ActionDescription = GetActionDescription(action)
+            });
+        }
+        else
+        {
+            executionResults.Add(new ActionExecutionResult
+            {
+                Success = false,
+                ActionType = action.Type.ToString(),
+                ActionDescription = GetActionDescription(action),
+                ErrorMessage = actionResult.Error
+            });
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Action execution failed: {Type}", action.Type);
+
+        executionResults.Add(new ActionExecutionResult
+        {
+            Success = false,
+            ActionType = action.Type.ToString(),
+            ErrorMessage = ex.Message
+        });
+    }
+}
+
+return Result.Success(new ChatResponse(executionResults, plan.AiMessage));
 ```
 
-This allows callers to pass `.Include(h => h.SubHabits).Include(h => h.HabitTags).ThenInclude(ht => ht.Tag)` without breaking the repository abstraction.
+### Pattern 3: Semantic Memory with Embedding Retrieval
+
+**What:** Store user facts with vector embeddings, retrieve by semantic similarity
+
+**When:** AI needs user context, preferences, or past information
+
+**Example:**
+```csharp
+// Store fact with embedding
+var fact = UserFact.Create(userId, "I prefer morning workouts");
+var embeddingResult = await userFactService.GenerateEmbeddingAsync(fact.Content);
+if (embeddingResult.IsSuccess)
+{
+    fact.SetEmbedding(embeddingResult.Value);
+}
+await factRepository.AddAsync(fact);
+await unitOfWork.SaveChangesAsync();
+
+// Retrieve relevant facts
+var messageEmbedding = await userFactService.GenerateEmbeddingAsync(userMessage);
+var relevantFacts = await userFactService.SearchSimilarFactsAsync(
+    userId,
+    messageEmbedding.Value,
+    maxResults: 5
+);
+
+// Load into AI context
+var prompt = SystemPromptBuilder.BuildSystemPrompt(habits, tags, relevantFacts);
+```
+
+**Alternative (Simple):** No embeddings, chronological or keyword-based retrieval:
+```csharp
+// Simple: Load most recent facts
+var recentFacts = await factRepository.FindAsync(
+    f => f.UserId == userId,
+    ct,
+    orderBy: q => q.OrderByDescending(f => f.CreatedAtUtc),
+    take: 10
+);
+```
+
+### Pattern 4: Time-Series Pattern Detection
+
+**What:** Analyze HabitLog timestamps to detect routines, consistency, preferred times
+
+**When:** User has sufficient log history (30+ logs or 2+ weeks)
+
+**Example:**
+```csharp
+public RoutineSuggestion AnalyzeDayOfWeekPattern(IGrouping<Guid, HabitLog> habitLogs)
+{
+    var logs = habitLogs.ToList();
+    var totalLogs = logs.Count;
+
+    // Group by day of week
+    var dayFrequency = logs
+        .GroupBy(l => l.Date.DayOfWeek)
+        .Select(g => new { Day = g.Key, Count = g.Count(), Percentage = g.Count() / (double)totalLogs })
+        .Where(x => x.Percentage >= 0.7) // 70% threshold
+        .Select(x => x.Day)
+        .OrderBy(d => d)
+        .ToList();
+
+    if (dayFrequency.Count >= 2 && dayFrequency.Count <= 5)
+    {
+        var habit = await habitRepository.GetByIdAsync(habitLogs.Key);
+
+        return new RoutineSuggestion
+        {
+            Title = $"{habit.Title} Weekly Pattern",
+            Description = $"You do this {dayFrequency.Count}x per week: {string.Join(", ", dayFrequency)}",
+            SuggestedAction = "Convert to recurring habit with specific days?",
+            SuggestedFrequency = FrequencyUnit.Day,
+            SuggestedQuantity = 1,
+            SuggestedDays = dayFrequency,
+            RelatedHabitId = habit.Id,
+            Confidence = ConfidenceLevel.High
+        };
+    }
+
+    return null; // No strong pattern
+}
+```
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Habit Entity Computing Its Own Metrics
+### Anti-Pattern 1: Synchronous Embedding Generation in Request Path
 
-**What:** Adding `GetCurrentStreak()` or `GetCompletionRate()` methods to the Habit entity.
-**Why bad:** Forces the entity to load all its HabitLogs (potentially thousands). Violates the principle of entities managing their own state, not aggregating read models. The Habit entity already holds `_logs` for the Log method, but those are for adding -- not for analytics queries.
-**Instead:** Use `IHabitProgressService` domain service that receives pre-loaded logs.
+**What:** Generating embeddings inline during chat request
 
-### Anti-Pattern 2: Separate SubHabit Entity
+**Why bad:** Adds 200-500ms latency per fact, blocks response
 
-**What:** Creating a `SubHabit` class that duplicates all Habit fields.
-**Why bad:** Sub-habits ARE habits. They can be logged, have types, frequencies. Duplicating the entity creates a maintenance nightmare and breaks the GenericRepository pattern.
-**Instead:** Self-referencing FK on Habit with `ParentHabitId`.
+**Instead:** Generate embeddings asynchronously after fact creation, or skip embeddings initially
 
-### Anti-Pattern 3: Implicit Many-to-Many for Tags
+```csharp
+// BAD
+var fact = UserFact.Create(userId, content);
+var embedding = await GenerateEmbeddingAsync(content); // Blocks request
+fact.SetEmbedding(embedding);
 
-**What:** Using EF Core's skip navigation (`List<Tag>` on Habit, `List<Habit>` on Tag, no join entity).
-**Why bad:** The existing codebase uses Entity base class with Guid Id for everything. Skip navigations hide the join table, making it harder to add metadata later and inconsistent with the repository pattern.
-**Instead:** Explicit `HabitTag` join entity.
+// GOOD
+var fact = UserFact.Create(userId, content);
+await factRepository.AddAsync(fact);
+await unitOfWork.SaveChangesAsync();
 
-### Anti-Pattern 4: Computing Metrics in the Database
+// Background job
+BackgroundJob.Enqueue(() => GenerateAndStoreEmbedding(fact.Id));
+```
 
-**What:** SQL views or stored procedures for streak/completion calculation.
-**Why bad:** Business logic in SQL is untestable, hard to change, and hard to debug. The frequency rules (every 2 weeks, specific days) make SQL computation extremely complex.
-**Instead:** Domain service with pure C# logic. Optimize with caching only if needed.
+### Anti-Pattern 2: Loading All Facts into Every AI Request
 
-### Anti-Pattern 5: Overloading HabitType Enum
+**What:** Including all user facts in system prompt regardless of relevance
 
-**What:** Adding `Negative`, `NegativeBoolean`, `NegativeQuantifiable` to HabitType.
-**Why bad:** Conflates two orthogonal dimensions (measurement type and intent). Leads to 2xN enum values as more types are added.
-**Instead:** Separate `IsNegative` boolean on Habit.
+**Why bad:** Token waste, context pollution, slower responses
+
+**Instead:** Use semantic search or limit to recent/relevant facts (5-10 max)
+
+```csharp
+// BAD
+var allFacts = await factRepository.FindAsync(f => f.UserId == userId);
+var prompt = BuildPrompt(habits, tags, allFacts); // Could be 100+ facts
+
+// GOOD
+var relevantFacts = await GetRelevantFactsQuery(userId, userMessage, maxResults: 5);
+var prompt = BuildPrompt(habits, tags, relevantFacts); // Only 5 relevant facts
+```
+
+### Anti-Pattern 3: Storing Raw Image Data in Database
+
+**What:** Storing full image bytes in SQL table
+
+**Why bad:** Database bloat, slow queries, backup issues
+
+**Instead:** Store images in blob storage (Azure Blob, S3, file system), reference URI in database
+
+```csharp
+// BAD
+public class ChatMessage
+{
+    public byte[]? ImageData { get; set; } // Could be 5MB+
+}
+
+// GOOD
+public class ChatMessage
+{
+    public string? ImageStorageUri { get; set; } // "blob://chat-images/abc123.jpg"
+}
+```
+
+**Note:** For Orbit, images are ephemeral (sent to Gemini, not stored), so no database storage needed.
+
+### Anti-Pattern 4: Running Pattern Analysis on Every Request
+
+**What:** Calling `AnalyzeUserRoutinesAsync()` in ProcessUserChatCommand
+
+**Why bad:** Expensive computation (queries 90 days of logs), slows chat response
+
+**Instead:** Run analysis on-demand via separate endpoint, or background job (daily/weekly)
+
+```csharp
+// BAD
+public async Task<Result<ChatResponse>> Handle(ProcessUserChatCommand request, CancellationToken ct)
+{
+    var suggestions = await routineAnalysisService.AnalyzeUserRoutinesAsync(request.UserId); // Slow!
+    // ...
+}
+
+// GOOD - Separate endpoint
+[HttpGet("api/routines/suggestions")]
+public async Task<IActionResult> GetSuggestions()
+{
+    var suggestions = await mediator.Send(new GetRoutineSuggestionsQuery(UserId));
+    return Ok(suggestions);
+}
+```
+
+### Anti-Pattern 5: Single Transaction for All Actions (Current)
+
+**What:** Commit all actions at once via single `SaveChangesAsync()` call
+
+**Why bad:** If one action fails or SaveChanges fails, ALL actions are lost
+
+**Instead:** Per-action commits with detailed result tracking (see Pattern 2)
+
+---
+
+## Suggested Build Order
+
+Based on dependencies and complexity:
+
+### Phase 1: Multi-Action Execution (Foundation)
+**Why first:** Enables better error handling for all AI features, no external dependencies
+
+**Components:**
+1. `ActionExecutionResult` model (Domain/Models)
+2. Modify `ChatResponse` to use `ActionExecutionResult[]`
+3. Update `ProcessUserChatCommandHandler` with per-action commits
+4. Update `ChatController` response mapping
+
+**Integration:** Refactor existing chat flow
+
+**Estimated Complexity:** Low
+
+---
+
+### Phase 2: User Fact Storage (Simple Version)
+**Why second:** Adds AI memory without complex embeddings, high value
+
+**Components:**
+1. `UserFact` entity (Domain/Entities)
+2. Add `UserFacts` DbSet + migration (Infrastructure/Persistence)
+3. `CreateUserFactCommand`, `GetRelevantFactsQuery` (Application)
+4. `UserFactsController` CRUD endpoints (Api)
+5. Add `StoreFact` to `AiActionType` enum
+6. Enhance `SystemPromptBuilder` to include facts
+7. Update `ProcessUserChatCommand` to load recent facts (no embeddings)
+
+**Integration:** Extend chat flow with fact loading + storage action
+
+**Estimated Complexity:** Medium
+
+---
+
+### Phase 3: Gemini Vision Integration
+**Why third:** Requires multimodal API changes, builds on Phase 1 error handling
+
+**Components:**
+1. `GeminiImageData` model (Domain/Models)
+2. Add image parameters to `IAiIntentService.InterpretAsync()`
+3. Modify `GeminiIntentService` to support `inline_data` parts
+4. Update `ProcessUserChatCommand` with image properties
+5. Modify `ChatController.ProcessChat()` to accept `IFormFile`
+
+**Integration:** Extend AI service with multimodal requests
+
+**Estimated Complexity:** Medium
+
+---
+
+### Phase 4: Routine Inference
+**Why fourth:** Most complex, requires pattern detection algorithms, least critical
+
+**Components:**
+1. `RoutineSuggestion` model + `ConfidenceLevel` enum (Domain)
+2. `IRoutineAnalysisService` interface (Domain/Interfaces)
+3. `RoutineAnalysisService` with pattern detection methods (Infrastructure/Services)
+4. `GetRoutineSuggestionsQuery` (Application/Routines/Queries)
+5. `RoutinesController` (Api/Controllers)
+
+**Integration:** New isolated feature, separate endpoint
+
+**Estimated Complexity:** High
+
+---
+
+### Phase 5: Semantic Search (Optional Enhancement)
+**Why last:** Requires pgvector setup, embeddings API, only improves Phase 2
+
+**Components:**
+1. Install pgvector extension in PostgreSQL
+2. Add `Embedding` property to `UserFact` with `vector(768)` column type
+3. `IUserFactService` interface (Domain/Interfaces)
+4. `GeminiUserFactService` with embedding generation + similarity search (Infrastructure)
+5. Modify `GetRelevantFactsQuery` to use semantic search instead of chronological
+
+**Integration:** Enhance Phase 2 fact retrieval
+
+**Estimated Complexity:** High
+
+---
+
+## Phase Dependencies
+
+```
+Phase 1 (Multi-Action)
+    ├─→ Phase 2 (User Facts - Simple) ─→ Phase 5 (Semantic Search)
+    └─→ Phase 3 (Gemini Vision)
+
+Phase 4 (Routine Inference) - Independent, can be built anytime
+```
+
+**Recommended Order:**
+1. Multi-action execution (enables better error handling)
+2. User facts - simple version (high value, low complexity)
+3. Gemini Vision (moderate complexity, visible feature)
+4. Routine inference (complex, can be deferred)
+5. Semantic search (optional enhancement to Phase 2)
 
 ---
 
@@ -534,92 +1297,30 @@ This allows callers to pass `.Include(h => h.SubHabits).Include(h => h.HabitTags
 
 | Concern | At 100 users | At 10K users | At 1M users |
 |---------|--------------|--------------|-------------|
-| Streak calculation | Compute on request, no caching | Compute on request, consider caching hot users | Periodic snapshot table, cache aggressively |
-| Sub-habit loading | Eager load with Include | Same, single query with join | Same, indexed FK makes this fast |
-| Tag filtering | In-memory LINQ is fine | DB-level filtering with indexed join table | Same, composite index on HabitTag |
-| HabitLog volume | ~365 logs/user/year | ~3.6M total logs | ~365M total logs, partition by date |
-| Progress queries | Direct computation | Add response caching (5 min TTL) | Pre-compute daily, serve from cache/snapshot |
+| **Gemini API rate limits** | No issue (free tier: 15 RPM) | Need paid tier | Need request queuing + caching |
+| **Image processing** | Direct inline base64 | Consider File API | Blob storage + CDN |
+| **UserFacts storage** | PostgreSQL sufficient | Add indexing on Embedding | Separate vector DB (Pinecone, Weaviate) |
+| **Pattern analysis** | On-demand queries | Background jobs (daily) | Pre-computed suggestions cache |
+| **Multi-action commits** | Per-action is fine | Monitor deadlocks | Consider saga pattern |
 
-### Index Strategy
+**Current Architecture Handles:** Up to 10K users without major changes
 
-The following indexes should be added for the new features:
-
-```
-Habit.ParentHabitId                      -- sub-habit lookups
-Tag(UserId, Name) UNIQUE                 -- prevent duplicate tags per user
-HabitTag(HabitId, TagId) UNIQUE          -- prevent duplicate tag assignments
-HabitTag(TagId)                          -- reverse lookup: "all habits with tag X"
-HabitLog(HabitId, Date)                  -- already exists, critical for streak calculation
-```
-
----
-
-## Database Schema Changes Summary
-
-```sql
--- Habit table additions
-ALTER TABLE "Habits" ADD COLUMN "ParentHabitId" uuid REFERENCES "Habits"("Id") ON DELETE CASCADE;
-ALTER TABLE "Habits" ADD COLUMN "IsNegative" boolean NOT NULL DEFAULT false;
-
--- New Tag table
-CREATE TABLE "Tags" (
-    "Id" uuid PRIMARY KEY,
-    "UserId" uuid NOT NULL REFERENCES "Users"("Id"),
-    "Name" text NOT NULL,
-    "Color" text,
-    "CreatedAtUtc" timestamp with time zone NOT NULL
-);
-CREATE UNIQUE INDEX "IX_Tags_UserId_Name" ON "Tags" ("UserId", "Name");
-
--- New HabitTag join table
-CREATE TABLE "HabitTags" (
-    "Id" uuid PRIMARY KEY,
-    "HabitId" uuid NOT NULL REFERENCES "Habits"("Id") ON DELETE CASCADE,
-    "TagId" uuid NOT NULL REFERENCES "Tags"("Id") ON DELETE CASCADE
-);
-CREATE UNIQUE INDEX "IX_HabitTags_HabitId_TagId" ON "HabitTags" ("HabitId", "TagId");
-CREATE INDEX "IX_HabitTags_TagId" ON "HabitTags" ("TagId");
-
--- User table additions
-ALTER TABLE "Users" ADD COLUMN "Timezone" text;
-ALTER TABLE "Users" ADD COLUMN "AvatarUrl" text;
-```
-
-Note: Since the project uses `EnsureCreated()` (no migrations), these changes apply via the DbContext model. When/if migrations are adopted, these become migration steps.
-
----
-
-## Suggested Build Order
-
-Features have the following dependency chain:
-
-```
-1. IsNegative on Habit        (no dependencies)
-2. Tags + HabitTag            (no dependencies)
-3. Sub-Habits (ParentHabitId) (no dependencies, but benefits from tags being done first)
-4. User Profile (Timezone)    (no dependencies)
-5. Progress Metrics Service   (depends on 1 for negative habit logic, depends on 4 for timezone)
-6. AI Integration updates     (depends on 1, 2, 3 all being done -- prompts reference all)
-```
-
-**Recommended phase grouping:**
-
-- **Phase A: Domain Model Extensions** -- Add IsNegative to Habit, create Tag and HabitTag entities, add ParentHabitId to Habit, extend User with Timezone. This is all domain + infrastructure (DbContext config). No application logic yet except basic CRUD commands/queries.
-
-- **Phase B: CRUD Operations** -- TagsController with CreateTag, GetTags, DeleteTag. Extended CreateHabitCommand accepting ParentHabitId, IsNegative, TagIds. Extended GetHabitsQuery with Include for sub-habits and tags. UpdateProfileCommand with timezone.
-
-- **Phase C: Progress Metrics** -- IHabitProgressService domain service, GetHabitProgressQuery, streak/completion algorithms. This is the most algorithmically complex phase but has clear inputs/outputs for testing.
-
-- **Phase D: AI Integration** -- Extend AiAction model, update SystemPromptBuilder, update ProcessUserChatCommand to handle tag resolution and sub-habit creation. Update AI prompt examples. This is last because it touches the most surface area and benefits from all other features being stable.
+**Future Optimizations:**
+- Caching layer for UserFacts retrieval (Redis)
+- Async background jobs for embeddings + pattern analysis (Hangfire)
+- Separate read models for routine suggestions (CQRS read side)
 
 ---
 
 ## Sources
 
-- [EF Core Self-Referencing Hierarchy (Medium - Dmitry Pavlov)](https://medium.com/@dmitry.pavlov/tree-structure-in-ef-core-how-to-configure-a-self-referencing-table-and-use-it-53effad60bf)
-- [Self-Referencing Relationships in EF Core (Dot Net Tutorials)](https://dotnettutorials.net/lesson/self-referencing-relationship-in-entity-framework-core/)
-- [EF Core Many-to-Many Relationships (Microsoft Learn)](https://learn.microsoft.com/en-us/ef/core/modeling/relationships/many-to-many)
-- [Self-referencing hierarchy querying (dotnet/efcore #3241)](https://github.com/dotnet/efcore/issues/3241)
-- [Negative habit tracking patterns (HabitBoard)](https://habitboard.app/negative-habits/)
-- [Streak calculation patterns (MyTimeCalculator)](https://mytimecalculator.com/habit-tracker-calculator)
-- [Best habit tracker apps 2026 (Reclaim)](https://reclaim.ai/blog/habit-tracker-apps)
+- [Image understanding | Gemini API | Google AI for Developers](https://ai.google.dev/gemini-api/docs/image-understanding)
+- [Multimodal Prompting with Gemini: Working with Images - Google Cloud Applied AI Engineering](https://googlecloudplatform.github.io/applied-ai-engineering-samples/genai-on-vertex-ai/gemini/prompting_recipes/multimodal/multimodal_prompting_image/)
+- [What Is AI Agent Memory? | IBM](https://www.ibm.com/think/topics/ai-agent-memory)
+- [Design Patterns for Long-Term Memory in LLM-Powered Architectures](https://serokell.io/blog/design-patterns-for-long-term-memory-in-llm-powered-architectures)
+- [Domain events: Design and implementation - .NET | Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/domain-events-design-implementation)
+- [CQRS and exception handling · Enterprise Craftsmanship](https://enterprisecraftsmanship.com/posts/cqrs-exception-handling/)
+- [Build a .NET AI vector search app | Microsoft Learn](https://learn.microsoft.com/en-us/dotnet/ai/quickstarts/build-vector-search-app)
+- [Pattern Recognition in Time Series | Baeldung on Computer Science](https://www.baeldung.com/cs/pattern-recognition-time-series)
+- [Time Traveling with Data Science: Pattern Recognition, Motifs Discovery and the Matrix Profile (Part 4) - Blog des Fraunhofer IESE](https://www.iese.fraunhofer.de/blog/pattern-recognition/)
+- [Semantic Search Development with C# using Ollama & VectorDB orchestrate in .NET Aspire | by Mehmet Ozkaya | Medium](https://mehmetozkaya.medium.com/semantic-search-development-with-c-using-ollama-vectordb-orchestrate-in-net-aspire-d82eec73696a)
