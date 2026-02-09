@@ -17,4 +17,5 @@ public record AiAction
     public List<string>? SubHabits { get; init; }
     public List<string>? TagNames { get; init; }
     public List<Guid>? TagIds { get; init; }
+    public List<AiAction>? SuggestedSubHabits { get; init; }
 }

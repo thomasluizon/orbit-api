@@ -11,7 +11,18 @@ namespace Orbit.Application.Chat.Commands;
 
 public record ProcessUserChatCommand(Guid UserId, string Message) : IRequest<Result<ChatResponse>>;
 
-public record ChatResponse(IReadOnlyList<string> ExecutedActions, string? AiMessage);
+public record ChatResponse(string? AiMessage, IReadOnlyList<ActionResult> Actions);
+
+public record ActionResult(
+    AiActionType Type,
+    ActionStatus Status,
+    Guid? EntityId = null,
+    string? EntityName = null,
+    string? Error = null,
+    string? Field = null,
+    IReadOnlyList<AiAction>? SuggestedSubHabits = null);
+
+public enum ActionStatus { Success, Failed, Suggestion }
 
 public class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -70,7 +81,7 @@ public class ProcessUserChatCommandHandler(
             return Result.Failure<ChatResponse>(planResult.Error);
 
         var plan = planResult.Value;
-        var executedActions = new List<string>();
+        var actionResults = new List<ActionResult>();
 
         // 3. Execute each action returned by the AI
         logger.LogInformation("Executing {ActionCount} actions...", plan.Actions.Count);
@@ -80,22 +91,46 @@ public class ProcessUserChatCommandHandler(
         {
             logger.LogInformation("Executing action: {ActionType} - {Title}", action.Type, action.Title ?? action.HabitId?.ToString() ?? "N/A");
 
-            var actionResult = action.Type switch
+            try
             {
-                AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
-                AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
-                AiActionType.AssignTag => await ExecuteAssignTagAsync(action, request.UserId, cancellationToken),
-                _ => Result.Failure($"Unknown action type: {action.Type}")
-            };
+                var actionResult = action.Type switch
+                {
+                    AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
+                    AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
+                    AiActionType.AssignTag => await ExecuteAssignTagAsync(action, request.UserId, cancellationToken),
+                    AiActionType.SuggestBreakdown => ExecuteSuggestBreakdown(action),
+                    _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
+                };
 
-            if (actionResult.IsSuccess)
-            {
-                executedActions.Add($"{action.Type}: {action.Title ?? action.HabitId?.ToString() ?? "N/A"}");
-                logger.LogInformation("Action succeeded: {ActionType}", action.Type);
+                if (actionResult.IsSuccess)
+                {
+                    var (id, name) = actionResult.Value;
+
+                    if (action.Type == AiActionType.SuggestBreakdown)
+                    {
+                        actionResults.Add(new ActionResult(
+                            action.Type,
+                            ActionStatus.Suggestion,
+                            EntityName: action.Title,
+                            SuggestedSubHabits: action.SuggestedSubHabits));
+                    }
+                    else
+                    {
+                        actionResults.Add(new ActionResult(action.Type, ActionStatus.Success, id, name));
+                    }
+
+                    logger.LogInformation("Action succeeded: {ActionType}", action.Type);
+                }
+                else
+                {
+                    actionResults.Add(new ActionResult(action.Type, ActionStatus.Failed, EntityName: action.Title, Error: actionResult.Error));
+                    logger.LogError("Action failed: {ActionType} - Error: {Error}", action.Type, actionResult.Error);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                logger.LogError("Action failed: {ActionType} - Error: {Error}", action.Type, actionResult.Error);
+                logger.LogError(ex, "Unexpected error executing action {Type}", action.Type);
+                actionResults.Add(new ActionResult(action.Type, ActionStatus.Failed, EntityName: action.Title, Error: "An unexpected error occurred."));
             }
         }
 
@@ -118,32 +153,32 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("   Execute actions: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
 
-        return Result.Success(new ChatResponse(executedActions, plan.AiMessage));
+        return Result.Success(new ChatResponse(plan.AiMessage, actionResults));
     }
 
-    private async Task<Result> ExecuteLogHabitAsync(
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteLogHabitAsync(
         AiAction action, Guid userId, CancellationToken ct)
     {
         if (action.HabitId is null)
-            return Result.Failure("Habit ID is required for logging.");
+            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for logging.");
 
         var habit = await habitRepository.GetByIdAsync(action.HabitId.Value, ct);
 
         if (habit is null)
-            return Result.Failure($"Habit {action.HabitId} not found.");
+            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
 
         if (habit.UserId != userId)
-            return Result.Failure("Habit does not belong to this user.");
+            return Result.Failure<(Guid? Id, string? Name)>("Habit does not belong to this user.");
 
         var user = await userRepository.GetByIdAsync(userId, ct);
         var today = GetUserToday(user);
         var logResult = habit.Log(today, action.Note);
 
         if (logResult.IsFailure)
-            return Result.Failure(logResult.Error);
+            return Result.Failure<(Guid? Id, string? Name)>(logResult.Error);
 
         await habitLogRepository.AddAsync(logResult.Value, ct);
-        return Result.Success();
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
     }
 
     private static DateOnly GetUserToday(User? user)
@@ -155,11 +190,11 @@ public class ProcessUserChatCommandHandler(
         return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
     }
 
-    private async Task<Result> ExecuteCreateHabitAsync(
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteCreateHabitAsync(
         AiAction action, Guid userId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(action.Title))
-            return Result.Failure("Title is required to create a habit.");
+            return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a habit.");
 
         var habitResult = Habit.Create(
             userId,
@@ -172,7 +207,7 @@ public class ProcessUserChatCommandHandler(
             dueDate: action.DueDate);
 
         if (habitResult.IsFailure)
-            return Result.Failure(habitResult.Error);
+            return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);
 
         var habit = habitResult.Value;
 
@@ -190,21 +225,21 @@ public class ProcessUserChatCommandHandler(
                     parentHabitId: habit.Id);
 
                 if (childResult.IsFailure)
-                    return Result.Failure(childResult.Error);
+                    return Result.Failure<(Guid? Id, string? Name)>(childResult.Error);
 
                 await habitRepository.AddAsync(childResult.Value, ct);
             }
         }
 
         await habitRepository.AddAsync(habit, ct);
-        return Result.Success();
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
     }
 
-    private async Task<Result> ExecuteAssignTagAsync(
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteAssignTagAsync(
         AiAction action, Guid userId, CancellationToken ct)
     {
         if (action.HabitId is null || action.TagIds is null || action.TagIds.Count == 0)
-            return Result.Failure("HabitId and TagIds are required for AssignTag.");
+            return Result.Failure<(Guid? Id, string? Name)>("HabitId and TagIds are required for AssignTag.");
 
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == action.HabitId && h.UserId == userId,
@@ -212,7 +247,7 @@ public class ProcessUserChatCommandHandler(
             ct);
 
         if (habit is null)
-            return Result.Failure("Habit not found.");
+            return Result.Failure<(Guid? Id, string? Name)>("Habit not found.");
 
         foreach (var tagId in action.TagIds)
         {
@@ -224,6 +259,13 @@ public class ProcessUserChatCommandHandler(
                 habit.Tags.Add(tag);
         }
 
-        return Result.Success();
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
+    }
+
+    private static Result<(Guid? Id, string? Name)> ExecuteSuggestBreakdown(AiAction action)
+    {
+        // SuggestBreakdown creates nothing -- it just passes through the AI's suggestions
+        // The ActionResult will carry the suggestions for frontend rendering
+        return Result.Success<(Guid? Id, string? Name)>((null, action.Title));
     }
 }
