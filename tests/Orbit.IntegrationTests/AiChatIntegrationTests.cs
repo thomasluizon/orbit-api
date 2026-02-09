@@ -223,7 +223,9 @@ public class AiChatIntegrationTests : IAsyncLifetime
     public async Task Chat_EmptyMessage_ShouldHandleGracefully()
     {
         // Act
-        var httpResponse = await _client.PostAsJsonAsync("/api/chat", new { message = "" });
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(""), "message");
+        var httpResponse = await _client.PostAsync("/api/chat", content);
 
         // Assert
         httpResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.BadRequest);
@@ -305,7 +307,90 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     #endregion
 
+    #region Image Upload Tests (2)
+
+    [Fact]
+    public async Task Chat_UploadImageWithMessage_ShouldReturnSuggestions()
+    {
+        await RateLimitSemaphore.WaitAsync();
+        try
+        {
+            var timeSinceLastCall = DateTime.UtcNow - LastApiCall;
+            var minDelay = TimeSpan.FromSeconds(10);
+            if (timeSinceLastCall < minDelay)
+                await Task.Delay(minDelay - timeSinceLastCall);
+
+            var imageBytes = CreateMinimalPng();
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent("Create habits from this schedule image"), "message");
+
+            var imageContent = new ByteArrayContent(imageBytes);
+            imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            content.Add(imageContent, "image", "schedule.png");
+
+            var httpResponse = await _client.PostAsync("/api/chat", content);
+            LastApiCall = DateTime.UtcNow;
+
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var responseText = await httpResponse.Content.ReadAsStringAsync();
+            var response = JsonSerializer.Deserialize<ChatResponse>(responseText, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            response.Should().NotBeNull();
+            response!.AiMessage.Should().NotBeNullOrEmpty();
+            // The AI should respond to the image -- it may return SuggestBreakdown or empty actions
+            // depending on what Gemini Vision interprets from the minimal 1x1 PNG.
+            // The key verification is that the request succeeded (200 OK) and the pipeline works end-to-end.
+        }
+        finally
+        {
+            RateLimitSemaphore.Release();
+        }
+    }
+
+    [Fact]
+    public async Task Chat_UploadInvalidFile_ShouldReturn400()
+    {
+        // Arrange - Create a fake text file disguised as image
+        var fakeImageBytes = System.Text.Encoding.UTF8.GetBytes("This is not an image");
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent("Analyze this"), "message");
+
+        var imageContent = new ByteArrayContent(fakeImageBytes);
+        imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+        content.Add(imageContent, "image", "fake.png");
+
+        // Act
+        var httpResponse = await _client.PostAsync("/api/chat", content);
+
+        // Assert - Should reject with 400 due to invalid file signature
+        httpResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    #endregion
+
     #region Helper Methods
+
+    private static byte[] CreateMinimalPng()
+    {
+        // Minimal valid 1x1 white pixel PNG
+        // PNG signature + IHDR + IDAT + IEND
+        return new byte[]
+        {
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, // IHDR chunk length + type
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 pixels
+            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, // 8-bit RGB, CRC
+            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, // IDAT chunk
+            0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, // compressed data
+            0x00, 0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, // CRC
+            0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, // IEND chunk
+            0x44, 0xAE, 0x42, 0x60, 0x82                     // IEND CRC
+        };
+    }
 
     private async Task<ChatResponse> SendChatMessage(string message)
     {
@@ -323,7 +408,10 @@ public class AiChatIntegrationTests : IAsyncLifetime
                 await Task.Delay(remainingDelay);
             }
 
-            var httpResponse = await _client.PostAsJsonAsync("/api/chat", new { message });
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(message), "message");
+
+            var httpResponse = await _client.PostAsync("/api/chat", content);
             LastApiCall = DateTime.UtcNow;
 
             if (!httpResponse.IsSuccessStatusCode)
@@ -331,12 +419,13 @@ public class AiChatIntegrationTests : IAsyncLifetime
                 var errorContent = await httpResponse.Content.ReadAsStringAsync();
                 Console.WriteLine($"API ERROR ({httpResponse.StatusCode}): {errorContent}");
                 Console.WriteLine($"   For message: '{message}'");
+                Console.WriteLine($"   Request had image: false");
             }
 
-            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK, $"Error: {await httpResponse.Content.ReadAsStringAsync()}");
 
-            var content = await httpResponse.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<ChatResponse>(content, new JsonSerializerOptions
+            var responseText = await httpResponse.Content.ReadAsStringAsync();
+            var response = JsonSerializer.Deserialize<ChatResponse>(responseText, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
