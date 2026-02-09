@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-09)
 ## Current Position
 
 Phase: 7 of 7 (Routine Intelligence)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-02-09 — Completed 07-01-PLAN.md (Routine Intelligence Infrastructure)
+Plan: 2 of 2 complete
+Status: Phase complete
+Last activity: 2026-02-09 — Completed 07-02-PLAN.md (Routine Intelligence Chat Integration)
 
-Progress: [███████░░░] 78% (7 of ~9 v1.1 plans)
+Progress: [████████░░] 89% (8 of ~9 v1.1 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15 (8 v1.0 + 7 v1.1)
+- Total plans completed: 16 (8 v1.0 + 8 v1.1)
 - Average duration: 6min
 - Total execution time: 1.6 hours
 
@@ -33,10 +33,10 @@ Progress: [███████░░░] 78% (7 of ~9 v1.1 plans)
 | 04-multi-action-foundation | 2/2 | 13min | 7min |
 | 05-user-learning-system | 2/2 | 16min | 8min |
 | 06-image-intelligence | 2/2 | 13min | 7min |
-| 07-routine-intelligence | 1/2 | 5min | 5min |
+| 07-routine-intelligence | 2/2 | 10min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 6min, 10min, 5min, 8min, 5min
+- Last 5 plans: 10min, 5min, 8min, 5min, 5min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -48,6 +48,10 @@ Progress: [███████░░░] 78% (7 of ~9 v1.1 plans)
 See PROJECT.md Key Decisions table for full history.
 
 Recent decisions affecting v1.1:
+- Non-critical routine analysis in chat pipeline — Follows fact extraction pattern, failures don't block chat responses (07-02)
+- Conflict warnings post-creation — Informational only, habit creation always succeeds (07-02)
+- Dictionary-based conflict warning tracking — Avoids changing Execute method signatures, scales to multi-action operations (07-02)
+- Routine patterns passed via AI intent services — Maintains single responsibility, no direct coupling to prompt builder (07-02)
 - LLM-first pattern analysis over statistical methods — Gemini handles temporal reasoning natively, produces human-readable patterns without ML.NET complexity (07-01)
 - Routine analysis always uses Gemini — Structured JSON output reliability, follows fact extraction pattern (07-01)
 - Fallback generic time slot suggestions — UX consistency, users get actionable recommendations even with insufficient data (07-01)
@@ -84,13 +88,12 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed 07-01-PLAN.md — Routine intelligence infrastructure with LLM-based pattern detection
-Resume file: .planning/phases/07-routine-intelligence/07-02-PLAN.md (integrate routine analysis into CreateHabitCommand)
+Stopped at: Completed 07-02-PLAN.md — Routine intelligence integrated into chat flow with conflict warnings
+Resume file: Phase 7 complete. All v1.1 features delivered.
 
-07-01-SUMMARY.md Key Info:
-- Commits: 8d75ab0 (task 1), 23ee5d5 (task 2)
-- Key files created: RoutineAnalysis.cs (6 records), IRoutineAnalysisService.cs, GeminiRoutineAnalysisService.cs
-- Key files modified: SystemPromptBuilder.cs (optional routinePatterns parameter), Program.cs (DI registration)
-- Patterns: UTC-to-local timezone conversion, minimum data thresholds (7 days, 5 logs/habit), retry logic with exponential backoff
-- Infrastructure ready for Plan 02: conflict detection + time slot suggestions via Gemini
-- Phase 7 Plan 1 complete: routine pattern detection foundation established
+07-02-SUMMARY.md Key Info:
+- Commits: 402db03 (task 1), 9e6852c (task 2)
+- Key files modified: ProcessUserChatCommand.cs, IAiIntentService.cs, GeminiIntentService.cs, AiIntentService.cs, AiChatIntegrationTests.cs
+- Patterns: Non-critical routine analysis, post-creation conflict warnings, dictionary-based warning tracking
+- Integration complete: AI receives routine context, conflict warnings on habit creation, 4 new integration tests
+- Phase 7 complete: All RTNI requirements (01-04) delivered and tested

@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 Backend Solidification** - Phases 1-3 (shipped 2026-02-08)
-- 🚧 **v1.1 AI Intelligence & Multi-Action** - Phases 4-7 (in progress)
+- ✅ **v1.1 AI Intelligence & Multi-Action** - Phases 4-7 (shipped 2026-02-09)
 
 ## Phases
 
@@ -18,7 +18,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 
 </details>
 
-### 🚧 v1.1 AI Intelligence & Multi-Action (In Progress)
+### ✅ v1.1 AI Intelligence & Multi-Action (SHIPPED 2026-02-09)
 
 **Milestone Goal:** Make the AI smarter - multi-action output, image understanding, user learning, routine inference, and interactive confirmation flows.
 
@@ -80,8 +80,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Routine analysis service (domain models, IRoutineAnalysisService, GeminiRoutineAnalysisService, SystemPromptBuilder routine context, DI wiring)
-- [ ] 07-02-PLAN.md — Chat pipeline integration and tests (conflict warnings on CreateHabit, routine patterns in AI context, 4 integration tests)
+- [x] 07-01-PLAN.md — Routine analysis service (domain models, IRoutineAnalysisService, GeminiRoutineAnalysisService, SystemPromptBuilder routine context, DI wiring)
+- [x] 07-02-PLAN.md — Chat pipeline integration and tests (conflict warnings on CreateHabit, routine patterns in AI context, 4 integration tests)
 
 ## Progress
 
@@ -96,4 +96,4 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 4. Multi-Action Foundation | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 5. User Learning System | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
 | 6. Image Intelligence | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
-| 7. Routine Intelligence | v1.1 | 0/2 | Not started | - |
+| 7. Routine Intelligence | v1.1 | 2/2 | ✓ Complete | 2026-02-09 |
