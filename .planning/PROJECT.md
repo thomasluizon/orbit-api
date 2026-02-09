@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Orbit is an AI-powered habit tracking backend API. Users manage habits with flexible scheduling (daily, weekly, monthly, yearly, specific days), sub-habit checklists, negative habit tracking, tags, and progress metrics. An AI chat layer enables quick actions via natural language with multi-provider support (Gemini/Ollama). Built with .NET 10.0, PostgreSQL, and Clean Architecture with CQRS.
+Orbit is an AI-powered habit tracking backend API. Users manage habits with flexible scheduling (daily, weekly, monthly, yearly, specific days), sub-habit checklists, negative habit tracking, tags, and progress metrics. An AI chat layer enables quick actions via natural language with multi-provider support (Gemini/Ollama), multi-action batch processing, image understanding, user learning from conversations, and routine pattern detection with scheduling intelligence. Built with .NET 10.0, PostgreSQL, and Clean Architecture with CQRS.
 
 ## Core Value
 
@@ -30,17 +30,16 @@ Users can track, build, and break habits with flexible scheduling, progress metr
 - ✓ AI graceful refusal of out-of-scope requests — v1.0
 - ✓ User timezone for correct date-based calculations — v1.0
 - ✓ Task management code fully removed — v1.0
+- ✓ Multi-action AI output (array of actions per prompt) — v1.1
+- ✓ Smart habit breakdown with sub-habit generation and confirmation flow — v1.1
+- ✓ Image processing in chat via Gemini Vision (multimodal) — v1.1
+- ✓ AI user learning system (extract and store key facts, load into context) — v1.1
+- ✓ Routine inference from log timestamps with conflict detection — v1.1
+- ✓ Structured suggestion responses (triple-choice) for frontend rendering — v1.1
 
 ### Active
 
-<!-- Current Milestone: v1.1 AI Intelligence & Multi-Action -->
-
-- [ ] Multi-action AI output (array of actions per prompt)
-- [ ] Smart habit breakdown with sub-habit generation and confirmation flow
-- [ ] Image processing in chat via Gemini Vision (multimodal)
-- [ ] AI user learning system (extract and store key facts, load into context)
-- [ ] Routine inference from log timestamps with conflict detection
-- [ ] Structured suggestion responses (triple-choice) for frontend rendering
+(None — next milestone requirements TBD via `/gsd:new-milestone`)
 
 ### Out of Scope
 
@@ -54,37 +53,36 @@ Users can track, build, and break habits with flexible scheduling, progress metr
 - Audio processing — frontend responsibility, backend receives transcribed text
 - Habit templates/categories (predefined) — using user-defined tags instead
 - Offline mode — real-time API is the architecture
-
-## Current Milestone: v1.1 AI Intelligence & Multi-Action
-
-**Goal:** Make the AI smarter — multi-action output, image understanding, user learning, routine inference, and interactive confirmation flows.
-
-**Target features:**
-- Multi-action AI responses (create/log multiple habits per prompt)
-- Smart habit breakdown with interactive sub-habit confirmation
-- Image processing via Gemini Vision multimodal API
-- AI user learning (extract key facts from conversations, personalize responses)
-- Routine inference from log timestamps with conflict detection and time slot suggestions
+- Ollama vision/image support — Ollama doesn't support multimodal APIs, Gemini-only for images
+- Conversation history storage — key facts are more efficient than full history
+- pgvector/embeddings — start with chronological fact retrieval, add semantic search only if needed
 
 ## Context
 
-Shipped v1.0 with 4,764 LOC C# across 91 files.
+Shipped v1.0 (2026-02-08) and v1.1 (2026-02-09) with 9,928 LOC C# across ~100+ files.
 Tech stack: .NET 10.0, PostgreSQL (Npgsql 10.0.0), MediatR 14.0.0, FluentValidation, Gemini 2.5 Flash / Ollama phi3.5:3.8b.
-20/20 v1 requirements delivered. All 3 phases verified.
+35 v1.1 requirements delivered across 7 phases. All phases verified.
 
-v1.1 focus: AI intelligence layer. Gemini Vision for multimodal, key fact extraction for personalization, routine pattern detection from existing log data. Multi-action support already partially exists (AiActionPlan.Actions is a list) but needs prompt engineering and execution hardening.
+Current capabilities:
+- REST API with JWT auth, habit CRUD, sub-habits, tags, metrics
+- AI chat with multi-action support, image understanding, user learning, routine intelligence
+- Multi-provider AI (Gemini primary, Ollama fallback)
+- Multipart form-data chat endpoint with image upload
+- 20+ integration tests covering all features
 
 Known concerns:
 - Ollama reliability with expanded AI prompts uncertain (Gemini is highly reliable)
-- Ollama may not support multimodal/vision — Gemini-only for image features
+- Ollama doesn't support multimodal/vision — Gemini-only for image features
 - Microsoft.EntityFrameworkCore in Application project (pragmatic clean architecture tradeoff)
+- IFormFile in Domain project (pragmatic tradeoff for image validation interface)
 - Pre-existing MSB3277 warning in IntegrationTests (cosmetic)
+- Fact deduplication not implemented (same fact can be extracted multiple times)
 
 ## Constraints
 
 - **Tech stack**: .NET 10.0, C# 13, PostgreSQL, Clean Architecture with CQRS — established, not changing
 - **AI providers**: Gemini (cloud, primary) and Ollama (local, fallback) — both must be supported
-- **Backend only**: No frontend work in this milestone — API endpoints and business logic only
+- **Backend only**: No frontend work in current scope — API endpoints and business logic only
 
 ## Key Decisions
 
@@ -100,11 +98,21 @@ Known concerns:
 | Microsoft.EntityFrameworkCore in Application | Needed for Include support in queries | ⚠️ Revisit — pragmatic but breaks strict layering |
 | Tag suggestions informational only | AI suggests names in aiMessage, not auto-create | ✓ Good — user controls tag creation |
 | Real-time metrics (no cache) | Calculate on-demand from logs with indexes | ✓ Good — simpler, accurate, fast enough |
-
-| Gemini Vision for multimodal | Native support in Gemini API, already integrated as primary provider | — Pending |
-| Key facts over conversation history | Compact, efficient, structured — avoids token bloat in system prompt | — Pending |
-| Routine inference from logs (no schema change) | Existing log timestamps sufficient — no need for StartTime/EndTime on Habit | — Pending |
-| Frontend handles audio transcription | Backend receives text only — simpler, no audio infrastructure needed | — Pending |
+| ActionResult with per-action error handling | Enables detailed batch operation feedback | ✓ Good — partial success for multi-action |
+| SuggestBreakdown as suggestion-only action | User must confirm before creation | ✓ Good — safe interactive flow |
+| Bulk endpoints with partial success policy | Keep successes even when some items fail | ✓ Good — consistent with chat pipeline |
+| Fact extraction always uses Gemini | Structured JSON reliability regardless of AiProvider | ✓ Good — consistent behavior |
+| Fact extraction is non-critical | Failures don't block chat, graceful degradation | ✓ Good — robust user experience |
+| Soft delete for UserFacts | Global query filter, keeps history | ✓ Good — clean with EF Core |
+| IFormFile in Domain layer | Needed for IImageValidationService interface | ⚠️ Revisit — pragmatic tradeoff |
+| Multipart form-data for chat | Single endpoint for text + image, better UX | ✓ Good — maintains conversational flow |
+| Base64 inline_data for Gemini Vision | Simpler than File API for images <20MB | ✓ Good — no upload/cleanup overhead |
+| Gemini Vision for multimodal | Native support in Gemini API | ✓ Good — works well with existing setup |
+| Key facts over conversation history | Compact, structured memory avoids token bloat | ✓ Good — efficient personalization |
+| Routine inference from logs (no schema change) | Existing timestamps sufficient for pattern detection | ✓ Good — zero migration needed |
+| LLM-first pattern analysis | Gemini handles temporal reasoning natively | ✓ Good — human-readable patterns without complex algorithms |
+| Non-critical routine analysis | Failures don't block chat, graceful degradation | ✓ Good — consistent with fact extraction pattern |
+| Conflict warnings are informational | Habit creation always succeeds, warning is FYI | ✓ Good — non-blocking UX |
 
 ---
-*Last updated: 2026-02-09 after v1.1 milestone start*
+*Last updated: 2026-02-09 after v1.1 milestone*
