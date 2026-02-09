@@ -89,6 +89,9 @@ else
 // Fact extraction always uses Gemini (structured output reliability)
 builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionService>();
 
+// Routine analysis always uses Gemini (structured output reliability)
+builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisService>();
+
 // --- Validation ---
 builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
 

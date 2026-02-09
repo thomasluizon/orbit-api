@@ -1,5 +1,6 @@
 using System.Text;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -9,7 +10,8 @@ public static class SystemPromptBuilder
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
-        bool hasImage = false)
+        bool hasImage = false,
+        IReadOnlyList<RoutinePattern>? routinePatterns = null)
     {
         var sb = new StringBuilder();
 
@@ -145,6 +147,26 @@ public static class SystemPromptBuilder
         }
         sb.AppendLine();
         sb.AppendLine("Use these facts to personalize your responses. Do NOT repeat these facts back to the user unless relevant.");
+
+        sb.AppendLine();
+
+        sb.AppendLine("## Your Understanding of This User's Routine");
+        if (routinePatterns is null || routinePatterns.Count == 0)
+        {
+            sb.AppendLine("(no routine patterns detected yet)");
+        }
+        else
+        {
+            foreach (var pattern in routinePatterns)
+            {
+                sb.AppendLine($"- \"{pattern.HabitTitle}\": {pattern.Description} (confidence: {pattern.Confidence}, consistency: {pattern.ConsistencyScore:P0})");
+            }
+            sb.AppendLine();
+            sb.AppendLine("Use these routine patterns to:");
+            sb.AppendLine("- Warn about potential scheduling conflicts when user creates new habits");
+            sb.AppendLine("- Suggest optimal time slots when asked");
+            sb.AppendLine("- Personalize scheduling advice based on detected patterns");
+        }
 
         sb.AppendLine();
         sb.AppendLine($"## Today's Date: {DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}");
