@@ -34,6 +34,20 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
     public record LogHabitRequest(string? Note = null);
 
+    public record BulkCreateHabitsRequest(IReadOnlyList<BulkHabitItemRequest> Habits);
+
+    public record BulkHabitItemRequest(
+        string Title,
+        string? Description,
+        FrequencyUnit? FrequencyUnit,
+        int? FrequencyQuantity,
+        IReadOnlyList<System.DayOfWeek>? Days = null,
+        bool IsBadHabit = false,
+        DateOnly? DueDate = null,
+        IReadOnlyList<BulkHabitItemRequest>? SubHabits = null);
+
+    public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
+
     [HttpGet]
     public async Task<IActionResult> GetHabits(
         [FromQuery] string? tags,
@@ -144,6 +158,53 @@ public class HabitsController(IMediator mediator) : ControllerBase
         var query = new GetHabitMetricsQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("bulk")]
+    public async Task<IActionResult> BulkCreate(
+        [FromBody] BulkCreateHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var habits = request.Habits.Select(MapToBulkHabitItem).ToList();
+
+        var command = new BulkCreateHabitsCommand(
+            HttpContext.GetUserId(),
+            habits);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpDelete("bulk")]
+    public async Task<IActionResult> BulkDelete(
+        [FromBody] BulkDeleteHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new BulkDeleteHabitsCommand(
+            HttpContext.GetUserId(),
+            request.HabitIds);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemRequest request)
+    {
+        return new BulkHabitItem(
+            request.Title,
+            request.Description,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
+            request.Days,
+            request.IsBadHabit,
+            request.DueDate,
+            request.SubHabits?.Select(MapToBulkHabitItem).ToList());
     }
 
 }
