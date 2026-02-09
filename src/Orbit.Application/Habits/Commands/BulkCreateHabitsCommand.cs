@@ -91,7 +91,8 @@ public class BulkCreateHabitsCommandHandler(
 
                         if (childResult.IsFailure)
                         {
-                            // Sub-habit creation failed - roll back parent by not saving
+                            // Sub-habit creation failed - remove parent from tracking
+                            habitRepository.Remove(parentHabit);
                             results.Add(new BulkCreateItemResult(
                                 Index: i,
                                 Status: BulkItemStatus.Failed,
