@@ -214,7 +214,7 @@ public class HabitsControllerTests : IAsyncLifetime
     {
         var response = await _client.PostAsJsonAsync("/api/habits/bulk", new
         {
-            habits = new[]
+            habits = new object[]
             {
                 new
                 {
@@ -283,7 +283,7 @@ public class HabitsControllerTests : IAsyncLifetime
         // Verify 2 habits created
         var habitsResponse = await _client.GetAsync("/api/habits");
         var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-        habits.Should().HaveCountGreaterOrEqualTo(2);
+        habits.Should().HaveCountGreaterThanOrEqualTo(2);
     }
 
     [Fact]
