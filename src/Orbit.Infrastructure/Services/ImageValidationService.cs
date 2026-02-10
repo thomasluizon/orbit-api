@@ -14,13 +14,6 @@ public sealed class ImageValidationService : IImageValidationService
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
-    private static readonly IEnumerable<FileFormat> AllowedFormats = new FileFormat[]
-    {
-        new Jpeg(),
-        new Png(),
-        new Webp()
-    };
-
     private static readonly FileFormatInspector Inspector = new();
 
     public async Task<Result<(string MimeType, long Size)>> ValidateAsync(IFormFile file)
@@ -44,9 +37,9 @@ public sealed class ImageValidationService : IImageValidationService
         if (format == null)
             return Result.Failure<(string, long)>("Unable to determine file format from magic bytes.");
 
-        // Validate against allowed formats
-        if (!AllowedFormats.Any(f => f.GetType() == format.GetType()))
-            return Result.Failure<(string, long)>($"File signature does not match allowed image formats. Detected: {format.GetType().Name}");
+        // Validate it's an image format
+        if (format is not Image)
+            return Result.Failure<(string, long)>($"File is not a recognized image format. Detected: {format.GetType().Name}");
 
         // Return the media type from the detected format
         return await Task.FromResult(Result.Success((format.MediaType, file.Length)));

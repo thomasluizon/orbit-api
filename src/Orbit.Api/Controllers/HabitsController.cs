@@ -48,6 +48,14 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
+    public record ReorderHabitsRequest(IReadOnlyList<HabitPositionRequest> Positions);
+
+    public record HabitPositionRequest(Guid HabitId, int Position);
+
+    public record MoveHabitParentRequest(Guid? ParentId);
+
+    public record CreateSubHabitRequest(string Title, string? Description);
+
     [HttpGet]
     public async Task<IActionResult> GetHabits(
         [FromQuery] string? tags,
@@ -191,6 +199,56 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         return result.IsSuccess
             ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("reorder")]
+    public async Task<IActionResult> ReorderHabits(
+        [FromBody] ReorderHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var positions = request.Positions
+            .Select(p => new HabitPositionUpdate(p.HabitId, p.Position))
+            .ToList();
+
+        var command = new ReorderHabitsCommand(HttpContext.GetUserId(), positions);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("{id:guid}/parent")]
+    public async Task<IActionResult> MoveHabitParent(
+        Guid id,
+        [FromBody] MoveHabitParentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new MoveHabitParentCommand(HttpContext.GetUserId(), id, request.ParentId);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("{parentId:guid}/sub-habits")]
+    public async Task<IActionResult> CreateSubHabit(
+        Guid parentId,
+        [FromBody] CreateSubHabitRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new CreateSubHabitCommand(
+            HttpContext.GetUserId(),
+            parentId,
+            request.Title,
+            request.Description);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Created($"/api/habits/{result.Value}", new { id = result.Value })
             : BadRequest(new { error = result.Error });
     }
 

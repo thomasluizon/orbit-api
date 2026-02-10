@@ -59,7 +59,11 @@ public class GetHabitsQueryHandler(
                 cancellationToken);
         }
 
-        return habits.Select(MapToResponse).ToList();
+        return habits
+            .OrderBy(h => h.Position ?? int.MaxValue)
+            .ThenBy(h => h.CreatedAtUtc)
+            .Select(MapToResponse)
+            .ToList();
     }
 
     private static HabitResponse MapToResponse(Habit h) => new(

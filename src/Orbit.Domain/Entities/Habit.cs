@@ -14,6 +14,7 @@ public class Habit : Entity
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
+    public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
 
@@ -171,6 +172,10 @@ public class Habit : Entity
 
         return Result.Success();
     }
+
+    public void SetPosition(int? position) => Position = position;
+
+    public void SetParentHabitId(Guid? parentHabitId) => ParentHabitId = parentHabitId;
 
     public void Deactivate() => IsActive = false;
 
