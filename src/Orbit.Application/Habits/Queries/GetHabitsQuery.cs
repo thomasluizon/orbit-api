@@ -16,6 +16,7 @@ public record HabitResponse(
     bool IsCompleted,
     DateOnly DueDate,
     IReadOnlyList<DayOfWeek> Days,
+    int? Position,
     DateTime CreatedAtUtc,
     IReadOnlyList<HabitChildResponse> Children,
     IReadOnlyList<TagResponse> Tags);
@@ -25,7 +26,9 @@ public record HabitChildResponse(
     string Title,
     string? Description,
     bool IsCompleted,
-    DateOnly DueDate);
+    DateOnly DueDate,
+    int? Position,
+    IReadOnlyList<HabitChildResponse> Children);
 
 public record TagResponse(
     Guid Id,
@@ -39,34 +42,32 @@ public class GetHabitsQueryHandler(
 {
     public async Task<IReadOnlyList<HabitResponse>> Handle(GetHabitsQuery request, CancellationToken cancellationToken)
     {
-        IReadOnlyList<Habit> habits;
+        // Load all active habits for the user in one query to build the tree in-memory
+        var allHabits = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.IsActive,
+            q => q.Include(h => h.Tags),
+            cancellationToken);
+
+        var lookup = allHabits.ToLookup(h => h.ParentHabitId);
+
+        var topLevel = lookup[null]
+            .OrderBy(h => h.Position ?? int.MaxValue)
+            .ThenBy(h => h.CreatedAtUtc);
 
         if (request.TagIds is { Count: > 0 })
         {
-            habits = await habitRepository.FindAsync(
-                h => h.UserId == request.UserId && h.IsActive && h.ParentHabitId == null
-                     && h.Tags.Any(t => request.TagIds.Contains(t.Id)),
-                q => q.Include(h => h.Children.Where(c => c.IsActive))
-                      .Include(h => h.Tags),
-                cancellationToken);
-        }
-        else
-        {
-            habits = await habitRepository.FindAsync(
-                h => h.UserId == request.UserId && h.IsActive && h.ParentHabitId == null,
-                q => q.Include(h => h.Children.Where(c => c.IsActive))
-                      .Include(h => h.Tags),
-                cancellationToken);
+            return topLevel
+                .Where(h => h.Tags.Any(t => request.TagIds.Contains(t.Id)))
+                .Select(h => MapToResponse(h, lookup))
+                .ToList();
         }
 
-        return habits
-            .OrderBy(h => h.Position ?? int.MaxValue)
-            .ThenBy(h => h.CreatedAtUtc)
-            .Select(MapToResponse)
+        return topLevel
+            .Select(h => MapToResponse(h, lookup))
             .ToList();
     }
 
-    private static HabitResponse MapToResponse(Habit h) => new(
+    private static HabitResponse MapToResponse(Habit h, ILookup<Guid?, Habit> lookup) => new(
         h.Id,
         h.Title,
         h.Description,
@@ -76,8 +77,17 @@ public class GetHabitsQueryHandler(
         h.IsCompleted,
         h.DueDate,
         h.Days.ToList(),
+        h.Position,
         h.CreatedAtUtc,
-        h.Children.Select(c => new HabitChildResponse(
-            c.Id, c.Title, c.Description, c.IsCompleted, c.DueDate)).ToList(),
+        MapChildren(h.Id, lookup),
         h.Tags.Select(t => new TagResponse(t.Id, t.Name, t.Color)).ToList());
+
+    private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>
+        lookup[parentId]
+            .OrderBy(c => c.Position ?? int.MaxValue)
+            .ThenBy(c => c.CreatedAtUtc)
+            .Select(c => new HabitChildResponse(
+                c.Id, c.Title, c.Description, c.IsCompleted, c.DueDate,
+                c.Position, MapChildren(c.Id, lookup)))
+            .ToList();
 }
