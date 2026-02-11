@@ -15,7 +15,7 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ec2-user/Orbit
+            cd /home/ec2-user/orbit-api
             git pull origin main
             docker compose up -d --build
             docker image prune -f
