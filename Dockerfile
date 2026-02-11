@@ -21,7 +21,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 
 # Non-root user for security
-RUN adduser --disabled-password --gecos "" appuser
+RUN useradd --no-create-home appuser
 USER appuser
 
 COPY --from=build /app .
