@@ -11,8 +11,10 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Tasks");
+            migrationBuilder.Sql(
+                """
+                DROP TABLE IF EXISTS "Tasks";
+                """);
         }
 
         /// <inheritdoc />
