@@ -165,7 +165,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
- 
+
 app.Run();
 
 // Make Program class accessible to integration tests
