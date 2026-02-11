@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260208052110_SimplifyHabitModel")]
-    partial class SimplifyHabitModel
+    [Migration("20260211151557_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -61,6 +61,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<Guid?>("ParentHabitId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("Position")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -179,6 +182,41 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.UserFact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExtractedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FactText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "IsDeleted");
+
+                    b.ToTable("UserFacts");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
