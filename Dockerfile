@@ -2,13 +2,12 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy project files for layer caching
-COPY Orbit.slnx ./
 COPY src/Orbit.Domain/Orbit.Domain.csproj src/Orbit.Domain/
 COPY src/Orbit.Application/Orbit.Application.csproj src/Orbit.Application/
 COPY src/Orbit.Infrastructure/Orbit.Infrastructure.csproj src/Orbit.Infrastructure/
 COPY src/Orbit.Api/Orbit.Api.csproj src/Orbit.Api/
 
-RUN dotnet restore Orbit.slnx
+RUN dotnet restore src/Orbit.Api/Orbit.Api.csproj
 
 # Copy everything and publish
 COPY src/ src/
