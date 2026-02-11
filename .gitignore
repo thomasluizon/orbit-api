@@ -46,3 +46,7 @@ Desktop.ini
 ## Publish
 *.pubxml
 *.publishsettings
+
+## Docker / Caddy
+caddy_data/
+caddy_config/

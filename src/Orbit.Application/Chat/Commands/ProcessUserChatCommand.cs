@@ -223,6 +223,7 @@ public class ProcessUserChatCommandHandler(
             var extractionResult = await factExtractionService.ExtractFactsAsync(
                 request.Message,
                 plan.AiMessage,
+                userFacts,
                 cancellationToken);
 
             extractionStopwatch.Stop();

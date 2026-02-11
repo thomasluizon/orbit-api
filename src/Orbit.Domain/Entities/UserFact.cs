@@ -43,12 +43,13 @@ public class UserFact : Entity
         });
     }
 
-    public void Update(string newFactText)
+    public void Update(string newFactText, string? category)
     {
         if (string.IsNullOrWhiteSpace(newFactText))
             throw new ArgumentException("Fact text cannot be empty", nameof(newFactText));
 
         FactText = newFactText.Trim();
+        Category = category;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 

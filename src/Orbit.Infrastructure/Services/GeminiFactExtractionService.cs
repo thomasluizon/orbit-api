@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
@@ -26,11 +27,12 @@ public sealed class GeminiFactExtractionService(
     public async Task<Result<ExtractedFacts>> ExtractFactsAsync(
         string userMessage,
         string? aiResponse,
+        IReadOnlyList<UserFact> existingFacts,
         CancellationToken cancellationToken = default)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var extractionPrompt = BuildExtractionPrompt(userMessage, aiResponse);
+        var extractionPrompt = BuildExtractionPrompt(userMessage, aiResponse, existingFacts);
 
         var request = new GeminiRequest
         {
@@ -126,15 +128,22 @@ public sealed class GeminiFactExtractionService(
         }
     }
 
-    private static string BuildExtractionPrompt(string userMessage, string? aiResponse)
+    private static string BuildExtractionPrompt(string userMessage, string? aiResponse, IReadOnlyList<UserFact> existingFacts)
     {
+        var existingFactsList = existingFacts.Count > 0
+            ? string.Join("\n", existingFacts.Select(f => $"- [{f.Category}] {f.FactText}"))
+            : "(none)";
+
         return $$"""
             # Extract Key Facts from Conversation
 
-            Analyze this conversation and extract ONLY factual information the user shared about themselves.
+            Analyze this conversation and extract ONLY meaningful, lasting personal traits the user shared about themselves.
 
             **User message:** {{userMessage}}
             **AI response:** {{aiResponse ?? "(no response yet)"}}
+
+            **Already stored facts:**
+            {{existingFactsList}}
 
             Return JSON with this EXACT structure:
             {
@@ -153,8 +162,12 @@ public sealed class GeminiFactExtractionService(
             - Category: preference (likes/dislikes/preferences), routine (schedules/patterns), context (situation/background/goals)
             - If no personal facts to extract, return {"facts": []}
             - NEVER extract action requests, commands, or habit names as facts
+            - **DO NOT extract a fact if a similar one already exists** in the stored facts list above
+            - **If the user contradicts an existing fact** (e.g., "I switched to mornings" when "User is a night person" exists), extract the NEW fact — the caller will handle replacement
+            - **Only extract meaningful, lasting personal traits** — skip transient states like "I'm tired today" or "I had coffee this morning"
+            - **Skip generic statements** — only save distinctive personal info that would help personalize future interactions
             - Examples of what IS a fact: "User is a morning person", "User works night shifts", "User prefers running outdoors"
-            - Examples of what is NOT a fact: "User wants to create a running habit", "User logged meditation"
+            - Examples of what is NOT a fact: "User wants to create a running habit", "User logged meditation", "User is tired", "User had a good day"
             """;
     }
 

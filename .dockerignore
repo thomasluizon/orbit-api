@@ -1,0 +1,13 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/TestResults
+**/.planning
+**/chat.md
+**/*.user
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/.env
+tests/
