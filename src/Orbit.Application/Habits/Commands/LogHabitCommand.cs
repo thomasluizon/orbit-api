@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -15,7 +16,8 @@ public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<LogHabitCommand, Result<Guid>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<LogHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
     {
@@ -43,6 +45,13 @@ public class LogHabitCommandHandler(
 
             habitLogRepository.Remove(unlogResult.Value);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+            for (int i = -1; i <= 1; i++)
+            {
+                cache.Remove($"summary:{habit.UserId}:{utcToday.AddDays(i):yyyy-MM-dd}");
+            }
+
             return Result.Success(unlogResult.Value.Id);
         }
 
@@ -53,6 +62,12 @@ public class LogHabitCommandHandler(
 
         await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (int i = -1; i <= 1; i++)
+        {
+            cache.Remove($"summary:{habit.UserId}:{utcDate.AddDays(i):yyyy-MM-dd}");
+        }
 
         return Result.Success(logResult.Value.Id);
     }

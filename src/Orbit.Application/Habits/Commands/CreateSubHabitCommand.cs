@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -13,7 +14,8 @@ public record CreateSubHabitCommand(
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateSubHabitCommand, Result<Guid>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<CreateSubHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateSubHabitCommand request, CancellationToken cancellationToken)
     {
@@ -38,6 +40,12 @@ public class CreateSubHabitCommandHandler(
 
         await habitRepository.AddAsync(childResult.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (int i = -1; i <= 1; i++)
+        {
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}");
+        }
 
         return Result.Success(childResult.Value.Id);
     }

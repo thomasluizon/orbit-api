@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -34,7 +35,8 @@ public enum BulkItemStatus { Success, Failed }
 
 public class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
 {
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
@@ -128,6 +130,12 @@ public class BulkCreateHabitsCommandHandler(
 
         // Save all successful entities once
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (int i = -1; i <= 1; i++)
+        {
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}");
+        }
 
         return Result.Success(new BulkCreateResult(results));
     }
