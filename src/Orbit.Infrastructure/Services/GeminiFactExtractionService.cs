@@ -135,39 +135,59 @@ public sealed class GeminiFactExtractionService(
             : "(none)";
 
         return $$"""
-            # Extract Key Facts from Conversation
+            # Extract Personal Facts from Conversation
 
-            Analyze this conversation and extract ONLY meaningful, lasting personal traits the user shared about themselves.
+            Your job is to extract facts that reveal WHO the user IS — their life situation, schedule constraints, health context, personality, and genuine preferences.
+            These facts help personalize habit suggestions in future conversations.
 
             **User message:** {{userMessage}}
             **AI response:** {{aiResponse ?? "(no response yet)"}}
 
-            **Already stored facts:**
+            **Already stored facts (do NOT duplicate these):**
             {{existingFactsList}}
 
             Return JSON with this EXACT structure:
             {
               "facts": [
                 {
-                  "factText": "clear, concise fact statement",
+                  "factText": "User [fact about who they are]",
                   "category": "preference" | "routine" | "context"
                 }
               ]
             }
 
-            Rules:
-            - Extract ONLY explicit statements by the user about themselves
-            - Do NOT infer or assume facts not directly stated
-            - Each fact should be a standalone sentence
-            - Category: preference (likes/dislikes/preferences), routine (schedules/patterns), context (situation/background/goals)
-            - If no personal facts to extract, return {"facts": []}
-            - NEVER extract action requests, commands, or habit names as facts
-            - **DO NOT extract a fact if a similar one already exists** in the stored facts list above
-            - **If the user contradicts an existing fact** (e.g., "I switched to mornings" when "User is a night person" exists), extract the NEW fact — the caller will handle replacement
-            - **Only extract meaningful, lasting personal traits** — skip transient states like "I'm tired today" or "I had coffee this morning"
-            - **Skip generic statements** — only save distinctive personal info that would help personalize future interactions
-            - Examples of what IS a fact: "User is a morning person", "User works night shifts", "User prefers running outdoors"
-            - Examples of what is NOT a fact: "User wants to create a running habit", "User logged meditation", "User is tired", "User had a good day"
+            ## What TO extract (facts about WHO the person is):
+            - Life context: "User works from home", "User is a student", "User has a young child", "User travels frequently for work"
+            - Schedule constraints: "User works night shifts", "User has morning meetings", "User studies in the afternoons"
+            - Health context: "User takes medication every morning", "User has a bad knee", "User is training for a marathon"
+            - Genuine preferences: "User prefers outdoor activities over gym", "User dislikes early mornings", "User is a vegetarian"
+            - Personality traits: "User is a night owl", "User gets stressed easily at work", "User finds meditation improves their focus"
+
+            ## What NOT to extract:
+
+            **NEVER extract habit creation or tracking requests** — when a user says "I want to meditate daily", "Create a morning routine", "I want to stop smoking", "track my gym sessions", these are habit intentions, NOT personal facts. The habit list already captures this. Do NOT save:
+            - "User wants to meditate in the morning" ← this is a habit, not a personal fact
+            - "User wants to go to the gym on Monday and Friday" ← this is a habit schedule
+            - "User wants to stop biting their nails" ← this is a habit to track
+            - "User wants to drink water every day" ← this is a habit
+            - "User wants to do yoga every 2 weeks" ← this is a habit
+
+            **NEVER extract one-time events or logged completions:**
+            - "User meditated this morning" ← single event, not a lasting trait
+            - "User logged their workout" ← action taken, not a personal fact
+            - "User completed their habit" ← completion event
+
+            **NEVER extract transient emotional states:**
+            - "User felt super focused after meditating" ← one-time feeling
+            - "User is tired today" ← temporary state
+            - "User had a good day" ← not lasting
+
+            ## Additional rules:
+            - If the message is only about creating/logging habits with no personal context revealed, return {"facts": []}
+            - DO NOT duplicate facts already in the stored list
+            - If the user contradicts an existing fact, extract the NEW fact — the system will handle replacement
+            - Facts must be genuinely useful for personalizing habit suggestions in future conversations
+            - Category: preference (likes/dislikes/personal style), routine (real schedule patterns and constraints), context (life situation, goals, background)
             """;
     }
 
