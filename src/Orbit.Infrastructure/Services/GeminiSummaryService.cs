@@ -27,9 +27,20 @@ public sealed class GeminiSummaryService(
     {
         var habitList = allHabits.ToList();
 
-        var scheduledHabits = habitList
-            .Where(h => HabitScheduleService.GetScheduledDates(h, dateFrom, dateTo).Count > 0)
+        // Find top-level habits scheduled for this date range
+        var scheduledTopLevel = habitList
+            .Where(h => h.ParentHabitId is null
+                         && HabitScheduleService.GetScheduledDates(h, dateFrom, dateTo).Count > 0)
             .ToList();
+
+        var scheduledTopLevelIds = scheduledTopLevel.Select(h => h.Id).ToHashSet();
+
+        // Include ALL sub-habits of scheduled parents (regardless of their own schedule)
+        var children = habitList
+            .Where(h => h.ParentHabitId is not null && scheduledTopLevelIds.Contains(h.ParentHabitId.Value))
+            .ToList();
+
+        var scheduledHabits = scheduledTopLevel.Concat(children).ToList();
 
         var overdueHabits = includeOverdue
             ? habitList
@@ -123,27 +134,65 @@ public sealed class GeminiSummaryService(
             _ => "English"
         };
 
-        var scheduledNames = scheduledHabits.Count > 0
-            ? string.Join(", ", scheduledHabits.Select(h => h.Title))
+        var habitLines = new List<string>();
+        foreach (var habit in scheduledHabits)
+        {
+            var status = habit.IsCompleted ? "done" : "pending";
+            var children = scheduledHabits
+                .Where(h => h.ParentHabitId == habit.Id)
+                .ToList();
+
+            if (habit.ParentHabitId is not null)
+                continue; // will be listed under parent
+
+            if (children.Count > 0)
+            {
+                var doneCount = children.Count(c => c.IsCompleted);
+                habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done)");
+                foreach (var child in children)
+                {
+                    var childStatus = child.IsCompleted ? "done" : "pending";
+                    habitLines.Add($"  - {child.Title} ({childStatus})");
+                }
+            }
+            else
+            {
+                habitLines.Add($"- {habit.Title} ({status})");
+            }
+        }
+
+        var habitSection = habitLines.Count > 0
+            ? string.Join("\n", habitLines)
+            : "(no habits scheduled)";
+
+        var overdueSection = overdueHabits.Count > 0
+            ? string.Join("\n", overdueHabits.Select(h => $"- {h.Title}"))
             : "(none)";
 
-        var overdueNames = overdueHabits.Count > 0
-            ? string.Join(", ", overdueHabits.Select(h => $"{h.Title} (overdue)"))
-            : "(none)";
+        var totalCount = scheduledHabits.Count;
+        var doneTotal = scheduledHabits.Count(h => h.IsCompleted);
 
         return $"""
-            Generate a daily habit summary for {date:MMMM d, yyyy}.
+            You are a friendly habit coach. Write a short daily briefing for the user.
 
-            Scheduled habits for today: {scheduledNames}
-            Overdue habits: {overdueNames}
+            Date: {date:MMMM d, yyyy}
+            Progress: {doneTotal}/{totalCount} habits completed
+
+            Today's habits:
+            {habitSection}
+
+            Overdue from previous days:
+            {overdueSection}
 
             Rules:
-            - Write 2-4 sentences
-            - Use a warm, encouraging tone
-            - Mention habit names naturally in the text
-            - Do NOT use markdown formatting, bullet points, or JSON
+            - Write 2-3 short sentences, like a supportive friend
+            - Focus on what's ahead: mention specific pending habits by name
+            - If some habits are done, briefly acknowledge progress
+            - If there are overdue habits, gently remind without guilt
+            - Keep it casual and concise, not overly enthusiastic
+            - Do NOT use markdown, bullet points, emojis, or JSON
             - Write ONLY in {languageName}
-            - No preamble, no sign-off -- just the summary paragraph
+            - No greeting, no sign-off -- just the briefing
             """;
     }
 
