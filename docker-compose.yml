@@ -47,6 +47,7 @@ services:
       Jwt__SecretKey: ${JWT_SECRET_KEY}
       Jwt__Issuer: ${JWT_ISSUER}
       Jwt__Audience: ${JWT_AUDIENCE}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://useorbit.org}
     ports:
       - "127.0.0.1:8080:8080"
     deploy:
