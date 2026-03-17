@@ -185,14 +185,18 @@ public sealed class GeminiSummaryService(
             {overdueSection}
 
             Rules:
-            - Write 2-3 short sentences, like a supportive friend
-            - Focus on what's ahead: mention specific pending habits by name
+            - Write 2-3 short sentences max, like a supportive friend texting you
+            - Weave habits into natural sentences about the DAY, don't just list habit names
+            - BAD: "Today you have Yoga, Morning Routine, and Guitar Playing."
+            - GOOD: "A good day to stretch out with some yoga and get creative on the guitar."
+            - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - If some habits are done, briefly acknowledge progress
-            - If there are overdue habits, gently remind without guilt
-            - Keep it casual and concise, not overly enthusiastic
+            - If there are overdue habits, gently nudge without guilt-tripping
+            - Keep it casual, warm, and concise -- not corporate or overly enthusiastic
             - Do NOT use markdown, bullet points, emojis, or JSON
+            - Do NOT mention the date explicitly
             - Write ONLY in {languageName}
-            - No greeting, no sign-off -- just the briefing
+            - No greeting like "good morning", no sign-off -- just the briefing
             """;
     }
 
