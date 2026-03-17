@@ -24,6 +24,9 @@ public static class HabitScheduleService
             return target == habit.DueDate;
         }
 
+        // Habit is not due before its anchor (due) date
+        if (target < anchor) return false;
+
         // Day filter: if habit has specific days, check target's weekday
         if (habit.Days.Count > 0)
         {

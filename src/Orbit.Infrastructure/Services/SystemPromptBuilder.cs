@@ -99,6 +99,7 @@ public static class SystemPromptBuilder
             12. Default dates to TODAY when not specified
             13. ALWAYS include dueDate (YYYY-MM-DD) when creating habits - this is when the habit is first due
             14. For recurring habits, dueDate is when it starts. For one-time tasks, dueDate is when it's due by
+            14b. When specific days are provided, dueDate MUST be the next occurrence of one of those days (e.g., if today is Tuesday and days are [Monday, Wednesday, Friday], dueDate should be Wednesday, NOT today)
             15. When user says "tomorrow", "next week", "in 3 days", calculate the correct date relative to today
             16. Match user's language style - be friendly but concise
             17. frequencyQuantity defaults to 1 if not specified by user

@@ -107,7 +107,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, x.scheduledDates, x.isOverdue, lookup))
+            .Select(x => MapToScheduleItem(x.habit, x.scheduledDates, x.isOverdue, lookup, request.DateFrom, request.DateTo))
             .ToList();
 
         return new PaginatedResponse<HabitScheduleItem>(
@@ -122,7 +122,9 @@ public class GetHabitScheduleQueryHandler(
         Habit h,
         List<DateOnly> scheduledDates,
         bool isOverdue,
-        ILookup<Guid?, Habit> lookup) => new(
+        ILookup<Guid?, Habit> lookup,
+        DateOnly dateFrom,
+        DateOnly dateTo) => new(
             h.Id,
             h.Title,
             h.Description,
@@ -135,14 +137,15 @@ public class GetHabitScheduleQueryHandler(
             h.CreatedAtUtc,
             scheduledDates,
             isOverdue,
-            MapChildren(h.Id, lookup));
+            MapChildren(h.Id, lookup, dateFrom, dateTo));
 
-    private static List<HabitScheduleChildItem> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>
+    private static List<HabitScheduleChildItem> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo) =>
         lookup[parentId]
+            .Where(c => HabitScheduleService.GetScheduledDates(c, dateFrom, dateTo).Count > 0 || c.IsCompleted)
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitScheduleChildItem(
                 c.Id, c.Title, c.Description, c.IsCompleted,
-                c.Position, MapChildren(c.Id, lookup)))
+                c.Position, MapChildren(c.Id, lookup, dateFrom, dateTo)))
             .ToList();
 }

@@ -17,6 +17,7 @@ public record GetDailySummaryQuery(
 
 public class GetDailySummaryQueryHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     ISummaryService summaryService,
     IMemoryCache cache) : IRequestHandler<GetDailySummaryQuery, Result<DailySummaryResponse>>
 {
@@ -24,6 +25,13 @@ public class GetDailySummaryQueryHandler(
         GetDailySummaryQuery request,
         CancellationToken cancellationToken)
     {
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        if (user is null)
+            return Result.Failure<DailySummaryResponse>("User not found.");
+
+        if (!user.AiSummaryEnabled)
+            return Result.Failure<DailySummaryResponse>("AI summary is disabled.");
+
         var cacheKey = CacheKey(request.UserId, request.DateFrom, request.Language);
 
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)

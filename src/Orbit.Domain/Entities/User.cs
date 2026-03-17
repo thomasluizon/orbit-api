@@ -14,6 +14,7 @@ public class User : Entity
     public string PasswordHash { get; private set; } = string.Empty;
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
+    public bool AiSummaryEnabled { get; private set; } = true;
     public DateTime CreatedAtUtc { get; private set; }
 
     private User() { }
@@ -93,4 +94,6 @@ public class User : Entity
     public void ClearTimeZone() => TimeZone = null;
 
     public void SetAiMemory(bool enabled) => AiMemoryEnabled = enabled;
+
+    public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 }
