@@ -80,15 +80,16 @@ public class BulkCreateHabitsCommandHandler(
                 {
                     foreach (var subItem in item.SubHabits)
                     {
+                        // Sub-habits inherit parent frequency/dueDate when not specified
                         var childResult = Habit.Create(
                             request.UserId,
                             subItem.Title,
-                            subItem.FrequencyUnit,
-                            subItem.FrequencyQuantity,
+                            subItem.FrequencyUnit ?? item.FrequencyUnit,
+                            subItem.FrequencyQuantity ?? item.FrequencyQuantity,
                             subItem.Description,
-                            subItem.Days,
+                            subItem.Days ?? item.Days,
                             subItem.IsBadHabit,
-                            subItem.DueDate,
+                            subItem.DueDate ?? item.DueDate,
                             parentHabitId: parentHabit.Id);
 
                         if (childResult.IsFailure)

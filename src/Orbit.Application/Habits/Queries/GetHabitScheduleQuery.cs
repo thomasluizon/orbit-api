@@ -18,6 +18,7 @@ public record HabitScheduleItem(
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
     DateTime CreatedAtUtc,
+    DateOnly DueDate,
     IReadOnlyList<DateOnly> ScheduledDates,
     bool IsOverdue,
     IReadOnlyList<HabitScheduleChildItem> Children);
@@ -79,8 +80,8 @@ public class GetHabitScheduleQueryHandler(
         if (request.IsCompleted.HasValue)
             topLevel = topLevel.Where(h => h.IsCompleted == request.IsCompleted.Value);
 
-        // Schedule-aware filtering: keep habits that have at least one scheduled date in range
-        // OR are overdue (if includeOverdue is true and we're checking today)
+        // Schedule-aware filtering: keep habits that have at least one scheduled date in range,
+        // OR are overdue, OR have any descendant due in range
         var filtered = new List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)>();
 
         foreach (var habit in topLevel)
@@ -93,7 +94,9 @@ public class GetHabitScheduleQueryHandler(
                 isOverdue = true;
             }
 
-            if (scheduledDates.Count > 0 || isOverdue)
+            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, request.DateFrom, request.DateTo);
+
+            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
             {
                 filtered.Add((habit, scheduledDates, isOverdue));
             }
@@ -135,13 +138,30 @@ public class GetHabitScheduleQueryHandler(
             h.Days.ToList(),
             h.Position,
             h.CreatedAtUtc,
+            h.DueDate,
             scheduledDates,
             isOverdue,
             MapChildren(h.Id, lookup, dateFrom, dateTo));
 
+    private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
+    {
+        foreach (var child in lookup[parentId])
+        {
+            if (HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count > 0)
+                return true;
+            if (!child.IsCompleted && child.DueDate < dateFrom)
+                return true;
+            if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo))
+                return true;
+        }
+        return false;
+    }
+
     private static List<HabitScheduleChildItem> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo) =>
         lookup[parentId]
-            .Where(c => HabitScheduleService.GetScheduledDates(c, dateFrom, dateTo).Count > 0 || c.IsCompleted)
+            .Where(c => HabitScheduleService.GetScheduledDates(c, dateFrom, dateTo).Count > 0
+                || c.IsCompleted
+                || (!c.IsCompleted && c.DueDate < dateFrom))
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitScheduleChildItem(

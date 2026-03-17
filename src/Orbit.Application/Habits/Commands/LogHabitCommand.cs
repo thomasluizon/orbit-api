@@ -44,6 +44,10 @@ public class LogHabitCommandHandler(
                 return Result.Failure<Guid>(unlogResult.Error);
 
             habitLogRepository.Remove(unlogResult.Value);
+
+            // If a child was unlogged, also unlog the auto-completed parent
+            await TryUnlogParent(habit, today, cancellationToken);
+
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
             var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -62,6 +66,10 @@ public class LogHabitCommandHandler(
             return Result.Failure<Guid>(logResult.Error);
 
         await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
+
+        // Auto-complete parent when all children are done (recursive up the tree)
+        await TryAutoCompleteParent(habit, today, cancellationToken);
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -72,6 +80,60 @@ public class LogHabitCommandHandler(
         }
 
         return Result.Success(logResult.Value.Id);
+    }
+
+    private async Task TryAutoCompleteParent(Habit child, DateOnly today, CancellationToken ct)
+    {
+        if (child.ParentHabitId is null) return;
+
+        var parent = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == child.ParentHabitId.Value,
+            q => q.Include(h => h.Logs).Include(h => h.Children),
+            ct);
+
+        if (parent is null || parent.IsCompleted) return;
+
+        // Only auto-log if the parent is actually due today (or overdue)
+        if (parent.DueDate > today) return;
+
+        // Check if ALL children are now completed
+        var allChildrenDone = parent.Children.All(c => c.IsCompleted);
+        if (!allChildrenDone) return;
+
+        // Auto-log the parent
+        var alreadyLogged = parent.Logs.Any(l => l.Date == today);
+        if (!alreadyLogged)
+        {
+            var logResult = parent.Log(today);
+            if (logResult.IsSuccess)
+                await habitLogRepository.AddAsync(logResult.Value, ct);
+        }
+
+        // Recurse up the tree
+        await TryAutoCompleteParent(parent, today, ct);
+    }
+
+    private async Task TryUnlogParent(Habit child, DateOnly today, CancellationToken ct)
+    {
+        if (child.ParentHabitId is null) return;
+
+        var parent = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == child.ParentHabitId.Value,
+            q => q.Include(h => h.Logs),
+            ct);
+
+        if (parent is null) return;
+
+        // If parent was logged today, unlog it since a child is no longer done
+        var parentLog = parent.Logs.FirstOrDefault(l => l.Date == today);
+        if (parentLog is null) return;
+
+        var unlogResult = parent.Unlog(today);
+        if (unlogResult.IsSuccess)
+            habitLogRepository.Remove(unlogResult.Value);
+
+        // Recurse up the tree
+        await TryUnlogParent(parent, today, ct);
     }
 
     private static DateOnly GetUserToday(User? user)
