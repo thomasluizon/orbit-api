@@ -27,7 +27,12 @@ public record HabitScheduleChildItem(
     Guid Id,
     string Title,
     string? Description,
+    FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    bool IsBadHabit,
     bool IsCompleted,
+    IReadOnlyList<DayOfWeek> Days,
+    DateOnly DueDate,
     int? Position,
     IReadOnlyList<HabitScheduleChildItem> Children);
 
@@ -165,7 +170,9 @@ public class GetHabitScheduleQueryHandler(
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitScheduleChildItem(
-                c.Id, c.Title, c.Description, c.IsCompleted,
+                c.Id, c.Title, c.Description,
+                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
+                c.Days.ToList(), c.DueDate,
                 c.Position, MapChildren(c.Id, lookup, dateFrom, dateTo)))
             .ToList();
 }

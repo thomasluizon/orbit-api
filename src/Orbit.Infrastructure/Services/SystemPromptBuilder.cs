@@ -99,7 +99,7 @@ public static class SystemPromptBuilder
             12. Default dates to TODAY when not specified
             13. ALWAYS include dueDate (YYYY-MM-DD) when creating habits - this is when the habit is first due
             14. For recurring habits, dueDate is when it starts. For one-time tasks, dueDate is when it's due by
-            14b. When specific days are provided, dueDate MUST be the next occurrence of one of those days (e.g., if today is Tuesday and days are [Monday, Wednesday, Friday], dueDate should be Wednesday, NOT today)
+            14b. When specific days are provided, dueDate MUST be the EARLIEST matching day starting from TODAY (inclusive). If today matches one of the days, use today. Otherwise use the next matching day. (e.g., if today is Tuesday and days are [Monday, Tuesday, Friday], dueDate = today. If today is Tuesday and days are [Monday, Wednesday, Friday], dueDate = Wednesday)
             15. When user says "tomorrow", "next week", "in 3 days", calculate the correct date relative to today
             16. Match user's language style - be friendly but concise
             17. frequencyQuantity defaults to 1 if not specified by user
@@ -415,11 +415,33 @@ public static class SystemPromptBuilder
                   "title": "Morning Routine",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "subHabits": ["Meditate", "Journal", "Stretch"],
+                  "subHabits": [
+                    { "title": "Meditate" },
+                    { "title": "Journal" },
+                    { "title": "Stretch" }
+                  ],
                   "dueDate": "2026-02-08"
                 }
               ],
               "aiMessage": "Created your morning routine with 3 sub-habits: Meditate, Journal, and Stretch!"
+            }
+
+            User: "Create a workout plan every day, with gym on monday wednesday friday and cardio on tuesday thursday"
+            {
+              "actions": [
+                {
+                  "type": "CreateHabit",
+                  "title": "Workout Plan",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "subHabits": [
+                    { "title": "Gym", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday", "Wednesday", "Friday"], "dueDate": "2026-02-09" },
+                    { "title": "Cardio", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Tuesday", "Thursday"], "dueDate": "2026-02-09" }
+                  ],
+                  "dueDate": "2026-02-08"
+                }
+              ],
+              "aiMessage": "Created your Workout Plan! Gym on Mon/Wed/Fri and Cardio on Tue/Thu."
             }
 
             ### Out-of-Scope Request Examples:
@@ -601,7 +623,7 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles, creates child habits under this parent)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
             LogHabit: type, habitId, note (optional - include if user shares context/feelings)
             SuggestBreakdown: type, title (parent habit name), description (optional), frequencyUnit, frequencyQuantity, dueDate, suggestedSubHabits (array of habit objects with type: "CreateHabit", title, description, frequencyUnit, frequencyQuantity, dueDate)
 

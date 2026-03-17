@@ -338,14 +338,17 @@ public class ProcessUserChatCommandHandler(
         // Handle inline sub-habits as child Habit entities
         if (action.SubHabits is { Count: > 0 })
         {
-            foreach (var subTitle in action.SubHabits)
+            foreach (var sub in action.SubHabits)
             {
                 var childResult = Habit.Create(
                     userId,
-                    subTitle,
-                    action.FrequencyUnit,
-                    action.FrequencyQuantity,
-                    dueDate: action.DueDate,
+                    sub.Title ?? "Untitled",
+                    sub.FrequencyUnit ?? action.FrequencyUnit,
+                    sub.FrequencyQuantity ?? action.FrequencyQuantity,
+                    sub.Description,
+                    days: sub.Days ?? action.Days,
+                    isBadHabit: sub.IsBadHabit ?? false,
+                    dueDate: sub.DueDate ?? action.DueDate,
                     parentHabitId: habit.Id);
 
                 if (childResult.IsFailure)

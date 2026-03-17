@@ -4,7 +4,7 @@ namespace Orbit.Domain.Models;
 
 public record AiAction
 {
-    public required AiActionType Type { get; init; }
+    public AiActionType Type { get; init; } = AiActionType.CreateHabit;
     public Guid? HabitId { get; init; }
     public string? Title { get; init; }
     public string? Description { get; init; }
@@ -14,6 +14,6 @@ public record AiAction
     public bool? IsBadHabit { get; init; }
     public DateOnly? DueDate { get; init; }
     public string? Note { get; init; }
-    public List<string>? SubHabits { get; init; }
+    public List<AiAction>? SubHabits { get; init; }
     public List<AiAction>? SuggestedSubHabits { get; init; }
 }
