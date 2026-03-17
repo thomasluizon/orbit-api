@@ -36,6 +36,7 @@ public class ProcessUserChatCommandHandler(
     IAiIntentService aiIntentService,
     IFactExtractionService factExtractionService,
     IRoutineAnalysisService routineAnalysisService,
+    IAppConfigService appConfigService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -58,17 +59,29 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
             dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
-        // 1b. Retrieve user's facts as context for the AI
-        logger.LogInformation("Fetching user facts from database...");
-        var factDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        // 1b. Check if user has AI memory enabled
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
-        var userFacts = await userFactRepository.FindAsync(
-            f => f.UserId == request.UserId,
-            cancellationToken);
+        // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
+        IReadOnlyList<UserFact> userFacts = [];
+        if (aiMemoryEnabled)
+        {
+            logger.LogInformation("Fetching user facts from database...");
+            var factDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        factDbStopwatch.Stop();
-        logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
-            factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
+            userFacts = await userFactRepository.FindAsync(
+                f => f.UserId == request.UserId,
+                cancellationToken);
+
+            factDbStopwatch.Stop();
+            logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
+                factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
+        }
+        else
+        {
+            logger.LogInformation("AI memory disabled for user, skipping fact retrieval");
+        }
 
         // 1d. Analyze user's routine patterns for AI context (non-critical)
         logger.LogInformation("Fetching user's routine patterns...");
@@ -199,7 +212,11 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         // 5. Extract facts from conversation (non-blocking - failure doesn't affect response)
-        try
+        if (!aiMemoryEnabled)
+        {
+            logger.LogInformation("AI memory disabled for user, skipping fact extraction");
+        }
+        else try
         {
             logger.LogInformation("Extracting facts from conversation...");
             var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -214,19 +231,28 @@ public class ProcessUserChatCommandHandler(
 
             if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
             {
-                logger.LogInformation("Extracted {FactCount} facts in {ElapsedMs}ms",
-                    extractionResult.Value.Facts.Count, extractionStopwatch.ElapsedMilliseconds);
-
-                foreach (var candidate in extractionResult.Value.Facts)
+                var maxFacts = await appConfigService.GetAsync("MaxUserFacts", 50, cancellationToken);
+                if (userFacts.Count >= maxFacts)
                 {
-                    var factResult = UserFact.Create(request.UserId, candidate.FactText, candidate.Category);
-                    if (factResult.IsSuccess)
+                    logger.LogInformation("User has reached {MaxFacts} fact limit, skipping extraction persistence", maxFacts);
+                }
+                else
+                {
+                    var remaining = maxFacts - userFacts.Count;
+                    logger.LogInformation("Extracted {FactCount} facts in {ElapsedMs}ms (room for {Remaining})",
+                        extractionResult.Value.Facts.Count, extractionStopwatch.ElapsedMilliseconds, remaining);
+
+                    foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
                     {
-                        await userFactRepository.AddAsync(factResult.Value, cancellationToken);
-                    }
-                    else
-                    {
-                        logger.LogWarning("Failed to create fact: {Error}", factResult.Error);
+                        var factResult = UserFact.Create(request.UserId, candidate.FactText, candidate.Category);
+                        if (factResult.IsSuccess)
+                        {
+                            await userFactRepository.AddAsync(factResult.Value, cancellationToken);
+                        }
+                        else
+                        {
+                            logger.LogWarning("Failed to create fact: {Error}", factResult.Error);
+                        }
                     }
                 }
 

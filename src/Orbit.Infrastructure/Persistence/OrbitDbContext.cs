@@ -10,6 +10,7 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
     public DbSet<UserFact> UserFacts => Set<UserFact>();
+    public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +54,17 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         {
             entity.HasIndex(f => new { f.UserId, f.IsDeleted });
             entity.HasQueryFilter(f => !f.IsDeleted);
+        });
+
+        modelBuilder.Entity<AppConfig>(entity =>
+        {
+            entity.HasKey(c => c.Key);
+            entity.Property(c => c.Key).HasMaxLength(100);
+            entity.Property(c => c.Value).HasMaxLength(500).IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(500);
+
+            entity.HasData(
+                AppConfig.Create("MaxUserFacts", "50", "Maximum number of facts the AI can remember per user"));
         });
     }
 }

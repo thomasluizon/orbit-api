@@ -13,6 +13,7 @@ public class User : Entity
     public string Email { get; private set; } = null!;
     public string PasswordHash { get; private set; } = string.Empty;
     public string? TimeZone { get; private set; }
+    public bool AiMemoryEnabled { get; private set; } = true;
     public DateTime CreatedAtUtc { get; private set; }
 
     private User() { }
@@ -90,4 +91,6 @@ public class User : Entity
     }
 
     public void ClearTimeZone() => TimeZone = null;
+
+    public void SetAiMemory(bool enabled) => AiMemoryEnabled = enabled;
 }
