@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -18,8 +17,7 @@ public record HabitResponse(
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
     DateTime CreatedAtUtc,
-    IReadOnlyList<HabitChildResponse> Children,
-    IReadOnlyList<TagResponse> Tags);
+    IReadOnlyList<HabitChildResponse> Children);
 
 public record HabitChildResponse(
     Guid Id,
@@ -30,14 +28,8 @@ public record HabitChildResponse(
     int? Position,
     IReadOnlyList<HabitChildResponse> Children);
 
-public record TagResponse(
-    Guid Id,
-    string Name,
-    string Color);
-
 public record GetHabitsQuery(
     Guid UserId,
-    IReadOnlyList<Guid>? TagIds = null,
     string? Search = null,
     DateOnly? DueDateFrom = null,
     DateOnly? DueDateTo = null,
@@ -52,7 +44,6 @@ public class GetHabitsQueryHandler(
         // Load all active habits for the user in one query to build the tree in-memory
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
-            q => q.Include(h => h.Tags),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -86,9 +77,6 @@ public class GetHabitsQueryHandler(
                 topLevel = topLevel.Where(h => h.FrequencyUnit == unit);
         }
 
-        if (request.TagIds is { Count: > 0 })
-            topLevel = topLevel.Where(h => h.Tags.Any(t => request.TagIds.Contains(t.Id)));
-
         return topLevel
             .Select(h => MapToResponse(h, lookup))
             .ToList();
@@ -106,8 +94,7 @@ public class GetHabitsQueryHandler(
         h.Days.ToList(),
         h.Position,
         h.CreatedAtUtc,
-        MapChildren(h.Id, lookup),
-        h.Tags.Select(t => new TagResponse(t.Id, t.Name, t.Color)).ToList());
+        MapChildren(h.Id, lookup));
 
     private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>
         lookup[parentId]

@@ -27,7 +27,6 @@ public sealed class OllamaIntentService(
     public async Task<Result<AiActionPlan>> InterpretAsync(
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
         byte[]? imageData = null,
         string? imageMimeType = null,
@@ -45,7 +44,7 @@ public sealed class OllamaIntentService(
 
         logger.LogInformation("🔵 START: Building system prompt...");
         var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, userTags, userFacts, routinePatterns: routinePatterns);
+        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, userFacts, routinePatterns: routinePatterns);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);

@@ -8,7 +8,6 @@ public static class SystemPromptBuilder
 {
     public static string BuildSystemPrompt(
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
         bool hasImage = false,
         IReadOnlyList<RoutinePattern>? routinePatterns = null)
@@ -30,9 +29,6 @@ public static class SystemPromptBuilder
             - Create habits with sub-habits/checklists (e.g., "morning routine with meditate, journal, stretch")
             - Break down complex goals into parent + sub-habit suggestions (e.g., "help me get fit" -> suggests Exercise parent with Running, Stretching, Gym sub-habits)
             - Suggest habit breakdowns when user asks to decompose or break down a goal
-            - Suggest relevant tags when creating habits
-            - Assign existing tags to habits when user requests
-
             ### What You CANNOT Do:
             - Answer general questions (trivia, facts, explanations)
             - Help with homework, work assignments, or academic problems
@@ -59,7 +55,7 @@ public static class SystemPromptBuilder
             5. If the request is out of scope, return empty actions array with explanatory message
             6. A single message may contain MULTIPLE actions - extract ALL of them
             7. When user mentions multiple activities or requests, return ALL of them as separate actions in the actions array
-            8. You can mix action types freely - e.g., CreateHabit + LogHabit + AssignTag all in one response
+            8. You can mix action types freely - e.g., CreateHabit + LogHabit all in one response
             9. Each action is independent - include all relevant fields on each action
             10. ONLY use LogHabit if the user mentions an activity matching an EXISTING habit from the list below
             11. If activity doesn't match existing habit, use CreateHabit first
@@ -111,24 +107,6 @@ public static class SystemPromptBuilder
             sb.AppendLine();
             sb.AppendLine("When user mentions an existing habit activity -> use LogHabit with the exact ID above");
             sb.AppendLine("When user mentions a NEW activity -> use CreateHabit");
-        }
-
-        sb.AppendLine();
-
-        sb.AppendLine("## User's Tags");
-        if (userTags.Count == 0)
-        {
-            sb.AppendLine("(none - user hasn't created tags yet)");
-        }
-        else
-        {
-            foreach (var tag in userTags)
-            {
-                sb.AppendLine($"- \"{tag.Name}\" | ID: {tag.Id} | Color: {tag.Color}");
-            }
-            sb.AppendLine();
-            sb.AppendLine("When user wants to tag a habit with an EXISTING tag -> use AssignTag with the exact ID above");
-            sb.AppendLine("When user mentions a NEW tag that doesn't exist -> include tagNames in aiMessage as suggestions (user creates tags manually)");
         }
 
         sb.AppendLine();
@@ -371,32 +349,6 @@ public static class SystemPromptBuilder
               "aiMessage": "Created your morning routine with 3 sub-habits: Meditate, Journal, and Stretch!"
             }
 
-            User: "Add the wellness tag to my meditation habit" (Meditation habit ID: "abc...", wellness tag ID: "def...")
-            {
-              "actions": [
-                {
-                  "type": "AssignTag",
-                  "habitId": "abc-123-guid",
-                  "tagIds": ["def-456-guid"]
-                }
-              ],
-              "aiMessage": "Added 'wellness' tag to your meditation habit!"
-            }
-
-            User: "I want to start doing yoga every morning"
-            {
-              "actions": [
-                {
-                  "type": "CreateHabit",
-                  "title": "Yoga",
-                  "frequencyUnit": "Day",
-                  "frequencyQuantity": 1,
-                  "dueDate": "2026-02-08"
-                }
-              ],
-              "aiMessage": "Created your daily yoga habit! You might want to add tags like 'morning', 'wellness', or 'fitness' to organize it."
-            }
-
             ### Out-of-Scope Request Examples:
 
             User: "What's the capital of France?"
@@ -548,7 +500,6 @@ public static class SystemPromptBuilder
 
             CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit titles, creates child habits under this parent)
             LogHabit: type, habitId, note (optional - include if user shares context/feelings)
-            AssignTag: type, habitId, tagIds (array of existing tag IDs from the list above)
             SuggestBreakdown: type, title (parent habit name), description (optional), frequencyUnit, frequencyQuantity, dueDate, suggestedSubHabits (array of habit objects with type: "CreateHabit", title, description, frequencyUnit, frequencyQuantity, dueDate)
 
             Use SuggestBreakdown when user asks to "break down", "decompose", "help me plan", or asks for suggestions for a complex goal.

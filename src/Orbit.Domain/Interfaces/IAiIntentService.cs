@@ -9,7 +9,6 @@ public interface IAiIntentService
     Task<Result<AiActionPlan>> InterpretAsync(
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
         byte[]? imageData = null,
         string? imageMimeType = null,

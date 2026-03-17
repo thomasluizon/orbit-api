@@ -26,8 +26,6 @@ public class Habit : Entity
     private readonly List<Habit> _children = [];
     public IReadOnlyCollection<Habit> Children => _children.AsReadOnly();
 
-    public ICollection<Tag> Tags { get; private set; } = [];
-
     private Habit() { }
 
     public static Result<Habit> Create(

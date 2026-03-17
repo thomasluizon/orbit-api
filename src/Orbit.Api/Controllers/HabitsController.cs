@@ -58,7 +58,6 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
-        [FromQuery] string? tags,
         [FromQuery] string? search,
         [FromQuery] DateOnly? dueDateFrom,
         [FromQuery] DateOnly? dueDateTo,
@@ -66,19 +65,8 @@ public class HabitsController(IMediator mediator) : ControllerBase
         [FromQuery] string? frequencyUnit,
         CancellationToken cancellationToken)
     {
-        IReadOnlyList<Guid>? tagIds = null;
-
-        if (!string.IsNullOrWhiteSpace(tags))
-        {
-            tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(s => Guid.TryParse(s, out _))
-                .Select(Guid.Parse)
-                .ToList();
-        }
-
         var query = new GetHabitsQuery(
             HttpContext.GetUserId(),
-            tagIds,
             search,
             dueDateFrom,
             dueDateTo,
