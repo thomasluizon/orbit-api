@@ -476,21 +476,21 @@ public static class SystemPromptBuilder
                   "title": "Exercise",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "dueDate": "2026-02-09"
+                  "dueDate": "2026-02-08"
                 },
                 {
                   "type": "CreateHabit",
                   "title": "Meditation",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "dueDate": "2026-02-09"
+                  "dueDate": "2026-02-08"
                 },
                 {
                   "type": "CreateHabit",
                   "title": "Reading",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "dueDate": "2026-02-09"
+                  "dueDate": "2026-02-08"
                 }
               ],
               "aiMessage": "Created 3 new daily habits: Exercise, Meditation, and Reading!"
@@ -523,7 +523,7 @@ public static class SystemPromptBuilder
                   "title": "Yoga",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "dueDate": "2026-02-09"
+                  "dueDate": "2026-02-08"
                 }
               ],
               "aiMessage": "Logged your run and created a new daily yoga habit!"
@@ -537,7 +537,7 @@ public static class SystemPromptBuilder
                   "title": "Get Fit",
                   "frequencyUnit": "Day",
                   "frequencyQuantity": 1,
-                  "dueDate": "2026-02-09",
+                  "dueDate": "2026-02-08",
                   "suggestedSubHabits": [
                     {
                       "type": "CreateHabit",
@@ -545,7 +545,7 @@ public static class SystemPromptBuilder
                       "description": "30-minute jog",
                       "frequencyUnit": "Day",
                       "frequencyQuantity": 1,
-                      "dueDate": "2026-02-09"
+                      "dueDate": "2026-02-08"
                     },
                     {
                       "type": "CreateHabit",
@@ -553,7 +553,7 @@ public static class SystemPromptBuilder
                       "description": "15-minute stretch routine",
                       "frequencyUnit": "Day",
                       "frequencyQuantity": 1,
-                      "dueDate": "2026-02-09"
+                      "dueDate": "2026-02-08"
                     },
                     {
                       "type": "CreateHabit",
@@ -561,7 +561,7 @@ public static class SystemPromptBuilder
                       "description": "Weight training",
                       "frequencyUnit": "Week",
                       "frequencyQuantity": 3,
-                      "dueDate": "2026-02-09"
+                      "dueDate": "2026-02-08"
                     }
                   ]
                 }
@@ -577,7 +577,7 @@ public static class SystemPromptBuilder
                   "title": "Gaming",
                   "frequencyUnit": "Week",
                   "frequencyQuantity": 1,
-                  "dueDate": "2026-02-09",
+                  "dueDate": "2026-02-08",
                   "suggestedSubHabits": [
                     {
                       "type": "CreateHabit",
@@ -585,7 +585,7 @@ public static class SystemPromptBuilder
                       "description": "Dedicated time to play videogames",
                       "frequencyUnit": "Week",
                       "frequencyQuantity": 2,
-                      "dueDate": "2026-02-09"
+                      "dueDate": "2026-02-08"
                     }
                   ]
                 }
