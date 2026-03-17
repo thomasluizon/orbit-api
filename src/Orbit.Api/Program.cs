@@ -93,6 +93,12 @@ builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionServi
 // Routine analysis always uses Gemini (structured output reliability)
 builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisService>();
 
+// Daily summary always uses Gemini (free-text generation)
+builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>();
+
+// --- In-Memory Cache ---
+builder.Services.AddMemoryCache();
+
 // --- Validation ---
 builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
 

@@ -82,6 +82,28 @@ public class HabitsController(IMediator mediator) : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetDailySummary(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] bool includeOverdue = false,
+        [FromQuery] string language = "en",
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetDailySummaryQuery(
+            HttpContext.GetUserId(),
+            dateFrom,
+            dateTo,
+            includeOverdue,
+            language);
+
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
     {
