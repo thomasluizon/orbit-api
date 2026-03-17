@@ -1,0 +1,70 @@
+using MediatR;
+using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
+
+namespace Orbit.Application.Habits.Queries;
+
+public record HabitDetailResponse(
+    Guid Id,
+    string Title,
+    string? Description,
+    Domain.Enums.FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    bool IsBadHabit,
+    bool IsCompleted,
+    DateOnly DueDate,
+    IReadOnlyList<DayOfWeek> Days,
+    int? Position,
+    DateTime CreatedAtUtc,
+    IReadOnlyList<HabitChildResponse> Children);
+
+public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
+
+public class GetHabitByIdQueryHandler(
+    IGenericRepository<Habit> habitRepository) : IRequestHandler<GetHabitByIdQuery, Result<HabitDetailResponse>>
+{
+    public async Task<Result<HabitDetailResponse>> Handle(GetHabitByIdQuery request, CancellationToken cancellationToken)
+    {
+        var allHabits = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.IsActive,
+            cancellationToken);
+
+        var habit = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
+        if (habit is null)
+            return Result.Failure<HabitDetailResponse>("Habit not found.");
+
+        var lookup = allHabits.ToLookup(h => h.ParentHabitId);
+
+        var children = lookup[habit.Id]
+            .OrderBy(c => c.Position ?? int.MaxValue)
+            .ThenBy(c => c.CreatedAtUtc)
+            .Select(c => MapChild(c, lookup))
+            .ToList();
+
+        return Result.Success(new HabitDetailResponse(
+            habit.Id,
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.IsBadHabit,
+            habit.IsCompleted,
+            habit.DueDate,
+            habit.Days.ToList(),
+            habit.Position,
+            habit.CreatedAtUtc,
+            children));
+    }
+
+    private static HabitChildResponse MapChild(Habit c, ILookup<Guid?, Habit> lookup) => new(
+        c.Id, c.Title, c.Description, c.IsCompleted, c.DueDate,
+        c.Position, MapChildren(c.Id, lookup));
+
+    private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>
+        lookup[parentId]
+            .OrderBy(c => c.Position ?? int.MaxValue)
+            .ThenBy(c => c.CreatedAtUtc)
+            .Select(c => MapChild(c, lookup))
+            .ToList();
+}

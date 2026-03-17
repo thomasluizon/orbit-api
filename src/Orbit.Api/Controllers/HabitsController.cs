@@ -58,22 +58,36 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
-        [FromQuery] string? search,
-        [FromQuery] DateOnly? dueDateFrom,
-        [FromQuery] DateOnly? dueDateTo,
-        [FromQuery] bool? isCompleted,
-        [FromQuery] string? frequencyUnit,
-        CancellationToken cancellationToken)
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] bool includeOverdue = false,
+        [FromQuery] string? search = null,
+        [FromQuery] string? frequencyUnit = null,
+        [FromQuery] bool? isCompleted = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
-        var query = new GetHabitsQuery(
+        var query = new GetHabitScheduleQuery(
             HttpContext.GetUserId(),
+            dateFrom,
+            dateTo,
+            includeOverdue,
             search,
-            dueDateFrom,
-            dueDateTo,
+            frequencyUnit,
             isCompleted,
-            frequencyUnit);
-        var habits = await mediator.Send(query, cancellationToken);
-        return Ok(habits);
+            page,
+            pageSize);
+        var result = await mediator.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetHabitByIdQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
     [HttpPost]
