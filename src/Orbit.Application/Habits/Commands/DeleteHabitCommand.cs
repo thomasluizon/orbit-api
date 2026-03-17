@@ -29,7 +29,8 @@ public class DeleteHabitCommandHandler(
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (int i = -1; i <= 1; i++)
         {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}");
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
         }
 
         return Result.Success();

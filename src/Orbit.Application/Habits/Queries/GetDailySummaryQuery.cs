@@ -24,7 +24,7 @@ public class GetDailySummaryQueryHandler(
         GetDailySummaryQuery request,
         CancellationToken cancellationToken)
     {
-        var cacheKey = CacheKey(request.UserId, request.DateFrom);
+        var cacheKey = CacheKey(request.UserId, request.DateFrom, request.Language);
 
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
         {
@@ -60,6 +60,6 @@ public class GetDailySummaryQueryHandler(
         return Result.Success(new DailySummaryResponse(summaryResult.Value, FromCache: false));
     }
 
-    private static string CacheKey(Guid userId, DateOnly date) =>
-        $"summary:{userId}:{date:yyyy-MM-dd}";
+    private static string CacheKey(Guid userId, DateOnly date, string language) =>
+        $"summary:{userId}:{date:yyyy-MM-dd}:{language}";
 }

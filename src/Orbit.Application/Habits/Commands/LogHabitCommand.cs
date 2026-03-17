@@ -49,7 +49,8 @@ public class LogHabitCommandHandler(
             var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
             for (int i = -1; i <= 1; i++)
             {
-                cache.Remove($"summary:{habit.UserId}:{utcToday.AddDays(i):yyyy-MM-dd}");
+                cache.Remove($"summary:{habit.UserId}:{utcToday.AddDays(i):yyyy-MM-dd}:en");
+                cache.Remove($"summary:{habit.UserId}:{utcToday.AddDays(i):yyyy-MM-dd}:pt-BR");
             }
 
             return Result.Success(unlogResult.Value.Id);
@@ -66,7 +67,8 @@ public class LogHabitCommandHandler(
         var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
         for (int i = -1; i <= 1; i++)
         {
-            cache.Remove($"summary:{habit.UserId}:{utcDate.AddDays(i):yyyy-MM-dd}");
+            cache.Remove($"summary:{habit.UserId}:{utcDate.AddDays(i):yyyy-MM-dd}:en");
+            cache.Remove($"summary:{habit.UserId}:{utcDate.AddDays(i):yyyy-MM-dd}:pt-BR");
         }
 
         return Result.Success(logResult.Value.Id);
