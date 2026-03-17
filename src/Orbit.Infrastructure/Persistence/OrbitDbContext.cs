@@ -64,7 +64,8 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
             entity.Property(c => c.Description).HasMaxLength(500);
 
             entity.HasData(
-                AppConfig.Create("MaxUserFacts", "50", "Maximum number of facts the AI can remember per user"));
+                AppConfig.Create("MaxUserFacts", "50", "Maximum number of facts the AI can remember per user"),
+                AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"));
         });
     }
 }

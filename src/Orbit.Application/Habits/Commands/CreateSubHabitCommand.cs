@@ -15,6 +15,7 @@ public record CreateSubHabitCommand(
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUnitOfWork unitOfWork,
+    IAppConfigService appConfigService,
     IMemoryCache cache) : IRequestHandler<CreateSubHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateSubHabitCommand request, CancellationToken cancellationToken)
@@ -25,6 +26,12 @@ public class CreateSubHabitCommandHandler(
 
         if (parent is null)
             return Result.Failure<Guid>("Parent habit not found.");
+
+        // Enforce max nesting depth from config
+        var maxDepth = await appConfigService.GetAsync("MaxHabitDepth", 5, cancellationToken);
+        var depth = await GetDepthAsync(parent, habitRepository, cancellationToken);
+        if (depth >= maxDepth - 1)
+            return Result.Failure<Guid>($"Maximum nesting depth reached ({maxDepth} levels).");
 
         var childResult = Habit.Create(
             request.UserId,
@@ -49,5 +56,18 @@ public class CreateSubHabitCommandHandler(
         }
 
         return Result.Success(childResult.Value.Id);
+    }
+
+    private static async Task<int> GetDepthAsync(Habit habit, IGenericRepository<Habit> repo, CancellationToken ct)
+    {
+        var depth = 0;
+        var current = habit;
+        while (current.ParentHabitId is not null)
+        {
+            depth++;
+            current = await repo.GetByIdAsync(current.ParentHabitId.Value, ct);
+            if (current is null) break;
+        }
+        return depth;
     }
 }

@@ -58,7 +58,9 @@ public class GetHabitByIdQueryHandler(
     }
 
     private static HabitChildResponse MapChild(Habit c, ILookup<Guid?, Habit> lookup) => new(
-        c.Id, c.Title, c.Description, c.IsCompleted, c.DueDate,
+        c.Id, c.Title, c.Description,
+        c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
+        c.Days.ToList(), c.DueDate,
         c.Position, MapChildren(c.Id, lookup));
 
     private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>

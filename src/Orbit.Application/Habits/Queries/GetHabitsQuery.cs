@@ -23,7 +23,11 @@ public record HabitChildResponse(
     Guid Id,
     string Title,
     string? Description,
+    Domain.Enums.FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    bool IsBadHabit,
     bool IsCompleted,
+    IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     int? Position,
     IReadOnlyList<HabitChildResponse> Children);
@@ -101,7 +105,9 @@ public class GetHabitsQueryHandler(
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitChildResponse(
-                c.Id, c.Title, c.Description, c.IsCompleted, c.DueDate,
+                c.Id, c.Title, c.Description,
+                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
+                c.Days.ToList(), c.DueDate,
                 c.Position, MapChildren(c.Id, lookup)))
             .ToList();
 }
