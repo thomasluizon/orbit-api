@@ -15,6 +15,7 @@ public class User : Entity
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
+    public bool HasCompletedOnboarding { get; private set; } = false;
     public DateTime CreatedAtUtc { get; private set; }
 
     private User() { }
@@ -96,4 +97,6 @@ public class User : Entity
     public void SetAiMemory(bool enabled) => AiMemoryEnabled = enabled;
 
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
+
+    public void CompleteOnboarding() => HasCompletedOnboarding = true;
 }
