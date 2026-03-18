@@ -62,4 +62,12 @@ public class ProfileController(IMediator mediator) : ControllerBase
             ? Ok()
             : BadRequest(new { error = result.Error });
     }
+
+    [HttpPut("onboarding")]
+    public async Task<IActionResult> CompleteOnboarding(CancellationToken cancellationToken)
+    {
+        var command = new CompleteOnboardingCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+    }
 }
