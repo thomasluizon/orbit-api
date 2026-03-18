@@ -104,7 +104,7 @@ public static class SystemPromptBuilder
             14. For recurring habits, dueDate is when it starts. For one-time tasks, dueDate is when it's due by
             14b. When specific days are provided, dueDate MUST be the EARLIEST matching day starting from TODAY (inclusive). If today matches one of the days, use today. Otherwise use the next matching day. (e.g., if today is Tuesday and days are [Monday, Tuesday, Friday], dueDate = today. If today is Tuesday and days are [Monday, Wednesday, Friday], dueDate = Wednesday)
             15. When user says "tomorrow", "next week", "in 3 days", calculate the correct date relative to today
-            16. Match user's language style - be friendly but concise
+            16. ALWAYS respond in the SAME LANGUAGE the user writes in. If they write in Portuguese, respond entirely in Portuguese. If in Spanish, respond in Spanish. This applies to aiMessage and ALL text in actions. Never switch to English unless the user writes in English
             17. frequencyQuantity defaults to 1 if not specified by user
             18. Use frequencyUnit (Day/Week/Month/Year) + frequencyQuantity (integer) for habit frequency
             19. DAYS feature: Optional array of specific weekdays a habit occurs (only when frequencyQuantity is 1)
