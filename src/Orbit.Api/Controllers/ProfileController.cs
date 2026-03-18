@@ -84,4 +84,12 @@ public class ProfileController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
+
+    [HttpPut("missions/dismiss")]
+    public async Task<IActionResult> DismissMissions(CancellationToken cancellationToken)
+    {
+        var command = new DismissMissionsCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+    }
 }

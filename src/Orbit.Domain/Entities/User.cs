@@ -15,6 +15,7 @@ public class User : Entity
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
     public bool HasCompletedOnboarding { get; private set; } = false;
+    public bool HasDismissedMissions { get; private set; } = false;
     public string? Language { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
@@ -69,4 +70,6 @@ public class User : Entity
     public void SetLanguage(string? language) => Language = language;
 
     public void CompleteOnboarding() => HasCompletedOnboarding = true;
+
+    public void DismissMissions() => HasDismissedMissions = true;
 }
