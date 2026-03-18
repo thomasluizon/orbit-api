@@ -14,6 +14,7 @@ public record CreateSubHabitCommand(
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IAppConfigService appConfigService,
     IMemoryCache cache) : IRequestHandler<CreateSubHabitCommand, Result<Guid>>
@@ -33,13 +34,18 @@ public class CreateSubHabitCommandHandler(
         if (depth >= maxDepth - 1)
             return Result.Failure<Guid>($"Maximum nesting depth reached ({maxDepth} levels).");
 
+        // Use today as dueDate if parent's dueDate has already advanced past today
+        var userEntity = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var userToday = GetUserToday(userEntity);
+        var childDueDate = parent.DueDate > userToday ? parent.DueDate : userToday;
+
         var childResult = Habit.Create(
             request.UserId,
             request.Title,
             parent.FrequencyUnit,
             parent.FrequencyQuantity,
             request.Description,
-            dueDate: parent.DueDate,
+            dueDate: childDueDate,
             parentHabitId: parent.Id);
 
         if (childResult.IsFailure)
@@ -69,5 +75,13 @@ public class CreateSubHabitCommandHandler(
             if (current is null) break;
         }
         return depth;
+    }
+
+    private static DateOnly GetUserToday(User? user)
+    {
+        var timeZone = user?.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
     }
 }

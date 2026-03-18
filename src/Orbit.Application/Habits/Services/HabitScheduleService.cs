@@ -11,9 +11,6 @@ public static class HabitScheduleService
     /// </summary>
     public static bool IsHabitDueOnDate(Habit habit, DateOnly target)
     {
-        var created = DateOnly.FromDateTime(habit.CreatedAtUtc);
-        if (target < created) return false;
-
         var anchor = habit.DueDate;
         var unit = habit.FrequencyUnit;
         var qty = habit.FrequencyQuantity ?? 1;
@@ -47,8 +44,14 @@ public static class HabitScheduleService
     /// <summary>
     /// Returns all dates within [from, to] where the habit is scheduled.
     /// </summary>
+    private const int MaxRangeDays = 366;
+
     public static List<DateOnly> GetScheduledDates(Habit habit, DateOnly from, DateOnly to)
     {
+        // Cap the range to prevent runaway iteration on absurd date ranges
+        if (to.DayNumber - from.DayNumber > MaxRangeDays)
+            to = from.AddDays(MaxRangeDays);
+
         var dates = new List<DateOnly>();
         var current = from;
         while (current <= to)

@@ -166,7 +166,8 @@ public class GetHabitScheduleQueryHandler(
         lookup[parentId]
             .Where(c => HabitScheduleService.GetScheduledDates(c, dateFrom, dateTo).Count > 0
                 || c.IsCompleted
-                || (!c.IsCompleted && c.DueDate < dateFrom))
+                || (!c.IsCompleted && c.DueDate < dateFrom)
+                || HasAnyDescendantDue(c.Id, lookup, dateFrom, dateTo))
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitScheduleChildItem(
