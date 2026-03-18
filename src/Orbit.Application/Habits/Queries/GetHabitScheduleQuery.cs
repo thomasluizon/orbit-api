@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
@@ -6,6 +7,8 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
+
+public record HabitTagItem(Guid Id, string Name, string Color);
 
 public record HabitScheduleItem(
     Guid Id,
@@ -21,6 +24,7 @@ public record HabitScheduleItem(
     DateOnly DueDate,
     IReadOnlyList<DateOnly> ScheduledDates,
     bool IsOverdue,
+    IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children);
 
 public record HabitScheduleChildItem(
@@ -34,6 +38,7 @@ public record HabitScheduleChildItem(
     IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     int? Position,
+    IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children);
 
 public record GetHabitScheduleQuery(
@@ -44,6 +49,7 @@ public record GetHabitScheduleQuery(
     string? Search = null,
     string? FrequencyUnitFilter = null,
     bool? IsCompleted = null,
+    IReadOnlyList<Guid>? TagIds = null,
     int Page = 1,
     int PageSize = 50) : IRequest<PaginatedResponse<HabitScheduleItem>>;
 
@@ -54,6 +60,7 @@ public class GetHabitScheduleQueryHandler(
     {
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
+            q => q.Include(h => h.Tags),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -84,6 +91,24 @@ public class GetHabitScheduleQueryHandler(
         // Completion filter
         if (request.IsCompleted.HasValue)
             topLevel = topLevel.Where(h => h.IsCompleted == request.IsCompleted.Value);
+
+        // Tag filter: include habits that have ANY of the requested tags,
+        // or have a descendant with any of the requested tags
+        if (request.TagIds is { Count: > 0 })
+        {
+            var tagIdSet = request.TagIds.ToHashSet();
+            bool HasMatchingTag(Habit h) => h.Tags.Any(t => tagIdSet.Contains(t.Id));
+            bool HasDescendantWithTag(Guid parentId)
+            {
+                foreach (var child in lookup[parentId])
+                {
+                    if (HasMatchingTag(child)) return true;
+                    if (HasDescendantWithTag(child.Id)) return true;
+                }
+                return false;
+            }
+            topLevel = topLevel.Where(h => HasMatchingTag(h) || HasDescendantWithTag(h.Id));
+        }
 
         // Schedule-aware filtering: keep habits that have at least one scheduled date in range,
         // OR are overdue, OR have any descendant due in range
@@ -146,6 +171,7 @@ public class GetHabitScheduleQueryHandler(
             h.DueDate,
             scheduledDates,
             isOverdue,
+            MapTags(h),
             MapChildren(h.Id, lookup, dateFrom, dateTo));
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
@@ -174,6 +200,9 @@ public class GetHabitScheduleQueryHandler(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
                 c.Days.ToList(), c.DueDate,
-                c.Position, MapChildren(c.Id, lookup, dateFrom, dateTo)))
+                c.Position, MapTags(c), MapChildren(c.Id, lookup, dateFrom, dateTo)))
             .ToList();
+
+    private static List<HabitTagItem> MapTags(Habit h) =>
+        h.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList();
 }

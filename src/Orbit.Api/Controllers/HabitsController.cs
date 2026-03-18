@@ -64,6 +64,7 @@ public class HabitsController(IMediator mediator) : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? frequencyUnit = null,
         [FromQuery] bool? isCompleted = null,
+        [FromQuery] Guid[]? tagIds = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -76,6 +77,7 @@ public class HabitsController(IMediator mediator) : ControllerBase
             search,
             frequencyUnit,
             isCompleted,
+            tagIds is { Length: > 0 } ? tagIds : null,
             page,
             pageSize);
         var result = await mediator.Send(query, cancellationToken);

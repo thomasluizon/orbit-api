@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260318012713_AddTagsFeature")]
+    partial class AddTagsFeature
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -67,12 +70,6 @@ namespace Orbit.Infrastructure.Migrations
                         {
                             Key = "MaxHabitDepth",
                             Description = "Maximum nesting depth for sub-habits",
-                            Value = "5"
-                        },
-                        new
-                        {
-                            Key = "MaxTagsPerHabit",
-                            Description = "Maximum number of tags per habit",
                             Value = "5"
                         });
                 });
