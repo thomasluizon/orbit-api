@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -33,10 +34,12 @@ public class ProcessUserChatCommandHandler(
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserFact> userFactRepository,
+    IGenericRepository<Tag> tagRepository,
     IAiIntentService aiIntentService,
     IFactExtractionService factExtractionService,
     IRoutineAnalysisService routineAnalysisService,
     IAppConfigService appConfigService,
+    IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -53,6 +56,11 @@ public class ProcessUserChatCommandHandler(
 
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
+            q => q.Include(h => h.Tags),
+            cancellationToken);
+
+        var userTags = await tagRepository.FindAsync(
+            t => t.UserId == request.UserId,
             cancellationToken);
 
         dbStopwatch.Stop();
@@ -108,6 +116,8 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Calling AI intent service...");
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
         var planResult = await aiIntentService.InterpretAsync(
             request.Message,
             activeHabits,
@@ -115,6 +125,8 @@ public class ProcessUserChatCommandHandler(
             request.ImageData,
             request.ImageMimeType,
             routinePatterns,
+            userTags,
+            userToday,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -143,6 +155,7 @@ public class ProcessUserChatCommandHandler(
                     AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.SuggestBreakdown => ExecuteSuggestBreakdown(action),
+                    AiActionType.AssignTags => await ExecuteAssignTagsAsync(action, request.UserId, cancellationToken),
                     _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
                 };
 
@@ -294,8 +307,7 @@ public class ProcessUserChatCommandHandler(
         if (habit.UserId != userId)
             return Result.Failure<(Guid? Id, string? Name)>("Habit does not belong to this user.");
 
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        var today = GetUserToday(user);
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
         var logResult = habit.Log(today, action.Note);
 
         if (logResult.IsFailure)
@@ -305,20 +317,13 @@ public class ProcessUserChatCommandHandler(
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
     }
 
-    private static DateOnly GetUserToday(User? user)
-    {
-        var timeZone = user?.TimeZone is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-            : TimeZoneInfo.Utc;
-
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
-    }
-
     private async Task<Result<(Guid? Id, string? Name)>> ExecuteCreateHabitAsync(
         AiAction action, Guid userId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(action.Title))
             return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a habit.");
+
+        var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
 
         var habitResult = Habit.Create(
             userId,
@@ -328,7 +333,7 @@ public class ProcessUserChatCommandHandler(
             action.Description,
             days: action.Days,
             isBadHabit: action.IsBadHabit ?? false,
-            dueDate: action.DueDate);
+            dueDate: dueDate);
 
         if (habitResult.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);
@@ -348,7 +353,7 @@ public class ProcessUserChatCommandHandler(
                     sub.Description,
                     days: sub.Days ?? action.Days,
                     isBadHabit: sub.IsBadHabit ?? false,
-                    dueDate: sub.DueDate ?? action.DueDate,
+                    dueDate: sub.DueDate ?? dueDate,
                     parentHabitId: habit.Id);
 
                 if (childResult.IsFailure)
@@ -359,6 +364,13 @@ public class ProcessUserChatCommandHandler(
         }
 
         await habitRepository.AddAsync(habit, ct);
+
+        // Assign tags if specified
+        if (action.TagNames is { Count: > 0 })
+        {
+            await AssignTagsToHabitAsync(habit, action.TagNames, userId, ct);
+        }
+
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
     }
 
@@ -367,5 +379,73 @@ public class ProcessUserChatCommandHandler(
         // SuggestBreakdown creates nothing -- it just passes through the AI's suggestions
         // The ActionResult will carry the suggestions for frontend rendering
         return Result.Success<(Guid? Id, string? Name)>((null, action.Title));
+    }
+
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteAssignTagsAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for assigning tags.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId.Value && h.UserId == userId,
+            q => q.Include(h => h.Tags),
+            ct);
+
+        if (habit is null)
+            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
+
+        var resolvedTags = await ResolveTagsByNameAsync(action.TagNames, userId, ct);
+
+        // Clear existing and assign new
+        foreach (var existing in habit.Tags.ToList())
+            habit.RemoveTag(existing);
+        foreach (var tag in resolvedTags)
+            habit.AddTag(tag);
+
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
+    }
+
+    private async Task AssignTagsToHabitAsync(Habit habit, List<string>? tagNames, Guid userId, CancellationToken ct)
+    {
+        if (tagNames is not { Count: > 0 }) return;
+
+        var resolvedTags = await ResolveTagsByNameAsync(tagNames, userId, ct);
+        foreach (var tag in resolvedTags)
+            habit.AddTag(tag);
+    }
+
+    private async Task<List<Tag>> ResolveTagsByNameAsync(List<string>? tagNames, Guid userId, CancellationToken ct)
+    {
+        if (tagNames is not { Count: > 0 }) return [];
+
+        var existingTags = await tagRepository.FindAsync(t => t.UserId == userId, ct);
+        var resolved = new List<Tag>();
+
+        foreach (var name in tagNames)
+        {
+            var trimmed = name.Trim();
+            if (string.IsNullOrEmpty(trimmed)) continue;
+
+            var existing = existingTags.FirstOrDefault(t =>
+                t.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+
+            if (existing is not null)
+            {
+                resolved.Add(existing);
+            }
+            else
+            {
+                // Auto-create the tag with a default color
+                var createResult = Tag.Create(userId, trimmed, "#7c3aed");
+                if (createResult.IsSuccess)
+                {
+                    await tagRepository.AddAsync(createResult.Value, ct);
+                    resolved.Add(createResult.Value);
+                }
+            }
+        }
+
+        return resolved;
     }
 }

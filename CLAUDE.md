@@ -53,6 +53,7 @@ docker compose up -d --build
 - Soft deletes for UserFacts
 - All endpoints except /health and auth require JWT Bearer token
 - Schedule calculations (frequency, days, intervals) live in `HabitScheduleService` -- never on the frontend
+- **Timezone rule:** All user-facing dates MUST use `IUserDateService.GetUserTodayAsync(userId)` to get the user's timezone-aware "today". NEVER use `DateOnly.FromDateTime(DateTime.UtcNow)` for user-facing logic. `DateTime.UtcNow` is only acceptable for: `CreatedAtUtc` timestamps in entity factories, and cache key generation. The user sets their timezone in their profile (`User.TimeZone`). If no timezone is set, it falls back to UTC.
 
 ## API Endpoints
 

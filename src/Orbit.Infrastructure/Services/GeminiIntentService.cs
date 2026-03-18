@@ -31,6 +31,8 @@ public sealed class GeminiIntentService(
         byte[]? imageData = null,
         string? imageMimeType = null,
         IReadOnlyList<RoutinePattern>? routinePatterns = null,
+        IReadOnlyList<Tag>? userTags = null,
+        DateOnly? userToday = null,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -40,7 +42,9 @@ public sealed class GeminiIntentService(
         var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(
             activeHabits, userFacts,
             hasImage: imageData != null,
-            routinePatterns: routinePatterns);
+            routinePatterns: routinePatterns,
+            userTags: userTags,
+            userToday: userToday);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);

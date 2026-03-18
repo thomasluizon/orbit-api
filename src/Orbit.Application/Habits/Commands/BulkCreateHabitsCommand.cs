@@ -35,11 +35,13 @@ public enum BulkItemStatus { Success, Failed }
 
 public class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
 {
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
 
         for (int i = 0; i < request.Habits.Count; i++)
@@ -57,7 +59,7 @@ public class BulkCreateHabitsCommandHandler(
                     item.Description,
                     item.Days,
                     item.IsBadHabit,
-                    item.DueDate);
+                    item.DueDate ?? userToday);
 
                 if (habitResult.IsFailure)
                 {
@@ -89,7 +91,7 @@ public class BulkCreateHabitsCommandHandler(
                             subItem.Description,
                             subItem.Days ?? item.Days,
                             subItem.IsBadHabit,
-                            subItem.DueDate ?? item.DueDate,
+                            subItem.DueDate ?? item.DueDate ?? userToday,
                             parentHabitId: parentHabit.Id);
 
                         if (childResult.IsFailure)

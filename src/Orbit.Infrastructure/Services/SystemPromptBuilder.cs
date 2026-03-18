@@ -10,7 +10,9 @@ public static class SystemPromptBuilder
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<UserFact> userFacts,
         bool hasImage = false,
-        IReadOnlyList<RoutinePattern>? routinePatterns = null)
+        IReadOnlyList<RoutinePattern>? routinePatterns = null,
+        IReadOnlyList<Tag>? userTags = null,
+        DateOnly? userToday = null)
     {
         var sb = new StringBuilder();
 
@@ -28,6 +30,7 @@ public static class SystemPromptBuilder
             - **Create and track habits** (e.g., "I want to meditate daily", "I want to run 5km every week")
             - **Log habit completions** with optional notes (e.g., "I ran today, felt great!")
             - **Suggest habit breakdowns** for complex goals (e.g., "help me get fit" -> suggests Exercise parent with Running, Stretching, Gym sub-habits)
+            - **Manage tags** on habits (assign, remove, create new tags when the user asks)
             - **Proactively suggest** complementary habits that pair well with what the user is creating
             - **Discuss and plan** routines before creating them -- help the user think through what works for their life
 
@@ -112,6 +115,12 @@ public static class SystemPromptBuilder
             24. BAD HABITS: Set isBadHabit to true for habits the user wants to AVOID or STOP doing
             25. Bad habits track slip-ups/occurrences of bad habits (smoking, nail biting, etc.)
             26. When logging habits, include a note if the user provides context or feelings about the activity
+            27. TAGS: You can assign tags to habits using tagNames on CreateHabit actions, or use AssignTags action to change tags on existing habits
+            28. tagNames is an array of tag name strings. Use EXISTING tag names from the user's tags list when possible
+            29. If user asks for a tag that doesn't exist yet, use the new name - it will be auto-created
+            30. ONLY add/change tags when the user EXPLICITLY asks for it. NEVER auto-assign tags on your own initiative
+            31. AssignTags action requires habitId and tagNames array. An empty tagNames array removes all tags from the habit
+            32. When creating habits, only include tagNames if the user explicitly mentioned tagging it
             """);
 
         sb.AppendLine();
@@ -133,8 +142,9 @@ public static class SystemPromptBuilder
 
                 var badHabitLabel = habit.IsBadHabit ? " | BAD HABIT (tracking to avoid)" : "";
                 var completedLabel = habit.IsCompleted ? " | COMPLETED" : "";
+                var tagsLabel = habit.Tags.Count > 0 ? $" | Tags: [{string.Join(", ", habit.Tags.Select(t => t.Name))}]" : "";
 
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{badHabitLabel}{completedLabel}");
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{badHabitLabel}{completedLabel}{tagsLabel}");
 
                 foreach (var child in habit.Children)
                 {
@@ -145,6 +155,21 @@ public static class SystemPromptBuilder
             sb.AppendLine();
             sb.AppendLine("When user mentions an existing habit activity -> use LogHabit with the exact ID above");
             sb.AppendLine("When user mentions a NEW activity -> use CreateHabit");
+        }
+
+        sb.AppendLine();
+
+        sb.AppendLine("## User's Tags");
+        if (userTags is { Count: > 0 })
+        {
+            foreach (var tag in userTags)
+            {
+                sb.AppendLine($"- \"{tag.Name}\" (color: {tag.Color})");
+            }
+        }
+        else
+        {
+            sb.AppendLine("(no tags created yet)");
         }
 
         sb.AppendLine();
@@ -220,7 +245,7 @@ public static class SystemPromptBuilder
         }
 
         sb.AppendLine();
-        sb.AppendLine($"## Today's Date: {DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}");
+        sb.AppendLine($"## Today's Date: {(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}");
         sb.AppendLine();
 
         if (hasImage)
@@ -623,9 +648,10 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
             LogHabit: type, habitId, note (optional - include if user shares context/feelings)
             SuggestBreakdown: type, title (parent habit name), description (optional), frequencyUnit, frequencyQuantity, dueDate, suggestedSubHabits (array of habit objects with type: "CreateHabit", title, description, frequencyUnit, frequencyQuantity, dueDate)
+            AssignTags: type, habitId (REQUIRED - ID of existing habit), tagNames (REQUIRED - array of tag name strings. Empty array [] removes all tags)
 
             **When to use SuggestBreakdown:**
             - User asks to "break down", "decompose", "help me plan", or asks for suggestions for a complex goal
@@ -638,6 +664,13 @@ public static class SystemPromptBuilder
             - User explicitly tells you what to create with clear details: "create a daily running habit", "add morning routine with meditate, journal, stretch"
             - It's a simple one-time task: "buy eggs today"
             - Use CreateHabit with subHabits when user explicitly lists what the sub-habits should be
+
+            **When to use AssignTags:**
+            - User says "tag my running habit as health" -> AssignTags with habitId and tagNames: ["health"]
+            - User says "add health and fitness tags to my gym habit" -> AssignTags with tagNames: ["health", "fitness"]
+            - User says "remove all tags from my reading habit" -> AssignTags with tagNames: []
+            - User says "create a daily run habit tagged as health" -> CreateHabit with tagNames: ["health"]
+            - NEVER assign tags unless the user explicitly asks. Creating or logging habits without tag mention = no tagNames field
 
             ### Frequency Examples:
             - Daily = frequencyUnit: "Day", frequencyQuantity: 1

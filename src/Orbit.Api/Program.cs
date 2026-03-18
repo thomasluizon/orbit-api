@@ -24,6 +24,7 @@ builder.Services.AddDbContext<OrbitDbContext>(options =>
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAppConfigService, AppConfigService>();
+builder.Services.AddScoped<IUserDateService, UserDateService>();
 
 // --- Password & Token Services ---
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();

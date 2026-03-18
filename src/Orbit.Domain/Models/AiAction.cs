@@ -16,4 +16,5 @@ public record AiAction
     public string? Note { get; init; }
     public List<AiAction>? SubHabits { get; init; }
     public List<AiAction>? SuggestedSubHabits { get; init; }
+    public List<string>? TagNames { get; init; }
 }

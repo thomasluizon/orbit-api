@@ -20,11 +20,14 @@ public record CreateHabitCommand(
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
+        var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
         var habitResult = Habit.Create(
             request.UserId,
             request.Title,
@@ -33,7 +36,7 @@ public class CreateHabitCommandHandler(
             request.Description,
             request.Days,
             request.IsBadHabit,
-            request.DueDate);
+            dueDate);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -49,7 +52,7 @@ public class CreateHabitCommandHandler(
                     subTitle,
                     request.FrequencyUnit,
                     request.FrequencyQuantity,
-                    dueDate: request.DueDate,
+                    dueDate: request.DueDate ?? dueDate,
                     parentHabitId: habit.Id);
 
                 if (childResult.IsFailure)

@@ -15,7 +15,7 @@ public record LogHabitCommand(
 public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<User> userRepository,
+    IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<LogHabitCommand, Result<Guid>>
 {
@@ -32,8 +32,7 @@ public class LogHabitCommandHandler(
         if (habit.UserId != request.UserId)
             return Result.Failure<Guid>("Habit does not belong to this user.");
 
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
-        var today = GetUserToday(user);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         // Toggle: if already logged for today, unlog it
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == today);
@@ -138,12 +137,4 @@ public class LogHabitCommandHandler(
         await TryUnlogParent(parent, today, ct);
     }
 
-    private static DateOnly GetUserToday(User? user)
-    {
-        var timeZone = user?.TimeZone is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-            : TimeZoneInfo.Utc;
-
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
-    }
 }
