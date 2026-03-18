@@ -149,6 +149,8 @@ Key logic:
 The frontend (orbit-ui) consumes this via BFF and never computes schedules.
 
 ## Deployment
-- Docker Compose: PostgreSQL + API + Caddy reverse proxy
-- GitHub Actions: push to main triggers SSH deploy to EC2
-- Domain: api.useorbit.org
+- **Hosting:** Render (Docker, auto-deploy on push to main)
+- **Database:** Supabase PostgreSQL (session pooler)
+- **Auth:** Supabase Auth for Google OAuth, custom JWT for email/password
+- **Domain:** api.useorbit.org
+- **Env vars:** Configured in Render dashboard (connection string, JWT, Supabase, Gemini, CORS)
