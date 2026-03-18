@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -19,10 +20,14 @@ public record CreateHabitCommand(
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateHabitCommand, Result<Guid>>
+    IUserDateService userDateService,
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
+        var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
         var habitResult = Habit.Create(
             request.UserId,
             request.Title,
@@ -31,7 +36,7 @@ public class CreateHabitCommandHandler(
             request.Description,
             request.Days,
             request.IsBadHabit,
-            request.DueDate);
+            dueDate);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -47,7 +52,7 @@ public class CreateHabitCommandHandler(
                     subTitle,
                     request.FrequencyUnit,
                     request.FrequencyQuantity,
-                    dueDate: request.DueDate,
+                    dueDate: request.DueDate ?? dueDate,
                     parentHabitId: habit.Id);
 
                 if (childResult.IsFailure)
@@ -59,6 +64,13 @@ public class CreateHabitCommandHandler(
 
         await habitRepository.AddAsync(habit, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (int i = -1; i <= 1; i++)
+        {
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
+        }
 
         return Result.Success(habit.Id);
     }

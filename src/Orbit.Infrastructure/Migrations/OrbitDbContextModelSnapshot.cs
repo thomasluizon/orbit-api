@@ -22,6 +22,61 @@ namespace Orbit.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("HabitTags", b =>
+                {
+                    b.Property<Guid>("HabitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("HabitId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("HabitTags");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.AppConfig", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("AppConfigs");
+
+                    b.HasData(
+                        new
+                        {
+                            Key = "MaxUserFacts",
+                            Description = "Maximum number of facts the AI can remember per user",
+                            Value = "50"
+                        },
+                        new
+                        {
+                            Key = "MaxHabitDepth",
+                            Description = "Maximum nesting depth for sub-habits",
+                            Value = "5"
+                        },
+                        new
+                        {
+                            Key = "MaxTagsPerHabit",
+                            Description = "Maximum number of tags per habit",
+                            Value = "5"
+                        });
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -106,21 +161,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("HabitLogs");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.HabitTag", b =>
-                {
-                    b.Property<Guid>("HabitId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TagId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("HabitId", "TagId");
-
-                    b.HasIndex("TagId");
-
-                    b.ToTable("HabitTag");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.Tag", b =>
                 {
                     b.Property<Guid>("Id")
@@ -155,6 +195,12 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AiMemoryEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AiSummaryEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -162,12 +208,14 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("HasCompletedOnboarding")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("PasswordHash")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("TimeZone")
@@ -216,6 +264,21 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("UserFacts");
                 });
 
+            modelBuilder.Entity("HabitTags", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.Habit", null)
+                        .WithMany()
+                        .HasForeignKey("HabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Orbit.Domain.Entities.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
@@ -229,21 +292,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
                         .WithMany("Logs")
                         .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.HabitTag", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Habit", null)
-                        .WithMany()
-                        .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.Tag", null)
-                        .WithMany()
-                        .HasForeignKey("TagId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

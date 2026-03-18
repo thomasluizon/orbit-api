@@ -13,6 +13,8 @@ namespace Orbit.Api.Controllers;
 public class ProfileController(IMediator mediator) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
+    public record SetAiMemoryRequest(bool Enabled);
+    public record SetAiSummaryRequest(bool Enabled);
 
     [HttpGet]
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
@@ -33,5 +35,39 @@ public class ProfileController(IMediator mediator) : ControllerBase
         return result.IsSuccess
             ? Ok()
             : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("ai-memory")]
+    public async Task<IActionResult> SetAiMemory(
+        [FromBody] SetAiMemoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetAiMemoryCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("ai-summary")]
+    public async Task<IActionResult> SetAiSummary(
+        [FromBody] SetAiSummaryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetAiSummaryCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("onboarding")]
+    public async Task<IActionResult> CompleteOnboarding(CancellationToken cancellationToken)
+    {
+        var command = new CompleteOnboardingCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 }

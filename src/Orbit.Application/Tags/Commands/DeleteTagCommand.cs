@@ -5,7 +5,9 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tags.Commands;
 
-public record DeleteTagCommand(Guid UserId, Guid TagId) : IRequest<Result>;
+public record DeleteTagCommand(
+    Guid UserId,
+    Guid TagId) : IRequest<Result>;
 
 public class DeleteTagCommandHandler(
     IGenericRepository<Tag> tagRepository,
@@ -13,17 +15,15 @@ public class DeleteTagCommandHandler(
 {
     public async Task<Result> Handle(DeleteTagCommand request, CancellationToken cancellationToken)
     {
-        var tag = await tagRepository.GetByIdAsync(request.TagId, cancellationToken);
+        var tag = await tagRepository.FindOneTrackedAsync(
+            t => t.Id == request.TagId && t.UserId == request.UserId,
+            cancellationToken: cancellationToken);
 
         if (tag is null)
             return Result.Failure("Tag not found.");
 
-        if (tag.UserId != request.UserId)
-            return Result.Failure("You don't have permission to delete this tag.");
-
         tagRepository.Remove(tag);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-
         return Result.Success();
     }
 }

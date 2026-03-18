@@ -5,7 +5,10 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tags.Commands;
 
-public record CreateTagCommand(Guid UserId, string Name, string Color) : IRequest<Result<Guid>>;
+public record CreateTagCommand(
+    Guid UserId,
+    string Name,
+    string Color) : IRequest<Result<Guid>>;
 
 public class CreateTagCommandHandler(
     IGenericRepository<Tag> tagRepository,
@@ -13,6 +16,7 @@ public class CreateTagCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateTagCommand request, CancellationToken cancellationToken)
     {
+        // Check for duplicate name
         var existing = await tagRepository.FindAsync(
             t => t.UserId == request.UserId && t.Name == request.Name.Trim(),
             cancellationToken);
@@ -20,14 +24,13 @@ public class CreateTagCommandHandler(
         if (existing.Count > 0)
             return Result.Failure<Guid>("A tag with this name already exists.");
 
-        var tagResult = Tag.Create(request.UserId, request.Name, request.Color);
+        var result = Tag.Create(request.UserId, request.Name, request.Color);
+        if (result.IsFailure)
+            return Result.Failure<Guid>(result.Error);
 
-        if (tagResult.IsFailure)
-            return Result.Failure<Guid>(tagResult.Error);
-
-        await tagRepository.AddAsync(tagResult.Value, cancellationToken);
+        await tagRepository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(tagResult.Value.Id);
+        return Result.Success(result.Value.Id);
     }
 }

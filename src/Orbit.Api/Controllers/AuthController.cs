@@ -11,6 +11,7 @@ public class AuthController(IMediator mediator) : ControllerBase
 {
     public record RegisterRequest(string Name, string Email, string Password);
     public record LoginRequest(string Email, string Password);
+    public record GoogleAuthRequest(string AccessToken);
 
     [HttpPost("register")]
     public async Task<IActionResult> Register(
@@ -32,6 +33,19 @@ public class AuthController(IMediator mediator) : ControllerBase
     {
         var query = new LoginQuery(request.Email, request.Password);
         var result = await mediator.Send(query, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : Unauthorized(new { error = result.Error });
+    }
+
+    [HttpPost("google")]
+    public async Task<IActionResult> GoogleAuth(
+        [FromBody] GoogleAuthRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new GoogleAuthCommand(request.AccessToken);
+        var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Ok(result.Value)

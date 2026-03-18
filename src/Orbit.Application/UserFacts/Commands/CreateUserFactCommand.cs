@@ -9,14 +9,20 @@ public record CreateUserFactCommand(Guid UserId, string FactText, string? Catego
 
 public class CreateUserFactCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
+    IAppConfigService appConfigService,
     IUnitOfWork unitOfWork) : IRequestHandler<CreateUserFactCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateUserFactCommand request, CancellationToken cancellationToken)
     {
+        var maxFacts = await appConfigService.GetAsync("MaxUserFacts", 50, cancellationToken);
+
         // Check for duplicate/similar facts
         var existingFacts = await userFactRepository.FindAsync(
             f => f.UserId == request.UserId && !f.IsDeleted,
             cancellationToken);
+
+        if (existingFacts.Count >= maxFacts)
+            return Result.Failure<Guid>($"You've reached the maximum of {maxFacts} saved facts. Delete some to add new ones.");
 
         var normalizedNew = request.FactText.Trim().ToLowerInvariant();
         var isDuplicate = existingFacts.Any(f =>

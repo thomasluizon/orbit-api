@@ -33,11 +33,13 @@ public class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
-    IGenericRepository<Tag> tagRepository,
     IGenericRepository<UserFact> userFactRepository,
+    IGenericRepository<Tag> tagRepository,
     IAiIntentService aiIntentService,
     IFactExtractionService factExtractionService,
     IRoutineAnalysisService routineAnalysisService,
+    IAppConfigService appConfigService,
+    IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -54,35 +56,40 @@ public class ProcessUserChatCommandHandler(
 
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsActive,
+            q => q.Include(h => h.Tags),
+            cancellationToken);
+
+        var userTags = await tagRepository.FindAsync(
+            t => t.UserId == request.UserId,
             cancellationToken);
 
         dbStopwatch.Stop();
         logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
             dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
-        // 1b. Retrieve user's tags as context for the AI
-        logger.LogInformation("Fetching tags from database...");
-        var tagDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        // 1b. Check if user has AI memory enabled
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
-        var userTags = await tagRepository.FindAsync(
-            t => t.UserId == request.UserId,
-            cancellationToken);
+        // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
+        IReadOnlyList<UserFact> userFacts = [];
+        if (aiMemoryEnabled)
+        {
+            logger.LogInformation("Fetching user facts from database...");
+            var factDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        tagDbStopwatch.Stop();
-        logger.LogInformation("Tag query completed in {ElapsedMs}ms (Tags: {TagCount})",
-            tagDbStopwatch.ElapsedMilliseconds, userTags.Count);
+            userFacts = await userFactRepository.FindAsync(
+                f => f.UserId == request.UserId,
+                cancellationToken);
 
-        // 1c. Retrieve user's facts as context for the AI
-        logger.LogInformation("Fetching user facts from database...");
-        var factDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        var userFacts = await userFactRepository.FindAsync(
-            f => f.UserId == request.UserId,
-            cancellationToken);
-
-        factDbStopwatch.Stop();
-        logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
-            factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
+            factDbStopwatch.Stop();
+            logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
+                factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
+        }
+        else
+        {
+            logger.LogInformation("AI memory disabled for user, skipping fact retrieval");
+        }
 
         // 1d. Analyze user's routine patterns for AI context (non-critical)
         logger.LogInformation("Fetching user's routine patterns...");
@@ -109,14 +116,17 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Calling AI intent service...");
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
         var planResult = await aiIntentService.InterpretAsync(
             request.Message,
             activeHabits,
-            userTags,
             userFacts,
             request.ImageData,
             request.ImageMimeType,
             routinePatterns,
+            userTags,
+            userToday,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -144,8 +154,8 @@ public class ProcessUserChatCommandHandler(
                 {
                     AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
-                    AiActionType.AssignTag => await ExecuteAssignTagAsync(action, request.UserId, cancellationToken),
                     AiActionType.SuggestBreakdown => ExecuteSuggestBreakdown(action),
+                    AiActionType.AssignTags => await ExecuteAssignTagsAsync(action, request.UserId, cancellationToken),
                     _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
                 };
 
@@ -215,7 +225,11 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         // 5. Extract facts from conversation (non-blocking - failure doesn't affect response)
-        try
+        if (!aiMemoryEnabled)
+        {
+            logger.LogInformation("AI memory disabled for user, skipping fact extraction");
+        }
+        else try
         {
             logger.LogInformation("Extracting facts from conversation...");
             var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -230,19 +244,28 @@ public class ProcessUserChatCommandHandler(
 
             if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
             {
-                logger.LogInformation("Extracted {FactCount} facts in {ElapsedMs}ms",
-                    extractionResult.Value.Facts.Count, extractionStopwatch.ElapsedMilliseconds);
-
-                foreach (var candidate in extractionResult.Value.Facts)
+                var maxFacts = await appConfigService.GetAsync("MaxUserFacts", 50, cancellationToken);
+                if (userFacts.Count >= maxFacts)
                 {
-                    var factResult = UserFact.Create(request.UserId, candidate.FactText, candidate.Category);
-                    if (factResult.IsSuccess)
+                    logger.LogInformation("User has reached {MaxFacts} fact limit, skipping extraction persistence", maxFacts);
+                }
+                else
+                {
+                    var remaining = maxFacts - userFacts.Count;
+                    logger.LogInformation("Extracted {FactCount} facts in {ElapsedMs}ms (room for {Remaining})",
+                        extractionResult.Value.Facts.Count, extractionStopwatch.ElapsedMilliseconds, remaining);
+
+                    foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
                     {
-                        await userFactRepository.AddAsync(factResult.Value, cancellationToken);
-                    }
-                    else
-                    {
-                        logger.LogWarning("Failed to create fact: {Error}", factResult.Error);
+                        var factResult = UserFact.Create(request.UserId, candidate.FactText, candidate.Category);
+                        if (factResult.IsSuccess)
+                        {
+                            await userFactRepository.AddAsync(factResult.Value, cancellationToken);
+                        }
+                        else
+                        {
+                            logger.LogWarning("Failed to create fact: {Error}", factResult.Error);
+                        }
                     }
                 }
 
@@ -284,8 +307,7 @@ public class ProcessUserChatCommandHandler(
         if (habit.UserId != userId)
             return Result.Failure<(Guid? Id, string? Name)>("Habit does not belong to this user.");
 
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        var today = GetUserToday(user);
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
         var logResult = habit.Log(today, action.Note);
 
         if (logResult.IsFailure)
@@ -295,20 +317,13 @@ public class ProcessUserChatCommandHandler(
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
     }
 
-    private static DateOnly GetUserToday(User? user)
-    {
-        var timeZone = user?.TimeZone is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-            : TimeZoneInfo.Utc;
-
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
-    }
-
     private async Task<Result<(Guid? Id, string? Name)>> ExecuteCreateHabitAsync(
         AiAction action, Guid userId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(action.Title))
             return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a habit.");
+
+        var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
 
         var habitResult = Habit.Create(
             userId,
@@ -318,7 +333,7 @@ public class ProcessUserChatCommandHandler(
             action.Description,
             days: action.Days,
             isBadHabit: action.IsBadHabit ?? false,
-            dueDate: action.DueDate);
+            dueDate: dueDate);
 
         if (habitResult.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);
@@ -328,14 +343,17 @@ public class ProcessUserChatCommandHandler(
         // Handle inline sub-habits as child Habit entities
         if (action.SubHabits is { Count: > 0 })
         {
-            foreach (var subTitle in action.SubHabits)
+            foreach (var sub in action.SubHabits)
             {
                 var childResult = Habit.Create(
                     userId,
-                    subTitle,
-                    action.FrequencyUnit,
-                    action.FrequencyQuantity,
-                    dueDate: action.DueDate,
+                    sub.Title ?? "Untitled",
+                    sub.FrequencyUnit ?? action.FrequencyUnit,
+                    sub.FrequencyQuantity ?? action.FrequencyQuantity,
+                    sub.Description,
+                    days: sub.Days ?? action.Days,
+                    isBadHabit: sub.IsBadHabit ?? false,
+                    dueDate: sub.DueDate ?? dueDate,
                     parentHabitId: habit.Id);
 
                 if (childResult.IsFailure)
@@ -346,31 +364,11 @@ public class ProcessUserChatCommandHandler(
         }
 
         await habitRepository.AddAsync(habit, ct);
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
-    }
 
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteAssignTagAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null || action.TagIds is null || action.TagIds.Count == 0)
-            return Result.Failure<(Guid? Id, string? Name)>("HabitId and TagIds are required for AssignTag.");
-
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == action.HabitId && h.UserId == userId,
-            q => q.Include(h => h.Tags),
-            ct);
-
-        if (habit is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit not found.");
-
-        foreach (var tagId in action.TagIds)
+        // Assign tags if specified
+        if (action.TagNames is { Count: > 0 })
         {
-            var tag = await tagRepository.GetByIdAsync(tagId, ct);
-            if (tag is null || tag.UserId != userId)
-                continue; // Skip invalid/unauthorized tags silently
-
-            if (!habit.Tags.Any(t => t.Id == tagId))
-                habit.Tags.Add(tag);
+            await AssignTagsToHabitAsync(habit, action.TagNames, userId, ct);
         }
 
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
@@ -382,4 +380,75 @@ public class ProcessUserChatCommandHandler(
         // The ActionResult will carry the suggestions for frontend rendering
         return Result.Success<(Guid? Id, string? Name)>((null, action.Title));
     }
+
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteAssignTagsAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for assigning tags.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId.Value && h.UserId == userId,
+            q => q.Include(h => h.Tags),
+            ct);
+
+        if (habit is null)
+            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
+
+        var resolvedTags = await ResolveTagsByNameAsync(action.TagNames, userId, ct);
+
+        // Clear existing and assign new
+        foreach (var existing in habit.Tags.ToList())
+            habit.RemoveTag(existing);
+        foreach (var tag in resolvedTags)
+            habit.AddTag(tag);
+
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
+    }
+
+    private async Task AssignTagsToHabitAsync(Habit habit, List<string>? tagNames, Guid userId, CancellationToken ct)
+    {
+        if (tagNames is not { Count: > 0 }) return;
+
+        var resolvedTags = await ResolveTagsByNameAsync(tagNames, userId, ct);
+        foreach (var tag in resolvedTags)
+            habit.AddTag(tag);
+    }
+
+    private async Task<List<Tag>> ResolveTagsByNameAsync(List<string>? tagNames, Guid userId, CancellationToken ct)
+    {
+        if (tagNames is not { Count: > 0 }) return [];
+
+        var resolved = new List<Tag>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in tagNames)
+        {
+            var capitalized = Capitalize(name.Trim());
+            if (string.IsNullOrEmpty(capitalized) || !seen.Add(capitalized)) continue;
+
+            // Use tracked query so EF doesn't try to re-insert existing tags
+            var existing = await tagRepository.FindOneTrackedAsync(
+                t => t.UserId == userId && t.Name == capitalized, cancellationToken: ct);
+
+            if (existing is not null)
+            {
+                resolved.Add(existing);
+            }
+            else
+            {
+                var createResult = Tag.Create(userId, capitalized, "#7c3aed");
+                if (createResult.IsSuccess)
+                {
+                    await tagRepository.AddAsync(createResult.Value, ct);
+                    resolved.Add(createResult.Value);
+                }
+            }
+        }
+
+        return resolved;
+    }
+
+    private static string Capitalize(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 }

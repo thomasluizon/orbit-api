@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -34,10 +35,13 @@ public enum BulkItemStatus { Success, Failed }
 
 public class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
+    IUserDateService userDateService,
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
 {
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
 
         for (int i = 0; i < request.Habits.Count; i++)
@@ -55,7 +59,7 @@ public class BulkCreateHabitsCommandHandler(
                     item.Description,
                     item.Days,
                     item.IsBadHabit,
-                    item.DueDate);
+                    item.DueDate ?? userToday);
 
                 if (habitResult.IsFailure)
                 {
@@ -78,15 +82,16 @@ public class BulkCreateHabitsCommandHandler(
                 {
                     foreach (var subItem in item.SubHabits)
                     {
+                        // Sub-habits inherit parent frequency/dueDate when not specified
                         var childResult = Habit.Create(
                             request.UserId,
                             subItem.Title,
-                            subItem.FrequencyUnit,
-                            subItem.FrequencyQuantity,
+                            subItem.FrequencyUnit ?? item.FrequencyUnit,
+                            subItem.FrequencyQuantity ?? item.FrequencyQuantity,
                             subItem.Description,
-                            subItem.Days,
+                            subItem.Days ?? item.Days,
                             subItem.IsBadHabit,
-                            subItem.DueDate,
+                            subItem.DueDate ?? item.DueDate ?? userToday,
                             parentHabitId: parentHabit.Id);
 
                         if (childResult.IsFailure)
@@ -128,6 +133,13 @@ public class BulkCreateHabitsCommandHandler(
 
         // Save all successful entities once
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (int i = -1; i <= 1; i++)
+        {
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
+        }
 
         return Result.Success(new BulkCreateResult(results));
     }

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -9,7 +10,8 @@ public record DeleteHabitCommand(Guid UserId, Guid HabitId) : IRequest<Result>;
 
 public class DeleteHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteHabitCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<DeleteHabitCommand, Result>
 {
     public async Task<Result> Handle(DeleteHabitCommand request, CancellationToken cancellationToken)
     {
@@ -23,6 +25,13 @@ public class DeleteHabitCommandHandler(
 
         habitRepository.Remove(habit);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        for (int i = -1; i <= 1; i++)
+        {
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
+            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
+        }
 
         return Result.Success();
     }

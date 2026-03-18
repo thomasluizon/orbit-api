@@ -23,10 +23,19 @@ builder.Services.AddDbContext<OrbitDbContext>(options =>
 // --- Repositories & UoW ---
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IAppConfigService, AppConfigService>();
+builder.Services.AddScoped<IUserDateService, UserDateService>();
 
 // --- Password & Token Services ---
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+
+// --- Supabase (OAuth token validation) ---
+builder.Services.AddHttpClient("Supabase", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
+    client.DefaultRequestHeaders.Add("apikey", builder.Configuration["Supabase:AnonKey"]!);
+});
 
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
@@ -93,6 +102,12 @@ builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionServi
 // Routine analysis always uses Gemini (structured output reliability)
 builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisService>();
 
+// Daily summary always uses Gemini (free-text generation)
+builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>();
+
+// --- In-Memory Cache ---
+builder.Services.AddMemoryCache();
+
 // --- Validation ---
 builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
 
@@ -104,13 +119,16 @@ builder.Services.AddMediatR(cfg =>
 });
 
 // --- CORS ---
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:3000"];
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 

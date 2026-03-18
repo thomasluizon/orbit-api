@@ -26,7 +26,8 @@ public class Habit : Entity
     private readonly List<Habit> _children = [];
     public IReadOnlyCollection<Habit> Children => _children.AsReadOnly();
 
-    public ICollection<Tag> Tags { get; private set; } = [];
+    private readonly List<Tag> _tags = [];
+    public IReadOnlyCollection<Tag> Tags => _tags.AsReadOnly();
 
     private Habit() { }
 
@@ -176,6 +177,10 @@ public class Habit : Entity
     public void SetPosition(int? position) => Position = position;
 
     public void SetParentHabitId(Guid? parentHabitId) => ParentHabitId = parentHabitId;
+
+    public void AddTag(Tag tag) { if (!_tags.Contains(tag)) _tags.Add(tag); }
+
+    public void RemoveTag(Tag tag) => _tags.Remove(tag);
 
     public void Deactivate() => IsActive = false;
 

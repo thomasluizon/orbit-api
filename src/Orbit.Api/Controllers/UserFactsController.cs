@@ -14,6 +14,7 @@ public class UserFactsController(IMediator mediator) : ControllerBase
 {
     public record CreateUserFactRequest(string FactText, string? Category);
     public record UpdateUserFactRequest(string FactText, string? Category);
+    public record BulkDeleteUserFactsRequest(IReadOnlyList<Guid> FactIds);
 
     [HttpGet]
     public async Task<IActionResult> GetUserFacts(CancellationToken cancellationToken)
@@ -68,5 +69,18 @@ public class UserFactsController(IMediator mediator) : ControllerBase
         return result.IsSuccess
             ? NoContent()
             : NotFound(new { error = result.Error });
+    }
+
+    [HttpDelete("bulk")]
+    public async Task<IActionResult> BulkDeleteUserFacts(
+        [FromBody] BulkDeleteUserFactsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new BulkDeleteUserFactsCommand(HttpContext.GetUserId(), request.FactIds);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(new { deleted = result.Value })
+            : BadRequest(new { error = result.Error });
     }
 }

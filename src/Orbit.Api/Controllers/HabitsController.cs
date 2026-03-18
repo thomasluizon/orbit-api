@@ -58,34 +58,60 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
-        [FromQuery] string? tags,
-        [FromQuery] string? search,
-        [FromQuery] DateOnly? dueDateFrom,
-        [FromQuery] DateOnly? dueDateTo,
-        [FromQuery] bool? isCompleted,
-        [FromQuery] string? frequencyUnit,
-        CancellationToken cancellationToken)
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] bool includeOverdue = false,
+        [FromQuery] string? search = null,
+        [FromQuery] string? frequencyUnit = null,
+        [FromQuery] bool? isCompleted = null,
+        [FromQuery] Guid[]? tagIds = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<Guid>? tagIds = null;
-
-        if (!string.IsNullOrWhiteSpace(tags))
-        {
-            tagIds = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(s => Guid.TryParse(s, out _))
-                .Select(Guid.Parse)
-                .ToList();
-        }
-
-        var query = new GetHabitsQuery(
+        var query = new GetHabitScheduleQuery(
             HttpContext.GetUserId(),
-            tagIds,
+            dateFrom,
+            dateTo,
+            includeOverdue,
             search,
-            dueDateFrom,
-            dueDateTo,
+            frequencyUnit,
             isCompleted,
-            frequencyUnit);
-        var habits = await mediator.Send(query, cancellationToken);
-        return Ok(habits);
+            tagIds is { Length: > 0 } ? tagIds : null,
+            page,
+            pageSize);
+        var result = await mediator.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetDailySummary(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        [FromQuery] bool includeOverdue = false,
+        [FromQuery] string language = "en",
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetDailySummaryQuery(
+            HttpContext.GetUserId(),
+            dateFrom,
+            dateTo,
+            includeOverdue,
+            language);
+
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetHabitByIdQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
     [HttpPost]
@@ -242,6 +268,19 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         return result.IsSuccess
             ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("{id:guid}/duplicate")]
+    public async Task<IActionResult> DuplicateHabit(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var command = new DuplicateHabitCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Created($"/api/habits/{result.Value}", new { id = result.Value })
             : BadRequest(new { error = result.Error });
     }
 

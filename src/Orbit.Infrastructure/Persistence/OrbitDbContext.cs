@@ -9,8 +9,9 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<User> Users => Set<User>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
-    public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<UserFact> UserFacts => Set<UserFact>();
+    public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
+    public DbSet<Tag> Tags => Set<Tag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,25 +51,34 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
             entity.HasIndex(l => new { l.HabitId, l.Date });
         });
 
-        modelBuilder.Entity<Tag>(entity =>
-        {
-            entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
-        });
-
-        modelBuilder.Entity<Habit>()
-            .HasMany(h => h.Tags)
-            .WithMany(t => t.Habits)
-            .UsingEntity<HabitTag>(
-                r => r.HasOne<Tag>().WithMany().HasForeignKey(ht => ht.TagId)
-                    .OnDelete(DeleteBehavior.Cascade),
-                l => l.HasOne<Habit>().WithMany().HasForeignKey(ht => ht.HabitId)
-                    .OnDelete(DeleteBehavior.Cascade),
-                j => j.HasKey(ht => new { ht.HabitId, ht.TagId }));
-
         modelBuilder.Entity<UserFact>(entity =>
         {
             entity.HasIndex(f => new { f.UserId, f.IsDeleted });
             entity.HasQueryFilter(f => !f.IsDeleted);
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
+
+            entity.HasMany(t => t.Habits)
+                .WithMany(h => h.Tags)
+                .UsingEntity("HabitTags",
+                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey("HabitId").OnDelete(DeleteBehavior.Cascade),
+                    r => r.HasOne(typeof(Tag)).WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade));
+        });
+
+        modelBuilder.Entity<AppConfig>(entity =>
+        {
+            entity.HasKey(c => c.Key);
+            entity.Property(c => c.Key).HasMaxLength(100);
+            entity.Property(c => c.Value).HasMaxLength(500).IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(500);
+
+            entity.HasData(
+                AppConfig.Create("MaxUserFacts", "50", "Maximum number of facts the AI can remember per user"),
+                AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"),
+                AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"));
         });
     }
 }

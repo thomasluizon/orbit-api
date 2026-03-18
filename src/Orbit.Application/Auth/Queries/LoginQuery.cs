@@ -25,6 +25,9 @@ public class LoginQueryHandler(
         if (user == null)
             return Result.Failure<LoginResponse>("Invalid email or password");
 
+        if (user.PasswordHash is null)
+            return Result.Failure<LoginResponse>("This account uses Google sign-in. Please use the Google button to log in.");
+
         // Verify password
         if (!passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
             return Result.Failure<LoginResponse>("Invalid email or password");

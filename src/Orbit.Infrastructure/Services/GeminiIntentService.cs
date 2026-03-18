@@ -27,11 +27,12 @@ public sealed class GeminiIntentService(
     public async Task<Result<AiActionPlan>> InterpretAsync(
         string userMessage,
         IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<Tag> userTags,
         IReadOnlyList<UserFact> userFacts,
         byte[]? imageData = null,
         string? imageMimeType = null,
         IReadOnlyList<RoutinePattern>? routinePatterns = null,
+        IReadOnlyList<Tag>? userTags = null,
+        DateOnly? userToday = null,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -39,9 +40,11 @@ public sealed class GeminiIntentService(
         logger.LogInformation("🔵 START: Building system prompt...");
         var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(
-            activeHabits, userTags, userFacts,
+            activeHabits, userFacts,
             hasImage: imageData != null,
-            routinePatterns: routinePatterns);
+            routinePatterns: routinePatterns,
+            userTags: userTags,
+            userToday: userToday);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);
