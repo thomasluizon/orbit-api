@@ -15,7 +15,8 @@ public class GoogleAuthCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     ITokenService tokenService,
-    IHttpClientFactory httpClientFactory) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
+    IHttpClientFactory httpClientFactory,
+    IEmailService emailService) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
     {
@@ -60,6 +61,19 @@ public class GoogleAuthCommandHandler(
             user = createResult.Value;
             await userRepository.AddAsync(user, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Send welcome email (fire and forget - don't fail auth if email fails)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await emailService.SendWelcomeEmailAsync(user.Email, user.Name, CancellationToken.None);
+                }
+                catch
+                {
+                    // Silently ignore email failures - don't block authentication
+                }
+            }, CancellationToken.None);
         }
 
         // Generate app JWT

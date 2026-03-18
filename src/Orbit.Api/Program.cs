@@ -37,6 +37,18 @@ builder.Services.AddHttpClient("Supabase", client =>
     client.DefaultRequestHeaders.Add("apikey", builder.Configuration["Supabase:AnonKey"]!);
 });
 
+// --- Resend (Email) ---
+builder.Services.Configure<ResendSettings>(
+    builder.Configuration.GetSection(ResendSettings.SectionName));
+
+builder.Services.AddHttpClient("Resend", client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com");
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["Resend:ApiKey"]}");
+});
+
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
+
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
 

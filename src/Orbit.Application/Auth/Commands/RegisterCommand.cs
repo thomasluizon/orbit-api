@@ -11,7 +11,8 @@ public record RegisterCommand(string Name, string Email, string Password)
 public class RegisterCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
-    IPasswordHasher passwordHasher) : IRequestHandler<RegisterCommand, Result<Guid>>
+    IPasswordHasher passwordHasher,
+    IEmailService emailService) : IRequestHandler<RegisterCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
@@ -33,6 +34,19 @@ public class RegisterCommandHandler(
 
         await userRepository.AddAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Send welcome email (fire and forget - don't fail auth if email fails)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await emailService.SendWelcomeEmailAsync(user.Email, user.Name, CancellationToken.None);
+            }
+            catch
+            {
+                // Silently ignore email failures - don't block authentication
+            }
+        }, CancellationToken.None);
 
         return Result.Success(user.Id);
     }
