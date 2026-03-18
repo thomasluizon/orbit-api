@@ -21,7 +21,8 @@ public class HabitsController(IMediator mediator) : ControllerBase
         IReadOnlyList<System.DayOfWeek>? Days = null,
         bool IsBadHabit = false,
         IReadOnlyList<string>? SubHabits = null,
-        DateOnly? DueDate = null);
+        DateOnly? DueDate = null,
+        TimeOnly? DueTime = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -30,7 +31,8 @@ public class HabitsController(IMediator mediator) : ControllerBase
         int? FrequencyQuantity,
         IReadOnlyList<System.DayOfWeek>? Days = null,
         bool IsBadHabit = false,
-        DateOnly? DueDate = null);
+        DateOnly? DueDate = null,
+        TimeOnly? DueTime = null);
 
     public record LogHabitRequest(string? Note = null);
 
@@ -128,7 +130,8 @@ public class HabitsController(IMediator mediator) : ControllerBase
             request.Days,
             request.IsBadHabit,
             request.SubHabits,
-            request.DueDate);
+            request.DueDate,
+            request.DueTime);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -170,7 +173,8 @@ public class HabitsController(IMediator mediator) : ControllerBase
             request.FrequencyQuantity,
             request.Days,
             request.IsBadHabit,
-            request.DueDate);
+            request.DueDate,
+            request.DueTime);
 
         var result = await mediator.Send(command, cancellationToken);
 

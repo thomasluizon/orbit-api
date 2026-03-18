@@ -14,6 +14,7 @@ public class Habit : Entity
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
+    public TimeOnly? DueTime { get; private set; }
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
@@ -40,6 +41,7 @@ public class Habit : Entity
         IReadOnlyList<System.DayOfWeek>? days = null,
         bool isBadHabit = false,
         DateOnly? dueDate = null,
+        TimeOnly? dueTime = null,
         Guid? parentHabitId = null)
     {
         if (userId == Guid.Empty)
@@ -64,6 +66,7 @@ public class Habit : Entity
             Days = days?.ToList() ?? [],
             IsBadHabit = isBadHabit,
             DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            DueTime = dueTime,
             ParentHabitId = parentHabitId,
             CreatedAtUtc = DateTime.UtcNow
         });
@@ -150,7 +153,8 @@ public class Habit : Entity
         int? frequencyQuantity,
         IReadOnlyList<System.DayOfWeek>? days,
         bool isBadHabit,
-        DateOnly? dueDate)
+        DateOnly? dueDate,
+        TimeOnly? dueTime = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
@@ -170,6 +174,8 @@ public class Habit : Entity
 
         if (dueDate is not null)
             DueDate = dueDate.Value;
+
+        DueTime = dueTime;
 
         return Result.Success();
     }

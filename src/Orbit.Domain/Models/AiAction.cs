@@ -13,6 +13,7 @@ public record AiAction
     public List<System.DayOfWeek>? Days { get; init; }
     public bool? IsBadHabit { get; init; }
     public DateOnly? DueDate { get; init; }
+    public TimeOnly? DueTime { get; init; }
     public string? Note { get; init; }
     public List<AiAction>? SubHabits { get; init; }
     public List<AiAction>? SuggestedSubHabits { get; init; }

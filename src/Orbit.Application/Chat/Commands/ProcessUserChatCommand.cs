@@ -360,7 +360,8 @@ public class ProcessUserChatCommandHandler(
             action.Description,
             days: action.Days,
             isBadHabit: action.IsBadHabit ?? false,
-            dueDate: dueDate);
+            dueDate: dueDate,
+            dueTime: action.DueTime);
 
         if (habitResult.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);
@@ -453,7 +454,8 @@ public class ProcessUserChatCommandHandler(
             action.FrequencyQuantity ?? habit.FrequencyQuantity,
             action.Days,
             action.IsBadHabit ?? habit.IsBadHabit,
-            action.DueDate ?? habit.DueDate);
+            action.DueDate ?? habit.DueDate,
+            dueTime: action.DueTime);
 
         if (result.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(result.Error);

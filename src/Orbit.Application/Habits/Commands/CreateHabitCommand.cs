@@ -16,7 +16,8 @@ public record CreateHabitCommand(
     IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
     IReadOnlyList<string>? SubHabits = null,
-    DateOnly? DueDate = null) : IRequest<Result<Guid>>;
+    DateOnly? DueDate = null,
+    TimeOnly? DueTime = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -36,7 +37,8 @@ public class CreateHabitCommandHandler(
             request.Description,
             request.Days,
             request.IsBadHabit,
-            dueDate);
+            dueDate,
+            dueTime: request.DueTime);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

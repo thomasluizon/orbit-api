@@ -16,7 +16,8 @@ public record UpdateHabitCommand(
     int? FrequencyQuantity,
     IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
-    DateOnly? DueDate = null) : IRequest<Result>;
+    DateOnly? DueDate = null,
+    TimeOnly? DueTime = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -39,7 +40,8 @@ public class UpdateHabitCommandHandler(
             request.FrequencyQuantity,
             request.Days,
             request.IsBadHabit,
-            request.DueDate);
+            request.DueDate,
+            dueTime: request.DueTime);
 
         if (result.IsFailure)
             return result;

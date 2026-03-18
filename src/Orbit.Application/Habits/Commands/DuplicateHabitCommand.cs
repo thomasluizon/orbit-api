@@ -81,6 +81,7 @@ public class DuplicateHabitCommandHandler(
             source.Days.ToList(),
             source.IsBadHabit,
             source.DueDate,
+            source.DueTime,
             parentHabitId);
     }
 }

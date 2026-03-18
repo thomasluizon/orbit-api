@@ -181,7 +181,8 @@ public static class SystemPromptBuilder
                     if (parts.Count > 0) metricsLabel = $" | Stats: {string.Join(", ", parts)}";
                 }
 
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{badHabitLabel}{completedLabel}{tagsLabel}{metricsLabel}");
+                var dueTimeLabel = habit.DueTime.HasValue ? $" at {habit.DueTime.Value:HH:mm}" : "";
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{badHabitLabel}{completedLabel}{tagsLabel}{metricsLabel}");
 
                 foreach (var child in habit.Children)
                 {
@@ -345,6 +346,9 @@ public static class SystemPromptBuilder
             CreateHabit (one-time task) -- "Buy eggs tomorrow"
             { "actions": [{ "type": "CreateHabit", "title": "Buy Eggs", "dueDate": "2026-02-09" }], "aiMessage": "Got it, buy eggs tomorrow!" }
 
+            CreateHabit (with time) -- "Dentist appointment tomorrow at 3pm"
+            { "actions": [{ "type": "CreateHabit", "title": "Dentist Appointment", "dueDate": "2026-02-09", "dueTime": "15:00" }], "aiMessage": "Scheduled your dentist appointment for tomorrow at 3pm!" }
+
             LogHabit -- "I ran today, felt great" (Running ID: "abc-123")
             { "actions": [{ "type": "LogHabit", "habitId": "abc-123", "note": "felt great" }], "aiMessage": "Logged your run!" }
 
@@ -379,10 +383,10 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), dueTime (optional - HH:mm 24h format, e.g. "15:00" for 3pm, ONLY include when user mentions a specific time), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
             LogHabit: type, habitId, note (optional - include if user shares context/feelings)
             SuggestBreakdown: type, title (parent habit name), description (optional), frequencyUnit, frequencyQuantity, dueDate, suggestedSubHabits (array of habit objects with type: "CreateHabit", title, description, frequencyUnit, frequencyQuantity, dueDate)
-            UpdateHabit: type, habitId (REQUIRED - ID of existing habit), title (optional - new title), description (optional), frequencyUnit (optional), frequencyQuantity (optional), days (optional), isBadHabit (optional), dueDate (optional - new due date YYYY-MM-DD). Only include fields that are changing.
+            UpdateHabit: type, habitId (REQUIRED - ID of existing habit), title (optional - new title), description (optional), frequencyUnit (optional), frequencyQuantity (optional), days (optional), isBadHabit (optional), dueDate (optional - new due date YYYY-MM-DD), dueTime (optional - HH:mm 24h format to set or change time). Only include fields that are changing.
             DeleteHabit: type, habitId (REQUIRED - ID of existing habit to delete)
             AssignTags: type, habitId (REQUIRED - ID of existing habit), tagNames (REQUIRED - array of tag name strings. Empty array [] removes all tags)
 
