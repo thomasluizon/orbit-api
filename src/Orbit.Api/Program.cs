@@ -26,8 +26,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAppConfigService, AppConfigService>();
 builder.Services.AddScoped<IUserDateService, UserDateService>();
 
-// --- Password & Token Services ---
-builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+// --- Token Service ---
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 
 // --- Supabase (OAuth token validation) ---
