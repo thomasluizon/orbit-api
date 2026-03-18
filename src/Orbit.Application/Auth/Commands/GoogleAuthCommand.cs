@@ -8,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record GoogleAuthCommand(string AccessToken)
+public record GoogleAuthCommand(string AccessToken, string Language = "en")
     : IRequest<Result<LoginResponse>>;
 
 public class GoogleAuthCommandHandler(
@@ -59,6 +59,7 @@ public class GoogleAuthCommandHandler(
                 return Result.Failure<LoginResponse>(createResult.Error);
 
             user = createResult.Value;
+            user.SetLanguage(request.Language);
             await userRepository.AddAsync(user, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -67,7 +68,7 @@ public class GoogleAuthCommandHandler(
             {
                 try
                 {
-                    await emailService.SendWelcomeEmailAsync(user.Email, user.Name, CancellationToken.None);
+                    await emailService.SendWelcomeEmailAsync(user.Email, user.Name, request.Language, CancellationToken.None);
                 }
                 catch
                 {

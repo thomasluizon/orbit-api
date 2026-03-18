@@ -9,16 +9,16 @@ namespace Orbit.Api.Controllers;
 [Route("api/[controller]")]
 public class AuthController(IMediator mediator) : ControllerBase
 {
-    public record RegisterRequest(string Name, string Email, string Password);
+    public record RegisterRequest(string Name, string Email, string Password, string Language = "en");
     public record LoginRequest(string Email, string Password);
-    public record GoogleAuthRequest(string AccessToken);
+    public record GoogleAuthRequest(string AccessToken, string Language = "en");
 
     [HttpPost("register")]
     public async Task<IActionResult> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new RegisterCommand(request.Name, request.Email, request.Password);
+        var command = new RegisterCommand(request.Name, request.Email, request.Password, request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
@@ -44,7 +44,7 @@ public class AuthController(IMediator mediator) : ControllerBase
         [FromBody] GoogleAuthRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new GoogleAuthCommand(request.AccessToken);
+        var command = new GoogleAuthCommand(request.AccessToken, request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess

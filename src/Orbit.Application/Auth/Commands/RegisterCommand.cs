@@ -5,7 +5,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record RegisterCommand(string Name, string Email, string Password)
+public record RegisterCommand(string Name, string Email, string Password, string Language = "en")
     : IRequest<Result<Guid>>;
 
 public class RegisterCommandHandler(
@@ -33,6 +33,7 @@ public class RegisterCommandHandler(
         user.SetPasswordHash(hashedPassword);
 
         await userRepository.AddAsync(user, cancellationToken);
+        user.SetLanguage(request.Language);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Send welcome email (fire and forget - don't fail auth if email fails)
@@ -40,7 +41,7 @@ public class RegisterCommandHandler(
         {
             try
             {
-                await emailService.SendWelcomeEmailAsync(user.Email, user.Name, CancellationToken.None);
+                await emailService.SendWelcomeEmailAsync(user.Email, user.Name, request.Language, CancellationToken.None);
             }
             catch
             {

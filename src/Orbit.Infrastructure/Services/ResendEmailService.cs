@@ -12,10 +12,12 @@ public class ResendEmailService(
 {
     private readonly ResendSettings _settings = options.Value;
 
-    public async Task SendWelcomeEmailAsync(string toEmail, string userName, CancellationToken cancellationToken = default)
+    public async Task SendWelcomeEmailAsync(string toEmail, string userName, string language = "en", CancellationToken cancellationToken = default)
     {
-        var html = BuildWelcomeEmailHtml(userName);
-        await SendEmailAsync(toEmail, "Welcome to Orbit!", html, cancellationToken);
+        var isPtBr = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
+        var subject = isPtBr ? "Bem-vindo ao Orbit!" : "Welcome to Orbit!";
+        var html = BuildWelcomeEmailHtml(userName, isPtBr);
+        await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
 
     private async Task SendEmailAsync(string to, string subject, string html, CancellationToken cancellationToken)
@@ -38,15 +40,27 @@ public class ResendEmailService(
         await client.PostAsync("/emails", content, cancellationToken);
     }
 
-    private static string BuildWelcomeEmailHtml(string userName)
+    private static string BuildWelcomeEmailHtml(string userName, bool isPtBr)
     {
+        var encodedName = System.Net.WebUtility.HtmlEncode(userName);
+        var heading = isPtBr ? $"Bem-vindo, {encodedName}!" : $"Welcome aboard, {encodedName}!";
+        var intro = isPtBr
+            ? "Estamos animados em ter você no Orbit. Agora você pode construir hábitos melhores, acompanhar seu progresso e manter suas metas em dia."
+            : "We're excited to have you on Orbit. You're now ready to build better habits, track your progress, and stay on top of your goals.";
+        var featuresTitle = isPtBr ? "O que você pode fazer:" : "Here's what you can do:";
+        var feature1 = isPtBr ? "Crie hábitos diários, semanais ou personalizados" : "Create daily, weekly, or custom habits";
+        var feature2 = isPtBr ? "Acompanhe sequências e veja seu progresso" : "Track streaks and view your progress";
+        var feature3 = isPtBr ? "Receba insights de IA sobre suas rotinas" : "Get AI-powered insights on your routines";
+        var cta = isPtBr ? "Começar" : "Get Started";
+        var footer = isPtBr ? "Equipe Orbit" : "The Orbit Team";
+
         return $@"
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset=""utf-8"">
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-    <title>Welcome to Orbit</title>
+    <title>Orbit</title>
 </head>
 <body style=""margin: 0; padding: 0; background-color: #0a0a0a; font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"">
     <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""background-color: #0a0a0a;"">
@@ -62,44 +76,35 @@ public class ResendEmailService(
                     <!-- Card -->
                     <tr>
                         <td style=""background-color: #141414; border-radius: 24px; border: 1px solid #262626; padding: 40px 32px;"">
-                            <!-- Welcome heading -->
-                            <h1 style=""margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #ffffff;"">Welcome aboard, {System.Net.WebUtility.HtmlEncode(userName)}!</h1>
-                            <p style=""margin: 0 0 24px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6;"">
-                                We're excited to have you on Orbit. You're now ready to build better habits, track your progress, and stay on top of your goals.
-                            </p>
-                            <!-- Divider -->
+                            <h1 style=""margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #ffffff;"">{heading}</h1>
+                            <p style=""margin: 0 0 24px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6;"">{intro}</p>
                             <div style=""height: 1px; background-color: #262626; margin: 24px 0;""></div>
-                            <!-- Features -->
-                            <p style=""margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: #ffffff;"">Here's what you can do:</p>
+                            <p style=""margin: 0 0 16px 0; font-size: 14px; font-weight: 600; color: #ffffff;"">{featuresTitle}</p>
                             <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"">
                                 <tr>
                                     <td style=""padding: 8px 0; font-size: 14px; color: #a3a3a3;"">
-                                        <span style=""color: #8b5cf6; font-weight: 700; margin-right: 8px;"">&#10022;</span> Create daily, weekly, or custom habits
+                                        <span style=""color: #8b5cf6; font-weight: 700; margin-right: 8px;"">&#10022;</span> {feature1}
                                     </td>
                                 </tr>
                                 <tr>
                                     <td style=""padding: 8px 0; font-size: 14px; color: #a3a3a3;"">
-                                        <span style=""color: #8b5cf6; font-weight: 700; margin-right: 8px;"">&#10022;</span> Track streaks and view your progress
+                                        <span style=""color: #8b5cf6; font-weight: 700; margin-right: 8px;"">&#10022;</span> {feature2}
                                     </td>
                                 </tr>
                                 <tr>
                                     <td style=""padding: 8px 0; font-size: 14px; color: #a3a3a3;"">
-                                        <span style=""color: #8b5cf6; font-weight: 700; margin-right: 8px;"">&#10022;</span> Get AI-powered insights on your routines
+                                        <span style=""color: #8b5cf6; font-weight: 700; margin-right: 8px;"">&#10022;</span> {feature3}
                                     </td>
                                 </tr>
                             </table>
-                            <!-- CTA Button -->
                             <div style=""text-align: center; padding-top: 32px;"">
-                                <a href=""https://app.useorbit.org"" style=""display: inline-block; background-color: #8b5cf6; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 40px; border-radius: 100px; box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.3);"">Get Started</a>
+                                <a href=""https://app.useorbit.org"" style=""display: inline-block; background-color: #8b5cf6; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 40px; border-radius: 100px; box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.3);"">{cta}</a>
                             </div>
                         </td>
                     </tr>
-                    <!-- Footer -->
                     <tr>
                         <td style=""text-align: center; padding-top: 32px;"">
-                            <p style=""margin: 0; font-size: 13px; color: #525252;"">
-                                The Orbit Team
-                            </p>
+                            <p style=""margin: 0; font-size: 13px; color: #525252;"">{footer}</p>
                         </td>
                     </tr>
                 </table>
