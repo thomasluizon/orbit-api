@@ -71,11 +71,16 @@ docker compose up -d --build
 - `PUT /api/habits/reorder` - Reorder positions
 - `PUT /api/habits/{id}/parent` - Move to new parent
 - `POST /api/habits/{parentId}/sub-habits` - Create sub-habit
+- `POST /api/habits/{id}/duplicate` - Duplicate a habit
+- `GET /api/habits/summary?dateFrom=&dateTo=&includeOverdue=&language=` - AI-generated daily summary (cached, invalidated on habit changes)
 
 ### Other
 - `POST /api/auth/register`, `POST /api/auth/login`
 - `POST /api/chat` (multipart, supports image upload)
 - `GET/PUT /api/profile`, `PUT /api/profile/timezone`
+- `PUT /api/profile/onboarding` - Mark onboarding complete (no request body, one-way flag, idempotent). `HasCompletedOnboarding` defaults to `false` in migration so existing users see the wizard.
+- `PUT /api/profile/ai-memory` - Toggle AI memory (request body: `{ "enabled": bool }`)
+- `PUT /api/profile/ai-summary` - Toggle daily summary (request body: `{ "enabled": bool }`)
 - `GET/POST /api/user-facts`, `PUT/DELETE /api/user-facts/{id}`
 - `GET /health`
 
