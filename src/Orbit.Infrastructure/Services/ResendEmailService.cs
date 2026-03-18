@@ -20,6 +20,14 @@ public class ResendEmailService(
         await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
 
+    public async Task SendVerificationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
+    {
+        var isPtBr = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
+        var subject = isPtBr ? "Seu código de verificação do Orbit" : "Your Orbit verification code";
+        var html = BuildVerificationCodeEmailHtml(code, isPtBr);
+        await SendEmailAsync(toEmail, subject, html, cancellationToken);
+    }
+
     private async Task SendEmailAsync(string to, string subject, string html, CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient("Resend");
@@ -38,6 +46,61 @@ public class ResendEmailService(
             "application/json");
 
         await client.PostAsync("/emails", content, cancellationToken);
+    }
+
+    private static string BuildVerificationCodeEmailHtml(string code, bool isPtBr)
+    {
+        var heading = isPtBr ? "Seu código de verificação" : "Your verification code";
+        var intro = isPtBr
+            ? "Use o código abaixo para entrar no Orbit. Ele expira em 5 minutos."
+            : "Use the code below to sign in to Orbit. It expires in 5 minutes.";
+        var warning = isPtBr
+            ? "Se você não solicitou este código, pode ignorar este e-mail."
+            : "If you didn't request this code, you can safely ignore this email.";
+        var footer = isPtBr ? "Equipe Orbit" : "The Orbit Team";
+
+        // Format code with spaces between digits for readability
+        var formattedCode = string.Join(" ", code.ToCharArray());
+
+        return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Orbit</title>
+</head>
+<body style=""margin: 0; padding: 0; background-color: #0a0a0a; font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"">
+    <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""background-color: #0a0a0a;"">
+        <tr>
+            <td style=""padding: 40px 20px;"">
+                <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""max-width: 520px; margin: 0 auto;"">
+                    <tr>
+                        <td style=""text-align: center; padding-bottom: 32px;"">
+                            <span style=""font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;"">Orbit</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=""background-color: #141414; border-radius: 24px; border: 1px solid #262626; padding: 40px 32px;"">
+                            <h1 style=""margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #ffffff; text-align: center;"">{heading}</h1>
+                            <p style=""margin: 0 0 32px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6; text-align: center;"">{intro}</p>
+                            <div style=""text-align: center; padding: 24px 0; background-color: #0a0a0a; border-radius: 16px; margin: 0 0 24px 0;"">
+                                <span style=""font-size: 36px; font-weight: 800; color: #8b5cf6; letter-spacing: 12px; font-family: monospace;"">{formattedCode}</span>
+                            </div>
+                            <p style=""margin: 0; font-size: 13px; color: #525252; text-align: center;"">{warning}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=""text-align: center; padding-top: 32px;"">
+                            <p style=""margin: 0; font-size: 13px; color: #525252;"">{footer}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
     }
 
     private static string BuildWelcomeEmailHtml(string userName, bool isPtBr)
