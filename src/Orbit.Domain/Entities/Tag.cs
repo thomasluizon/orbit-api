@@ -28,10 +28,11 @@ public class Tag : Entity
         if (string.IsNullOrWhiteSpace(color))
             return Result.Failure<Tag>("Tag color is required.");
 
+        var trimmed = name.Trim();
         return Result.Success(new Tag
         {
             UserId = userId,
-            Name = name.Trim(),
+            Name = char.ToUpper(trimmed[0]) + trimmed[1..].ToLower(),
             Color = color.Trim(),
             CreatedAtUtc = DateTime.UtcNow
         });
@@ -48,7 +49,8 @@ public class Tag : Entity
         if (string.IsNullOrWhiteSpace(color))
             return Result.Failure("Tag color is required.");
 
-        Name = name.Trim();
+        var trimmed = name.Trim();
+        Name = char.ToUpper(trimmed[0]) + trimmed[1..].ToLower();
         Color = color.Trim();
         return Result.Success();
     }

@@ -419,16 +419,17 @@ public class ProcessUserChatCommandHandler(
     {
         if (tagNames is not { Count: > 0 }) return [];
 
-        var existingTags = await tagRepository.FindAsync(t => t.UserId == userId, ct);
         var resolved = new List<Tag>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var name in tagNames)
         {
-            var trimmed = name.Trim();
-            if (string.IsNullOrEmpty(trimmed)) continue;
+            var capitalized = Capitalize(name.Trim());
+            if (string.IsNullOrEmpty(capitalized) || !seen.Add(capitalized)) continue;
 
-            var existing = existingTags.FirstOrDefault(t =>
-                t.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+            // Use tracked query so EF doesn't try to re-insert existing tags
+            var existing = await tagRepository.FindOneTrackedAsync(
+                t => t.UserId == userId && t.Name == capitalized, cancellationToken: ct);
 
             if (existing is not null)
             {
@@ -436,8 +437,7 @@ public class ProcessUserChatCommandHandler(
             }
             else
             {
-                // Auto-create the tag with a default color
-                var createResult = Tag.Create(userId, trimmed, "#7c3aed");
+                var createResult = Tag.Create(userId, capitalized, "#7c3aed");
                 if (createResult.IsSuccess)
                 {
                     await tagRepository.AddAsync(createResult.Value, ct);
@@ -448,4 +448,7 @@ public class ProcessUserChatCommandHandler(
 
         return resolved;
     }
+
+    private static string Capitalize(string s) =>
+        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 }
