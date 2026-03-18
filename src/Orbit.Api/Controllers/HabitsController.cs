@@ -269,6 +269,19 @@ public class HabitsController(IMediator mediator) : ControllerBase
             : BadRequest(new { error = result.Error });
     }
 
+    [HttpPost("{id:guid}/duplicate")]
+    public async Task<IActionResult> DuplicateHabit(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var command = new DuplicateHabitCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Created($"/api/habits/{result.Value}", new { id = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
     [HttpPost("{parentId:guid}/sub-habits")]
     public async Task<IActionResult> CreateSubHabit(
         Guid parentId,
