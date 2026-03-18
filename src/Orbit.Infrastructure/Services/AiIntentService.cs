@@ -33,6 +33,8 @@ public sealed class OllamaIntentService(
         IReadOnlyList<RoutinePattern>? routinePatterns = null,
         IReadOnlyList<Tag>? userTags = null,
         DateOnly? userToday = null,
+        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
+        IReadOnlyList<ChatHistoryMessage>? history = null,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -45,7 +47,7 @@ public sealed class OllamaIntentService(
 
         logger.LogInformation("🔵 START: Building system prompt...");
         var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, userFacts, routinePatterns: routinePatterns, userTags: userTags, userToday: userToday);
+        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(activeHabits, userFacts, routinePatterns: routinePatterns, userTags: userTags, userToday: userToday, habitMetrics: habitMetrics);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);

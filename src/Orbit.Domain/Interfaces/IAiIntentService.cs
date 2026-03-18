@@ -15,5 +15,7 @@ public interface IAiIntentService
         IReadOnlyList<RoutinePattern>? routinePatterns = null,
         IReadOnlyList<Tag>? userTags = null,
         DateOnly? userToday = null,
+        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
+        IReadOnlyList<ChatHistoryMessage>? history = null,
         CancellationToken cancellationToken = default);
 }

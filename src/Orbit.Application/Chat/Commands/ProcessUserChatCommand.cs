@@ -13,7 +13,8 @@ public record ProcessUserChatCommand(
     Guid UserId,
     string Message,
     byte[]? ImageData = null,
-    string? ImageMimeType = null) : IRequest<Result<ChatResponse>>;
+    string? ImageMimeType = null,
+    List<ChatHistoryMessage>? History = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(string? AiMessage, IReadOnlyList<ActionResult> Actions);
 
@@ -30,6 +31,7 @@ public record ActionResult(
 public enum ActionStatus { Success, Failed, Suggestion }
 
 public class ProcessUserChatCommandHandler(
+    IMediator mediator,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
@@ -67,7 +69,28 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
             dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
-        // 1b. Check if user has AI memory enabled
+        // 1b. Fetch metrics for all habits (for AI context)
+        var metricsDict = new Dictionary<Guid, HabitMetrics>();
+        try
+        {
+            var metricsStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var metricsTasks = activeHabits.Select(h =>
+                mediator.Send(new Orbit.Application.Habits.Queries.GetHabitMetricsQuery(request.UserId, h.Id), cancellationToken));
+            var metricsResults = await Task.WhenAll(metricsTasks);
+            for (int i = 0; i < activeHabits.Count; i++)
+            {
+                if (metricsResults[i].IsSuccess)
+                    metricsDict[activeHabits[i].Id] = metricsResults[i].Value;
+            }
+            metricsStopwatch.Stop();
+            logger.LogInformation("Metrics fetched for {Count} habits in {ElapsedMs}ms", metricsDict.Count, metricsStopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Metrics fetch failed - non-critical, continuing without metrics");
+        }
+
+        // 1c. Check if user has AI memory enabled
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
@@ -127,6 +150,8 @@ public class ProcessUserChatCommandHandler(
             routinePatterns,
             userTags,
             userToday,
+            metricsDict,
+            request.History,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -156,6 +181,8 @@ public class ProcessUserChatCommandHandler(
                     AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.SuggestBreakdown => ExecuteSuggestBreakdown(action),
                     AiActionType.AssignTags => await ExecuteAssignTagsAsync(action, request.UserId, cancellationToken),
+                    AiActionType.UpdateHabit => await ExecuteUpdateHabitAsync(action, request.UserId, cancellationToken),
+                    AiActionType.DeleteHabit => await ExecuteDeleteHabitAsync(action, request.UserId, cancellationToken),
                     _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
                 };
 
@@ -404,6 +431,53 @@ public class ProcessUserChatCommandHandler(
             habit.AddTag(tag);
 
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
+    }
+
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteUpdateHabitAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for updating.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId.Value && h.UserId == userId,
+            cancellationToken: ct);
+
+        if (habit is null)
+            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
+
+        var result = habit.Update(
+            action.Title ?? habit.Title,
+            action.Description ?? habit.Description,
+            action.FrequencyUnit ?? habit.FrequencyUnit,
+            action.FrequencyQuantity ?? habit.FrequencyQuantity,
+            action.Days,
+            action.IsBadHabit ?? habit.IsBadHabit,
+            action.DueDate ?? habit.DueDate);
+
+        if (result.IsFailure)
+            return Result.Failure<(Guid? Id, string? Name)>(result.Error);
+
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
+    }
+
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteDeleteHabitAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for deleting.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId.Value && h.UserId == userId,
+            cancellationToken: ct);
+
+        if (habit is null)
+            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
+
+        var title = habit.Title;
+        habit.Deactivate();
+
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, title));
     }
 
     private async Task AssignTagsToHabitAsync(Habit habit, List<string>? tagNames, Guid userId, CancellationToken ct)

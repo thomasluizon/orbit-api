@@ -5,5 +5,7 @@ public enum AiActionType
     LogHabit,
     CreateHabit,
     SuggestBreakdown,
-    AssignTags
+    AssignTags,
+    UpdateHabit,
+    DeleteHabit
 }

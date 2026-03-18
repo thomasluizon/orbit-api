@@ -33,6 +33,8 @@ public sealed class GeminiIntentService(
         IReadOnlyList<RoutinePattern>? routinePatterns = null,
         IReadOnlyList<Tag>? userTags = null,
         DateOnly? userToday = null,
+        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
+        IReadOnlyList<ChatHistoryMessage>? history = null,
         CancellationToken cancellationToken = default)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -44,19 +46,38 @@ public sealed class GeminiIntentService(
             hasImage: imageData != null,
             routinePatterns: routinePatterns,
             userTags: userTags,
-            userToday: userToday);
+            userToday: userToday,
+            habitMetrics: habitMetrics);
         promptStopwatch.Stop();
         logger.LogInformation("✅ System prompt built in {ElapsedMs}ms (length: {Length} chars)",
             promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);
 
-        var parts = new List<GeminiPart>
+        // Build multi-turn conversation
+        var contents = new List<GeminiContent>();
+
+        // System prompt as first turn
+        contents.Add(new GeminiContent { Role = "user", Parts = [new GeminiPart { Text = systemPrompt }] });
+        contents.Add(new GeminiContent { Role = "model", Parts = [new GeminiPart { Text = "{\"actions\":[],\"aiMessage\":\"Ready.\"}" }] });
+
+        // Conversation history
+        if (history is { Count: > 0 })
         {
-            new GeminiPart { Text = $"{systemPrompt}\n\nUser: {userMessage}" }
-        };
+            foreach (var msg in history)
+            {
+                contents.Add(new GeminiContent
+                {
+                    Role = msg.Role == "user" ? "user" : "model",
+                    Parts = [new GeminiPart { Text = msg.Content }]
+                });
+            }
+        }
+
+        // Current user message with optional image
+        var currentParts = new List<GeminiPart> { new GeminiPart { Text = userMessage } };
 
         if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
         {
-            parts.Add(new GeminiPart
+            currentParts.Add(new GeminiPart
             {
                 InlineData = new InlineData
                 {
@@ -66,15 +87,11 @@ public sealed class GeminiIntentService(
             });
         }
 
+        contents.Add(new GeminiContent { Role = "user", Parts = currentParts.ToArray() });
+
         var request = new GeminiRequest
         {
-            Contents = new[]
-            {
-                new GeminiContent
-                {
-                    Parts = parts.ToArray()
-                }
-            },
+            Contents = contents.ToArray(),
             GenerationConfig = new GeminiGenerationConfig
             {
                 Temperature = 0.1,
@@ -183,6 +200,9 @@ public sealed class GeminiIntentService(
 
     private record GeminiContent
     {
+        [JsonPropertyName("role")]
+        public string? Role { get; init; }
+
         [JsonPropertyName("parts")]
         public GeminiPart[] Parts { get; init; } = [];
     }

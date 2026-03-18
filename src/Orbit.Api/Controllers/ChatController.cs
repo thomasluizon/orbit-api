@@ -1,9 +1,11 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.Chat.Commands;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Api.Controllers;
 
@@ -16,6 +18,7 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
     [RequestFormLimits(MultipartBodyLengthLimit = 20_971_520)] // 20MB
     public async Task<IActionResult> ProcessChat(
         [FromForm] string message,
+        [FromForm] string? history,
         IFormFile? image,
         CancellationToken cancellationToken)
     {
@@ -34,11 +37,29 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
             imageMimeType = validationResult.Value.MimeType;
         }
 
+        // Parse conversation history
+        List<ChatHistoryMessage>? chatHistory = null;
+        if (!string.IsNullOrWhiteSpace(history))
+        {
+            try
+            {
+                chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+            }
+            catch
+            {
+                // Invalid history format, ignore
+            }
+        }
+
         var command = new ProcessUserChatCommand(
             HttpContext.GetUserId(),
             message,
             imageData,
-            imageMimeType);
+            imageMimeType,
+            chatHistory);
 
         var result = await mediator.Send(command, cancellationToken);
 
