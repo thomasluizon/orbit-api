@@ -4,7 +4,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Queries;
 
-public record ProfileResponse(string Name, string Email, string? TimeZone, bool AiMemoryEnabled, bool AiSummaryEnabled, bool HasCompletedOnboarding);
+public record ProfileResponse(string Name, string Email, string? TimeZone, bool AiMemoryEnabled, bool AiSummaryEnabled, bool HasCompletedOnboarding, string? Language);
 
 public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
 
@@ -18,6 +18,6 @@ public class GetProfileQueryHandler(
         if (user is null)
             throw new InvalidOperationException("User not found.");
 
-        return new ProfileResponse(user.Name, user.Email, user.TimeZone, user.AiMemoryEnabled, user.AiSummaryEnabled, user.HasCompletedOnboarding);
+        return new ProfileResponse(user.Name, user.Email, user.TimeZone, user.AiMemoryEnabled, user.AiSummaryEnabled, user.HasCompletedOnboarding, user.Language);
     }
 }

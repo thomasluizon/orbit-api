@@ -15,6 +15,7 @@ public class ProfileController(IMediator mediator) : ControllerBase
     public record SetTimezoneRequest(string TimeZone);
     public record SetAiMemoryRequest(bool Enabled);
     public record SetAiSummaryRequest(bool Enabled);
+    public record SetLanguageRequest(string Language);
 
     [HttpGet]
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
@@ -56,6 +57,19 @@ public class ProfileController(IMediator mediator) : ControllerBase
         CancellationToken cancellationToken)
     {
         var command = new SetAiSummaryCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("language")]
+    public async Task<IActionResult> SetLanguage(
+        [FromBody] SetLanguageRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetLanguageCommand(HttpContext.GetUserId(), request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
