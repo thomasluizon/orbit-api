@@ -30,6 +30,13 @@ builder.Services.AddScoped<IUserDateService, UserDateService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 
+// --- Supabase (OAuth token validation) ---
+builder.Services.AddHttpClient("Supabase", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
+    client.DefaultRequestHeaders.Add("apikey", builder.Configuration["Supabase:AnonKey"]!);
+});
+
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
 

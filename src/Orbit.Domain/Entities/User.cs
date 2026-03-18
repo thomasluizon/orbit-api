@@ -11,7 +11,7 @@ public class User : Entity
 
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
-    public string PasswordHash { get; private set; } = string.Empty;
+    public string? PasswordHash { get; private set; }
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
@@ -38,6 +38,26 @@ public class User : Entity
         var passwordValidation = ValidatePassword(password);
         if (passwordValidation.IsFailure)
             return Result.Failure<User>(passwordValidation.Error);
+
+        return Result.Success(new User
+        {
+            Name = name.Trim(),
+            Email = trimmedEmail.ToLowerInvariant(),
+            CreatedAtUtc = DateTime.UtcNow
+        });
+    }
+
+    public static Result<User> CreateFromOAuth(string name, string email)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Failure<User>("Name is required");
+
+        if (string.IsNullOrWhiteSpace(email))
+            return Result.Failure<User>("Email is required");
+
+        var trimmedEmail = email.Trim();
+        if (!EmailRegex.IsMatch(trimmedEmail))
+            return Result.Failure<User>("Invalid email format");
 
         return Result.Success(new User
         {
