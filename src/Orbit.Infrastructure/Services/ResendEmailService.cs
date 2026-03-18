@@ -28,17 +28,83 @@ public class ResendEmailService(
         await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
 
-    private async Task SendEmailAsync(string to, string subject, string html, CancellationToken cancellationToken)
+    public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)
+    {
+        var encodedName = System.Net.WebUtility.HtmlEncode(fromName);
+        var encodedEmail = System.Net.WebUtility.HtmlEncode(fromEmail);
+        var encodedSubject = System.Net.WebUtility.HtmlEncode(subject);
+        var encodedMessage = System.Net.WebUtility.HtmlEncode(message).Replace("\n", "<br>");
+
+        var html = $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Orbit Support</title>
+</head>
+<body style=""margin: 0; padding: 0; background-color: #0a0a0a; font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"">
+    <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""background-color: #0a0a0a;"">
+        <tr>
+            <td style=""padding: 40px 20px;"">
+                <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""max-width: 520px; margin: 0 auto;"">
+                    <tr>
+                        <td style=""text-align: center; padding-bottom: 32px;"">
+                            <span style=""font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;"">Orbit</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=""background-color: #141414; border-radius: 24px; border: 1px solid #262626; padding: 40px 32px;"">
+                            <h1 style=""margin: 0 0 24px 0; font-size: 22px; font-weight: 700; color: #8b5cf6;"">Support Request</h1>
+                            <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"">
+                                <tr>
+                                    <td style=""padding: 8px 0; font-size: 13px; color: #525252; font-weight: 600;"">FROM</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 0 0 16px 0; font-size: 15px; color: #ffffff;"">{encodedName} &lt;{encodedEmail}&gt;</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 8px 0; font-size: 13px; color: #525252; font-weight: 600;"">SUBJECT</td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 0 0 16px 0; font-size: 15px; color: #ffffff;"">{encodedSubject}</td>
+                                </tr>
+                                <tr>
+                                    <td style=""height: 1px; background-color: #262626;""></td>
+                                </tr>
+                                <tr>
+                                    <td style=""padding: 16px 0 0 0; font-size: 15px; color: #a3a3a3; line-height: 1.6;"">{encodedMessage}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=""text-align: center; padding-top: 32px;"">
+                            <p style=""margin: 0; font-size: 13px; color: #525252;"">Reply directly to respond to the user.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+
+        await SendEmailAsync(
+            _settings.SupportEmail,
+            $"[Orbit Support] {subject}",
+            html,
+            cancellationToken,
+            replyTo: fromEmail);
+    }
+
+    private async Task SendEmailAsync(string to, string subject, string html, CancellationToken cancellationToken, string? replyTo = null)
     {
         var client = httpClientFactory.CreateClient("Resend");
 
-        var payload = new
-        {
-            from = _settings.FromEmail,
-            to = new[] { to },
-            subject,
-            html
-        };
+        object payload = replyTo != null
+            ? new { from = _settings.FromEmail, to = new[] { to }, subject, html, reply_to = replyTo }
+            : new { from = _settings.FromEmail, to = new[] { to }, subject, html };
 
         var content = new StringContent(
             JsonSerializer.Serialize(payload),
