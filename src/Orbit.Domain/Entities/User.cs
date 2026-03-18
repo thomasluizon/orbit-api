@@ -11,7 +11,6 @@ public class User : Entity
 
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
-    public string? PasswordHash { get; private set; }
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
@@ -21,34 +20,7 @@ public class User : Entity
 
     private User() { }
 
-    public static Result<User> Create(string name, string email, string password)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure<User>("Name is required");
-
-        if (string.IsNullOrWhiteSpace(email))
-            return Result.Failure<User>("Email is required");
-
-        var trimmedEmail = email.Trim();
-        if (!EmailRegex.IsMatch(trimmedEmail))
-            return Result.Failure<User>("Invalid email format");
-
-        if (string.IsNullOrWhiteSpace(password))
-            return Result.Failure<User>("Password is required");
-
-        var passwordValidation = ValidatePassword(password);
-        if (passwordValidation.IsFailure)
-            return Result.Failure<User>(passwordValidation.Error);
-
-        return Result.Success(new User
-        {
-            Name = name.Trim(),
-            Email = trimmedEmail.ToLowerInvariant(),
-            CreatedAtUtc = DateTime.UtcNow
-        });
-    }
-
-    public static Result<User> CreateFromOAuth(string name, string email)
+    public static Result<User> Create(string name, string email)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure<User>("Name is required");
@@ -66,31 +38,6 @@ public class User : Entity
             Email = trimmedEmail.ToLowerInvariant(),
             CreatedAtUtc = DateTime.UtcNow
         });
-    }
-
-    private static Result ValidatePassword(string password)
-    {
-        if (password.Length < 8)
-            return Result.Failure("Password must be at least 8 characters");
-
-        if (!password.Any(char.IsUpper))
-            return Result.Failure("Password must contain at least one uppercase letter");
-
-        if (!password.Any(char.IsLower))
-            return Result.Failure("Password must contain at least one lowercase letter");
-
-        if (!password.Any(char.IsDigit))
-            return Result.Failure("Password must contain at least one digit");
-
-        return Result.Success();
-    }
-
-    public void SetPasswordHash(string passwordHash)
-    {
-        if (string.IsNullOrWhiteSpace(passwordHash))
-            throw new ArgumentException("Password hash cannot be empty", nameof(passwordHash));
-
-        PasswordHash = passwordHash;
     }
 
     public void UpdateProfile(string name, string email)

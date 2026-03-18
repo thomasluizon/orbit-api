@@ -1,7 +1,6 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Application.Auth.Commands;
-using Orbit.Application.Auth.Queries;
 
 namespace Orbit.Api.Controllers;
 
@@ -9,30 +8,30 @@ namespace Orbit.Api.Controllers;
 [Route("api/[controller]")]
 public class AuthController(IMediator mediator) : ControllerBase
 {
-    public record RegisterRequest(string Name, string Email, string Password, string Language = "en");
-    public record LoginRequest(string Email, string Password);
+    public record SendCodeRequest(string Email, string Language = "en");
+    public record VerifyCodeRequest(string Email, string Code, string Language = "en");
     public record GoogleAuthRequest(string AccessToken, string Language = "en");
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register(
-        [FromBody] RegisterRequest request,
+    [HttpPost("send-code")]
+    public async Task<IActionResult> SendCode(
+        [FromBody] SendCodeRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new RegisterCommand(request.Name, request.Email, request.Password, request.Language);
+        var command = new SendCodeCommand(request.Email, request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
-            ? Ok(new { userId = result.Value, message = "Registration successful" })
+            ? Ok(new { message = "Verification code sent" })
             : BadRequest(new { error = result.Error });
     }
 
-    [HttpPost("login")]
-    public async Task<IActionResult> Login(
-        [FromBody] LoginRequest request,
+    [HttpPost("verify-code")]
+    public async Task<IActionResult> VerifyCode(
+        [FromBody] VerifyCodeRequest request,
         CancellationToken cancellationToken)
     {
-        var query = new LoginQuery(request.Email, request.Password);
-        var result = await mediator.Send(query, cancellationToken);
+        var command = new VerifyCodeCommand(request.Email, request.Code, request.Language);
+        var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Ok(result.Value)

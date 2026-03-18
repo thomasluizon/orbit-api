@@ -54,7 +54,7 @@ public class GoogleAuthCommandHandler(
 
         if (user is null)
         {
-            var createResult = User.CreateFromOAuth(name, email);
+            var createResult = User.Create(name, email);
             if (createResult.IsFailure)
                 return Result.Failure<LoginResponse>(createResult.Error);
 
