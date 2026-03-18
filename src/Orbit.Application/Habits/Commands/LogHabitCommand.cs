@@ -88,7 +88,8 @@ public class LogHabitCommandHandler(
 
         var parent = await habitRepository.FindOneTrackedAsync(
             h => h.Id == child.ParentHabitId.Value,
-            q => q.Include(h => h.Logs).Include(h => h.Children),
+            q => q.Include(h => h.Logs)
+                  .Include(h => h.Children).ThenInclude(c => c.Logs),
             ct);
 
         if (parent is null || parent.IsCompleted) return;
@@ -96,8 +97,9 @@ public class LogHabitCommandHandler(
         // Only auto-log if the parent is actually due today (or overdue)
         if (parent.DueDate > today) return;
 
-        // Check if ALL children are now completed
-        var allChildrenDone = parent.Children.All(c => c.IsCompleted);
+        // Check if ALL children are done for today (logged today or permanently completed)
+        var allChildrenDone = parent.Children.All(c =>
+            c.IsCompleted || c.Logs.Any(l => l.Date == today));
         if (!allChildrenDone) return;
 
         // Auto-log the parent
