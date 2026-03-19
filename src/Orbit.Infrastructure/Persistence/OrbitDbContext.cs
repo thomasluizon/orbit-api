@@ -12,6 +12,7 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<UserFact> UserFacts => Set<UserFact>();
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,12 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                 .UsingEntity("HabitTags",
                     l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey("HabitId").OnDelete(DeleteBehavior.Cascade),
                     r => r.HasOne(typeof(Tag)).WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade));
+        });
+
+        modelBuilder.Entity<PushSubscription>(entity =>
+        {
+            entity.HasIndex(s => s.UserId);
+            entity.HasIndex(s => s.Endpoint).IsUnique();
         });
 
         modelBuilder.Entity<AppConfig>(entity =>

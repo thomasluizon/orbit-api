@@ -53,6 +53,11 @@ builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.Configure<StripeSettings>(
     builder.Configuration.GetSection(StripeSettings.SectionName));
 
+// --- Push Notifications (VAPID) ---
+builder.Services.Configure<VapidSettings>(
+    builder.Configuration.GetSection(VapidSettings.SectionName));
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
 
