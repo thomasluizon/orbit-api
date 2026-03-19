@@ -48,8 +48,15 @@ builder.Services.AddHttpClient("Resend", client =>
 
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
 
+// --- Stripe ---
+builder.Services.Configure<StripeSettings>(
+    builder.Configuration.GetSection(StripeSettings.SectionName));
+
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
+
+// --- Geo Location ---
+builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>();
 
 // --- JWT Settings ---
 builder.Services.Configure<JwtSettings>(

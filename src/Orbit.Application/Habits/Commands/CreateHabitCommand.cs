@@ -21,12 +21,24 @@ public record CreateHabitCommand(
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
+        // Check habit limit for free users
+        var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
+        if (user is not null && !user.HasProAccess)
+        {
+            var activeHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId && h.IsActive, cancellationToken);
+            if (activeHabits.Count >= 10)
+            {
+                return Result.Failure<Guid>("You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+            }
+        }
+
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         var habitResult = Habit.Create(

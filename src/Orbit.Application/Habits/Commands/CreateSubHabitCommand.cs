@@ -14,6 +14,7 @@ public record CreateSubHabitCommand(
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IAppConfigService appConfigService,
@@ -21,6 +22,13 @@ public class CreateSubHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateSubHabitCommand request, CancellationToken cancellationToken)
     {
+        // Sub-habits are a Pro feature
+        var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
+        if (user is not null && !user.HasProAccess)
+        {
+            return Result.Failure<Guid>("Sub-habits are a Pro feature. Upgrade to unlock!");
+        }
+
         var parent = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.ParentHabitId && h.UserId == request.UserId,
             cancellationToken: cancellationToken);

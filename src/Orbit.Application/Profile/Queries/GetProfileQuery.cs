@@ -4,7 +4,22 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Queries;
 
-public record ProfileResponse(string Name, string Email, string? TimeZone, bool AiMemoryEnabled, bool AiSummaryEnabled, bool HasCompletedOnboarding, bool HasDismissedMissions, string? Language);
+public record ProfileResponse(
+    string Name,
+    string Email,
+    string? TimeZone,
+    bool AiMemoryEnabled,
+    bool AiSummaryEnabled,
+    bool HasCompletedOnboarding,
+    bool HasDismissedMissions,
+    string? Language,
+    string Plan,
+    bool HasProAccess,
+    bool IsTrialActive,
+    DateTime? TrialEndsAt,
+    DateTime? PlanExpiresAt,
+    int AiMessagesUsed,
+    int AiMessagesLimit);
 
 public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
 
@@ -18,6 +33,21 @@ public class GetProfileQueryHandler(
         if (user is null)
             throw new InvalidOperationException("User not found.");
 
-        return new ProfileResponse(user.Name, user.Email, user.TimeZone, user.AiMemoryEnabled, user.AiSummaryEnabled, user.HasCompletedOnboarding, user.HasDismissedMissions, user.Language);
+        return new ProfileResponse(
+            user.Name,
+            user.Email,
+            user.TimeZone,
+            user.AiMemoryEnabled,
+            user.AiSummaryEnabled,
+            user.HasCompletedOnboarding,
+            user.HasDismissedMissions,
+            user.Language,
+            user.HasProAccess ? "pro" : "free",
+            user.HasProAccess,
+            user.IsTrialActive,
+            user.TrialEndsAt,
+            user.PlanExpiresAt,
+            user.AiMessagesUsedThisMonth,
+            user.HasProAccess ? 500 : 50);
     }
 }

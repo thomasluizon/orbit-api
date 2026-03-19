@@ -94,6 +94,16 @@ public class ProcessUserChatCommandHandler(
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
+        // Check AI message limits
+        if (user is not null)
+        {
+            var messageLimit = user.HasProAccess ? 500 : 50;
+            if (user.AiMessagesUsedThisMonth >= messageLimit)
+            {
+                return Result.Failure<ChatResponse>("You've reached your monthly AI message limit. Upgrade to Pro for 500 messages per month.");
+            }
+        }
+
         // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)
@@ -309,6 +319,15 @@ public class ProcessUserChatCommandHandler(
         {
             logger.LogWarning(ex, "Fact extraction failed - non-critical, continuing");
         }
+
+        // Increment AI message counter (after all other processing)
+        try
+        {
+            var userForIncrement = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
+            userForIncrement?.IncrementAiMessageCount();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch { /* non-critical */ }
 
         totalStopwatch.Stop();
         logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
