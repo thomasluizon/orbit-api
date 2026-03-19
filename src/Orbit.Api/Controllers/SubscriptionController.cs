@@ -18,7 +18,8 @@ public class SubscriptionController(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IOptions<StripeSettings> stripeSettings,
-    IGeoLocationService geoLocationService) : ControllerBase
+    IGeoLocationService geoLocationService,
+    ILogger<SubscriptionController> logger) : ControllerBase
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
 
@@ -136,6 +137,7 @@ public class SubscriptionController(
         StripeConfiguration.ApiKey = _settings.SecretKey;
 
         var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(ct);
+        logger.LogInformation("Stripe webhook received, body length: {Length}", json.Length);
 
         Event stripeEvent;
         try
@@ -152,84 +154,131 @@ public class SubscriptionController(
                 stripeEvent = EventUtility.ParseEvent(json);
             }
         }
-        catch (StripeException)
+        catch (StripeException ex)
         {
+            logger.LogError(ex, "Stripe webhook signature verification failed");
             return BadRequest();
         }
 
-        switch (stripeEvent.Type)
+        logger.LogInformation("Stripe event type: {Type}, id: {Id}", stripeEvent.Type, stripeEvent.Id);
+
+        try
         {
-            case Stripe.EventTypes.CheckoutSessionCompleted:
+            switch (stripeEvent.Type)
             {
-                var session = stripeEvent.Data.Object as Session;
-                if (session?.Metadata.TryGetValue("userId", out var userIdStr) == true
-                    && Guid.TryParse(userIdStr, out var uid))
+                case "checkout.session.completed":
                 {
-                    var user = await userRepository.FindOneTrackedAsync(u => u.Id == uid, cancellationToken: ct);
-                    if (user is not null && session.SubscriptionId is not null)
-                    {
-                        var subService = new SubscriptionService();
-                        var subscription = await subService.GetAsync(session.SubscriptionId, cancellationToken: ct);
-                        user.SetStripeSubscription(session.SubscriptionId, subscription.Items.Data[0].CurrentPeriodEnd);
-                        await unitOfWork.SaveChangesAsync(ct);
-                    }
-                }
-                break;
-            }
+                    var session = stripeEvent.Data.Object as Session;
+                    logger.LogInformation("Checkout session: id={Id}, subscription={SubId}, metadata keys={Keys}",
+                        session?.Id, session?.SubscriptionId ?? session?.Subscription?.Id,
+                        session?.Metadata != null ? string.Join(",", session.Metadata.Keys) : "null");
 
-            case Stripe.EventTypes.InvoicePaid:
-            {
-                var invoice = stripeEvent.Data.Object as Invoice;
-                var invoiceSubId = invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
-                if (invoiceSubId is not null)
-                {
-                    var user = await userRepository.FindOneTrackedAsync(
-                        u => u.StripeSubscriptionId == invoiceSubId, cancellationToken: ct);
-                    if (user is not null)
-                    {
-                        var subService = new SubscriptionService();
-                        var subscription = await subService.GetAsync(invoiceSubId, cancellationToken: ct);
-                        user.SetStripeSubscription(invoiceSubId, subscription.Items.Data[0].CurrentPeriodEnd);
-                        await unitOfWork.SaveChangesAsync(ct);
-                    }
-                }
-                break;
-            }
+                    var subscriptionId = session?.SubscriptionId ?? session?.Subscription?.Id;
 
-            case Stripe.EventTypes.CustomerSubscriptionDeleted:
-            {
-                var subscription = stripeEvent.Data.Object as Subscription;
-                if (subscription is not null)
-                {
-                    var user = await userRepository.FindOneTrackedAsync(
-                        u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
-                    if (user is not null)
+                    if (session?.Metadata?.TryGetValue("userId", out var userIdStr) == true
+                        && Guid.TryParse(userIdStr, out var uid))
                     {
-                        user.CancelSubscription();
-                        await unitOfWork.SaveChangesAsync(ct);
-                    }
-                }
-                break;
-            }
+                        var user = await userRepository.FindOneTrackedAsync(u => u.Id == uid, cancellationToken: ct);
+                        logger.LogInformation("User found: {Found}, subscriptionId: {SubId}", user is not null, subscriptionId);
 
-            case Stripe.EventTypes.CustomerSubscriptionUpdated:
-            {
-                var subscription = stripeEvent.Data.Object as Subscription;
-                if (subscription is not null)
-                {
-                    var user = await userRepository.FindOneTrackedAsync(
-                        u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
-                    if (user is not null)
+                        if (user is not null && subscriptionId is not null)
+                        {
+                            // Fetch subscription to get period end
+                            var subService = new SubscriptionService();
+                            var subscription = await subService.GetAsync(subscriptionId, cancellationToken: ct);
+                            var periodEnd = subscription.Items?.Data?.Count > 0
+                                ? subscription.Items.Data[0].CurrentPeriodEnd
+                                : DateTime.UtcNow.AddMonths(1);
+
+                            user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
+                            user.SetStripeSubscription(subscriptionId, periodEnd);
+                            await unitOfWork.SaveChangesAsync(ct);
+                            logger.LogInformation("User {UserId} upgraded to Pro, expires {Expires}", uid, periodEnd);
+                        }
+                    }
+                    else
                     {
-                        if (subscription.Status == "active")
-                            user.SetStripeSubscription(subscription.Id, subscription.Items.Data[0].CurrentPeriodEnd);
-                        else if (subscription.Status == "canceled" || subscription.Status == "unpaid")
+                        logger.LogWarning("Could not extract userId from checkout session metadata");
+                    }
+                    break;
+                }
+
+                case "invoice.paid":
+                {
+                    var invoice = stripeEvent.Data.Object as Invoice;
+                    // v50: SubscriptionId is under Parent.SubscriptionDetails
+                    var invoiceSubId = invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
+                    logger.LogInformation("Invoice paid: subId={SubId}", invoiceSubId);
+
+                    if (invoiceSubId is not null)
+                    {
+                        var user = await userRepository.FindOneTrackedAsync(
+                            u => u.StripeSubscriptionId == invoiceSubId, cancellationToken: ct);
+                        if (user is not null)
+                        {
+                            var subService = new SubscriptionService();
+                            var subscription = await subService.GetAsync(invoiceSubId, cancellationToken: ct);
+                            var periodEnd = subscription.Items?.Data?.Count > 0
+                                ? subscription.Items.Data[0].CurrentPeriodEnd
+                                : DateTime.UtcNow.AddMonths(1);
+                            user.SetStripeSubscription(invoiceSubId, periodEnd);
+                            await unitOfWork.SaveChangesAsync(ct);
+                            logger.LogInformation("User {UserId} subscription renewed, expires {Expires}", user.Id, periodEnd);
+                        }
+                    }
+                    break;
+                }
+
+                case "customer.subscription.deleted":
+                {
+                    var subscription = stripeEvent.Data.Object as Subscription;
+                    logger.LogInformation("Subscription deleted: {SubId}", subscription?.Id);
+                    if (subscription is not null)
+                    {
+                        var user = await userRepository.FindOneTrackedAsync(
+                            u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
+                        if (user is not null)
+                        {
                             user.CancelSubscription();
-                        await unitOfWork.SaveChangesAsync(ct);
+                            await unitOfWork.SaveChangesAsync(ct);
+                            logger.LogInformation("User {UserId} downgraded to Free", user.Id);
+                        }
                     }
+                    break;
                 }
-                break;
+
+                case "customer.subscription.updated":
+                {
+                    var subscription = stripeEvent.Data.Object as Subscription;
+                    logger.LogInformation("Subscription updated: {SubId}, status={Status}", subscription?.Id, subscription?.Status);
+                    if (subscription is not null)
+                    {
+                        var user = await userRepository.FindOneTrackedAsync(
+                            u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
+                        if (user is not null)
+                        {
+                            if (subscription.Status == "active")
+                            {
+                                var periodEnd = subscription.Items?.Data?.Count > 0
+                                    ? subscription.Items.Data[0].CurrentPeriodEnd
+                                    : DateTime.UtcNow.AddMonths(1);
+                                user.SetStripeSubscription(subscription.Id, periodEnd);
+                            }
+                            else if (subscription.Status == "canceled" || subscription.Status == "unpaid")
+                            {
+                                user.CancelSubscription();
+                            }
+                            await unitOfWork.SaveChangesAsync(ct);
+                        }
+                    }
+                    break;
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing Stripe webhook event {Type}", stripeEvent.Type);
+            // Still return 200 to prevent Stripe from retrying
         }
 
         return Ok();
