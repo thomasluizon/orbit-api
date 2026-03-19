@@ -29,6 +29,9 @@ public class GetDailySummaryQueryHandler(
         if (user is null)
             return Result.Failure<DailySummaryResponse>("User not found.");
 
+        if (!user.HasProAccess)
+            return Result.Failure<DailySummaryResponse>("Daily summaries are a Pro feature. Upgrade to unlock!");
+
         if (!user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>("AI summary is disabled.");
 

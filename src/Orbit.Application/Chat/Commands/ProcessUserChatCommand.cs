@@ -262,9 +262,9 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         // 5. Extract facts from conversation (non-blocking - failure doesn't affect response)
-        if (!aiMemoryEnabled)
+        if (!aiMemoryEnabled || (user is not null && !user.HasProAccess))
         {
-            logger.LogInformation("AI memory disabled for user, skipping fact extraction");
+            logger.LogInformation("AI memory disabled for user or not Pro, skipping fact extraction");
         }
         else try
         {
