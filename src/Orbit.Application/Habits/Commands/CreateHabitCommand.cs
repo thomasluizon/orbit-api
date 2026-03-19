@@ -65,9 +65,6 @@ public class CreateHabitCommandHandler(
 
         if (request.SubHabits is { Count: > 0 })
         {
-            if (user is not null && !user.HasProAccess)
-                return Result.Failure<Guid>("Sub-habits are a Pro feature. Upgrade to unlock!");
-
             foreach (var subTitle in request.SubHabits)
             {
                 var childResult = Habit.Create(
