@@ -42,6 +42,7 @@ public class ProcessUserChatCommandHandler(
     IRoutineAnalysisService routineAnalysisService,
     IAppConfigService appConfigService,
     IUserDateService userDateService,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -95,14 +96,11 @@ public class ProcessUserChatCommandHandler(
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
         // Check AI message limits
-        if (user is not null)
-        {
-            var messageLimit = user.HasProAccess ? 500 : 20;
-            if (user.AiMessagesUsedThisMonth >= messageLimit)
-            {
-                return Result.Failure<ChatResponse>("You've reached your monthly AI message limit. Upgrade to Pro for 500 messages per month.");
-            }
-        }
+        var messageGate = await payGate.CanSendAiMessage(request.UserId, cancellationToken);
+        if (messageGate.IsFailure)
+            return messageGate.ErrorCode == "PAY_GATE"
+                ? Result.PayGateFailure<ChatResponse>(messageGate.Error)
+                : Result.Failure<ChatResponse>(messageGate.Error);
 
         // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];
@@ -369,14 +367,12 @@ public class ProcessUserChatCommandHandler(
         if (string.IsNullOrWhiteSpace(action.Title))
             return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a habit.");
 
-        // Check habit limit for free users
-        var creator = await userRepository.GetByIdAsync(userId, ct);
-        if (creator is not null && !creator.HasProAccess)
-        {
-            var activeHabits = await habitRepository.FindAsync(h => h.UserId == userId && h.IsActive, ct);
-            if (activeHabits.Count >= 10)
-                return Result.Failure<(Guid? Id, string? Name)>("Habit limit reached (10). Upgrade to Pro for unlimited habits.");
-        }
+        // Check habit limit
+        var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
+        if (habitGate.IsFailure)
+            return habitGate.ErrorCode == "PAY_GATE"
+                ? Result.PayGateFailure<(Guid? Id, string? Name)>(habitGate.Error)
+                : Result.Failure<(Guid? Id, string? Name)>(habitGate.Error);
 
         var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
 
@@ -399,8 +395,11 @@ public class ProcessUserChatCommandHandler(
         // Handle inline sub-habits as child Habit entities (Pro only)
         if (action.SubHabits is { Count: > 0 })
         {
-            if (creator is not null && !creator.HasProAccess)
-                return Result.Failure<(Guid? Id, string? Name)>("Sub-habits are a Pro feature. Upgrade to unlock!");
+            var subGate = await payGate.CanCreateSubHabits(userId, ct);
+            if (subGate.IsFailure)
+                return subGate.ErrorCode == "PAY_GATE"
+                    ? Result.PayGateFailure<(Guid? Id, string? Name)>(subGate.Error)
+                    : Result.Failure<(Guid? Id, string? Name)>(subGate.Error);
             foreach (var sub in action.SubHabits)
             {
                 var childResult = Habit.Create(

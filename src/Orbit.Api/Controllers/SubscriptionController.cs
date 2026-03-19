@@ -17,6 +17,7 @@ namespace Orbit.Api.Controllers;
 public class SubscriptionController(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
+    IPayGateService payGate,
     IOptions<StripeSettings> stripeSettings,
     IGeoLocationService geoLocationService,
     ILogger<SubscriptionController> logger) : ControllerBase
@@ -126,7 +127,7 @@ public class SubscriptionController(
             user.TrialEndsAt,
             user.PlanExpiresAt,
             user.AiMessagesUsedThisMonth,
-            user.HasProAccess ? 500 : 20,
+            await payGate.GetAiMessageLimit(user.Id, ct),
             user.IsLifetimePro));
     }
 

@@ -18,6 +18,7 @@ public record GetDailySummaryQuery(
 public class GetDailySummaryQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
+    IPayGateService payGate,
     ISummaryService summaryService,
     IMemoryCache cache) : IRequestHandler<GetDailySummaryQuery, Result<DailySummaryResponse>>
 {
@@ -25,12 +26,16 @@ public class GetDailySummaryQueryHandler(
         GetDailySummaryQuery request,
         CancellationToken cancellationToken)
     {
+        // Check pay gate
+        var gateCheck = await payGate.CanUseDailySummary(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.ErrorCode == "PAY_GATE"
+                ? Result.PayGateFailure<DailySummaryResponse>(gateCheck.Error)
+                : Result.Failure<DailySummaryResponse>(gateCheck.Error);
+
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<DailySummaryResponse>("User not found.");
-
-        if (!user.HasProAccess)
-            return Result.Failure<DailySummaryResponse>("Daily summaries are a Pro feature. Upgrade to unlock!");
 
         if (!user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>("AI summary is disabled.");

@@ -63,8 +63,11 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return result.ErrorCode == "PAY_GATE"
+            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
             : BadRequest(new { error = result.Error });
     }
 }

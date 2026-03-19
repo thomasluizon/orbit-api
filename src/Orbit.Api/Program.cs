@@ -25,6 +25,7 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAppConfigService, AppConfigService>();
 builder.Services.AddScoped<IUserDateService, UserDateService>();
+builder.Services.AddScoped<IPayGateService, Orbit.Application.Common.PayGateService>();
 
 // --- Token Service ---
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
