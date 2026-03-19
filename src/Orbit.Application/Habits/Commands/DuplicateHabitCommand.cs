@@ -12,6 +12,7 @@ public record DuplicateHabitCommand(
 
 public class DuplicateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<DuplicateHabitCommand, Result<Guid>>
 {
@@ -25,6 +26,19 @@ public class DuplicateHabitCommandHandler(
         var original = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
         if (original is null)
             return Result.Failure<Guid>("Habit not found.");
+
+        // Check plan limits
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        if (user is not null && !user.HasProAccess)
+        {
+            if (allHabits.Count >= 10)
+                return Result.Failure<Guid>("You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+
+            // Duplicating a habit with children = creating sub-habits
+            var childLookupCheck = allHabits.ToLookup(h => h.ParentHabitId);
+            if (childLookupCheck[original.Id].Any())
+                return Result.Failure<Guid>("Duplicating habits with sub-habits is a Pro feature. Upgrade to unlock!");
+        }
 
         var childLookup = allHabits.ToLookup(h => h.ParentHabitId);
 

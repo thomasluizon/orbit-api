@@ -48,6 +48,6 @@ public class GetProfileQueryHandler(
             user.TrialEndsAt,
             user.PlanExpiresAt,
             user.AiMessagesUsedThisMonth,
-            user.HasProAccess ? 500 : 50);
+            user.HasProAccess ? 500 : 20);
     }
 }

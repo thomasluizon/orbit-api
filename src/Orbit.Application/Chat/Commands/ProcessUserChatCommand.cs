@@ -97,7 +97,7 @@ public class ProcessUserChatCommandHandler(
         // Check AI message limits
         if (user is not null)
         {
-            var messageLimit = user.HasProAccess ? 500 : 50;
+            var messageLimit = user.HasProAccess ? 500 : 20;
             if (user.AiMessagesUsedThisMonth >= messageLimit)
             {
                 return Result.Failure<ChatResponse>("You've reached your monthly AI message limit. Upgrade to Pro for 500 messages per month.");
@@ -369,6 +369,15 @@ public class ProcessUserChatCommandHandler(
         if (string.IsNullOrWhiteSpace(action.Title))
             return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a habit.");
 
+        // Check habit limit for free users
+        var creator = await userRepository.GetByIdAsync(userId, ct);
+        if (creator is not null && !creator.HasProAccess)
+        {
+            var activeHabits = await habitRepository.FindAsync(h => h.UserId == userId && h.IsActive, ct);
+            if (activeHabits.Count >= 10)
+                return Result.Failure<(Guid? Id, string? Name)>("Habit limit reached (10). Upgrade to Pro for unlimited habits.");
+        }
+
         var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
 
         var habitResult = Habit.Create(
@@ -387,9 +396,11 @@ public class ProcessUserChatCommandHandler(
 
         var habit = habitResult.Value;
 
-        // Handle inline sub-habits as child Habit entities
+        // Handle inline sub-habits as child Habit entities (Pro only)
         if (action.SubHabits is { Count: > 0 })
         {
+            if (creator is not null && !creator.HasProAccess)
+                return Result.Failure<(Guid? Id, string? Name)>("Sub-habits are a Pro feature. Upgrade to unlock!");
             foreach (var sub in action.SubHabits)
             {
                 var childResult = Habit.Create(

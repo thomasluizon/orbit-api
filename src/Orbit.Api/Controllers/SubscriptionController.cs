@@ -126,7 +126,7 @@ public class SubscriptionController(
             user.TrialEndsAt,
             user.PlanExpiresAt,
             user.AiMessagesUsedThisMonth,
-            user.HasProAccess ? 500 : 50,
+            user.HasProAccess ? 500 : 20,
             user.IsLifetimePro));
     }
 

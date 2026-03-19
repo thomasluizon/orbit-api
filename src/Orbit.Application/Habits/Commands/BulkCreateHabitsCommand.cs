@@ -35,6 +35,7 @@ public enum BulkItemStatus { Success, Failed }
 
 public class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
@@ -43,6 +44,26 @@ public class BulkCreateHabitsCommandHandler(
     {
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
+
+        // Check plan limits
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var isFree = user is not null && !user.HasProAccess;
+
+        if (isFree)
+        {
+            var activeHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId && h.IsActive, cancellationToken);
+            var remaining = 10 - activeHabits.Count;
+            if (remaining <= 0)
+                return Result.Failure<BulkCreateResult>("You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+
+            // Trim request to remaining capacity
+            if (request.Habits.Count > remaining)
+                return Result.Failure<BulkCreateResult>($"You can only create {remaining} more habits on the free plan. Upgrade to Pro for unlimited habits.");
+
+            // Block sub-habits for free users
+            if (request.Habits.Any(h => h.SubHabits is { Count: > 0 }))
+                return Result.Failure<BulkCreateResult>("Sub-habits are a Pro feature. Upgrade to unlock!");
+        }
 
         for (int i = 0; i < request.Habits.Count; i++)
         {
