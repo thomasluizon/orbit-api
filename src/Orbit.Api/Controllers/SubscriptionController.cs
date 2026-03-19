@@ -57,6 +57,8 @@ public class SubscriptionController(
         {
             ("yearly", true) => _settings.YearlyPriceIdBrl,
             ("yearly", false) => _settings.YearlyPriceIdUsd,
+            ("semiannual", true) => _settings.SemiAnnualPriceIdBrl,
+            ("semiannual", false) => _settings.SemiAnnualPriceIdUsd,
             ("monthly", true) => _settings.MonthlyPriceIdBrl,
             (_, false) => _settings.MonthlyPriceIdUsd,
             _ => _settings.MonthlyPriceIdBrl

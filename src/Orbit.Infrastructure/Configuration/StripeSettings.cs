@@ -8,6 +8,8 @@ public class StripeSettings
     public string WebhookSecret { get; set; } = "";
     public string MonthlyPriceIdUsd { get; set; } = "";
     public string YearlyPriceIdUsd { get; set; } = "";
+    public string SemiAnnualPriceIdUsd { get; set; } = "";
+    public string SemiAnnualPriceIdBrl { get; set; } = "";
     public string MonthlyPriceIdBrl { get; set; } = "";
     public string YearlyPriceIdBrl { get; set; } = "";
     public string SuccessUrl { get; set; } = "";
