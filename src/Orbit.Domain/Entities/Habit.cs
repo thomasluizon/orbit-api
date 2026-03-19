@@ -93,34 +93,38 @@ public class Habit : Entity
         }
         else
         {
-            // Recurring habit: advance DueDate to next occurrence
-            AdvanceDueDate();
+            // Recurring habit: advance DueDate past today
+            AdvanceDueDate(date);
         }
 
         return Result.Success(log);
     }
 
-    private void AdvanceDueDate()
+    private void AdvanceDueDate(DateOnly today)
     {
-        var next = (FrequencyUnit, FrequencyQuantity) switch
+        do
         {
-            (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
-            (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
-            (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
-            (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
-            _ => DueDate
-        };
-
-        // If Days are specified, find the next matching day
-        if (Days.Count > 0)
-        {
-            while (!Days.Contains(next.DayOfWeek))
+            var prev = DueDate;
+            DueDate = (FrequencyUnit, FrequencyQuantity) switch
             {
-                next = next.AddDays(1);
-            }
-        }
+                (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
+                (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
+                (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
+                (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
+                _ => DueDate
+            };
 
-        DueDate = next;
+            // If Days are specified, find the next matching day
+            if (Days.Count > 0)
+            {
+                while (!Days.Contains(DueDate.DayOfWeek))
+                {
+                    DueDate = DueDate.AddDays(1);
+                }
+            }
+
+            if (DueDate == prev) break;
+        } while (DueDate <= today);
     }
 
     public Result<HabitLog> Unlog(DateOnly date)
