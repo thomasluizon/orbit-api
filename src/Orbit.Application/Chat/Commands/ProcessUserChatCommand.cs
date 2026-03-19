@@ -42,6 +42,7 @@ public class ProcessUserChatCommandHandler(
     IRoutineAnalysisService routineAnalysisService,
     IAppConfigService appConfigService,
     IUserDateService userDateService,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -95,14 +96,11 @@ public class ProcessUserChatCommandHandler(
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
         // Check AI message limits
-        if (user is not null)
-        {
-            var messageLimit = user.HasProAccess ? 500 : 50;
-            if (user.AiMessagesUsedThisMonth >= messageLimit)
-            {
-                return Result.Failure<ChatResponse>("You've reached your monthly AI message limit. Upgrade to Pro for 500 messages per month.");
-            }
-        }
+        var messageGate = await payGate.CanSendAiMessage(request.UserId, cancellationToken);
+        if (messageGate.IsFailure)
+            return messageGate.ErrorCode == "PAY_GATE"
+                ? Result.PayGateFailure<ChatResponse>(messageGate.Error)
+                : Result.Failure<ChatResponse>(messageGate.Error);
 
         // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];

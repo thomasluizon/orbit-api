@@ -103,8 +103,11 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         var result = await mediator.Send(query, cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return result.ErrorCode == "PAY_GATE"
+            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
             : BadRequest(new { error = result.Error });
     }
 
@@ -135,8 +138,11 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? CreatedAtAction(nameof(GetHabits), new { id = result.Value }, result.Value)
+        if (result.IsSuccess)
+            return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, result.Value);
+
+        return result.ErrorCode == "PAY_GATE"
+            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
             : BadRequest(new { error = result.Error });
     }
 
@@ -223,8 +229,11 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return result.ErrorCode == "PAY_GATE"
+            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
             : BadRequest(new { error = result.Error });
     }
 
@@ -302,8 +311,11 @@ public class HabitsController(IMediator mediator) : ControllerBase
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? Created($"/api/habits/{result.Value}", new { id = result.Value })
+        if (result.IsSuccess)
+            return Created($"/api/habits/{result.Value}", new { id = result.Value });
+
+        return result.ErrorCode == "PAY_GATE"
+            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
             : BadRequest(new { error = result.Error });
     }
 

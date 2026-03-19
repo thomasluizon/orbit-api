@@ -24,7 +24,8 @@ public record ProfileResponse(
 public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
 
 public class GetProfileQueryHandler(
-    IGenericRepository<User> userRepository) : IRequestHandler<GetProfileQuery, ProfileResponse>
+    IGenericRepository<User> userRepository,
+    IPayGateService payGate) : IRequestHandler<GetProfileQuery, ProfileResponse>
 {
     public async Task<ProfileResponse> Handle(GetProfileQuery request, CancellationToken cancellationToken)
     {
@@ -32,6 +33,8 @@ public class GetProfileQueryHandler(
 
         if (user is null)
             throw new InvalidOperationException("User not found.");
+
+        var aiMessageLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
 
         return new ProfileResponse(
             user.Name,
@@ -48,6 +51,6 @@ public class GetProfileQueryHandler(
             user.TrialEndsAt,
             user.PlanExpiresAt,
             user.AiMessagesUsedThisMonth,
-            user.HasProAccess ? 500 : 50);
+            aiMessageLimit);
     }
 }

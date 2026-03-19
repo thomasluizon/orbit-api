@@ -21,22 +21,28 @@ public record CreateHabitCommand(
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<User> userRepository,
     IUserDateService userDateService,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
-        // Check habit limit for free users
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
-        if (user is not null && !user.HasProAccess)
+        // Check habit limit
+        var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.ErrorCode == "PAY_GATE"
+                ? Result.PayGateFailure<Guid>(gateCheck.Error)
+                : Result.Failure<Guid>(gateCheck.Error);
+
+        // Check sub-habit access if creating with sub-habits
+        if (request.SubHabits is { Count: > 0 })
         {
-            var activeHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId && h.IsActive, cancellationToken);
-            if (activeHabits.Count >= 10)
-            {
-                return Result.Failure<Guid>("You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
-            }
+            var subGateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
+            if (subGateCheck.IsFailure)
+                return subGateCheck.ErrorCode == "PAY_GATE"
+                    ? Result.PayGateFailure<Guid>(subGateCheck.Error)
+                    : Result.Failure<Guid>(subGateCheck.Error);
         }
 
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
