@@ -147,7 +147,8 @@ public class SubscriptionController(
                 stripeEvent = EventUtility.ConstructEvent(
                     json,
                     Request.Headers["Stripe-Signature"],
-                    _settings.WebhookSecret);
+                    _settings.WebhookSecret,
+                    throwOnApiVersionMismatch: false);
             }
             else
             {
