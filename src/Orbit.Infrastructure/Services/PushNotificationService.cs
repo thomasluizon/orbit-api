@@ -1,10 +1,12 @@
+using System.Net;
+using Lib.Net.Http.WebPush;
+using Lib.Net.Http.WebPush.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
-using WebPush;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -28,10 +30,15 @@ public class PushNotificationService(
 
         if (subscriptions.Count == 0) return;
 
-        var client = new WebPushClient();
-        var vapidDetails = new VapidDetails(_settings.Subject, _settings.PublicKey, _settings.PrivateKey);
+        var client = new PushServiceClient();
+        client.DefaultAuthentication = new VapidAuthentication(
+            _settings.PublicKey, _settings.PrivateKey)
+        {
+            Subject = _settings.Subject
+        };
 
         var payload = System.Text.Json.JsonSerializer.Serialize(new { title, body, url });
+        var message = new PushMessage(payload) { TimeToLive = 3600 };
 
         var staleSubscriptions = new List<Domain.Entities.PushSubscription>();
 
@@ -39,15 +46,28 @@ public class PushNotificationService(
         {
             try
             {
-                var pushSubscription = new WebPush.PushSubscription(sub.Endpoint, sub.P256dh, sub.Auth);
-                await client.SendNotificationAsync(pushSubscription, payload, vapidDetails, cancellationToken);
+                var pushSub = new Lib.Net.Http.WebPush.PushSubscription
+                {
+                    Endpoint = sub.Endpoint,
+                    Keys = new Dictionary<string, string>
+                    {
+                        ["p256dh"] = sub.P256dh,
+                        ["auth"] = sub.Auth
+                    }
+                };
+                await client.RequestPushMessageDeliveryAsync(pushSub, message, cancellationToken);
             }
-            catch (WebPushException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
+            catch (PushServiceClientException ex)
+                when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
             {
                 logger.LogInformation("Push subscription {Endpoint} is gone, removing", sub.Endpoint);
                 staleSubscriptions.Add(sub);
             }
-            catch (WebPushException ex)
+            catch (PushServiceClientException ex)
+            {
+                logger.LogWarning("Failed to send push to {Endpoint}: {Status}", sub.Endpoint, ex.StatusCode);
+            }
+            catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to send push notification to {Endpoint}", sub.Endpoint);
             }
