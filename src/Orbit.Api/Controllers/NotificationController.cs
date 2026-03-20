@@ -1,8 +1,13 @@
+using System.Net;
+using Lib.Net.Http.WebPush;
+using Lib.Net.Http.WebPush.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
@@ -11,7 +16,8 @@ namespace Orbit.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 public class NotificationController(
-    OrbitDbContext dbContext) : ControllerBase
+    OrbitDbContext dbContext,
+    ILogger<NotificationController> logger) : ControllerBase
 {
     public record SubscribeRequest(string Endpoint, string P256dh, string Auth);
     public record NotificationItem(Guid Id, string Title, string Body, string? Url, Guid? HabitId, bool IsRead, DateTime CreatedAtUtc);
@@ -100,7 +106,7 @@ public class NotificationController(
             dbContext.PushSubscriptions.Remove(existing);
         }
 
-        var result = PushSubscription.Create(userId, request.Endpoint, request.P256dh, request.Auth);
+        var result = Domain.Entities.PushSubscription.Create(userId, request.Endpoint, request.P256dh, request.Auth);
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 
@@ -112,25 +118,65 @@ public class NotificationController(
 
     [HttpPost("test-push")]
     public async Task<IActionResult> TestPush(
-        [FromServices] Domain.Interfaces.IPushNotificationService pushService,
+        [FromServices] IOptions<VapidSettings> vapidSettings,
         CancellationToken ct)
     {
         var userId = HttpContext.GetUserId();
+        var settings = vapidSettings.Value;
 
-        var subscriptionCount = await dbContext.PushSubscriptions
-            .CountAsync(s => s.UserId == userId, ct);
+        var subscriptions = await dbContext.PushSubscriptions
+            .Where(s => s.UserId == userId)
+            .ToListAsync(ct);
 
-        if (subscriptionCount == 0)
+        if (subscriptions.Count == 0)
             return BadRequest(new { error = "No push subscriptions found for this user" });
 
-        await pushService.SendToUserAsync(
-            userId,
-            "Orbit Test",
-            "Push notifications are working!",
-            "/",
-            ct);
+        var client = new PushServiceClient();
+        client.DefaultAuthentication = new VapidAuthentication(
+            settings.PublicKey, settings.PrivateKey)
+        {
+            Subject = settings.Subject
+        };
 
-        return Ok(new { subscriptionCount });
+        var payload = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            title = "Orbit Test",
+            body = "Push notifications are working!",
+            url = "/"
+        });
+        var message = new PushMessage(payload) { TimeToLive = 60 };
+
+        var results = new List<object>();
+        foreach (var sub in subscriptions)
+        {
+            try
+            {
+                var pushSub = new Lib.Net.Http.WebPush.PushSubscription
+                {
+                    Endpoint = sub.Endpoint,
+                    Keys = new Dictionary<string, string>
+                    {
+                        ["p256dh"] = sub.P256dh,
+                        ["auth"] = sub.Auth
+                    }
+                };
+                await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
+                logger.LogInformation("Test push sent to {Endpoint}", sub.Endpoint);
+                results.Add(new { endpoint = sub.Endpoint[..Math.Min(60, sub.Endpoint.Length)] + "...", status = "sent" });
+            }
+            catch (PushServiceClientException ex)
+            {
+                logger.LogWarning("Test push failed for {Endpoint}: {Status} {Message}", sub.Endpoint, ex.StatusCode, ex.Message);
+                results.Add(new { endpoint = sub.Endpoint[..Math.Min(60, sub.Endpoint.Length)] + "...", status = "failed", error = $"{ex.StatusCode}: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Test push failed for {Endpoint}", sub.Endpoint);
+                results.Add(new { endpoint = sub.Endpoint[..Math.Min(60, sub.Endpoint.Length)] + "...", status = "failed", error = ex.Message });
+            }
+        }
+
+        return Ok(new { subscriptionCount = subscriptions.Count, results });
     }
 
     [HttpPost("unsubscribe")]
