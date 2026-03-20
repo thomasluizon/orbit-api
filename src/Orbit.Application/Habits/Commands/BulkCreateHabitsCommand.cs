@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -46,9 +47,7 @@ public class BulkCreateHabitsCommandHandler(
         var parentCount = request.Habits.Count;
         var habitGate = await payGate.CanCreateHabits(request.UserId, parentCount, cancellationToken);
         if (habitGate.IsFailure)
-            return habitGate.ErrorCode == "PAY_GATE"
-                ? Result.PayGateFailure<BulkCreateResult>(habitGate.Error)
-                : Result.Failure<BulkCreateResult>(habitGate.Error);
+            return habitGate.PropagateError<BulkCreateResult>();
 
         // Check sub-habit access if any items have sub-habits
         var hasSubHabits = request.Habits.Any(h => h.SubHabits is { Count: > 0 });
@@ -56,9 +55,7 @@ public class BulkCreateHabitsCommandHandler(
         {
             var subGate = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
             if (subGate.IsFailure)
-                return subGate.ErrorCode == "PAY_GATE"
-                    ? Result.PayGateFailure<BulkCreateResult>(subGate.Error)
-                    : Result.Failure<BulkCreateResult>(subGate.Error);
+                return subGate.PropagateError<BulkCreateResult>();
         }
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -103,6 +100,7 @@ public class BulkCreateHabitsCommandHandler(
                     await habitRepository.AddAsync(parentHabit, cancellationToken);
 
                     // Create child habits if any
+                    var subHabitFailed = false;
                     if (item.SubHabits is { Count: > 0 })
                     {
                         foreach (var subItem in item.SubHabits)
@@ -129,13 +127,16 @@ public class BulkCreateHabitsCommandHandler(
                                     Title: item.Title,
                                     Error: $"Sub-habit '{subItem.Title}' failed: {childResult.Error}",
                                     Field: "SubHabits"));
-                                goto NextItem; // Skip to next top-level item
+                                subHabitFailed = true;
+                                break;
                             }
 
                             // Explicitly add child habit
                             await habitRepository.AddAsync(childResult.Value, cancellationToken);
                         }
                     }
+
+                    if (subHabitFailed) continue;
 
                     // Success
                     results.Add(new BulkCreateItemResult(
@@ -152,8 +153,6 @@ public class BulkCreateHabitsCommandHandler(
                         Title: item.Title,
                         Error: ex.Message));
                 }
-
-                NextItem: ; // Label for goto
             }
 
             // Save all successful entities and commit
@@ -166,12 +165,7 @@ public class BulkCreateHabitsCommandHandler(
             throw;
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(new BulkCreateResult(results));
     }

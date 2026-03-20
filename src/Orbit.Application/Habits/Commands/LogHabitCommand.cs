@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -27,10 +28,10 @@ public class LogHabitCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure<Guid>("Habit not found.");
+            return Result.Failure<Guid>(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure<Guid>("Habit does not belong to this user.");
+            return Result.Failure<Guid>(ErrorMessages.HabitNotOwned);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
@@ -49,12 +50,7 @@ public class LogHabitCommandHandler(
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
-            for (int i = -1; i <= 1; i++)
-            {
-                cache.Remove($"summary:{habit.UserId}:{utcToday.AddDays(i):yyyy-MM-dd}:en");
-                cache.Remove($"summary:{habit.UserId}:{utcToday.AddDays(i):yyyy-MM-dd}:pt-BR");
-            }
+            CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
             return Result.Success(unlogResult.Value.Id);
         }
@@ -71,12 +67,7 @@ public class LogHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{habit.UserId}:{utcDate.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{habit.UserId}:{utcDate.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
         return Result.Success(logResult.Value.Id);
     }

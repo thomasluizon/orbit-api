@@ -13,16 +13,12 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         RuleFor(x => x.HabitId)
             .NotEmpty();
 
-        RuleFor(x => x.Title)
-            .NotEmpty()
-            .MaximumLength(200);
+        SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
             .When(x => x.FrequencyQuantity is not null);
 
-        RuleFor(x => x.Days)
-            .Must((command, days) => days is null || days.Count == 0 || command.FrequencyQuantity == 1)
-            .WithMessage("Days can only be specified when frequency quantity is 1");
+        SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
     }
 }

@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -75,12 +76,7 @@ public class BulkDeleteHabitsCommandHandler(
         // Save all successful deletions once
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(new BulkDeleteResult(results));
     }

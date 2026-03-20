@@ -1,8 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace Orbit.Application.Habits.Queries;
 
@@ -27,7 +28,7 @@ public class GetHabitLogsQueryHandler(
 
         var found = habit.FirstOrDefault();
         if (found is null)
-            return Result.Failure<IReadOnlyList<HabitLogResponse>>("Habit not found.");
+            return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound);
 
         var logs = found.Logs
             .OrderByDescending(l => l.Date)

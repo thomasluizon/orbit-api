@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -23,11 +24,11 @@ public class GetHabitMetricsQueryHandler(
 
         var habit = habits.FirstOrDefault();
         if (habit is null)
-            return Result.Failure<HabitMetrics>("Habit not found.");
+            return Result.Failure<HabitMetrics>(ErrorMessages.HabitNotFound);
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<HabitMetrics>("User not found.");
+            return Result.Failure<HabitMetrics>(ErrorMessages.UserNotFound);
 
         var today = GetUserToday(user);
         var logDates = habit.Logs.Select(l => l.Date).Distinct().ToHashSet();

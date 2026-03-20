@@ -53,18 +53,23 @@ public class SubscriptionController(
         var countryCode = await geoLocationService.GetCountryCodeAsync(ip, ct);
         var isBrazil = countryCode == "BR";
 
-        var priceId = (request.Interval?.ToLower(), isBrazil) switch
+        var allowedIntervals = new[] { "monthly", "semiannual", "yearly" };
+        var interval = request.Interval?.ToLower();
+        if (string.IsNullOrEmpty(interval) || !allowedIntervals.Contains(interval))
+        {
+            return BadRequest(new { error = "Invalid billing interval" });
+        }
+
+        var priceId = (interval, isBrazil) switch
         {
             ("yearly", true) => _settings.YearlyPriceIdBrl,
             ("yearly", false) => _settings.YearlyPriceIdUsd,
             ("semiannual", true) => _settings.SemiAnnualPriceIdBrl,
             ("semiannual", false) => _settings.SemiAnnualPriceIdUsd,
             ("monthly", true) => _settings.MonthlyPriceIdBrl,
-            (_, false) => _settings.MonthlyPriceIdUsd,
-            _ => _settings.MonthlyPriceIdBrl
+            ("monthly", false) => _settings.MonthlyPriceIdUsd,
+            _ => _settings.MonthlyPriceIdBrl // unreachable after validation
         };
-
-        StripeConfiguration.ApiKey = _settings.SecretKey;
 
         if (string.IsNullOrEmpty(user.StripeCustomerId))
         {
@@ -104,8 +109,6 @@ public class SubscriptionController(
         if (string.IsNullOrEmpty(user.StripeCustomerId))
             return BadRequest(new { error = "No subscription found" });
 
-        StripeConfiguration.ApiKey = _settings.SecretKey;
-
         var portalService = new Stripe.BillingPortal.SessionService();
         var session = await portalService.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
         {
@@ -138,26 +141,23 @@ public class SubscriptionController(
     [HttpPost("webhook")]
     public async Task<IActionResult> HandleWebhook(CancellationToken ct)
     {
-        StripeConfiguration.ApiKey = _settings.SecretKey;
-
         var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(ct);
         logger.LogInformation("Stripe webhook received, body length: {Length}", json.Length);
+
+        if (string.IsNullOrEmpty(_settings.WebhookSecret))
+        {
+            logger.LogCritical("Stripe WebhookSecret is not configured -- rejecting webhook");
+            return StatusCode(500);
+        }
 
         Event stripeEvent;
         try
         {
-            if (!string.IsNullOrEmpty(_settings.WebhookSecret))
-            {
-                stripeEvent = EventUtility.ConstructEvent(
-                    json,
-                    Request.Headers["Stripe-Signature"],
-                    _settings.WebhookSecret,
-                    throwOnApiVersionMismatch: false);
-            }
-            else
-            {
-                stripeEvent = EventUtility.ParseEvent(json);
-            }
+            stripeEvent = EventUtility.ConstructEvent(
+                json,
+                Request.Headers["Stripe-Signature"],
+                _settings.WebhookSecret,
+                throwOnApiVersionMismatch: false);
         }
         catch (StripeException ex)
         {

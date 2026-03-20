@@ -52,6 +52,11 @@ builder.Services.AddScoped<IEmailService, ResendEmailService>();
 // --- Stripe ---
 builder.Services.Configure<StripeSettings>(
     builder.Configuration.GetSection(StripeSettings.SectionName));
+var stripeKey = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>()?.SecretKey;
+if (!string.IsNullOrEmpty(stripeKey))
+{
+    Stripe.StripeConfiguration.ApiKey = stripeKey;
+}
 
 // --- Push Notifications (VAPID + FCM) ---
 builder.Services.Configure<VapidSettings>(
@@ -172,10 +177,16 @@ builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
+              .WithHeaders("Authorization", "Content-Type")
+              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH")
               .AllowCredentials();
     });
+});
+
+// --- Request Size Limit ---
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10MB global default
 });
 
 // --- Controllers ---
@@ -205,6 +216,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // --- Pipeline ---
+app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
@@ -219,7 +231,7 @@ if (app.Environment.IsDevelopment())
 app.UseExceptionHandler();
 app.UseCors();
 
-if (!app.Environment.IsProduction())
+if (app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
 }

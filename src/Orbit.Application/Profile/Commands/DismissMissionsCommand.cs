@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,7 +19,7 @@ public class DismissMissionsCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure("User not found.");
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         user.DismissMissions();
 

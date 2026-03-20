@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -20,7 +21,7 @@ public class DeleteTagCommandHandler(
             cancellationToken: cancellationToken);
 
         if (tag is null)
-            return Result.Failure("Tag not found.");
+            return Result.Failure(ErrorMessages.TagNotFound);
 
         tagRepository.Remove(tag);
         await unitOfWork.SaveChangesAsync(cancellationToken);

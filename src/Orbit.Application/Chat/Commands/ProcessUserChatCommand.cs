@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -98,9 +99,7 @@ public class ProcessUserChatCommandHandler(
         // Check AI message limits
         var messageGate = await payGate.CanSendAiMessage(request.UserId, cancellationToken);
         if (messageGate.IsFailure)
-            return messageGate.ErrorCode == "PAY_GATE"
-                ? Result.PayGateFailure<ChatResponse>(messageGate.Error)
-                : Result.Failure<ChatResponse>(messageGate.Error);
+            return messageGate.PropagateError<ChatResponse>();
 
         // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];
@@ -370,9 +369,7 @@ public class ProcessUserChatCommandHandler(
         // Check habit limit
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
         if (habitGate.IsFailure)
-            return habitGate.ErrorCode == "PAY_GATE"
-                ? Result.PayGateFailure<(Guid? Id, string? Name)>(habitGate.Error)
-                : Result.Failure<(Guid? Id, string? Name)>(habitGate.Error);
+            return habitGate.PropagateError<(Guid? Id, string? Name)>();
 
         var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
 
@@ -397,9 +394,7 @@ public class ProcessUserChatCommandHandler(
         {
             var subGate = await payGate.CanCreateSubHabits(userId, ct);
             if (subGate.IsFailure)
-                return subGate.ErrorCode == "PAY_GATE"
-                    ? Result.PayGateFailure<(Guid? Id, string? Name)>(subGate.Error)
-                    : Result.Failure<(Guid? Id, string? Name)>(subGate.Error);
+                return subGate.PropagateError<(Guid? Id, string? Name)>();
             foreach (var sub in action.SubHabits)
             {
                 var childResult = Habit.Create(

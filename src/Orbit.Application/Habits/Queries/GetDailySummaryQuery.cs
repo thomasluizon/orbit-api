@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -29,13 +30,11 @@ public class GetDailySummaryQueryHandler(
         // Check pay gate
         var gateCheck = await payGate.CanUseDailySummary(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
-            return gateCheck.ErrorCode == "PAY_GATE"
-                ? Result.PayGateFailure<DailySummaryResponse>(gateCheck.Error)
-                : Result.Failure<DailySummaryResponse>(gateCheck.Error);
+            return gateCheck.PropagateError<DailySummaryResponse>();
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DailySummaryResponse>("User not found.");
+            return Result.Failure<DailySummaryResponse>(ErrorMessages.UserNotFound);
 
         if (!user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>("AI summary is disabled.");
