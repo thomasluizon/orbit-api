@@ -95,9 +95,14 @@ public class ReminderSchedulerService(
                 "/",
                 ct);
 
-            // Record sent reminder
+            // Record sent reminder + create in-app notification
             var sentReminder = SentReminder.Create(habit.Id, userToday);
             await dbContext.SentReminders.AddAsync(sentReminder, ct);
+
+            var notification = Notification.Create(
+                habit.UserId, habit.Title, minutesText, "/", habit.Id);
+            await dbContext.Notifications.AddAsync(notification, ct);
+
             await dbContext.SaveChangesAsync(ct);
 
             logger.LogInformation("Sent reminder for habit {HabitId} to user {UserId}", habit.Id, habit.UserId);

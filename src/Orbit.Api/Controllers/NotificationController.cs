@@ -14,6 +14,48 @@ public class NotificationController(
     OrbitDbContext dbContext) : ControllerBase
 {
     public record SubscribeRequest(string Endpoint, string P256dh, string Auth);
+    public record NotificationItem(Guid Id, string Title, string Body, string? Url, Guid? HabitId, bool IsRead, DateTime CreatedAtUtc);
+
+    [HttpGet]
+    public async Task<IActionResult> GetNotifications(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var notifications = await dbContext.Notifications
+            .Where(n => n.UserId == userId)
+            .OrderByDescending(n => n.CreatedAtUtc)
+            .Take(50)
+            .Select(n => new NotificationItem(n.Id, n.Title, n.Body, n.Url, n.HabitId, n.IsRead, n.CreatedAtUtc))
+            .ToListAsync(ct);
+
+        var unreadCount = await dbContext.Notifications
+            .CountAsync(n => n.UserId == userId && !n.IsRead, ct);
+
+        return Ok(new { items = notifications, unreadCount });
+    }
+
+    [HttpPut("{id:guid}/read")]
+    public async Task<IActionResult> MarkAsRead(Guid id, CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var notification = await dbContext.Notifications
+            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, ct);
+
+        if (notification is null) return NotFound();
+
+        notification.MarkAsRead();
+        await dbContext.SaveChangesAsync(ct);
+        return Ok();
+    }
+
+    [HttpPut("read-all")]
+    public async Task<IActionResult> MarkAllAsRead(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        await dbContext.Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
+        return Ok();
+    }
 
     [HttpPost("subscribe")]
     public async Task<IActionResult> Subscribe(
