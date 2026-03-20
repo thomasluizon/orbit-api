@@ -14,6 +14,7 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
+    public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
     public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -80,6 +81,11 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         modelBuilder.Entity<SentReminder>(entity =>
         {
             entity.HasIndex(r => new { r.HabitId, r.Date }).IsUnique();
+        });
+
+        modelBuilder.Entity<SentSlipAlert>(entity =>
+        {
+            entity.HasIndex(a => new { a.HabitId, a.WeekStart }).IsUnique();
         });
 
         modelBuilder.Entity<Notification>(entity =>

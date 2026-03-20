@@ -21,7 +21,8 @@ public record UpdateHabitCommand(
     DateOnly? DueDate = null,
     TimeOnly? DueTime = null,
     bool? ReminderEnabled = null,
-    int? ReminderMinutesBefore = null) : IRequest<Result>;
+    int? ReminderMinutesBefore = null,
+    bool? SlipAlertEnabled = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -49,7 +50,8 @@ public class UpdateHabitCommandHandler(
             request.DueDate,
             dueTime: request.DueTime,
             reminderEnabled: request.ReminderEnabled,
-            reminderMinutesBefore: request.ReminderMinutesBefore);
+            reminderMinutesBefore: request.ReminderMinutesBefore,
+            slipAlertEnabled: request.SlipAlertEnabled);
 
         if (result.IsFailure)
             return result;

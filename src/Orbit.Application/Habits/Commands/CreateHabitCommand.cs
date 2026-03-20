@@ -21,6 +21,7 @@ public record CreateHabitCommand(
     TimeOnly? DueTime = null,
     bool ReminderEnabled = false,
     int ReminderMinutesBefore = 15,
+    bool SlipAlertEnabled = false,
     IReadOnlyList<Guid>? TagIds = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
@@ -59,7 +60,8 @@ public class CreateHabitCommandHandler(
             dueDate,
             dueTime: request.DueTime,
             reminderEnabled: request.ReminderEnabled,
-            reminderMinutesBefore: request.ReminderMinutesBefore);
+            reminderMinutesBefore: request.ReminderMinutesBefore,
+            slipAlertEnabled: request.SlipAlertEnabled);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

@@ -17,6 +17,7 @@ public class Habit : Entity
     public TimeOnly? DueTime { get; private set; }
     public bool ReminderEnabled { get; private set; }
     public int ReminderMinutesBefore { get; private set; } = 15;
+    public bool SlipAlertEnabled { get; private set; }
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
@@ -46,7 +47,8 @@ public class Habit : Entity
         TimeOnly? dueTime = null,
         Guid? parentHabitId = null,
         bool reminderEnabled = false,
-        int reminderMinutesBefore = 15)
+        int reminderMinutesBefore = 15,
+        bool slipAlertEnabled = false)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -74,6 +76,7 @@ public class Habit : Entity
             ParentHabitId = parentHabitId,
             ReminderEnabled = reminderEnabled,
             ReminderMinutesBefore = reminderMinutesBefore,
+            SlipAlertEnabled = slipAlertEnabled,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -166,7 +169,8 @@ public class Habit : Entity
         DateOnly? dueDate,
         TimeOnly? dueTime = null,
         bool? reminderEnabled = null,
-        int? reminderMinutesBefore = null)
+        int? reminderMinutesBefore = null,
+        bool? slipAlertEnabled = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
@@ -193,6 +197,8 @@ public class Habit : Entity
             ReminderEnabled = reminderEnabled.Value;
         if (reminderMinutesBefore.HasValue)
             ReminderMinutesBefore = reminderMinutesBefore.Value;
+        if (slipAlertEnabled.HasValue)
+            SlipAlertEnabled = slipAlertEnabled.Value;
 
         return Result.Success();
     }
