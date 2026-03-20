@@ -83,10 +83,15 @@ public class ReminderSchedulerService(
                 .AnyAsync(r => r.HabitId == habit.Id && r.Date == userToday, ct);
             if (alreadySent) continue;
 
-            // Send push notification
-            var minutesText = habit.ReminderMinutesBefore > 0
-                ? $"Due in {habit.ReminderMinutesBefore} minutes"
-                : "Due now";
+            // Send push notification (translated)
+            var lang = user.Language ?? "en";
+            var minutesText = (lang.StartsWith("pt"), habit.ReminderMinutesBefore > 0) switch
+            {
+                (true, true) => $"Em {habit.ReminderMinutesBefore} minutos",
+                (true, false) => "Agora",
+                (false, true) => $"Due in {habit.ReminderMinutesBefore} minutes",
+                (false, false) => "Due now"
+            };
 
             await pushService.SendToUserAsync(
                 habit.UserId,
