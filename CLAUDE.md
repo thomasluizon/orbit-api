@@ -12,6 +12,8 @@
 - AI: Gemini 2.5 Flash (primary), Ollama phi3.5:3.8b (fallback)
 - BCrypt for password hashing
 - Scalar for API docs (dev only)
+- Firebase Admin SDK 3.5.0 (FCM push notifications)
+- Lib.Net.Http.WebPush 3.3.1 (VAPID web push)
 
 ## Architecture
 ```
@@ -125,8 +127,22 @@ docker compose up -d --build
 - `POST /api/habits/{id}/duplicate` - Duplicate a habit
 - `GET /api/habits/summary?dateFrom=&dateTo=&includeOverdue=&language=` - AI-generated daily summary (cached, invalidated on habit changes)
 
+### Notifications & Push
+- `GET /api/notification` - List notifications (last 50 + unread count)
+- `PUT /api/notification/{id}/read` - Mark as read
+- `PUT /api/notification/read-all` - Mark all as read
+- `DELETE /api/notification/{id}` - Delete notification
+- `DELETE /api/notification/all` - Delete all
+- `POST /api/notification/subscribe` - Register push subscription (FCM token or Web Push keys)
+- `POST /api/notification/unsubscribe` - Remove subscription
+- `POST /api/notification/test-push` - Send test notification (uses PushNotificationService, supports both FCM and Web Push)
+
+### Auth
+- `POST /api/auth/send-code` - Send verification code via email
+- `POST /api/auth/verify-code` - Verify code and login
+- `POST /api/auth/google` - Google OAuth (Supabase access token)
+
 ### Other
-- `POST /api/auth/register`, `POST /api/auth/login`
 - `POST /api/chat` (multipart, supports image upload)
 - `GET/PUT /api/profile`, `PUT /api/profile/timezone`
 - `PUT /api/profile/onboarding` - Mark onboarding complete (no request body, one-way flag, idempotent). `HasCompletedOnboarding` defaults to `false` in migration so existing users see the wizard.
@@ -151,6 +167,25 @@ The frontend (orbit-ui) consumes this via BFF and never computes schedules.
 ## Deployment
 - **Hosting:** Render (Docker, auto-deploy on push to main)
 - **Database:** Supabase PostgreSQL (session pooler)
-- **Auth:** Supabase Auth for Google OAuth, custom JWT for email/password
+- **Auth:** Supabase Auth for Google OAuth, custom email/code verification via Resend
 - **Domain:** api.useorbit.org
-- **Env vars:** Configured in Render dashboard (connection string, JWT, Supabase, Gemini, CORS)
+- **Firebase:** Project orbit-11d4a, FCM for native push notifications
+- **Env vars:** Configured in Render dashboard (connection string, JWT, Supabase, Gemini, CORS, Firebase, Stripe, Vapid, Resend)
+- **Observability:** Render built-in logs + metrics. Production log level: Information (Microsoft.AspNetCore/EF Core: Warning)
+
+## Push Notifications
+- **Dual delivery:** `PushNotificationService` routes by subscription type -- `p256dh == "fcm"` sends via Firebase Admin SDK, otherwise via Lib.Net.Http.WebPush (VAPID)
+- **FCM:** Firebase Admin SDK initialized in Program.cs from `Firebase:CredentialsJson` env var. Handles `Unregistered`/`InvalidArgument` as stale tokens.
+- **Web Push:** VAPID auth with keys from `Vapid:PublicKey`/`PrivateKey`/`Subject`. Handles `410 Gone`/`404 NotFound` as stale subscriptions.
+- **Scheduler:** `ReminderSchedulerService` (BackgroundService) runs every 1 minute, checks habits with `ReminderEnabled && DueTime != null`, sends push + creates in-app notification. `SentReminder` table prevents duplicates per (habitId, date).
+- **Test endpoint:** `POST /api/notification/test-push` uses PushNotificationService directly for diagnostic push.
+
+## Logging Convention
+- All controllers inject `ILogger<T>` and log business events
+- Format: `logger.LogInformation("Action {Property}", value)` -- structured properties in PascalCase, English only
+- Auth: log code sends, login success/failure, Google auth
+- Habits: log create, delete, bulk operations
+- Email: log send success/failure with status codes (ResendEmailService)
+- Payments: log checkout creation
+- Validation: log failed fields and endpoint path
+- Profile: log timezone/language changes
