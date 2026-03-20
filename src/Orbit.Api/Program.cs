@@ -12,6 +12,10 @@ using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -78,6 +82,55 @@ else
             Credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromFile(firebaseCredPath)
         });
     }
+}
+
+// --- OpenTelemetry (Grafana Cloud) ---
+var otelEndpoint = builder.Configuration["Grafana:OtlpEndpoint"];
+if (!string.IsNullOrEmpty(otelEndpoint))
+{
+    var otelInstanceId = builder.Configuration["Grafana:InstanceId"] ?? "";
+    var otelToken = builder.Configuration["Grafana:ApiToken"] ?? "";
+    var otelAuth = Convert.ToBase64String(
+        System.Text.Encoding.UTF8.GetBytes($"{otelInstanceId}:{otelToken}"));
+
+    var resourceBuilder = ResourceBuilder.CreateDefault()
+        .AddService("orbit-api", serviceVersion: "1.0.0");
+
+    builder.Services.AddOpenTelemetry()
+        .WithTracing(tracing => tracing
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation()
+            .AddOtlpExporter(o =>
+            {
+                o.Endpoint = new Uri(otelEndpoint);
+                o.Headers = $"Authorization=Basic {otelAuth}";
+                o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+            }))
+        .WithMetrics(metrics => metrics
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddOtlpExporter(o =>
+            {
+                o.Endpoint = new Uri(otelEndpoint);
+                o.Headers = $"Authorization=Basic {otelAuth}";
+                o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+            }));
+
+    builder.Logging.AddOpenTelemetry(logging =>
+    {
+        logging.SetResourceBuilder(resourceBuilder);
+        logging.IncludeScopes = true;
+        logging.IncludeFormattedMessage = true;
+        logging.AddOtlpExporter(o =>
+        {
+            o.Endpoint = new Uri(otelEndpoint);
+            o.Headers = $"Authorization=Basic {otelAuth}";
+            o.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+        });
+    });
 }
 
 // --- Image Validation ---
