@@ -4,6 +4,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using System.Linq.Expressions;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -23,6 +24,8 @@ public record UpdateHabitCommand(
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<SentReminder> sentReminderRepository,
+    IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>
 {
@@ -49,6 +52,17 @@ public class UpdateHabitCommandHandler(
 
         if (result.IsFailure)
             return result;
+
+        // If dueTime changed, clear today's sent reminder so it re-triggers
+        if (request.DueTime.HasValue)
+        {
+            var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+            var existing = await sentReminderRepository.FindOneTrackedAsync(
+                r => r.HabitId == request.HabitId && r.Date == userToday,
+                cancellationToken: cancellationToken);
+            if (existing is not null)
+                sentReminderRepository.Remove(existing);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
