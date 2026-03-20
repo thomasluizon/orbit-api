@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -25,7 +26,7 @@ public class DuplicateHabitCommandHandler(
 
         var original = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
         if (original is null)
-            return Result.Failure<Guid>("Habit not found.");
+            return Result.Failure<Guid>(ErrorMessages.HabitNotFound);
 
         // Check plan limits
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
@@ -54,12 +55,7 @@ public class DuplicateHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(rootCopy.Value.Id);
     }

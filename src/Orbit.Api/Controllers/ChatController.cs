@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.Chat.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -44,6 +45,11 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
         List<ChatHistoryMessage>? chatHistory = null;
         if (!string.IsNullOrWhiteSpace(history))
         {
+            if (history.Length > 50_000)
+            {
+                return BadRequest(new { error = "Chat history too large" });
+            }
+
             try
             {
                 chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, new JsonSerializerOptions
@@ -66,11 +72,6 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
-            return Ok(result.Value);
-
-        return result.ErrorCode == "PAY_GATE"
-            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 }

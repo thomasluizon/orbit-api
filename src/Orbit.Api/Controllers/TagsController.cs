@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class TagsController(IMediator mediator) : ControllerBase
+public class TagsController(IMediator mediator, ILogger<TagsController> logger) : ControllerBase
 {
     public record CreateTagRequest(string Name, string Color);
     public record UpdateTagRequest(string Name, string Color);
@@ -32,9 +32,12 @@ public class TagsController(IMediator mediator) : ControllerBase
         var command = new CreateTagCommand(HttpContext.GetUserId(), request.Name, request.Color);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? Created($"/api/tags/{result.Value}", new { id = result.Value })
-            : BadRequest(new { error = result.Error });
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Tag created {TagId} by user {UserId}", result.Value, HttpContext.GetUserId());
+            return Created($"/api/tags/{result.Value}", new { id = result.Value });
+        }
+        return BadRequest(new { error = result.Error });
     }
 
     [HttpPut("{id:guid}")]
@@ -46,7 +49,12 @@ public class TagsController(IMediator mediator) : ControllerBase
         var command = new UpdateTagCommand(HttpContext.GetUserId(), id, request.Name, request.Color);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Tag updated {TagId} by user {UserId}", id, HttpContext.GetUserId());
+            return NoContent();
+        }
+        return BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("{id:guid}")]
@@ -55,7 +63,12 @@ public class TagsController(IMediator mediator) : ControllerBase
         var command = new DeleteTagCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Tag deleted {TagId} by user {UserId}", id, HttpContext.GetUserId());
+            return NoContent();
+        }
+        return BadRequest(new { error = result.Error });
     }
 
     [HttpPut("{habitId:guid}/assign")]

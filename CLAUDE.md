@@ -19,9 +19,13 @@
 ```
 src/
   Orbit.Api/           - Controllers, middleware, DI config, Program.cs
+    Extensions/        - ResultActionResultExtensions (PayGate-aware IActionResult)
+    Middleware/         - SecurityHeadersMiddleware, ValidationExceptionHandler
   Orbit.Application/   - Commands, Queries, Validators, DTOs (CQRS)
-    Common/            - Shared models (PaginatedResponse<T>)
+    Common/            - PaginatedResponse<T>, ErrorMessages, AppConstants,
+                         CacheInvalidationHelper, ResultExtensions, PayGateService
     Habits/Services/   - HabitScheduleService (schedule calculation logic)
+    Habits/Validators/ - SharedHabitRules (shared Create/Update validation)
   Orbit.Domain/        - Entities, Enums, Interfaces, Value Objects
   Orbit.Infrastructure/- DbContext, Repositories, AI services, JWT, Migrations
 tests/
@@ -59,6 +63,22 @@ docker compose up -d --build
 - All endpoints except /health and auth require JWT Bearer token
 - Schedule calculations (frequency, days, intervals) live in `HabitScheduleService` -- never on the frontend
 - **Timezone rule:** All user-facing dates MUST use `IUserDateService.GetUserTodayAsync(userId)` to get the user's timezone-aware "today". NEVER use `DateOnly.FromDateTime(DateTime.UtcNow)` for user-facing logic. `DateTime.UtcNow` is only acceptable for: `CreatedAtUtc` timestamps in entity factories, and cache key generation. The user sets their timezone in their profile (`User.TimeZone`). If no timezone is set, it falls back to UTC.
+
+### DRY Patterns (Application Layer)
+- **Error messages:** Use `ErrorMessages.UserNotFound`, `ErrorMessages.HabitNotFound`, etc. from `Common/ErrorMessages.cs`. Never hardcode "not found" strings.
+- **Magic numbers:** Use `AppConstants.MaxSubHabits`, `AppConstants.MaxUserFacts`, etc. from `Common/AppConstants.cs`. Never inline limits.
+- **Cache invalidation:** Use `CacheInvalidationHelper.InvalidateSummaryCache(cache, userId)` after any habit mutation. Never manually write the 6-line cache removal loop.
+- **PayGate propagation:** Use `result.PropagateError<T>()` from `Common/ResultExtensions.cs` to propagate PayGate failures. Never manually check `ErrorCode == "PAY_GATE"` with ternary.
+- **PayGate controller responses:** Use `result.ToPayGateAwareResult(v => Ok(v))` from `Extensions/ResultActionResultExtensions.cs` in controllers. Never manually write the 403/PAY_GATE response block.
+- **Shared validation:** `SharedHabitRules` in `Habits/Validators/` has `AddTitleRules()` and `AddDaysRules()` shared between Create and Update validators.
+
+### Security
+- **Stripe API key:** Set once globally in `Program.cs` at startup. Never set `StripeConfiguration.ApiKey` per-request in controllers.
+- **Webhook verification:** Stripe webhooks MUST verify signatures. Reject if `WebhookSecret` is not configured.
+- **Security headers:** `SecurityHeadersMiddleware` adds nosniff, DENY, referrer-policy, XSS headers to all responses.
+- **CORS:** Restricted to explicit methods (GET/POST/PUT/DELETE/PATCH) and headers (Authorization, Content-Type). No `AllowAnyHeader()`/`AllowAnyMethod()`.
+- **Request size:** 10MB global Kestrel limit. Chat endpoint has its own 20MB multipart limit.
+- **Input validation:** Validate Stripe checkout intervals against whitelist. Validate chat history size before JSON deserialization.
 
 ## Working Style
 
@@ -180,12 +200,54 @@ The frontend (orbit-ui) consumes this via BFF and never computes schedules.
 - **Scheduler:** `ReminderSchedulerService` (BackgroundService) runs every 1 minute, checks habits with `ReminderEnabled && DueTime != null`, sends push + creates in-app notification. `SentReminder` table prevents duplicates per (habitId, date).
 - **Test endpoint:** `POST /api/notification/test-push` uses PushNotificationService directly for diagnostic push.
 
+## Git Workflow
+
+Branch protection is enforced on `main`. No direct pushes, no force pushes, no branch deletion.
+
+### Branching Convention
+
+- `feature/xxx` -- new features
+- `fix/xxx` -- bugfixes
+- `chore/xxx` -- maintenance, config, docs
+
+### Merge Strategy
+
+- **Squash merge only** -- keeps `main` history linear and clean
+- Squash commit uses PR title + PR body
+- Head branches auto-delete after merge
+
+### Workflow
+
+```bash
+# 1. Create branch from main
+git checkout main && git pull
+git checkout -b feature/my-change
+
+# 2. Work and commit
+git add <files> && git commit -m "description"
+
+# 3. Push and create PR
+git push -u origin feature/my-change
+gh pr create --fill
+
+# 4. Merge via squash
+gh pr merge --squash
+```
+
+### Rules
+
+- Never push directly to `main` -- always go through a PR
+- Never force push to `main`
+- Keep PRs focused: one feature or fix per PR
+- Branch names should be descriptive: `feature/add-tags-to-habits`, `fix/login-redirect`
+
 ## Logging Convention
 - All controllers inject `ILogger<T>` and log business events
 - Format: `logger.LogInformation("Action {Property}", value)` -- structured properties in PascalCase, English only
 - Auth: log code sends, login success/failure, Google auth
 - Habits: log create, delete, bulk operations
+- Tags: log create, update, delete operations
 - Email: log send success/failure with status codes (ResendEmailService)
-- Payments: log checkout creation
+- Payments: log checkout creation, webhook events
 - Validation: log failed fields and endpoint path
 - Profile: log timezone/language changes

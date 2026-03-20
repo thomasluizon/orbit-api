@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,20 +19,15 @@ public class DeleteHabitCommandHandler(
         var habit = await habitRepository.GetByIdAsync(request.HabitId, cancellationToken);
 
         if (habit is null)
-            return Result.Failure("Habit not found.");
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure("You don't have permission to delete this habit.");
+            return Result.Failure(ErrorMessages.NoPermission);
 
         habitRepository.Remove(habit);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success();
     }

@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -35,18 +36,14 @@ public class CreateHabitCommandHandler(
         // Check habit limit
         var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
         if (gateCheck.IsFailure)
-            return gateCheck.ErrorCode == "PAY_GATE"
-                ? Result.PayGateFailure<Guid>(gateCheck.Error)
-                : Result.Failure<Guid>(gateCheck.Error);
+            return gateCheck.PropagateError<Guid>();
 
         // Check sub-habit access if creating with sub-habits
         if (request.SubHabits is { Count: > 0 })
         {
             var subGateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
             if (subGateCheck.IsFailure)
-                return subGateCheck.ErrorCode == "PAY_GATE"
-                    ? Result.PayGateFailure<Guid>(subGateCheck.Error)
-                    : Result.Failure<Guid>(subGateCheck.Error);
+                return subGateCheck.PropagateError<Guid>();
         }
 
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -101,12 +98,7 @@ public class CreateHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(habit.Id);
     }

@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,7 +19,7 @@ public class DeleteUserFactCommandHandler(
             cancellationToken: cancellationToken);
 
         if (fact is null)
-            return Result.Failure("Fact not found.");
+            return Result.Failure(ErrorMessages.FactNotFound);
 
         fact.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);

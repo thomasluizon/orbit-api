@@ -1,4 +1,5 @@
 using FluentValidation;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Habits.Validators;
@@ -10,26 +11,22 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
         RuleFor(x => x.UserId)
             .NotEmpty();
 
-        RuleFor(x => x.Title)
-            .NotEmpty()
-            .MaximumLength(200);
+        SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
             .When(x => x.FrequencyQuantity is not null);
 
-        RuleFor(x => x.Days)
-            .Must((command, days) => days is null || days.Count == 0 || command.FrequencyQuantity == 1)
-            .WithMessage("Days can only be specified when frequency quantity is 1");
+        SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
 
         RuleFor(x => x.SubHabits)
-            .Must(subs => subs is null || subs.Count <= 20)
-            .WithMessage("A habit can have at most 20 sub-habits");
+            .Must(subs => subs is null || subs.Count <= AppConstants.MaxSubHabits)
+            .WithMessage($"A habit can have at most {AppConstants.MaxSubHabits} sub-habits");
 
         RuleForEach(x => x.SubHabits)
             .NotEmpty()
             .WithMessage("Sub-habit title must not be empty")
-            .MaximumLength(200)
-            .WithMessage("Sub-habit title must not exceed 200 characters");
+            .MaximumLength(AppConstants.MaxHabitTitleLength)
+            .WithMessage($"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters");
     }
 }

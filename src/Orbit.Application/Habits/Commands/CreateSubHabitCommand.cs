@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -25,16 +26,14 @@ public class CreateSubHabitCommandHandler(
         // Sub-habits are a Pro feature
         var gateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
-            return gateCheck.ErrorCode == "PAY_GATE"
-                ? Result.PayGateFailure<Guid>(gateCheck.Error)
-                : Result.Failure<Guid>(gateCheck.Error);
+            return gateCheck.PropagateError<Guid>();
 
         var parent = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.ParentHabitId && h.UserId == request.UserId,
             cancellationToken: cancellationToken);
 
         if (parent is null)
-            return Result.Failure<Guid>("Parent habit not found.");
+            return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound);
 
         // Enforce max nesting depth from config
         var maxDepth = await appConfigService.GetAsync("MaxHabitDepth", 5, cancellationToken);
@@ -61,12 +60,7 @@ public class CreateSubHabitCommandHandler(
         await habitRepository.AddAsync(childResult.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        for (int i = -1; i <= 1; i++)
-        {
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{request.UserId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
-        }
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(childResult.Value.Id);
     }

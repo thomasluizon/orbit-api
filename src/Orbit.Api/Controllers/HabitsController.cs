@@ -107,13 +107,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             language);
 
         var result = await mediator.Send(query, cancellationToken);
-
-        if (result.IsSuccess)
-            return Ok(result.Value);
-
-        return result.ErrorCode == "PAY_GATE"
-            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("{id:guid}")]
@@ -152,9 +146,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, result.Value);
         }
 
-        return result.ErrorCode == "PAY_GATE"
-            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, v));
     }
 
     [HttpPost("{id:guid}/log")]
@@ -252,9 +244,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             return Ok(result.Value);
         }
 
-        return result.ErrorCode == "PAY_GATE"
-            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpDelete("bulk")]
@@ -334,9 +324,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         if (result.IsSuccess)
             return Created($"/api/habits/{result.Value}", new { id = result.Value });
 
-        return result.ErrorCode == "PAY_GATE"
-            ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Created($"/api/habits/{v}", new { id = v }));
     }
 
     private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemRequest request)

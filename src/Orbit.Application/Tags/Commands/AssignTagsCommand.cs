@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -30,7 +31,7 @@ public class AssignTagsCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure("Habit not found.");
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         // Load requested tags
         var tags = await tagRepository.FindAsync(

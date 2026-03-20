@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -33,7 +34,7 @@ public class GetHabitByIdQueryHandler(
 
         var habit = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
         if (habit is null)
-            return Result.Failure<HabitDetailResponse>("Habit not found.");
+            return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
 
