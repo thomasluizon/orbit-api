@@ -53,11 +53,32 @@ builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.Configure<StripeSettings>(
     builder.Configuration.GetSection(StripeSettings.SectionName));
 
-// --- Push Notifications (VAPID) ---
+// --- Push Notifications (VAPID + FCM) ---
 builder.Services.Configure<VapidSettings>(
     builder.Configuration.GetSection(VapidSettings.SectionName));
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddHostedService<ReminderSchedulerService>();
+
+// Initialize Firebase Admin SDK for FCM
+var firebaseCredJson = builder.Configuration["Firebase:CredentialsJson"];
+if (!string.IsNullOrEmpty(firebaseCredJson))
+{
+    FirebaseAdmin.FirebaseApp.Create(new FirebaseAdmin.AppOptions
+    {
+        Credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromJson(firebaseCredJson)
+    });
+}
+else
+{
+    var firebaseCredPath = builder.Configuration["Firebase:CredentialsPath"];
+    if (!string.IsNullOrEmpty(firebaseCredPath) && File.Exists(firebaseCredPath))
+    {
+        FirebaseAdmin.FirebaseApp.Create(new FirebaseAdmin.AppOptions
+        {
+            Credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromFile(firebaseCredPath)
+        });
+    }
+}
 
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
