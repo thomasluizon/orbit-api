@@ -164,6 +164,12 @@ public class NotificationController(
                 logger.LogInformation("Test push sent to {Endpoint}", sub.Endpoint);
                 results.Add(new { endpoint = sub.Endpoint[..Math.Min(60, sub.Endpoint.Length)] + "...", status = "sent" });
             }
+            catch (PushServiceClientException ex) when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                logger.LogWarning("Test push: subscription {Endpoint} is gone, removing", sub.Endpoint);
+                dbContext.PushSubscriptions.Remove(sub);
+                results.Add(new { endpoint = sub.Endpoint[..Math.Min(60, sub.Endpoint.Length)] + "...", status = "failed", error = $"{ex.StatusCode}: subscription expired - toggle push off/on to fix" });
+            }
             catch (PushServiceClientException ex)
             {
                 logger.LogWarning("Test push failed for {Endpoint}: {Status} {Message}", sub.Endpoint, ex.StatusCode, ex.Message);
@@ -176,6 +182,7 @@ public class NotificationController(
             }
         }
 
+        await dbContext.SaveChangesAsync(ct);
         return Ok(new { subscriptionCount = subscriptions.Count, results });
     }
 
