@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
@@ -8,7 +9,8 @@ namespace Orbit.Infrastructure.Services;
 
 public class ResendEmailService(
     IHttpClientFactory httpClientFactory,
-    IOptions<ResendSettings> options) : IEmailService
+    IOptions<ResendSettings> options,
+    ILogger<ResendEmailService> logger) : IEmailService
 {
     private readonly ResendSettings _settings = options.Value;
 
@@ -111,7 +113,23 @@ public class ResendEmailService(
             Encoding.UTF8,
             "application/json");
 
-        await client.PostAsync("/emails", content, cancellationToken);
+        try
+        {
+            var response = await client.PostAsync("/emails", content, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                logger.LogInformation("Email sent to {To} subject={Subject}", to, subject);
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                logger.LogError("Email failed to {To} status={Status} body={Body}", to, response.StatusCode, body);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Email send exception to {To}", to);
+        }
     }
 
     private static string BuildVerificationCodeEmailHtml(string code, bool isPtBr)

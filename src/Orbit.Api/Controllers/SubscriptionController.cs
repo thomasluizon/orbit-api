@@ -90,6 +90,7 @@ public class SubscriptionController(
             Metadata = new Dictionary<string, string> { { "userId", userId.ToString() } }
         }, cancellationToken: ct);
 
+        logger.LogInformation("Checkout created for user {UserId} price={PriceId} country={Country}", userId, priceId, countryCode);
         return Ok(new CheckoutResponse(session.Url));
     }
 

@@ -11,7 +11,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class HabitsController(IMediator mediator) : ControllerBase
+public class HabitsController(IMediator mediator, ILogger<HabitsController> logger) : ControllerBase
 {
     public record CreateHabitRequest(
         string Title,
@@ -145,7 +145,10 @@ public class HabitsController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
+        {
+            logger.LogInformation("Habit created {HabitId} by user {UserId}", result.Value, HttpContext.GetUserId());
             return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, result.Value);
+        }
 
         return result.ErrorCode == "PAY_GATE"
             ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })
@@ -203,9 +206,13 @@ public class HabitsController(IMediator mediator) : ControllerBase
         var command = new DeleteHabitCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Habit deleted {HabitId} by user {UserId}", id, HttpContext.GetUserId());
+            return NoContent();
+        }
+
+        return BadRequest(new { error = result.Error });
     }
 
     [HttpGet("{id:guid}/logs")]
@@ -238,7 +245,10 @@ public class HabitsController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
+        {
+            logger.LogInformation("Bulk created {Count} habits for user {UserId}", request.Habits.Count, HttpContext.GetUserId());
             return Ok(result.Value);
+        }
 
         return result.ErrorCode == "PAY_GATE"
             ? StatusCode(403, new { error = result.Error, code = "PAY_GATE" })

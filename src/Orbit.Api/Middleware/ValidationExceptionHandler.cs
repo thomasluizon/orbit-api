@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Diagnostics;
 
 namespace Orbit.Api.Middleware;
 
-internal sealed class ValidationExceptionHandler : IExceptionHandler
+internal sealed class ValidationExceptionHandler(ILogger<ValidationExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -22,6 +22,10 @@ internal sealed class ValidationExceptionHandler : IExceptionHandler
             .ToDictionary(
                 g => g.Key,
                 g => g.Select(e => e.ErrorMessage).ToArray());
+
+        logger.LogWarning("Validation failed on {Path}: {Fields}",
+            httpContext.Request.Path,
+            string.Join(", ", errors.Keys));
 
         var response = new
         {

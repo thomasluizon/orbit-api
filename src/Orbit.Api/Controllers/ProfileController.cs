@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class ProfileController(IMediator mediator) : ControllerBase
+public class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
     public record SetAiMemoryRequest(bool Enabled);
@@ -32,6 +32,9 @@ public class ProfileController(IMediator mediator) : ControllerBase
     {
         var command = new SetTimezoneCommand(HttpContext.GetUserId(), request.TimeZone);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Timezone changed to {Timezone} for user {UserId}", request.TimeZone, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()
@@ -71,6 +74,9 @@ public class ProfileController(IMediator mediator) : ControllerBase
     {
         var command = new SetLanguageCommand(HttpContext.GetUserId(), request.Language);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Language changed to {Language} for user {UserId}", request.Language, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()

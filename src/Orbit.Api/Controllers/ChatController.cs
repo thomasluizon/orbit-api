@@ -12,7 +12,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class ChatController(IMediator mediator, IImageValidationService imageValidation) : ControllerBase
+public class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
 {
     [HttpPost]
     [RequestFormLimits(MultipartBodyLengthLimit = 20_971_520)] // 20MB
@@ -29,7 +29,10 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
         {
             var validationResult = await imageValidation.ValidateAsync(image);
             if (validationResult.IsFailure)
+            {
+                logger.LogWarning("Chat image validation failed: {Error}", validationResult.Error);
                 return BadRequest(new { error = validationResult.Error });
+            }
 
             using var ms = new MemoryStream();
             await image.CopyToAsync(ms, cancellationToken);
@@ -48,9 +51,9 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
                     PropertyNameCaseInsensitive = true
                 });
             }
-            catch
+            catch (JsonException ex)
             {
-                // Invalid history format, ignore
+                logger.LogWarning("Chat history parse failed: {Error}", ex.Message);
             }
         }
 
