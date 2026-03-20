@@ -18,6 +18,7 @@ public class User : Entity
     public bool AiSummaryEnabled { get; private set; } = true;
     public bool HasCompletedOnboarding { get; private set; } = false;
     public bool HasDismissedMissions { get; private set; } = false;
+    public string? CompletedTours { get; private set; }
     public string? Language { get; private set; }
     public UserPlan Plan { get; private set; } = UserPlan.Free;
     public string? StripeCustomerId { get; private set; }
@@ -92,6 +93,15 @@ public class User : Entity
     public void CompleteOnboarding() => HasCompletedOnboarding = true;
 
     public void DismissMissions() => HasDismissedMissions = true;
+
+    public void MarkTourCompleted(string pageName)
+    {
+        var tours = string.IsNullOrEmpty(CompletedTours)
+            ? new HashSet<string>()
+            : new HashSet<string>(CompletedTours.Split(','));
+        tours.Add(pageName);
+        CompletedTours = string.Join(",", tours);
+    }
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
 

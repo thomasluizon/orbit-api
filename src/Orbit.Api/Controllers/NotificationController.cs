@@ -57,6 +57,31 @@ public class NotificationController(
         return Ok();
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var notification = await dbContext.Notifications
+            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, ct);
+
+        if (notification is not null)
+        {
+            dbContext.Notifications.Remove(notification);
+            await dbContext.SaveChangesAsync(ct);
+        }
+        return Ok();
+    }
+
+    [HttpDelete("all")]
+    public async Task<IActionResult> DeleteAll(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        await dbContext.Notifications
+            .Where(n => n.UserId == userId)
+            .ExecuteDeleteAsync(ct);
+        return Ok();
+    }
+
     [HttpPost("subscribe")]
     public async Task<IActionResult> Subscribe(
         [FromBody] SubscribeRequest request,

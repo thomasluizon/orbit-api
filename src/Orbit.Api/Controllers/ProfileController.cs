@@ -92,4 +92,16 @@ public class ProfileController(IMediator mediator) : ControllerBase
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
+
+    public record MarkTourRequest(string PageName);
+
+    [HttpPut("tour")]
+    public async Task<IActionResult> MarkTourCompleted(
+        [FromBody] MarkTourRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new MarkTourCompletedCommand(HttpContext.GetUserId(), request.PageName);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+    }
 }
