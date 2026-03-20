@@ -17,7 +17,9 @@ public record UpdateHabitCommand(
     IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
     DateOnly? DueDate = null,
-    TimeOnly? DueTime = null) : IRequest<Result>;
+    TimeOnly? DueTime = null,
+    bool? ReminderEnabled = null,
+    int? ReminderMinutesBefore = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -41,7 +43,9 @@ public class UpdateHabitCommandHandler(
             request.Days,
             request.IsBadHabit,
             request.DueDate,
-            dueTime: request.DueTime);
+            dueTime: request.DueTime,
+            reminderEnabled: request.ReminderEnabled,
+            reminderMinutesBefore: request.ReminderMinutesBefore);
 
         if (result.IsFailure)
             return result;

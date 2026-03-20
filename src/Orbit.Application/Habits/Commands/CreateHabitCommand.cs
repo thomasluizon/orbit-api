@@ -17,7 +17,9 @@ public record CreateHabitCommand(
     bool IsBadHabit = false,
     IReadOnlyList<string>? SubHabits = null,
     DateOnly? DueDate = null,
-    TimeOnly? DueTime = null) : IRequest<Result<Guid>>;
+    TimeOnly? DueTime = null,
+    bool ReminderEnabled = false,
+    int ReminderMinutesBefore = 15) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -56,7 +58,9 @@ public class CreateHabitCommandHandler(
             request.Days,
             request.IsBadHabit,
             dueDate,
-            dueTime: request.DueTime);
+            dueTime: request.DueTime,
+            reminderEnabled: request.ReminderEnabled,
+            reminderMinutesBefore: request.ReminderMinutesBefore);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

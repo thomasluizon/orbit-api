@@ -57,6 +57,7 @@ builder.Services.Configure<StripeSettings>(
 builder.Services.Configure<VapidSettings>(
     builder.Configuration.GetSection(VapidSettings.SectionName));
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddHostedService<ReminderSchedulerService>();
 
 // --- Image Validation ---
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();

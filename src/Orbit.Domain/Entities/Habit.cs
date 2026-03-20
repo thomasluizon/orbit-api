@@ -15,6 +15,8 @@ public class Habit : Entity
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
     public TimeOnly? DueTime { get; private set; }
+    public bool ReminderEnabled { get; private set; }
+    public int ReminderMinutesBefore { get; private set; } = 15;
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
@@ -42,7 +44,9 @@ public class Habit : Entity
         bool isBadHabit = false,
         DateOnly? dueDate = null,
         TimeOnly? dueTime = null,
-        Guid? parentHabitId = null)
+        Guid? parentHabitId = null,
+        bool reminderEnabled = false,
+        int reminderMinutesBefore = 15)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -68,6 +72,8 @@ public class Habit : Entity
             DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             DueTime = dueTime,
             ParentHabitId = parentHabitId,
+            ReminderEnabled = reminderEnabled,
+            ReminderMinutesBefore = reminderMinutesBefore,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -158,7 +164,9 @@ public class Habit : Entity
         IReadOnlyList<System.DayOfWeek>? days,
         bool isBadHabit,
         DateOnly? dueDate,
-        TimeOnly? dueTime = null)
+        TimeOnly? dueTime = null,
+        bool? reminderEnabled = null,
+        int? reminderMinutesBefore = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
@@ -180,6 +188,11 @@ public class Habit : Entity
             DueDate = dueDate.Value;
 
         DueTime = dueTime;
+
+        if (reminderEnabled.HasValue)
+            ReminderEnabled = reminderEnabled.Value;
+        if (reminderMinutesBefore.HasValue)
+            ReminderMinutesBefore = reminderMinutesBefore.Value;
 
         return Result.Success();
     }
