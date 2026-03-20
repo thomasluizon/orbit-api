@@ -172,6 +172,7 @@ public static class SystemPromptBuilder
                         : $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString()!.ToLower()}s";
 
                 var badHabitLabel = habit.IsBadHabit ? " | BAD HABIT (tracking to avoid)" : "";
+                var slipAlertLabel = habit.SlipAlertEnabled ? " | SLIP ALERTS ON" : "";
                 var completedLabel = habit.IsCompleted ? " | COMPLETED" : "";
                 var tagsLabel = habit.Tags.Count > 0 ? $" | Tags: [{string.Join(", ", habit.Tags.Select(t => t.Name))}]" : "";
 
@@ -188,7 +189,7 @@ public static class SystemPromptBuilder
                 }
 
                 var dueTimeLabel = habit.DueTime.HasValue ? $" at {habit.DueTime.Value:HH:mm}" : "";
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{badHabitLabel}{completedLabel}{tagsLabel}{metricsLabel}");
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{badHabitLabel}{slipAlertLabel}{completedLabel}{tagsLabel}{metricsLabel}");
 
                 foreach (var child in habit.Children)
                 {
@@ -347,7 +348,7 @@ public static class SystemPromptBuilder
             { "actions": [{ "type": "CreateHabit", "title": "Workout Plan", "frequencyUnit": "Day", "frequencyQuantity": 1, "subHabits": [{ "title": "Gym", "days": ["Monday","Wednesday","Friday"] }, { "title": "Cardio", "days": ["Tuesday","Thursday"] }], "dueDate": "2026-02-08" }], "aiMessage": "Created your Workout Plan!" }
 
             CreateHabit (bad habit) -- "I want to stop smoking"
-            { "actions": [{ "type": "CreateHabit", "title": "Smoking", "frequencyUnit": "Day", "frequencyQuantity": 1, "isBadHabit": true, "dueDate": "2026-02-08" }], "aiMessage": "Tracking smoking as a bad habit. Log each slip-up so we can see your progress!" }
+            { "actions": [{ "type": "CreateHabit", "title": "Smoking", "frequencyUnit": "Day", "frequencyQuantity": 1, "isBadHabit": true, "slipAlertEnabled": true, "dueDate": "2026-02-08" }], "aiMessage": "Tracking smoking as a bad habit with slip alerts enabled. Log each slip-up and I'll send you motivational nudges before your usual slip times!" }
 
             CreateHabit (one-time task) -- "Buy eggs tomorrow"
             { "actions": [{ "type": "CreateHabit", "title": "Buy Eggs", "dueDate": "2026-02-09" }], "aiMessage": "Got it, buy eggs tomorrow!" }
@@ -389,7 +390,7 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), dueTime (optional - HH:mm 24h format, e.g. "15:00" for 3pm, ONLY include when user mentions a specific time), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), dueTime (optional - HH:mm 24h format, e.g. "15:00" for 3pm, ONLY include when user mentions a specific time), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), slipAlertEnabled (optional, defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
             LogHabit: type, habitId, note (optional - include if user shares context/feelings)
             SuggestBreakdown: type, title (parent habit name), description (optional), frequencyUnit, frequencyQuantity, dueDate, suggestedSubHabits (array of habit objects with type: "CreateHabit", title, description, frequencyUnit, frequencyQuantity, dueDate)
             UpdateHabit: type, habitId (REQUIRED - ID of existing habit), title (optional - new title), description (optional), frequencyUnit (optional), frequencyQuantity (optional), days (optional), isBadHabit (optional), dueDate (optional - new due date YYYY-MM-DD), dueTime (optional - HH:mm 24h format to set or change time). Only include fields that are changing.

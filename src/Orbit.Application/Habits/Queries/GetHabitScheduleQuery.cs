@@ -27,6 +27,7 @@ public record HabitScheduleItem(
     bool IsOverdue,
     bool ReminderEnabled,
     int ReminderMinutesBefore,
+    bool SlipAlertEnabled,
     IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children);
 
@@ -178,6 +179,7 @@ public class GetHabitScheduleQueryHandler(
             isOverdue,
             h.ReminderEnabled,
             h.ReminderMinutesBefore,
+            h.SlipAlertEnabled,
             MapTags(h),
             MapChildren(h.Id, lookup, dateFrom, dateTo));
 

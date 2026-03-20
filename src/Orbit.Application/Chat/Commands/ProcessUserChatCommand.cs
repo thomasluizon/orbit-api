@@ -373,6 +373,9 @@ public class ProcessUserChatCommandHandler(
 
         var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
 
+        var isBadHabit = action.IsBadHabit ?? false;
+        var slipAlertEnabled = action.SlipAlertEnabled ?? isBadHabit;
+
         var habitResult = Habit.Create(
             userId,
             action.Title,
@@ -380,9 +383,10 @@ public class ProcessUserChatCommandHandler(
             action.FrequencyQuantity,
             action.Description,
             days: action.Days,
-            isBadHabit: action.IsBadHabit ?? false,
+            isBadHabit: isBadHabit,
             dueDate: dueDate,
-            dueTime: action.DueTime);
+            dueTime: action.DueTime,
+            slipAlertEnabled: slipAlertEnabled);
 
         if (habitResult.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);

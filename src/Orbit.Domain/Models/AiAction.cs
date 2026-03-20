@@ -12,6 +12,7 @@ public record AiAction
     public int? FrequencyQuantity { get; init; }
     public List<System.DayOfWeek>? Days { get; init; }
     public bool? IsBadHabit { get; init; }
+    public bool? SlipAlertEnabled { get; init; }
     public DateOnly? DueDate { get; init; }
     public TimeOnly? DueTime { get; init; }
     public string? Note { get; init; }
