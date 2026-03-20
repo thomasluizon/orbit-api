@@ -24,7 +24,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         DateOnly? DueDate = null,
         TimeOnly? DueTime = null,
         bool ReminderEnabled = false,
-        int ReminderMinutesBefore = 15);
+        int ReminderMinutesBefore = 15,
+        IReadOnlyList<Guid>? TagIds = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -140,7 +141,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.DueDate,
             request.DueTime,
             request.ReminderEnabled,
-            request.ReminderMinutesBefore);
+            request.ReminderMinutesBefore,
+            request.TagIds);
 
         var result = await mediator.Send(command, cancellationToken);
 

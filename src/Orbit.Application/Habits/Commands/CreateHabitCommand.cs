@@ -19,10 +19,12 @@ public record CreateHabitCommand(
     DateOnly? DueDate = null,
     TimeOnly? DueTime = null,
     bool ReminderEnabled = false,
-    int ReminderMinutesBefore = 15) : IRequest<Result<Guid>>;
+    int ReminderMinutesBefore = 15,
+    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
@@ -87,6 +89,16 @@ public class CreateHabitCommandHandler(
         }
 
         await habitRepository.AddAsync(habit, cancellationToken);
+
+        if (request.TagIds is { Count: > 0 })
+        {
+            var tags = await tagRepository.FindAsync(
+                t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,
+                cancellationToken);
+            foreach (var tag in tags)
+                habit.AddTag(tag);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
