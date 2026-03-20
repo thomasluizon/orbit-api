@@ -56,6 +56,7 @@ public class PushNotificationService(
                     }
                 };
                 await client.RequestPushMessageDeliveryAsync(pushSub, message, cancellationToken);
+                logger.LogInformation("Push sent to {Endpoint}", sub.Endpoint);
             }
             catch (PushServiceClientException ex)
                 when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
@@ -65,7 +66,7 @@ public class PushNotificationService(
             }
             catch (PushServiceClientException ex)
             {
-                logger.LogWarning("Failed to send push to {Endpoint}: {Status}", sub.Endpoint, ex.StatusCode);
+                logger.LogWarning("Failed to send push to {Endpoint}: {Status} {Message}", sub.Endpoint, ex.StatusCode, ex.Message);
             }
             catch (Exception ex)
             {

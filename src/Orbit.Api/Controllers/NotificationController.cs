@@ -110,6 +110,29 @@ public class NotificationController(
         return Ok();
     }
 
+    [HttpPost("test-push")]
+    public async Task<IActionResult> TestPush(
+        [FromServices] Domain.Interfaces.IPushNotificationService pushService,
+        CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+
+        var subscriptionCount = await dbContext.PushSubscriptions
+            .CountAsync(s => s.UserId == userId, ct);
+
+        if (subscriptionCount == 0)
+            return BadRequest(new { error = "No push subscriptions found for this user" });
+
+        await pushService.SendToUserAsync(
+            userId,
+            "Orbit Test",
+            "Push notifications are working!",
+            "/",
+            ct);
+
+        return Ok(new { subscriptionCount });
+    }
+
     [HttpPost("unsubscribe")]
     public async Task<IActionResult> Unsubscribe(
         [FromBody] SubscribeRequest request,
