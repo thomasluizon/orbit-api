@@ -113,7 +113,7 @@ public class Habit : Entity
         return Result.Success(log);
     }
 
-    private void AdvanceDueDate(DateOnly today)
+    public void AdvanceDueDate(DateOnly today)
     {
         do
         {

@@ -62,10 +62,25 @@ public record GetHabitScheduleQuery(
     int PageSize = 50) : IRequest<PaginatedResponse<HabitScheduleItem>>;
 
 public class GetHabitScheduleQueryHandler(
-    IGenericRepository<Habit> habitRepository) : IRequestHandler<GetHabitScheduleQuery, PaginatedResponse<HabitScheduleItem>>
+    IGenericRepository<Habit> habitRepository,
+    IUserDateService userDateService,
+    IUnitOfWork unitOfWork) : IRequestHandler<GetHabitScheduleQuery, PaginatedResponse<HabitScheduleItem>>
 {
     public async Task<PaginatedResponse<HabitScheduleItem>> Handle(GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
+        // Advance stale bad habit DueDates so they show on the correct next scheduled day
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var staleBadHabits = await habitRepository.FindTrackedAsync(
+            h => h.UserId == request.UserId && h.IsBadHabit && h.FrequencyUnit != null && h.DueDate < today,
+            cancellationToken);
+
+        if (staleBadHabits.Count > 0)
+        {
+            foreach (var habit in staleBadHabits)
+                habit.AdvanceDueDate(today);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
@@ -127,7 +142,7 @@ public class GetHabitScheduleQueryHandler(
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, request.DateFrom, request.DateTo);
             var isOverdue = false;
 
-            if (request.IncludeOverdue && !habit.IsCompleted && habit.DueDate < request.DateFrom)
+            if (request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && habit.DueDate < request.DateFrom)
             {
                 isOverdue = true;
             }
@@ -193,7 +208,7 @@ public class GetHabitScheduleQueryHandler(
         {
             if (HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count > 0)
                 return true;
-            if (!child.IsCompleted && child.DueDate < dateFrom)
+            if (!child.IsCompleted && !child.IsBadHabit && child.DueDate < dateFrom)
                 return true;
             if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo))
                 return true;
@@ -205,7 +220,7 @@ public class GetHabitScheduleQueryHandler(
         lookup[parentId]
             .Where(c => HabitScheduleService.GetScheduledDates(c, dateFrom, dateTo).Count > 0
                 || c.IsCompleted
-                || (!c.IsCompleted && c.DueDate < dateFrom)
+                || (!c.IsCompleted && !c.IsBadHabit && c.DueDate < dateFrom)
                 || HasAnyDescendantDue(c.Id, lookup, dateFrom, dateTo))
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
