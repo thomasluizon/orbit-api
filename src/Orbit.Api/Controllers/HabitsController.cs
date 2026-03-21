@@ -117,6 +117,35 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpGet("retrospective")]
+    public async Task<IActionResult> GetRetrospective(
+        [FromQuery] string period,
+        [FromQuery] string language = "en",
+        CancellationToken cancellationToken = default)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var days = period.ToLowerInvariant() switch
+        {
+            "week" => 7,
+            "month" => 30,
+            "quarter" => 90,
+            "semester" => 180,
+            "year" => 365,
+            _ => 7
+        };
+        var dateFrom = today.AddDays(-days);
+
+        var query = new GetRetrospectiveQuery(
+            HttpContext.GetUserId(),
+            dateFrom,
+            today,
+            period,
+            language);
+
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
     {
