@@ -7,6 +7,15 @@ namespace Orbit.Infrastructure.Services;
 
 public static class SystemPromptBuilder
 {
+    private record PromptContext(
+        IReadOnlyList<Habit> ActiveHabits,
+        IReadOnlyList<UserFact> UserFacts,
+        bool HasImage,
+        IReadOnlyList<RoutinePattern>? RoutinePatterns,
+        IReadOnlyList<Tag>? UserTags,
+        DateOnly? UserToday,
+        IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics);
+
     public static string BuildSystemPrompt(
         IReadOnlyList<Habit> activeHabits,
         IReadOnlyList<UserFact> userFacts,
@@ -16,8 +25,24 @@ public static class SystemPromptBuilder
         DateOnly? userToday = null,
         IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
     {
+        var ctx = new PromptContext(activeHabits, userFacts, hasImage, routinePatterns, userTags, userToday, habitMetrics);
         var sb = new StringBuilder();
 
+        AppendCoreIdentity(sb);
+        AppendActiveHabits(sb, ctx);
+        AppendUserTags(sb, ctx);
+        AppendUserFacts(sb, ctx);
+        AppendRoutinePatterns(sb, ctx);
+        AppendTodayDate(sb, ctx);
+        AppendImageInstructions(sb, ctx);
+        AppendHabitCount(sb, ctx);
+        AppendResponseSchema(sb);
+
+        return sb.ToString();
+    }
+
+    private static void AppendCoreIdentity(StringBuilder sb)
+    {
         sb.AppendLine("""
             # You are Orbit AI - A Personal Habit Tracking Assistant
 
@@ -33,6 +58,7 @@ public static class SystemPromptBuilder
             - **Log habit completions** with optional notes (e.g., "I ran today, felt great!")
             - **Update habits** -- change title, frequency, due date, or any property (e.g., "move my gym to tomorrow", "rename running to jogging")
             - **Delete habits** when asked (e.g., "delete my running habit", "remove all bad habits")
+            - **Add sub-habits** to existing parent habits (e.g., "add stretching under my Workout Plan")
             - **Suggest habit breakdowns** for complex goals (e.g., "help me get fit" -> suggests Exercise parent with Running, Stretching, Gym sub-habits)
             - **Manage tags** on habits (assign, remove, create new tags when the user asks)
             - **Proactively suggest** complementary habits that pair well with what the user is creating
@@ -154,18 +180,22 @@ public static class SystemPromptBuilder
             35. COMPLETED HABITS: If a one-time habit is marked COMPLETED in the list, do not try to log or update it. Inform the user it's already done.
             36. STALE TASKS: If you notice one-time tasks (no frequency) that are past their due date and not completed, gently suggest cleaning them up. Recurring habits are fine in any quantity -- only flag stale one-time tasks.
             37. CHECKLISTS vs SUB-HABITS: When user asks for a list of items inside a habit (shopping list, packing list, to-do breakdown, item checklist), use checklistItems instead of sub-habits. Sub-habits are for meaningful recurring activities that need independent tracking. Checklists are for simple item lists that get checked off.
+            38. CREATE SUB-HABIT: Use CreateSubHabit to add a sub-habit under an EXISTING parent from the Active Habits list. Requires habitId (the parent's exact ID) and title. The sub-habit inherits the parent's frequency and scheduling. Do NOT confuse with CreateHabit+subHabits which creates a NEW parent. If the parent habit doesn't exist yet, use CreateHabit instead.
             """);
+    }
 
+    private static void AppendActiveHabits(StringBuilder sb, PromptContext ctx)
+    {
         sb.AppendLine();
 
         sb.AppendLine("## User's Active Habits");
-        if (activeHabits.Count == 0)
+        if (ctx.ActiveHabits.Count == 0)
         {
             sb.AppendLine("(none)");
         }
         else
         {
-            foreach (var habit in activeHabits)
+            foreach (var habit in ctx.ActiveHabits)
             {
                 var freqLabel = habit.FrequencyUnit is null
                     ? "One-time"
@@ -179,7 +209,7 @@ public static class SystemPromptBuilder
                 var tagsLabel = habit.Tags.Count > 0 ? $" | Tags: [{string.Join(", ", habit.Tags.Select(t => t.Name))}]" : "";
 
                 var metricsLabel = "";
-                if (habitMetrics != null && habitMetrics.TryGetValue(habit.Id, out var metrics))
+                if (ctx.HabitMetrics != null && ctx.HabitMetrics.TryGetValue(habit.Id, out var metrics))
                 {
                     var parts = new List<string>();
                     if (metrics.CurrentStreak > 0) parts.Add($"streak: {metrics.CurrentStreak}d");
@@ -207,13 +237,16 @@ public static class SystemPromptBuilder
             sb.AppendLine("When user mentions an existing habit activity -> use LogHabit with the exact ID above");
             sb.AppendLine("When user mentions a NEW activity -> use CreateHabit");
         }
+    }
 
+    private static void AppendUserTags(StringBuilder sb, PromptContext ctx)
+    {
         sb.AppendLine();
 
         sb.AppendLine("## User's Tags");
-        if (userTags is { Count: > 0 })
+        if (ctx.UserTags is { Count: > 0 })
         {
-            foreach (var tag in userTags)
+            foreach (var tag in ctx.UserTags)
             {
                 sb.AppendLine($"- \"{tag.Name}\" (color: {tag.Color})");
             }
@@ -222,17 +255,20 @@ public static class SystemPromptBuilder
         {
             sb.AppendLine("(no tags created yet)");
         }
+    }
 
+    private static void AppendUserFacts(StringBuilder sb, PromptContext ctx)
+    {
         sb.AppendLine();
 
         sb.AppendLine("## What You Know About This User");
-        if (userFacts.Count == 0)
+        if (ctx.UserFacts.Count == 0)
         {
             sb.AppendLine("(nothing yet - learn as you go)");
         }
         else
         {
-            var grouped = userFacts
+            var grouped = ctx.UserFacts
                 .OrderByDescending(f => f.ExtractedAtUtc)
                 .GroupBy(f => f.Category?.ToLowerInvariant() ?? "general")
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -274,17 +310,20 @@ public static class SystemPromptBuilder
             - NEVER parrot facts back unprompted ("Since you work from home..."). Use them silently to shape better responses.
             - When facts conflict with a user's request, gently acknowledge it (e.g., user says "I want to wake up at 5am" but facts say they work night shifts - ask if they're sure).
             """);
+    }
 
+    private static void AppendRoutinePatterns(StringBuilder sb, PromptContext ctx)
+    {
         sb.AppendLine();
 
         sb.AppendLine("## Your Understanding of This User's Routine");
-        if (routinePatterns is null || routinePatterns.Count == 0)
+        if (ctx.RoutinePatterns is null || ctx.RoutinePatterns.Count == 0)
         {
             sb.AppendLine("(no routine patterns detected yet)");
         }
         else
         {
-            foreach (var pattern in routinePatterns)
+            foreach (var pattern in ctx.RoutinePatterns)
             {
                 sb.AppendLine($"- \"{pattern.HabitTitle}\": {pattern.Description} (confidence: {pattern.Confidence}, consistency: {pattern.ConsistencyScore:P0})");
             }
@@ -294,108 +333,119 @@ public static class SystemPromptBuilder
             sb.AppendLine("- Suggest optimal time slots when asked");
             sb.AppendLine("- Personalize scheduling advice based on detected patterns");
         }
+    }
 
+    private static void AppendTodayDate(StringBuilder sb, PromptContext ctx)
+    {
         sb.AppendLine();
-        sb.AppendLine($"## Today's Date: {(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}");
+        sb.AppendLine($"## Today's Date: {(ctx.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}");
         sb.AppendLine();
+    }
 
-        if (hasImage)
-        {
-            sb.AppendLine($$"""
-                ## Image Analysis Instructions
-                When the user uploads an image (photo of schedule, to-do list, calendar, task app screenshot, whiteboard, bill, etc.):
+    private static void AppendImageInstructions(StringBuilder sb, PromptContext ctx)
+    {
+        if (!ctx.HasImage) return;
 
-                ### Extraction Rules
-                1. Extract EVERYTHING visible: tasks, habits, groups, sub-items, categories, labels
-                2. Preserve the EXACT hierarchy from the image:
-                   - Top-level groups/categories -> separate CreateHabit actions (parents)
-                   - Nested/indented items under a group -> subHabits array on that parent
-                   - Deeply nested items (sub-sub-items) -> flatten into the nearest parent's subHabits
-                3. Preserve exact titles/names as shown in the image -- do not rename, summarize, or merge items
-                4. If an item appears multiple times (e.g., "Water - 710ml" x4), create each one individually
-                5. Items with no children that are not nested under anything -> standalone CreateHabit (no subHabits)
-                6. Infer frequency from visual cues:
-                   - Daily checkboxes, daily columns, or checkmarks -> Day, 1
-                   - Week columns (Mon-Sun) or weekly markers -> Week, 1
-                   - Month labels -> Month, 1
-                   - Specific days listed -> use Days array
-                   - No frequency cue -> default to Day, 1 for recurring items; omit for one-time tasks
-                7. Extract due dates from visible dates (YYYY-MM-DD). Default to today if none visible.
-                8. Extract times if visible (HH:mm format for dueTime)
-                9. Detect completion status: checked/completed items in the image should still be created (user wants the structure, not the state)
+        sb.AppendLine($$"""
+            ## Image Analysis Instructions
+            When the user uploads an image (photo of schedule, to-do list, calendar, task app screenshot, whiteboard, bill, etc.):
 
-                ### When to Create vs Suggest
-                - **Create directly** (multiple CreateHabit actions) when user says: "create", "add", "set up", "make these", "I want these", or any clear intent to create
-                - **Suggest** (SuggestBreakdown) ONLY when user says: "what do you see?", "analyze this", "what's in this image?" or gives no creation intent at all
-                - When in doubt, CREATE. Users send images because they want the habits created.
+            ### Extraction Rules
+            1. Extract EVERYTHING visible: tasks, habits, groups, sub-items, categories, labels
+            2. Preserve the EXACT hierarchy from the image:
+               - Top-level groups/categories -> separate CreateHabit actions (parents)
+               - Nested/indented items under a group -> subHabits array on that parent
+               - Deeply nested items (sub-sub-items) -> flatten into the nearest parent's subHabits
+            3. Preserve exact titles/names as shown in the image -- do not rename, summarize, or merge items
+            4. If an item appears multiple times (e.g., "Water - 710ml" x4), create each one individually
+            5. Items with no children that are not nested under anything -> standalone CreateHabit (no subHabits)
+            6. Infer frequency from visual cues:
+               - Daily checkboxes, daily columns, or checkmarks -> Day, 1
+               - Week columns (Mon-Sun) or weekly markers -> Week, 1
+               - Month labels -> Month, 1
+               - Specific days listed -> use Days array
+               - No frequency cue -> default to Day, 1 for recurring items; omit for one-time tasks
+            7. Extract due dates from visible dates (YYYY-MM-DD). Default to today if none visible.
+            8. Extract times if visible (HH:mm format for dueTime)
+            9. Detect completion status: checked/completed items in the image should still be created (user wants the structure, not the state)
 
-                ### Example: Task app screenshot with groups (user says "create these habits")
+            ### When to Create vs Suggest
+            - **Create directly** (multiple CreateHabit actions) when user says: "create", "add", "set up", "make these", "I want these", or any clear intent to create
+            - **Suggest** (SuggestBreakdown) ONLY when user says: "what do you see?", "analyze this", "what's in this image?" or gives no creation intent at all
+            - When in doubt, CREATE. Users send images because they want the habits created.
+
+            ### Example: Task app screenshot with groups (user says "create these habits")
+            {
+              "aiMessage": "Created 5 habit groups with all their sub-habits from your screenshot!",
+              "actions": [
                 {
-                  "aiMessage": "Created 5 habit groups with all their sub-habits from your screenshot!",
-                  "actions": [
-                    {
-                      "type": "CreateHabit",
-                      "title": "Water",
-                      "frequencyUnit": "Day",
-                      "frequencyQuantity": 1,
-                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
-                      "subHabits": [
-                        { "title": "Water - 710ml" },
-                        { "title": "Water - 710ml" },
-                        { "title": "Water - 710ml" },
-                        { "title": "Water - 710ml" }
-                      ]
-                    },
-                    {
-                      "type": "CreateHabit",
-                      "title": "Meals",
-                      "frequencyUnit": "Day",
-                      "frequencyQuantity": 1,
-                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
-                      "subHabits": [
-                        { "title": "Dinner" }
-                      ]
-                    },
-                    {
-                      "type": "CreateHabit",
-                      "title": "Waking up",
-                      "frequencyUnit": "Day",
-                      "frequencyQuantity": 1,
-                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}"
-                    },
-                    {
-                      "type": "CreateHabit",
-                      "title": "Post Lunch",
-                      "frequencyUnit": "Day",
-                      "frequencyQuantity": 1,
-                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
-                      "subHabits": [
-                        { "title": "Creatine" },
-                        { "title": "Multivitamin (2)" }
-                      ]
-                    },
-                    {
-                      "type": "CreateHabit",
-                      "title": "Anytime",
-                      "frequencyUnit": "Day",
-                      "frequencyQuantity": 1,
-                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
-                      "subHabits": [
-                        { "title": "Self care" },
-                        { "title": "Exercise" },
-                        { "title": "Cardio" }
-                      ]
-                    }
+                  "type": "CreateHabit",
+                  "title": "Water",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "dueDate": "{{(ctx.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                  "subHabits": [
+                    { "title": "Water - 710ml" },
+                    { "title": "Water - 710ml" },
+                    { "title": "Water - 710ml" },
+                    { "title": "Water - 710ml" }
+                  ]
+                },
+                {
+                  "type": "CreateHabit",
+                  "title": "Meals",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "dueDate": "{{(ctx.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                  "subHabits": [
+                    { "title": "Dinner" }
+                  ]
+                },
+                {
+                  "type": "CreateHabit",
+                  "title": "Waking up",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "dueDate": "{{(ctx.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}"
+                },
+                {
+                  "type": "CreateHabit",
+                  "title": "Post Lunch",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "dueDate": "{{(ctx.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                  "subHabits": [
+                    { "title": "Creatine" },
+                    { "title": "Multivitamin (2)" }
+                  ]
+                },
+                {
+                  "type": "CreateHabit",
+                  "title": "Anytime",
+                  "frequencyUnit": "Day",
+                  "frequencyQuantity": 1,
+                  "dueDate": "{{(ctx.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                  "subHabits": [
+                    { "title": "Self care" },
+                    { "title": "Exercise" },
+                    { "title": "Cardio" }
                   ]
                 }
+              ]
+            }
 
-                """);
-        }
+            """);
+    }
 
+    private static void AppendHabitCount(StringBuilder sb, PromptContext ctx)
+    {
         // Add habit count context
-        sb.AppendLine($"## Habit Count: {activeHabits.Count} active habits");
+        sb.AppendLine($"## Habit Count: {ctx.ActiveHabits.Count} active habits");
         sb.AppendLine();
+    }
 
+    private static void AppendResponseSchema(StringBuilder sb)
+    {
         sb.AppendLine("## Response JSON Schema & Examples");
         sb.AppendLine("""
             ### Key Examples (one per action type):
@@ -433,6 +483,9 @@ public static class SystemPromptBuilder
             AssignTags -- "Tag my running habit as health" (Running ID: "abc-123")
             { "actions": [{ "type": "AssignTags", "habitId": "abc-123", "tagNames": ["health"] }], "aiMessage": "Tagged Running as health!" }
 
+            CreateSubHabit -- "Add stretching under my Workout Plan" (Workout Plan ID: "abc-123")
+            { "actions": [{ "type": "CreateSubHabit", "habitId": "abc-123", "title": "Stretching", "description": "Post-workout stretching routine" }], "aiMessage": "Added Stretching as a sub-habit under Workout Plan!" }
+
             Multi-action -- "I ran and meditated today" (Running ID: "a1", Meditation ID: "b2")
             { "actions": [{ "type": "LogHabit", "habitId": "a1" }, { "type": "LogHabit", "habitId": "b2" }], "aiMessage": "Logged both!" }
 
@@ -448,7 +501,7 @@ public static class SystemPromptBuilder
             Duplicate prevention -- "Create a running habit" (Running habit ALREADY EXISTS with ID "abc-123")
             { "actions": [], "aiMessage": "You already have a Running habit! Did you mean to log it instead, or do you want a different one?" }
 
-            CRITICAL: For LogHabit/UpdateHabit/DeleteHabit, use EXACT IDs from Active Habits list. NEVER fabricate IDs.
+            CRITICAL: For LogHabit/UpdateHabit/DeleteHabit/CreateSubHabit, use EXACT IDs from Active Habits list. NEVER fabricate IDs.
 
             ### Action Types & Required Fields:
 
@@ -458,6 +511,7 @@ public static class SystemPromptBuilder
             UpdateHabit: type, habitId (REQUIRED - ID of existing habit), title (optional - new title), description (optional), frequencyUnit (optional), frequencyQuantity (optional), days (optional), isBadHabit (optional), dueDate (optional - new due date YYYY-MM-DD), dueTime (optional - HH:mm 24h format to set or change time). Only include fields that are changing.
             DeleteHabit: type, habitId (REQUIRED - ID of existing habit to delete)
             AssignTags: type, habitId (REQUIRED - ID of existing habit), tagNames (REQUIRED - array of tag name strings. Empty array [] removes all tags)
+            CreateSubHabit: type, habitId (REQUIRED - ID of existing PARENT habit from Active Habits list), title (REQUIRED), description (optional). Sub-habit inherits parent's frequency and due date.
 
             **When to use SuggestBreakdown:**
             - User asks to "break down", "decompose", "help me plan", or asks for suggestions for a complex goal
@@ -493,6 +547,12 @@ public static class SystemPromptBuilder
             - User says "remove all tags from my reading habit" -> AssignTags with tagNames: []
             - User says "create a daily run habit tagged as health" -> CreateHabit with tagNames: ["health"]
             - NEVER assign tags unless the user explicitly asks. Creating or logging habits without tag mention = no tagNames field
+
+            **When to use CreateSubHabit:**
+            - User wants to add a sub-habit to an existing parent: "add X under Y", "create X as part of my Y habit"
+            - The parent habit MUST already exist in the Active Habits list with a known ID
+            - Do NOT use CreateSubHabit when the parent doesn't exist yet -- use CreateHabit with subHabits instead
+            - Do NOT use CreateSubHabit for standalone habits -- use CreateHabit
 
             ### Conversational Examples (no actions needed):
 
@@ -554,7 +614,5 @@ public static class SystemPromptBuilder
             CRITICAL: ONLY include fields relevant to each action. No null/undefined values!
             ALWAYS include "aiMessage" - NEVER leave it empty or null!
             """);
-
-        return sb.ToString();
     }
 }
