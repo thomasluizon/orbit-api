@@ -30,6 +30,14 @@ public class ResendEmailService(
         await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
 
+    public async Task SendAccountDeletionCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
+    {
+        var isPtBr = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
+        var subject = isPtBr ? "Confirme a exclusao da sua conta Orbit" : "Confirm your Orbit account deletion";
+        var html = BuildAccountDeletionEmailHtml(code, isPtBr);
+        await SendEmailAsync(toEmail, subject, html, cancellationToken);
+    }
+
     public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)
     {
         var encodedName = System.Net.WebUtility.HtmlEncode(fromName);
@@ -170,6 +178,62 @@ public class ResendEmailService(
                             <p style=""margin: 0 0 32px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6; text-align: center;"">{intro}</p>
                             <div style=""text-align: center; padding: 24px 0; background-color: #0a0a0a; border-radius: 16px; margin: 0 0 24px 0;"">
                                 <span style=""font-size: 36px; font-weight: 800; color: #8b5cf6; letter-spacing: 12px; font-family: monospace;"">{formattedCode}</span>
+                            </div>
+                            <p style=""margin: 0; font-size: 13px; color: #525252; text-align: center;"">{warning}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=""text-align: center; padding-top: 32px;"">
+                            <p style=""margin: 0; font-size: 13px; color: #525252;"">{footer}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
+    }
+
+    private static string BuildAccountDeletionEmailHtml(string code, bool isPtBr)
+    {
+        var heading = isPtBr ? "Exclusao de conta" : "Account deletion";
+        var intro = isPtBr
+            ? "Voce solicitou a exclusao da sua conta Orbit. Essa acao e irreversivel. Todos os seus dados serao permanentemente excluidos, incluindo habitos, historico, conversas e configuracoes."
+            : "You requested to delete your Orbit account. This action is irreversible. All your data will be permanently deleted, including habits, history, conversations, and settings.";
+        var codeLabel = isPtBr ? "Use o codigo abaixo para confirmar:" : "Use the code below to confirm:";
+        var warning = isPtBr
+            ? "Se voce nao solicitou isso, ignore este e-mail. Sua conta permanecera segura."
+            : "If you didn't request this, ignore this email. Your account will remain safe.";
+        var footer = isPtBr ? "Equipe Orbit" : "The Orbit Team";
+
+        var formattedCode = string.Join(" ", code.ToCharArray());
+
+        return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Orbit</title>
+</head>
+<body style=""margin: 0; padding: 0; background-color: #0a0a0a; font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;"">
+    <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""background-color: #0a0a0a;"">
+        <tr>
+            <td style=""padding: 40px 20px;"">
+                <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" border=""0"" width=""100%"" style=""max-width: 520px; margin: 0 auto;"">
+                    <tr>
+                        <td style=""text-align: center; padding-bottom: 32px;"">
+                            <span style=""font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;"">Orbit</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style=""background-color: #141414; border-radius: 24px; border: 1px solid #dc2626; padding: 40px 32px;"">
+                            <h1 style=""margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #dc2626; text-align: center;"">{heading}</h1>
+                            <p style=""margin: 0 0 16px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6; text-align: center;"">{intro}</p>
+                            <p style=""margin: 0 0 16px 0; font-size: 15px; color: #ffffff; text-align: center; font-weight: 600;"">{codeLabel}</p>
+                            <div style=""text-align: center; padding: 24px 0; background-color: #0a0a0a; border-radius: 16px; margin: 0 0 24px 0;"">
+                                <span style=""font-size: 36px; font-weight: 800; color: #dc2626; letter-spacing: 12px; font-family: monospace;"">{formattedCode}</span>
                             </div>
                             <p style=""margin: 0; font-size: 13px; color: #525252; text-align: center;"">{warning}</p>
                         </td>

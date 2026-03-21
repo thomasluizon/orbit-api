@@ -1,5 +1,7 @@
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Orbit.Api.Extensions;
 using Orbit.Application.Auth.Commands;
 
 namespace Orbit.Api.Controllers;
@@ -11,6 +13,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
     public record SendCodeRequest(string Email, string Language = "en");
     public record VerifyCodeRequest(string Email, string Code, string Language = "en");
     public record GoogleAuthRequest(string AccessToken, string Language = "en");
+    public record ConfirmDeletionRequest(string Code);
 
     [HttpPost("send-code")]
     public async Task<IActionResult> SendCode(
@@ -64,5 +67,41 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
         logger.LogWarning("Google auth failed: {Error}", result.Error);
         return Unauthorized(new { error = result.Error });
+    }
+
+    [Authorize]
+    [HttpPost("request-deletion")]
+    public async Task<IActionResult> RequestDeletion(CancellationToken cancellationToken)
+    {
+        var command = new RequestAccountDeletionCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Account deletion requested by {UserId}", HttpContext.GetUserId());
+            return Ok(new { message = "Deletion code sent" });
+        }
+
+        logger.LogWarning("Deletion request failed for {UserId}: {Error}", HttpContext.GetUserId(), result.Error);
+        return BadRequest(new { error = result.Error });
+    }
+
+    [Authorize]
+    [HttpPost("confirm-deletion")]
+    public async Task<IActionResult> ConfirmDeletion(
+        [FromBody] ConfirmDeletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new ConfirmAccountDeletionCommand(HttpContext.GetUserId(), request.Code);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Account deleted for {UserId}", HttpContext.GetUserId());
+            return Ok(new { message = "Account deleted" });
+        }
+
+        logger.LogWarning("Deletion confirmation failed for {UserId}: {Error}", HttpContext.GetUserId(), result.Error);
+        return BadRequest(new { error = result.Error });
     }
 }
