@@ -19,6 +19,19 @@ public class SendCodeCommandHandler(
         var email = request.Email.Trim().ToLowerInvariant();
         var cacheKey = $"verify:{email}";
 
+        // Reviewer test account: skip email, store fixed code
+        var reviewerEmail = Environment.GetEnvironmentVariable("REVIEWER_TEST_EMAIL")?.ToLowerInvariant();
+        var reviewerCode = Environment.GetEnvironmentVariable("REVIEWER_TEST_CODE");
+        if (reviewerEmail is not null && reviewerCode is not null && email == reviewerEmail)
+        {
+            var testEntry = new VerificationEntry(reviewerCode, 0, DateTime.UtcNow);
+            cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+            });
+            return Result.Success();
+        }
+
         // Rate limit: no new code within 60 seconds
         if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) && existing is not null)
         {
