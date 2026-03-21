@@ -303,34 +303,87 @@ public static class SystemPromptBuilder
         {
             sb.AppendLine($$"""
                 ## Image Analysis Instructions
-                When the user uploads an image (photo of schedule, bill, to-do list, calendar):
-                1. Extract all habit-like items (tasks, recurring events, goals, responsibilities)
-                2. Infer frequency from visual cues:
-                   - Daily checkboxes or daily columns -> FrequencyUnit: Day, FrequencyQuantity: 1
-                   - Week columns (Mon-Sun) or weekly markers -> FrequencyUnit: Week, FrequencyQuantity: 1
-                   - Month labels or monthly markers -> FrequencyUnit: Month, FrequencyQuantity: 1
-                   - Specific days listed -> Use Days array (Monday, Tuesday, etc.)
-                3. Extract due dates from dates visible in image (format: YYYY-MM-DD)
-                4. Extract amounts for financial habits (bill amount, subscription cost) and include in description
-                5. CRITICAL: For image-based habit extraction, ALWAYS use SuggestBreakdown action type
-                   - NEVER create habits directly from image analysis
-                   - User must explicitly confirm which suggestions to create
-                6. Include extracted text/context in habit descriptions for clarity
-                7. If the image contains no habit-relevant information, return empty actions with an aiMessage explaining what you see
+                When the user uploads an image (photo of schedule, to-do list, calendar, task app screenshot, whiteboard, bill, etc.):
 
-                Example image analysis response:
+                ### Extraction Rules
+                1. Extract EVERYTHING visible: tasks, habits, groups, sub-items, categories, labels
+                2. Preserve the EXACT hierarchy from the image:
+                   - Top-level groups/categories -> separate CreateHabit actions (parents)
+                   - Nested/indented items under a group -> subHabits array on that parent
+                   - Deeply nested items (sub-sub-items) -> flatten into the nearest parent's subHabits
+                3. Preserve exact titles/names as shown in the image -- do not rename, summarize, or merge items
+                4. If an item appears multiple times (e.g., "Water - 710ml" x4), create each one individually
+                5. Items with no children that are not nested under anything -> standalone CreateHabit (no subHabits)
+                6. Infer frequency from visual cues:
+                   - Daily checkboxes, daily columns, or checkmarks -> Day, 1
+                   - Week columns (Mon-Sun) or weekly markers -> Week, 1
+                   - Month labels -> Month, 1
+                   - Specific days listed -> use Days array
+                   - No frequency cue -> default to Day, 1 for recurring items; omit for one-time tasks
+                7. Extract due dates from visible dates (YYYY-MM-DD). Default to today if none visible.
+                8. Extract times if visible (HH:mm format for dueTime)
+                9. Detect completion status: checked/completed items in the image should still be created (user wants the structure, not the state)
+
+                ### When to Create vs Suggest
+                - **Create directly** (multiple CreateHabit actions) when user says: "create", "add", "set up", "make these", "I want these", or any clear intent to create
+                - **Suggest** (SuggestBreakdown) ONLY when user says: "what do you see?", "analyze this", "what's in this image?" or gives no creation intent at all
+                - When in doubt, CREATE. Users send images because they want the habits created.
+
+                ### Example: Task app screenshot with groups (user says "create these habits")
                 {
-                  "aiMessage": "I found 3 recurring tasks in your schedule image.",
+                  "aiMessage": "Created 5 habit groups with all their sub-habits from your screenshot!",
                   "actions": [
                     {
-                      "type": "SuggestBreakdown",
-                      "title": "Schedule from Image",
+                      "type": "CreateHabit",
+                      "title": "Water",
                       "frequencyUnit": "Day",
                       "frequencyQuantity": 1,
-                      "dueDate": "YYYY-MM-DD",
-                      "suggestedSubHabits": [
-                        { "type": "CreateHabit", "title": "Morning jog", "frequencyUnit": "Week", "frequencyQuantity": 3, "days": ["Monday", "Wednesday", "Friday"], "dueDate": "YYYY-MM-DD" },
-                        { "type": "CreateHabit", "title": "Team meeting", "frequencyUnit": "Week", "frequencyQuantity": 1, "days": ["Tuesday"], "dueDate": "YYYY-MM-DD" }
+                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                      "subHabits": [
+                        { "title": "Water - 710ml" },
+                        { "title": "Water - 710ml" },
+                        { "title": "Water - 710ml" },
+                        { "title": "Water - 710ml" }
+                      ]
+                    },
+                    {
+                      "type": "CreateHabit",
+                      "title": "Meals",
+                      "frequencyUnit": "Day",
+                      "frequencyQuantity": 1,
+                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                      "subHabits": [
+                        { "title": "Dinner" }
+                      ]
+                    },
+                    {
+                      "type": "CreateHabit",
+                      "title": "Waking up",
+                      "frequencyUnit": "Day",
+                      "frequencyQuantity": 1,
+                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}"
+                    },
+                    {
+                      "type": "CreateHabit",
+                      "title": "Post Lunch",
+                      "frequencyUnit": "Day",
+                      "frequencyQuantity": 1,
+                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                      "subHabits": [
+                        { "title": "Creatine" },
+                        { "title": "Multivitamin (2)" }
+                      ]
+                    },
+                    {
+                      "type": "CreateHabit",
+                      "title": "Anytime",
+                      "frequencyUnit": "Day",
+                      "frequencyQuantity": 1,
+                      "dueDate": "{{(userToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}}",
+                      "subHabits": [
+                        { "title": "Self care" },
+                        { "title": "Exercise" },
+                        { "title": "Cardio" }
                       ]
                     }
                   ]
