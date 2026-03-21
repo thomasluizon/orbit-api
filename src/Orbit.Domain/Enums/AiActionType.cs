@@ -7,5 +7,6 @@ public enum AiActionType
     SuggestBreakdown,
     AssignTags,
     UpdateHabit,
-    DeleteHabit
+    DeleteHabit,
+    CreateSubHabit
 }

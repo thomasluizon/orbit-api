@@ -191,6 +191,7 @@ public class ProcessUserChatCommandHandler(
                     AiActionType.AssignTags => await ExecuteAssignTagsAsync(action, request.UserId, cancellationToken),
                     AiActionType.UpdateHabit => await ExecuteUpdateHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.DeleteHabit => await ExecuteDeleteHabitAsync(action, request.UserId, cancellationToken),
+                    AiActionType.CreateSubHabit => await ExecuteCreateSubHabitAsync(action, request.UserId, cancellationToken),
                     _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
                 };
 
@@ -511,6 +512,27 @@ public class ProcessUserChatCommandHandler(
         habit.Deactivate();
 
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, title));
+    }
+
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteCreateSubHabitAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Parent habit ID is required for creating a sub-habit.");
+
+        if (string.IsNullOrWhiteSpace(action.Title))
+            return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a sub-habit.");
+
+        var result = await mediator.Send(new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
+            userId,
+            action.HabitId.Value,
+            action.Title,
+            action.Description), ct);
+
+        if (result.IsFailure)
+            return Result.Failure<(Guid? Id, string? Name)>(result.Error);
+
+        return Result.Success<(Guid? Id, string? Name)>((result.Value, action.Title));
     }
 
     private async Task AssignTagsToHabitAsync(Habit habit, List<string>? tagNames, Guid userId, CancellationToken ct)
