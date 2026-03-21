@@ -1,5 +1,6 @@
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Entities;
 
@@ -18,6 +19,7 @@ public class Habit : Entity
     public bool ReminderEnabled { get; private set; }
     public int ReminderMinutesBefore { get; private set; } = 15;
     public bool SlipAlertEnabled { get; private set; }
+    public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
@@ -48,7 +50,8 @@ public class Habit : Entity
         Guid? parentHabitId = null,
         bool reminderEnabled = false,
         int reminderMinutesBefore = 15,
-        bool slipAlertEnabled = false)
+        bool slipAlertEnabled = false,
+        IReadOnlyList<ChecklistItem>? checklistItems = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -77,6 +80,7 @@ public class Habit : Entity
             ReminderEnabled = reminderEnabled,
             ReminderMinutesBefore = reminderMinutesBefore,
             SlipAlertEnabled = slipAlertEnabled,
+            ChecklistItems = checklistItems ?? [],
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -104,6 +108,10 @@ public class Habit : Entity
         {
             // Recurring habit: advance DueDate past today
             AdvanceDueDate(date);
+
+            // Reset checklist for next occurrence
+            if (ChecklistItems.Count > 0)
+                ChecklistItems = ChecklistItems.Select(i => i with { IsChecked = false }).ToList();
         }
 
         return Result.Success(log);
@@ -170,7 +178,8 @@ public class Habit : Entity
         TimeOnly? dueTime = null,
         bool? reminderEnabled = null,
         int? reminderMinutesBefore = null,
-        bool? slipAlertEnabled = null)
+        bool? slipAlertEnabled = null,
+        IReadOnlyList<ChecklistItem>? checklistItems = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
@@ -199,9 +208,13 @@ public class Habit : Entity
             ReminderMinutesBefore = reminderMinutesBefore.Value;
         if (slipAlertEnabled.HasValue)
             SlipAlertEnabled = slipAlertEnabled.Value;
+        if (checklistItems is not null)
+            ChecklistItems = checklistItems;
 
         return Result.Success();
     }
+
+    public void UpdateChecklist(IReadOnlyList<ChecklistItem> items) => ChecklistItems = items;
 
     public void SetPosition(int? position) => Position = position;
 

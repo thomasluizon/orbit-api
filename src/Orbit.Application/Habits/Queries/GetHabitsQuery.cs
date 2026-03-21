@@ -2,6 +2,7 @@ using MediatR;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Queries;
 
@@ -17,6 +18,7 @@ public record HabitResponse(
     TimeOnly? DueTime,
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
+    IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
     IReadOnlyList<HabitChildResponse> Children);
 
@@ -32,6 +34,7 @@ public record HabitChildResponse(
     DateOnly DueDate,
     TimeOnly? DueTime,
     int? Position,
+    IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitChildResponse> Children);
 
 public record GetHabitsQuery(
@@ -100,6 +103,7 @@ public class GetHabitsQueryHandler(
         h.DueTime,
         h.Days.ToList(),
         h.Position,
+        h.ChecklistItems,
         h.CreatedAtUtc,
         MapChildren(h.Id, lookup));
 
@@ -111,6 +115,6 @@ public class GetHabitsQueryHandler(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
                 c.Days.ToList(), c.DueDate, c.DueTime,
-                c.Position, MapChildren(c.Id, lookup)))
+                c.Position, c.ChecklistItems, MapChildren(c.Id, lookup)))
             .ToList();
 }

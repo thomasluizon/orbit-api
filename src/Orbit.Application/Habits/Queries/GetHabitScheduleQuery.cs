@@ -5,6 +5,7 @@ using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Queries;
 
@@ -28,6 +29,7 @@ public record HabitScheduleItem(
     bool ReminderEnabled,
     int ReminderMinutesBefore,
     bool SlipAlertEnabled,
+    IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children);
 
@@ -43,6 +45,7 @@ public record HabitScheduleChildItem(
     DateOnly DueDate,
     TimeOnly? DueTime,
     int? Position,
+    IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children);
 
@@ -180,6 +183,7 @@ public class GetHabitScheduleQueryHandler(
             h.ReminderEnabled,
             h.ReminderMinutesBefore,
             h.SlipAlertEnabled,
+            h.ChecklistItems,
             MapTags(h),
             MapChildren(h.Id, lookup, dateFrom, dateTo));
 
@@ -209,7 +213,7 @@ public class GetHabitScheduleQueryHandler(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
                 c.Days.ToList(), c.DueDate, c.DueTime,
-                c.Position, MapTags(c), MapChildren(c.Id, lookup, dateFrom, dateTo)))
+                c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, dateFrom, dateTo)))
             .ToList();
 
     private static List<HabitTagItem> MapTags(Habit h) =>

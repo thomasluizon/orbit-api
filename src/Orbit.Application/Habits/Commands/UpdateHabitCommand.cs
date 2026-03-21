@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Habits.Commands;
@@ -22,7 +23,8 @@ public record UpdateHabitCommand(
     TimeOnly? DueTime = null,
     bool? ReminderEnabled = null,
     int? ReminderMinutesBefore = null,
-    bool? SlipAlertEnabled = null) : IRequest<Result>;
+    bool? SlipAlertEnabled = null,
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -51,7 +53,8 @@ public class UpdateHabitCommandHandler(
             dueTime: request.DueTime,
             reminderEnabled: request.ReminderEnabled,
             reminderMinutesBefore: request.ReminderMinutesBefore,
-            slipAlertEnabled: request.SlipAlertEnabled);
+            slipAlertEnabled: request.SlipAlertEnabled,
+            checklistItems: request.ChecklistItems);
 
         if (result.IsFailure)
             return result;

@@ -5,6 +5,7 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Api.Controllers;
 
@@ -26,7 +27,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         bool ReminderEnabled = false,
         int ReminderMinutesBefore = 15,
         bool SlipAlertEnabled = false,
-        IReadOnlyList<Guid>? TagIds = null);
+        IReadOnlyList<Guid>? TagIds = null,
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -39,7 +41,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         TimeOnly? DueTime = null,
         bool? ReminderEnabled = null,
         int? ReminderMinutesBefore = null,
-        bool? SlipAlertEnabled = null);
+        bool? SlipAlertEnabled = null,
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+
+    public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
     public record LogHabitRequest(string? Note = null);
 
@@ -139,7 +144,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ReminderEnabled,
             request.ReminderMinutesBefore,
             request.SlipAlertEnabled,
-            request.TagIds);
+            request.TagIds,
+            request.ChecklistItems);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -189,7 +195,26 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.DueTime,
             request.ReminderEnabled,
             request.ReminderMinutesBefore,
-            request.SlipAlertEnabled);
+            request.SlipAlertEnabled,
+            request.ChecklistItems);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("{id:guid}/checklist")]
+    public async Task<IActionResult> UpdateChecklist(
+        Guid id,
+        [FromBody] UpdateChecklistRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateChecklistCommand(
+            HttpContext.GetUserId(),
+            id,
+            request.ChecklistItems);
 
         var result = await mediator.Send(command, cancellationToken);
 
