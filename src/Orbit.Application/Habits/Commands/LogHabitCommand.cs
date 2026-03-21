@@ -6,12 +6,27 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
+using Orbit.Application.Common.Attributes;
+
 namespace Orbit.Application.Habits.Commands;
 
+[AiAction(
+    "LogHabit",
+    """**Log habit completions** with optional notes (e.g., "I ran today, felt great!")""",
+    """
+    - User mentions completing an activity that matches an EXISTING habit from the Active Habits list
+    - Use the exact habit ID from the list
+    - Include a note if the user shares context or feelings about the activity
+    """,
+    DisplayOrder = 20)]
+[AiExample(
+    "I ran today, felt great",
+    """{ "actions": [{ "type": "LogHabit", "habitId": "abc-123", "note": "felt great" }], "aiMessage": "Logged your run!" }""",
+    Note = """Running ID: "abc-123" """)]
 public record LogHabitCommand(
     Guid UserId,
-    Guid HabitId,
-    string? Note = null) : IRequest<Result<Guid>>;
+    [property: AiField("string", "ID of the habit to log", Required = true)] Guid HabitId,
+    [property: AiField("string", "Include if user shares context or feelings")] string? Note = null) : IRequest<Result<Guid>>;
 
 public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,

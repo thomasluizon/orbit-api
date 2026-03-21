@@ -7,24 +7,70 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
+using Orbit.Application.Common.Attributes;
+
 namespace Orbit.Application.Habits.Commands;
 
+[AiAction(
+    "CreateHabit",
+    """**Create and track habits** (e.g., "I want to meditate daily", "I want to run 5km every week")""",
+    """
+    - User explicitly tells you what to create with clear details: "create a daily running habit", "add morning routine with meditate, journal, stretch"
+    - It's a simple one-time task: "buy eggs today"
+    - Use CreateHabit with subHabits when user explicitly lists what the sub-habits should be
+    """,
+    DisplayOrder = 10)]
+[AiRule("ALWAYS include dueDate when creating habits")]
+[AiRule("Omit frequencyUnit and frequencyQuantity for one-time tasks")]
+[AiRule("days CANNOT be set if frequencyQuantity > 1")]
+[AiRule("Only include tagNames if user explicitly mentioned tagging it")]
+[AiRule("BAD HABITS: Set isBadHabit to true for habits the user wants to AVOID or STOP doing. Bad habits track slip-ups/occurrences (smoking, nail biting, etc.)")]
+[AiRule("When logging habits, include a note if the user provides context or feelings about the activity")]
+[AiRule("TAGS: You can assign tags to habits using tagNames on CreateHabit actions, or use AssignTags action to change tags on existing habits. tagNames is an array of tag name strings. Use EXISTING tag names from the user's tags list when possible. If user asks for a tag that doesn't exist yet, use the new name - it will be auto-created")]
+[AiRule("ONLY add/change tags when the user EXPLICITLY asks for it. NEVER auto-assign tags on your own initiative")]
+[AiExample(
+    "I want to meditate on weekdays",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Meditation", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created a weekday meditation habit!" }""")]
+[AiExample(
+    "Create workout plan with gym MWF and cardio TuTh",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Workout Plan", "frequencyUnit": "Day", "frequencyQuantity": 1, "subHabits": [{ "title": "Gym", "days": ["Monday","Wednesday","Friday"] }, { "title": "Cardio", "days": ["Tuesday","Thursday"] }], "dueDate": "{TODAY}" }], "aiMessage": "Created your Workout Plan!" }""",
+    Note = "with subHabits")]
+[AiExample(
+    "I want to stop smoking",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Smoking", "frequencyUnit": "Day", "frequencyQuantity": 1, "isBadHabit": true, "slipAlertEnabled": true, "dueDate": "{TODAY}" }], "aiMessage": "Tracking smoking as a bad habit with slip alerts enabled. Log each slip-up and I'll send you motivational nudges before your usual slip times!" }""",
+    Note = "bad habit")]
+[AiExample(
+    "Buy eggs tomorrow",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Buy Eggs", "dueDate": "{TOMORROW}" }], "aiMessage": "Got it, buy eggs tomorrow!" }""",
+    Note = "one-time task")]
+[AiExample(
+    "Dentist appointment tomorrow at 3pm",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Dentist Appointment", "dueDate": "{TOMORROW}", "dueTime": "15:00" }], "aiMessage": "Scheduled your dentist appointment for tomorrow at 3pm!" }""",
+    Note = "with time")]
+[AiExample(
+    "Exam tomorrow at 5pm, remind me 30 minutes before",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Exam", "dueDate": "{TOMORROW}", "dueTime": "17:00", "reminderEnabled": true, "reminderMinutesBefore": 30 }], "aiMessage": "Scheduled your exam for tomorrow at 5pm with a reminder 30 minutes before!" }""",
+    Note = "with reminder")]
+[AiExample(
+    "Create a supermarket list with milk, eggs, bread",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Supermarket", "dueDate": "{TODAY}", "checklistItems": [{"text": "Milk", "isChecked": false}, {"text": "Eggs", "isChecked": false}, {"text": "Bread", "isChecked": false}] }], "aiMessage": "Created your supermarket list with 3 items!" }""",
+    Note = "with checklist")]
 public record CreateHabitCommand(
     Guid UserId,
-    string Title,
-    string? Description,
-    FrequencyUnit? FrequencyUnit,
-    int? FrequencyQuantity,
-    IReadOnlyList<System.DayOfWeek>? Days = null,
-    bool IsBadHabit = false,
-    IReadOnlyList<string>? SubHabits = null,
-    DateOnly? DueDate = null,
-    TimeOnly? DueTime = null,
-    bool ReminderEnabled = false,
-    int ReminderMinutesBefore = 15,
-    bool SlipAlertEnabled = false,
-    IReadOnlyList<Guid>? TagIds = null,
-    IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result<Guid>>;
+    [property: AiField("string", "Name of the habit", Required = true)] string Title,
+    [property: AiField("string", "Optional description")] string? Description,
+    [property: AiField("Day|Week|Month|Year", "OMIT for one-time tasks")] FrequencyUnit? FrequencyUnit,
+    [property: AiField("integer", "Defaults to 1. OMIT for one-time tasks")] int? FrequencyQuantity,
+    [property: AiField("string[]", "Specific weekdays, only when frequencyQuantity is 1")] IReadOnlyList<System.DayOfWeek>? Days = null,
+    [property: AiField("boolean", "True for habits the user wants to AVOID or STOP doing")] bool IsBadHabit = false,
+    [property: AiField("object[]", "Array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.")] IReadOnlyList<string>? SubHabits = null,
+    [property: AiField("string", "YYYY-MM-DD, when the habit starts or is due", Required = true)] DateOnly? DueDate = null,
+    [property: AiField("string", "HH:mm 24h format, e.g. \"15:00\" for 3pm. ONLY include when user mentions a specific time")] TimeOnly? DueTime = null,
+    [property: AiField("boolean", "Set true when user asks for a reminder/notification")] bool ReminderEnabled = false,
+    [property: AiField("integer", "Minutes before dueTime to send reminder, default 15")] int ReminderMinutesBefore = 15,
+    [property: AiField("boolean", "Defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows")] bool SlipAlertEnabled = false,
+    [property: AiField("string[]", "Array of tag name strings, ONLY when user explicitly asks to tag it", Name = "tagNames")] IReadOnlyList<Guid>? TagIds = null,
+    [property: AiField("object[]", "Array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit")] IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
