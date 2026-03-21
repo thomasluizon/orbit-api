@@ -158,6 +158,9 @@ builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisSer
 // Daily summary always uses Gemini (free-text generation)
 builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>();
 
+// Retrospective always uses Gemini (free-text generation)
+builder.Services.AddHttpClient<IRetrospectiveService, GeminiRetrospectiveService>();
+
 // --- In-Memory Cache ---
 builder.Services.AddMemoryCache();
 

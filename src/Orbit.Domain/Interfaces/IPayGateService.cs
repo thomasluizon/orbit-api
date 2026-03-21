@@ -25,6 +25,11 @@ public interface IPayGateService
     Task<Result> CanUseDailySummary(Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// Checks if the user can use AI retrospectives (Pro-only feature).
+    /// </summary>
+    Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the AI message limit for the given user.
     /// </summary>
     Task<int> GetAiMessageLimit(Guid userId, CancellationToken ct = default);

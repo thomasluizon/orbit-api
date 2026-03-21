@@ -70,6 +70,19 @@ public class PayGateService(
         return Result.Success();
     }
 
+    public async Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default)
+    {
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+            return Result.Failure("User not found.");
+
+        var proOnly = await appConfig.GetAsync("RetrospectiveProOnly", true, ct);
+        if (proOnly && !user.HasProAccess)
+            return Result.PayGateFailure("Retrospectives are a Pro feature. Upgrade to unlock!");
+
+        return Result.Success();
+    }
+
     /// <summary>
     /// Returns the AI message limit for the given user (used by profile/subscription endpoints).
     /// </summary>
