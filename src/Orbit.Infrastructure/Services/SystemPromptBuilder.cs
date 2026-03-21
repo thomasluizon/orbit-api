@@ -1,6 +1,7 @@
 using System.Text;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -152,6 +153,7 @@ public static class SystemPromptBuilder
             34. SUB-HABIT AMBIGUITY: If user mentions an activity and BOTH a parent habit and a sub-habit match (e.g., "Meditation" exists as standalone AND as sub-habit of "Morning Routine"), prefer the standalone habit. If only the sub-habit matches, use the sub-habit's ID.
             35. COMPLETED HABITS: If a one-time habit is marked COMPLETED in the list, do not try to log or update it. Inform the user it's already done.
             36. STALE TASKS: If you notice one-time tasks (no frequency) that are past their due date and not completed, gently suggest cleaning them up. Recurring habits are fine in any quantity -- only flag stale one-time tasks.
+            37. CHECKLISTS vs SUB-HABITS: When user asks for a list of items inside a habit (shopping list, packing list, to-do breakdown, item checklist), use checklistItems instead of sub-habits. Sub-habits are for meaningful recurring activities that need independent tracking. Checklists are for simple item lists that get checked off.
             """);
 
         sb.AppendLine();
@@ -188,8 +190,12 @@ public static class SystemPromptBuilder
                     if (parts.Count > 0) metricsLabel = $" | Stats: {string.Join(", ", parts)}";
                 }
 
+                var checklistLabel = habit.ChecklistItems.Count > 0
+                    ? $" | Checklist: {habit.ChecklistItems.Count(i => i.IsChecked)}/{habit.ChecklistItems.Count} done"
+                    : "";
+
                 var dueTimeLabel = habit.DueTime.HasValue ? $" at {habit.DueTime.Value:HH:mm}" : "";
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{badHabitLabel}{slipAlertLabel}{completedLabel}{tagsLabel}{metricsLabel}");
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{badHabitLabel}{slipAlertLabel}{completedLabel}{tagsLabel}{checklistLabel}{metricsLabel}");
 
                 foreach (var child in habit.Children)
                 {
@@ -356,6 +362,9 @@ public static class SystemPromptBuilder
             CreateHabit (with time) -- "Dentist appointment tomorrow at 3pm"
             { "actions": [{ "type": "CreateHabit", "title": "Dentist Appointment", "dueDate": "2026-02-09", "dueTime": "15:00" }], "aiMessage": "Scheduled your dentist appointment for tomorrow at 3pm!" }
 
+            CreateHabit with checklist -- "Create a supermarket list with milk, eggs, bread"
+            { "actions": [{ "type": "CreateHabit", "title": "Supermarket", "dueDate": "2026-03-20", "checklistItems": [{"text": "Milk", "isChecked": false}, {"text": "Eggs", "isChecked": false}, {"text": "Bread", "isChecked": false}] }], "aiMessage": "Created your supermarket list with 3 items!" }
+
             LogHabit -- "I ran today, felt great" (Running ID: "abc-123")
             { "actions": [{ "type": "LogHabit", "habitId": "abc-123", "note": "felt great" }], "aiMessage": "Logged your run!" }
 
@@ -390,7 +399,7 @@ public static class SystemPromptBuilder
 
             ### Action Types & Required Fields:
 
-            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), dueTime (optional - HH:mm 24h format, e.g. "15:00" for 3pm, ONLY include when user mentions a specific time), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), slipAlertEnabled (optional, defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.)
+            CreateHabit: type, title, dueDate (YYYY-MM-DD, REQUIRED), dueTime (optional - HH:mm 24h format, e.g. "15:00" for 3pm, ONLY include when user mentions a specific time), frequencyUnit (Day | Week | Month | Year - OMIT for one-time tasks), frequencyQuantity (integer - OMIT for one-time tasks), description (optional), days (optional - only when frequencyQuantity is 1), isBadHabit (optional, true for habits to avoid/stop), slipAlertEnabled (optional, defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows), tagNames (optional - array of tag name strings, ONLY when user explicitly asks to tag it), subHabits (optional - array of sub-habit OBJECTS, each with: title (REQUIRED), plus optional frequencyUnit, frequencyQuantity, days, dueDate, description, isBadHabit. Sub-habits INHERIT parent frequency/dueDate when those fields are omitted.), checklistItems (optional - array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit)
             LogHabit: type, habitId, note (optional - include if user shares context/feelings)
             SuggestBreakdown: type, title (parent habit name), description (optional), frequencyUnit, frequencyQuantity, dueDate, suggestedSubHabits (array of habit objects with type: "CreateHabit", title, description, frequencyUnit, frequencyQuantity, dueDate)
             UpdateHabit: type, habitId (REQUIRED - ID of existing habit), title (optional - new title), description (optional), frequencyUnit (optional), frequencyQuantity (optional), days (optional), isBadHabit (optional), dueDate (optional - new due date YYYY-MM-DD), dueTime (optional - HH:mm 24h format to set or change time). Only include fields that are changing.

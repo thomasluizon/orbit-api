@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Orbit.Domain.Entities;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Infrastructure.Persistence;
 
@@ -46,6 +48,18 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                         (l1, l2) => l1!.SequenceEqual(l2!),
                         c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
                         c => c.ToList()));
+
+            entity.Property(h => h.ChecklistItems)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<ChecklistItem>>(v, (JsonSerializerOptions?)null) ?? new List<ChecklistItem>())
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(
+                    new ValueComparer<IReadOnlyList<ChecklistItem>>(
+                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
+                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
+                        c => JsonSerializer.Deserialize<List<ChecklistItem>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
             entity.HasIndex(h => new { h.UserId, h.IsActive });
         });

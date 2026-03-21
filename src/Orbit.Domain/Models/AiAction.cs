@@ -1,4 +1,5 @@
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Models;
 
@@ -19,4 +20,5 @@ public record AiAction
     public List<AiAction>? SubHabits { get; init; }
     public List<AiAction>? SuggestedSubHabits { get; init; }
     public List<string>? TagNames { get; init; }
+    public List<ChecklistItem>? ChecklistItems { get; init; }
 }

@@ -7,6 +7,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -386,7 +387,8 @@ public class ProcessUserChatCommandHandler(
             isBadHabit: isBadHabit,
             dueDate: dueDate,
             dueTime: action.DueTime,
-            slipAlertEnabled: slipAlertEnabled);
+            slipAlertEnabled: slipAlertEnabled,
+            checklistItems: action.ChecklistItems);
 
         if (habitResult.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);
@@ -483,7 +485,8 @@ public class ProcessUserChatCommandHandler(
             action.Days,
             action.IsBadHabit ?? habit.IsBadHabit,
             action.DueDate ?? habit.DueDate,
-            dueTime: action.DueTime);
+            dueTime: action.DueTime,
+            checklistItems: action.ChecklistItems);
 
         if (result.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(result.Error);

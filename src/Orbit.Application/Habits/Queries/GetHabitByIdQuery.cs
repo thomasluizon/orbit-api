@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Queries;
 
@@ -18,6 +19,7 @@ public record HabitDetailResponse(
     TimeOnly? DueTime,
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
+    IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
     IReadOnlyList<HabitChildResponse> Children);
 
@@ -56,6 +58,7 @@ public class GetHabitByIdQueryHandler(
             habit.DueTime,
             habit.Days.ToList(),
             habit.Position,
+            habit.ChecklistItems,
             habit.CreatedAtUtc,
             children));
     }
@@ -64,7 +67,7 @@ public class GetHabitByIdQueryHandler(
         c.Id, c.Title, c.Description,
         c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
         c.Days.ToList(), c.DueDate, c.DueTime,
-        c.Position, MapChildren(c.Id, lookup));
+        c.Position, c.ChecklistItems, MapChildren(c.Id, lookup));
 
     private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>
         lookup[parentId]

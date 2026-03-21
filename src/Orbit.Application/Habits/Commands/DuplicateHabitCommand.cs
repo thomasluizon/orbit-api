@@ -92,6 +92,7 @@ public class DuplicateHabitCommandHandler(
             source.IsBadHabit,
             source.DueDate,
             source.DueTime,
-            parentHabitId);
+            parentHabitId,
+            checklistItems: source.ChecklistItems);
     }
 }

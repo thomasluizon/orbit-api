@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -22,7 +23,8 @@ public record CreateHabitCommand(
     bool ReminderEnabled = false,
     int ReminderMinutesBefore = 15,
     bool SlipAlertEnabled = false,
-    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<Guid>? TagIds = null,
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -61,7 +63,8 @@ public class CreateHabitCommandHandler(
             dueTime: request.DueTime,
             reminderEnabled: request.ReminderEnabled,
             reminderMinutesBefore: request.ReminderMinutesBefore,
-            slipAlertEnabled: request.SlipAlertEnabled);
+            slipAlertEnabled: request.SlipAlertEnabled,
+            checklistItems: request.ChecklistItems);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
