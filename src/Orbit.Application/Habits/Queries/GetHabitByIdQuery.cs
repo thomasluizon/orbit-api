@@ -31,7 +31,7 @@ public class GetHabitByIdQueryHandler(
     public async Task<Result<HabitDetailResponse>> Handle(GetHabitByIdQuery request, CancellationToken cancellationToken)
     {
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             cancellationToken);
 
         var habit = allHabits.FirstOrDefault(h => h.Id == request.HabitId);

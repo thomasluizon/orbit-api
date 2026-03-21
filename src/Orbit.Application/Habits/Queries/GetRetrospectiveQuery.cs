@@ -37,7 +37,7 @@ public class GetRetrospectiveQueryHandler(
             return Result.Success(new RetrospectiveResponse(cached, FromCache: true));
 
         var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo)),
             cancellationToken);
 

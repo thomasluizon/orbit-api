@@ -19,9 +19,9 @@ public class DuplicateHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(DuplicateHabitCommand request, CancellationToken cancellationToken)
     {
-        // Load all active habits for this user
+        // Load all habits for this user
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             cancellationToken);
 
         var original = allHabits.FirstOrDefault(h => h.Id == request.HabitId);

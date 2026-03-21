@@ -67,7 +67,7 @@ public class GetHabitScheduleQueryHandler(
     public async Task<PaginatedResponse<HabitScheduleItem>> Handle(GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
             cancellationToken);
 

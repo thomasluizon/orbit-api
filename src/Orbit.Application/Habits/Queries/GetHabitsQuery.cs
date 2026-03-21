@@ -50,9 +50,9 @@ public class GetHabitsQueryHandler(
 {
     public async Task<IReadOnlyList<HabitResponse>> Handle(GetHabitsQuery request, CancellationToken cancellationToken)
     {
-        // Load all active habits for the user in one query to build the tree in-memory
+        // Load all habits for the user in one query to build the tree in-memory
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);

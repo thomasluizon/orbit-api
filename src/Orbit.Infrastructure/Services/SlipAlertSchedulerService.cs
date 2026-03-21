@@ -43,7 +43,7 @@ public class SlipAlertSchedulerService(
 
         // Load active bad habits with slip alerts enabled
         var habits = await dbContext.Habits
-            .Where(h => h.IsActive && !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled)
+            .Where(h => !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled)
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;

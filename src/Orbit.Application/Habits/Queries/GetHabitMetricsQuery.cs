@@ -18,7 +18,7 @@ public class GetHabitMetricsQueryHandler(
     public async Task<Result<HabitMetrics>> Handle(GetHabitMetricsQuery request, CancellationToken cancellationToken)
     {
         var habits = await habitRepository.FindAsync(
-            h => h.Id == request.HabitId && h.UserId == request.UserId && h.IsActive,
+            h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Logs),
             cancellationToken);
 
