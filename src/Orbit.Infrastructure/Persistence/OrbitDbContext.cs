@@ -61,7 +61,6 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<ChecklistItem>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
-            entity.HasIndex(h => new { h.UserId, h.IsActive });
         });
 
         modelBuilder.Entity<HabitLog>(entity =>

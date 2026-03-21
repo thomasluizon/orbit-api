@@ -47,7 +47,7 @@ public class GetDailySummaryQueryHandler(
         }
 
         var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             cancellationToken);
 
         var summaryResult = await summaryService.GenerateSummaryAsync(

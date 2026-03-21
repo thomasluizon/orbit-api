@@ -103,6 +103,8 @@ public class LogHabitCommandHandler(
         if (parent.DueDate > today) return;
 
         // Check if ALL children are done for today (logged today or permanently completed)
+        if (!parent.Children.Any()) return;
+
         var allChildrenDone = parent.Children.All(c =>
             c.IsCompleted || c.Logs.Any(l => l.Date == today));
         if (!allChildrenDone) return;

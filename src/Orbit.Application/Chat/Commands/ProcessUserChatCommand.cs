@@ -60,7 +60,7 @@ public class ProcessUserChatCommandHandler(
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var activeHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && h.IsActive,
+            h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
             cancellationToken);
 
@@ -513,7 +513,7 @@ public class ProcessUserChatCommandHandler(
             return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
 
         var title = habit.Title;
-        habit.Deactivate();
+        habitRepository.Remove(habit);
 
         return Result.Success<(Guid? Id, string? Name)>((habit.Id, title));
     }

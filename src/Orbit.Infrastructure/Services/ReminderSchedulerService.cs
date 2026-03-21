@@ -40,7 +40,7 @@ public class ReminderSchedulerService(
 
         // Load habits with reminders enabled and a due time set
         var habits = await dbContext.Habits
-            .Where(h => h.IsActive && !h.IsCompleted && h.ReminderEnabled && h.DueTime != null)
+            .Where(h => !h.IsCompleted && h.ReminderEnabled && h.DueTime != null)
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;

@@ -11,7 +11,6 @@ public class Habit : Entity
     public string? Description { get; private set; }
     public FrequencyUnit? FrequencyUnit { get; private set; }
     public int? FrequencyQuantity { get; private set; }
-    public bool IsActive { get; private set; } = true;
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
@@ -87,9 +86,6 @@ public class Habit : Entity
 
     public Result<HabitLog> Log(DateOnly date, string? note = null)
     {
-        if (!IsActive)
-            return Result.Failure<HabitLog>("Cannot log an inactive habit.");
-
         if (IsCompleted)
             return Result.Failure<HabitLog>("Cannot log a completed habit.");
 
@@ -146,9 +142,6 @@ public class Habit : Entity
 
     public Result<HabitLog> Unlog(DateOnly date)
     {
-        if (!IsActive)
-            return Result.Failure<HabitLog>("Cannot unlog an inactive habit.");
-
         var log = _logs.Find(l => l.Date == date);
         if (log is null)
             return Result.Failure<HabitLog>("No log found for this date.");
@@ -224,7 +217,4 @@ public class Habit : Entity
 
     public void RemoveTag(Tag tag) => _tags.Remove(tag);
 
-    public void Deactivate() => IsActive = false;
-
-    public void Activate() => IsActive = true;
 }
