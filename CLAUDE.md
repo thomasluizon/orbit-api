@@ -241,6 +241,13 @@ gh pr merge --squash
 - Keep PRs focused: one feature or fix per PR
 - Branch names should be descriptive: `feature/add-tags-to-habits`, `fix/login-redirect`
 
+## Testing
+
+- Integration tests (xUnit + FluentAssertions) + unit tests (Domain, Application, Infrastructure test projects)
+- Run: `dotnet test`
+- **Every new feature must include unit tests** covering commands, queries, validators, and domain logic
+- Test accounts: `REVIEWER_TEST_EMAIL`/`REVIEWER_TEST_CODE` and `QA_TEST_EMAIL`/`QA_TEST_CODE` env vars bypass email verification for testing
+
 ## Logging Convention
 - All controllers inject `ILogger<T>` and log business events
 - Format: `logger.LogInformation("Action {Property}", value)` -- structured properties in PascalCase, English only
