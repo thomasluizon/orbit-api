@@ -1,0 +1,30 @@
+name: API Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Run Domain Tests
+        run: dotnet test tests/Orbit.Domain.Tests --no-restore
+
+      - name: Run Application Tests
+        run: dotnet test tests/Orbit.Application.Tests --no-restore
+
+      - name: Run Infrastructure Tests
+        run: dotnet test tests/Orbit.Infrastructure.Tests --no-restore
