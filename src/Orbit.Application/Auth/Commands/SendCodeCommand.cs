@@ -19,12 +19,19 @@ public class SendCodeCommandHandler(
         var email = request.Email.Trim().ToLowerInvariant();
         var cacheKey = $"verify:{email}";
 
-        // Reviewer test account: skip email, store fixed code
-        var reviewerEmail = Environment.GetEnvironmentVariable("REVIEWER_TEST_EMAIL")?.ToLowerInvariant();
-        var reviewerCode = Environment.GetEnvironmentVariable("REVIEWER_TEST_CODE");
-        if (reviewerEmail is not null && reviewerCode is not null && email == reviewerEmail)
+        // Test accounts: skip email, store fixed code
+        var testAccounts = new[]
         {
-            var testEntry = new VerificationEntry(reviewerCode, 0, DateTime.UtcNow);
+            (Environment.GetEnvironmentVariable("REVIEWER_TEST_EMAIL")?.ToLowerInvariant(),
+             Environment.GetEnvironmentVariable("REVIEWER_TEST_CODE")),
+            (Environment.GetEnvironmentVariable("QA_TEST_EMAIL")?.ToLowerInvariant(),
+             Environment.GetEnvironmentVariable("QA_TEST_CODE")),
+        };
+
+        var matchedAccount = Array.Find(testAccounts, a => a.Item1 is not null && a.Item2 is not null && email == a.Item1);
+        if (matchedAccount != default)
+        {
+            var testEntry = new VerificationEntry(matchedAccount.Item2!, 0, DateTime.UtcNow);
             cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
