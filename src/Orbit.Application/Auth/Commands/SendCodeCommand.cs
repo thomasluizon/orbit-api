@@ -20,23 +20,23 @@ public class SendCodeCommandHandler(
         var cacheKey = $"verify:{email}";
 
         // Test accounts: skip email, store fixed code
-        var testAccounts = new[]
+        // Format: TEST_ACCOUNTS=email1:code1,email2:code2,...
+        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        if (!string.IsNullOrEmpty(testAccountsEnv))
         {
-            (Environment.GetEnvironmentVariable("REVIEWER_TEST_EMAIL")?.ToLowerInvariant(),
-             Environment.GetEnvironmentVariable("REVIEWER_TEST_CODE")),
-            (Environment.GetEnvironmentVariable("QA_TEST_EMAIL")?.ToLowerInvariant(),
-             Environment.GetEnvironmentVariable("QA_TEST_CODE")),
-        };
-
-        var matchedAccount = Array.Find(testAccounts, a => a.Item1 is not null && a.Item2 is not null && email == a.Item1);
-        if (matchedAccount != default)
-        {
-            var testEntry = new VerificationEntry(matchedAccount.Item2!, 0, DateTime.UtcNow);
-            cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
+            foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-            });
-            return Result.Success();
+                var parts = pair.Split(':', 2);
+                if (parts.Length == 2 && parts[0].Trim().ToLowerInvariant() == email)
+                {
+                    var testEntry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
+                    cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+                    });
+                    return Result.Success();
+                }
+            }
         }
 
         // Rate limit: no new code within 60 seconds
