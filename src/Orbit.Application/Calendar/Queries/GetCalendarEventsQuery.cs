@@ -60,17 +60,18 @@ public class GetCalendarEventsQueryHandler(
             var existingHabits = await habitRepository.FindAsync(
                 h => h.UserId == request.UserId, cancellationToken);
             var existingTitles = new HashSet<string>(
-                existingHabits.Select(h => h.Title), StringComparer.OrdinalIgnoreCase);
+                existingHabits.Select(h => h.Title.Trim()), StringComparer.OrdinalIgnoreCase);
 
             var items = new List<CalendarEventItem>();
             var seenTitles = new HashSet<string>(existingTitles, StringComparer.OrdinalIgnoreCase);
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
-                if (existingTitles.Contains(ev.Summary)) continue;
+                var evTitle = ev.Summary.Trim();
+                if (existingTitles.Contains(evTitle)) continue;
 
                 // Deduplicate by title (covers recurring instances + already-imported)
-                if (!seenTitles.Add(ev.Summary)) continue;
+                if (!seenTitles.Add(evTitle)) continue;
 
                 var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
                 var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
