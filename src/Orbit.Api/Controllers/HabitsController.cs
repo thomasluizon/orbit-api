@@ -205,6 +205,19 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             : BadRequest(new { error = result.Error });
     }
 
+    [HttpPost("{id:guid}/skip")]
+    public async Task<IActionResult> SkipHabit(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var command = new SkipHabitCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateHabit(
         Guid id,
