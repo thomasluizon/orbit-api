@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
@@ -100,6 +101,9 @@ public sealed class OllamaIntentService(
             text = text.Trim();
 
             logger.LogInformation("Cleaned JSON (length: {Length} chars)", text.Length);
+
+            // Fix invalid JSON escape sequences (e.g., \P, \C) that AI may generate
+            text = Regex.Replace(text, @"\\([^""\\\/bfnrtu])", "$1");
 
             var plan = JsonSerializer.Deserialize<AiActionPlan>(text, ActionPlanJsonOptions);
 

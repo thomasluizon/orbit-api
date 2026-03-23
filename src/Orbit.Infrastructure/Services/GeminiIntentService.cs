@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
@@ -151,6 +152,9 @@ public sealed class GeminiIntentService(
 
             logger.LogInformation("Gemini response (length: {Length} chars)", text.Length);
             logger.LogInformation("📄 GEMINI RAW JSON: {Json}", text);
+
+            // Fix invalid JSON escape sequences (e.g., \P, \C) that Gemini may generate
+            text = Regex.Replace(text, @"\\([^""\\\/bfnrtu])", "$1");
 
             var plan = JsonSerializer.Deserialize<AiActionPlan>(text, ActionPlanJsonOptions);
 
