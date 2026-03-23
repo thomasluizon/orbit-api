@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260323153115_GoogleCalendarTokens")]
-    partial class GoogleCalendarTokens
+    [Migration("20260323154616_GoogleCalendarSync")]
+    partial class GoogleCalendarSync
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -365,6 +365,9 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("HasDismissedMissions")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("HasImportedCalendar")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsLifetimePro")

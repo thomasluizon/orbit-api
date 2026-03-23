@@ -364,6 +364,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("HasDismissedMissions")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("HasImportedCalendar")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsLifetimePro")
                         .HasColumnType("boolean");
 

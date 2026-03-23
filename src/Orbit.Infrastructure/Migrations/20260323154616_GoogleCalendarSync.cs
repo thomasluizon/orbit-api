@@ -5,7 +5,7 @@
 namespace Orbit.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class GoogleCalendarTokens : Migration
+    public partial class GoogleCalendarSync : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -21,6 +21,13 @@ namespace Orbit.Infrastructure.Migrations
                 table: "Users",
                 type: "text",
                 nullable: true);
+
+            migrationBuilder.AddColumn<bool>(
+                name: "HasImportedCalendar",
+                table: "Users",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
         }
 
         /// <inheritdoc />
@@ -32,6 +39,10 @@ namespace Orbit.Infrastructure.Migrations
 
             migrationBuilder.DropColumn(
                 name: "GoogleRefreshToken",
+                table: "Users");
+
+            migrationBuilder.DropColumn(
+                name: "HasImportedCalendar",
                 table: "Users");
         }
     }
