@@ -18,7 +18,7 @@ public class ActiveHabitsSection : IPromptSection
         }
         else
         {
-            foreach (var habit in context.ActiveHabits)
+            foreach (var habit in context.ActiveHabits.Where(h => h.ParentHabitId is null))
             {
                 var freqLabel = habit.FrequencyUnit is null
                     ? "One-time"
@@ -70,7 +70,7 @@ public class ActiveHabitsSection : IPromptSection
                             childDueLabel = " | OVERDUE";
                     }
                     var childCompleted = child.IsCompleted ? " | COMPLETED" : "";
-                    sb.AppendLine($"  - \"{child.Title}\" | ID: {child.Id} | Due: {child.DueDate:yyyy-MM-dd}{childDueLabel}{childCompleted}");
+                    sb.AppendLine($"  - [Sub-habit] \"{child.Title}\" | ID: {child.Id} | Due: {child.DueDate:yyyy-MM-dd}{childDueLabel}{childCompleted}");
                 }
             }
             sb.AppendLine();
