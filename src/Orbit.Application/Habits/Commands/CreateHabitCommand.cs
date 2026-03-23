@@ -27,7 +27,12 @@ namespace Orbit.Application.Habits.Commands;
 [AiRule("BAD HABITS: Set isBadHabit to true for habits the user wants to AVOID or STOP doing. Bad habits track slip-ups/occurrences (smoking, nail biting, etc.)")]
 [AiRule("When logging habits, include a note if the user provides context or feelings about the activity")]
 [AiRule("TAGS: You can assign tags to habits using tagNames on CreateHabit actions, or use AssignTags action to change tags on existing habits. tagNames is an array of tag name strings. Use EXISTING tag names from the user's tags list when possible. If user asks for a tag that doesn't exist yet, use the new name - it will be auto-created")]
+[AiRule("FREQUENCY INTERPRETATION: 'X times per week' (e.g., '3x per week', '3 vezes por semana') means frequencyUnit: Day, frequencyQuantity: 1, days: [pick X evenly spread weekdays]. It does NOT mean frequencyQuantity: X, frequencyUnit: Week (that means every X weeks). Example: '3x/week' = Day/1/[Monday,Wednesday,Friday]. '2x/week' = Day/1/[Tuesday,Thursday]")]
 [AiRule("ONLY add/change tags when the user EXPLICITLY asks for it. NEVER auto-assign tags on your own initiative")]
+[AiExample(
+    "Clean the house 3x per week",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Clean the House", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Wednesday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created 'Clean the House' for Monday, Wednesday, and Friday!" }""",
+    Note = "X times per week")]
 [AiExample(
     "I want to meditate on weekdays",
     """{ "actions": [{ "type": "CreateHabit", "title": "Meditation", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created a weekday meditation habit!" }""")]
