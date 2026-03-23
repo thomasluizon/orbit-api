@@ -52,13 +52,24 @@ public class ImportCalendarEventsCommandHandler(
         var existingTitles = new HashSet<string>(
             existingHabits.Select(h => h.Title.Trim()), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var eventId in request.EventIds)
+        // Fetch all events and filter by selected IDs (avoids issues with instance IDs)
+        var selectedIds = new HashSet<string>(request.EventIds);
+
+        var listRequest = service.Events.List("primary");
+        listRequest.SingleEvents = true;
+        listRequest.TimeMinDateTimeOffset = DateTimeOffset.UtcNow.AddDays(-1);
+        listRequest.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddDays(60);
+        listRequest.MaxResults = 250;
+
+        var allEvents = await listRequest.ExecuteAsync(cancellationToken);
+
+        foreach (var ev in allEvents.Items ?? [])
         {
+            if (ev is null || string.IsNullOrWhiteSpace(ev.Summary)) continue;
+            if (!selectedIds.Contains(ev.Id)) continue;
+
             try
             {
-                var ev = await service.Events.Get("primary", eventId).ExecuteAsync(cancellationToken);
-                if (ev is null || string.IsNullOrWhiteSpace(ev.Summary)) continue;
-
                 var title = ev.Summary.Trim();
 
                 // Skip if habit with same title already exists
@@ -99,10 +110,6 @@ public class ImportCalendarEventsCommandHandler(
                         rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
                     }
                     catch { /* ignore - treat as one-time */ }
-                }
-                else
-                {
-                    rrule = ev.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
                 }
 
                 if (rrule is not null)
@@ -146,7 +153,6 @@ public class ImportCalendarEventsCommandHandler(
             }
             catch
             {
-                // Skip events that fail to import
                 continue;
             }
         }
