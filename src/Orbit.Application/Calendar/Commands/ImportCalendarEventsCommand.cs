@@ -50,7 +50,7 @@ public class ImportCalendarEventsCommandHandler(
         var existingHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId, cancellationToken);
         var existingTitles = new HashSet<string>(
-            existingHabits.Select(h => h.Title), StringComparer.OrdinalIgnoreCase);
+            existingHabits.Select(h => h.Title.Trim()), StringComparer.OrdinalIgnoreCase);
 
         foreach (var eventId in request.EventIds)
         {
@@ -59,8 +59,10 @@ public class ImportCalendarEventsCommandHandler(
                 var ev = await service.Events.Get("primary", eventId).ExecuteAsync(cancellationToken);
                 if (ev is null || string.IsNullOrWhiteSpace(ev.Summary)) continue;
 
+                var title = ev.Summary.Trim();
+
                 // Skip if habit with same title already exists
-                if (existingTitles.Contains(ev.Summary)) continue;
+                if (existingTitles.Contains(title)) continue;
 
                 // Parse dates
                 DateOnly dueDate;
@@ -126,7 +128,7 @@ public class ImportCalendarEventsCommandHandler(
 
                 var habitResult = Habit.Create(
                     request.UserId,
-                    ev.Summary,
+                    title,
                     freqUnit,
                     freqQty,
                     ev.Description,
@@ -139,8 +141,8 @@ public class ImportCalendarEventsCommandHandler(
                 if (habitResult.IsFailure) continue;
 
                 await habitRepository.AddAsync(habitResult.Value, cancellationToken);
-                existingTitles.Add(ev.Summary);
-                imported.Add(new ImportedHabitItem(habitResult.Value.Id, ev.Summary));
+                existingTitles.Add(title);
+                imported.Add(new ImportedHabitItem(habitResult.Value.Id, title));
             }
             catch
             {
