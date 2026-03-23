@@ -8,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record GoogleAuthCommand(string AccessToken, string Language = "en")
+public record GoogleAuthCommand(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null)
     : IRequest<Result<LoginResponse>>;
 
 public class GoogleAuthCommandHandler(
@@ -75,6 +75,13 @@ public class GoogleAuthCommandHandler(
                     // Silently ignore email failures - don't block authentication
                 }
             }, CancellationToken.None);
+        }
+
+        // Store Google tokens for Calendar API access
+        if (request.GoogleAccessToken is not null)
+        {
+            user.SetGoogleTokens(request.GoogleAccessToken, request.GoogleRefreshToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         // Generate app JWT

@@ -29,6 +29,8 @@ public class User : Entity
     public int AiMessagesUsedThisMonth { get; private set; } = 0;
     public DateTime? AiMessagesResetAt { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public string? GoogleAccessToken { get; private set; }
+    public string? GoogleRefreshToken { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -129,5 +131,18 @@ public class User : Entity
             AiMessagesResetAt = DateTime.UtcNow.AddDays(30);
         }
         AiMessagesUsedThisMonth++;
+    }
+
+    public void SetGoogleTokens(string accessToken, string? refreshToken)
+    {
+        GoogleAccessToken = accessToken;
+        if (refreshToken is not null)
+            GoogleRefreshToken = refreshToken;
+    }
+
+    public void ClearGoogleTokens()
+    {
+        GoogleAccessToken = null;
+        GoogleRefreshToken = null;
     }
 }
