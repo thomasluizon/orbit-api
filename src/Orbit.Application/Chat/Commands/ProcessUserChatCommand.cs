@@ -284,8 +284,23 @@ public class ProcessUserChatCommandHandler(
         saveStopwatch.Stop();
         logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
 
-        // 6. Extract facts from conversation (non-blocking - failure doesn't affect response)
+        // 6. Extract AI message (strip JSON wrapper if model didn't use function calling)
         var aiMessage = aiResponse.TextMessage;
+        if (aiMessage is not null && aiMessage.TrimStart().StartsWith('{'))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(aiMessage);
+                if (doc.RootElement.TryGetProperty("aiMessage", out var msgEl))
+                    aiMessage = msgEl.GetString();
+            }
+            catch (JsonException)
+            {
+                // Not valid JSON, use as-is
+            }
+        }
+
+        // 7. Extract facts from conversation (non-blocking - failure doesn't affect response)
 
         if (!aiMemoryEnabled || (user is not null && !user.HasProAccess))
         {

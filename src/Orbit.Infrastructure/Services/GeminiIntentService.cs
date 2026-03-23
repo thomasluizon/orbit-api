@@ -29,6 +29,7 @@ public sealed class GeminiIntentService(
     /// Conversation state maintained between SendWithToolsAsync and ContinueWithToolResultsAsync calls.
     /// </summary>
     private List<GeminiContent>? _conversationContents;
+    private GeminiContent? _conversationSystemInstruction;
     private GeminiTool[]? _conversationTools;
     private GeminiToolConfig? _conversationToolConfig;
 
@@ -194,9 +195,9 @@ public sealed class GeminiIntentService(
     {
         var contents = new List<GeminiContent>();
 
-        // System prompt as first user turn, model acknowledges
-        contents.Add(new GeminiContent { Role = "user", Parts = [new GeminiPart { Text = systemPrompt }] });
-        contents.Add(new GeminiContent { Role = "model", Parts = [new GeminiPart { Text = "Understood. I will use the provided tools when appropriate." }] });
+        // System instruction (separate from conversation - proper Gemini API field)
+        var systemInstruction = new GeminiContent { Parts = [new GeminiPart { Text = systemPrompt }] };
+        _conversationSystemInstruction = systemInstruction;
 
         // Conversation history
         if (history is { Count: > 0 })
@@ -277,6 +278,7 @@ public sealed class GeminiIntentService(
     {
         var request = new GeminiRequest
         {
+            SystemInstruction = _conversationSystemInstruction,
             Contents = _conversationContents!.ToArray(),
             GenerationConfig = new GeminiGenerationConfig { Temperature = 0.1 },
             Tools = _conversationTools,
@@ -404,6 +406,10 @@ public sealed class GeminiIntentService(
 
     private record GeminiRequest
     {
+        [JsonPropertyName("system_instruction")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public GeminiContent? SystemInstruction { get; init; }
+
         [JsonPropertyName("contents")]
         public GeminiContent[] Contents { get; init; } = [];
 
