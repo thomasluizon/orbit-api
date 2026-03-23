@@ -25,7 +25,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         DateOnly? DueDate = null,
         TimeOnly? DueTime = null,
         bool ReminderEnabled = false,
-        int ReminderMinutesBefore = 15,
+        IReadOnlyList<int>? ReminderTimes = null,
         bool SlipAlertEnabled = false,
         IReadOnlyList<Guid>? TagIds = null,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null);
@@ -40,7 +40,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         DateOnly? DueDate = null,
         TimeOnly? DueTime = null,
         bool? ReminderEnabled = null,
-        int? ReminderMinutesBefore = null,
+        IReadOnlyList<int>? ReminderTimes = null,
         bool? SlipAlertEnabled = null,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null);
 
@@ -171,7 +171,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.DueDate,
             request.DueTime,
             request.ReminderEnabled,
-            request.ReminderMinutesBefore,
+            request.ReminderTimes,
             request.SlipAlertEnabled,
             request.TagIds,
             request.ChecklistItems);
@@ -236,7 +236,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.DueDate,
             request.DueTime,
             request.ReminderEnabled,
-            request.ReminderMinutesBefore,
+            request.ReminderTimes,
             request.SlipAlertEnabled,
             request.ChecklistItems);
 

@@ -16,7 +16,7 @@ public class Habit : Entity
     public DateOnly DueDate { get; private set; }
     public TimeOnly? DueTime { get; private set; }
     public bool ReminderEnabled { get; private set; }
-    public int ReminderMinutesBefore { get; private set; } = 15;
+    public IReadOnlyList<int> ReminderTimes { get; private set; } = [15];
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public int? Position { get; private set; }
@@ -48,7 +48,7 @@ public class Habit : Entity
         TimeOnly? dueTime = null,
         Guid? parentHabitId = null,
         bool reminderEnabled = false,
-        int reminderMinutesBefore = 15,
+        IReadOnlyList<int>? reminderTimes = null,
         bool slipAlertEnabled = false,
         IReadOnlyList<ChecklistItem>? checklistItems = null)
     {
@@ -77,7 +77,7 @@ public class Habit : Entity
             DueTime = dueTime,
             ParentHabitId = parentHabitId,
             ReminderEnabled = reminderEnabled,
-            ReminderMinutesBefore = reminderMinutesBefore,
+            ReminderTimes = reminderTimes ?? [15],
             SlipAlertEnabled = slipAlertEnabled,
             ChecklistItems = checklistItems ?? [],
             CreatedAtUtc = DateTime.UtcNow
@@ -170,7 +170,7 @@ public class Habit : Entity
         DateOnly? dueDate,
         TimeOnly? dueTime = null,
         bool? reminderEnabled = null,
-        int? reminderMinutesBefore = null,
+        IReadOnlyList<int>? reminderTimes = null,
         bool? slipAlertEnabled = null,
         IReadOnlyList<ChecklistItem>? checklistItems = null)
     {
@@ -197,8 +197,8 @@ public class Habit : Entity
 
         if (reminderEnabled.HasValue)
             ReminderEnabled = reminderEnabled.Value;
-        if (reminderMinutesBefore.HasValue)
-            ReminderMinutesBefore = reminderMinutesBefore.Value;
+        if (reminderTimes is not null)
+            ReminderTimes = reminderTimes;
         if (slipAlertEnabled.HasValue)
             SlipAlertEnabled = slipAlertEnabled.Value;
         if (checklistItems is not null)

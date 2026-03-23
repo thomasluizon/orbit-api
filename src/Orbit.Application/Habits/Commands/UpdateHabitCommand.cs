@@ -42,7 +42,7 @@ public record UpdateHabitCommand(
     [property: AiField("string", "New due date YYYY-MM-DD")] DateOnly? DueDate = null,
     [property: AiField("string", "HH:mm 24h format to set or change time")] TimeOnly? DueTime = null,
     [property: AiField("boolean", "Enable or disable reminders")] bool? ReminderEnabled = null,
-    [property: AiField("integer", "Minutes before dueTime to send reminder")] int? ReminderMinutesBefore = null,
+    [property: AiField("integer[]", "Array of minutes before dueTime for reminders")] IReadOnlyList<int>? ReminderTimes = null,
     [property: AiField("boolean", "Enable or disable slip alerts")] bool? SlipAlertEnabled = null,
     [property: AiField("object[]", "New checklist items")] IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result>;
 
@@ -72,22 +72,22 @@ public class UpdateHabitCommandHandler(
             request.DueDate,
             dueTime: request.DueTime,
             reminderEnabled: request.ReminderEnabled,
-            reminderMinutesBefore: request.ReminderMinutesBefore,
+            reminderTimes: request.ReminderTimes,
             slipAlertEnabled: request.SlipAlertEnabled,
             checklistItems: request.ChecklistItems);
 
         if (result.IsFailure)
             return result;
 
-        // If dueTime changed, clear today's sent reminder so it re-triggers
+        // If dueTime changed, clear today's sent reminders so they re-trigger
         if (request.DueTime.HasValue)
         {
             var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-            var existing = await sentReminderRepository.FindOneTrackedAsync(
+            var existing = await sentReminderRepository.FindAsync(
                 r => r.HabitId == request.HabitId && r.Date == userToday,
-                cancellationToken: cancellationToken);
-            if (existing is not null)
-                sentReminderRepository.Remove(existing);
+                cancellationToken);
+            foreach (var r in existing)
+                sentReminderRepository.Remove(r);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
