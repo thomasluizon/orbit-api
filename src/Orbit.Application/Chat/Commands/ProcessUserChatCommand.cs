@@ -192,6 +192,7 @@ public class ProcessUserChatCommandHandler(
                     AiActionType.UpdateHabit => await ExecuteUpdateHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.DeleteHabit => await ExecuteDeleteHabitAsync(action, request.UserId, cancellationToken),
                     AiActionType.CreateSubHabit => await ExecuteCreateSubHabitAsync(action, request.UserId, cancellationToken),
+                    AiActionType.SkipHabit => await ExecuteSkipHabitAsync(action, request.UserId, cancellationToken),
                     _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
                 };
 
@@ -541,6 +542,35 @@ public class ProcessUserChatCommandHandler(
             return Result.Failure<(Guid? Id, string? Name)>(result.Error);
 
         return Result.Success<(Guid? Id, string? Name)>((result.Value, action.Title));
+    }
+
+    private async Task<Result<(Guid? Id, string? Name)>> ExecuteSkipHabitAsync(
+        AiAction action, Guid userId, CancellationToken ct)
+    {
+        if (action.HabitId is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for skipping.");
+
+        var habit = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == action.HabitId.Value && h.UserId == userId,
+            cancellationToken: ct);
+
+        if (habit is null)
+            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
+
+        if (habit.IsCompleted)
+            return Result.Failure<(Guid? Id, string? Name)>("Cannot skip a completed habit.");
+
+        if (habit.FrequencyUnit is null)
+            return Result.Failure<(Guid? Id, string? Name)>("Cannot skip a one-time task.");
+
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+
+        if (habit.DueDate > today)
+            return Result.Failure<(Guid? Id, string? Name)>("Cannot skip a habit that is not yet due.");
+
+        habit.AdvanceDueDate(today);
+
+        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
     }
 
     private async Task AssignTagsToHabitAsync(Habit habit, List<string>? tagNames, Guid userId, CancellationToken ct)

@@ -26,6 +26,15 @@ public class ActiveHabitsSection : IPromptSection
                         ? $"Every {habit.FrequencyUnit.ToString()!.ToLower()}"
                         : $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString()!.ToLower()}s";
 
+                var dueLabel = "";
+                if (!habit.IsCompleted && context.UserToday.HasValue)
+                {
+                    if (habit.DueDate == context.UserToday.Value)
+                        dueLabel = " | DUE TODAY";
+                    else if (habit.DueDate < context.UserToday.Value)
+                        dueLabel = " | OVERDUE";
+                }
+
                 var badHabitLabel = habit.IsBadHabit ? " | BAD HABIT (tracking to avoid)" : "";
                 var slipAlertLabel = habit.SlipAlertEnabled ? " | SLIP ALERTS ON" : "";
                 var completedLabel = habit.IsCompleted ? " | COMPLETED" : "";
@@ -48,7 +57,7 @@ public class ActiveHabitsSection : IPromptSection
                     : "";
 
                 var dueTimeLabel = habit.DueTime.HasValue ? $" at {habit.DueTime.Value:HH:mm}" : "";
-                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{badHabitLabel}{slipAlertLabel}{completedLabel}{tagsLabel}{checklistLabel}{metricsLabel}");
+                sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{dueLabel}{badHabitLabel}{slipAlertLabel}{completedLabel}{tagsLabel}{checklistLabel}{metricsLabel}");
 
                 foreach (var child in habit.Children)
                 {

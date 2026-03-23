@@ -8,5 +8,6 @@ public enum AiActionType
     AssignTags,
     UpdateHabit,
     DeleteHabit,
-    CreateSubHabit
+    CreateSubHabit,
+    SkipHabit
 }
