@@ -61,8 +61,16 @@ public class ActiveHabitsSection : IPromptSection
 
                 foreach (var child in habit.Children)
                 {
-                    var childCompleted = child.IsCompleted ? " (done)" : "";
-                    sb.AppendLine($"  - \"{child.Title}\" | ID: {child.Id}{childCompleted}");
+                    var childDueLabel = "";
+                    if (!child.IsCompleted && context.UserToday.HasValue)
+                    {
+                        if (child.DueDate == context.UserToday.Value)
+                            childDueLabel = " | DUE TODAY";
+                        else if (child.DueDate < context.UserToday.Value)
+                            childDueLabel = " | OVERDUE";
+                    }
+                    var childCompleted = child.IsCompleted ? " | COMPLETED" : "";
+                    sb.AppendLine($"  - \"{child.Title}\" | ID: {child.Id} | Due: {child.DueDate:yyyy-MM-dd}{childDueLabel}{childCompleted}");
                 }
             }
             sb.AppendLine();

@@ -18,6 +18,7 @@ namespace Orbit.Application.Habits.Commands;
     - For "skip all" or "skip everything today", return SkipHabit for EVERY habit marked DUE TODAY or OVERDUE that is not COMPLETED
     - For specific habits, use their exact ID
     - Do NOT confuse with LogHabit: skip = didn't do it, just move on; log = actually completed it
+    - When user asks to skip a parent habit AND its sub-habits, return SkipHabit for the parent AND each sub-habit separately (each with its own ID)
     """,
     DisplayOrder = 25)]
 [AiExample(
