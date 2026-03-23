@@ -58,6 +58,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         IReadOnlyList<System.DayOfWeek>? Days = null,
         bool IsBadHabit = false,
         DateOnly? DueDate = null,
+        TimeOnly? DueTime = null,
+        bool ReminderEnabled = false,
+        IReadOnlyList<int>? ReminderTimes = null,
         IReadOnlyList<BulkHabitItemRequest>? SubHabits = null);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
@@ -408,6 +411,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.Days,
             request.IsBadHabit,
             request.DueDate,
+            request.DueTime,
+            request.ReminderEnabled,
+            request.ReminderTimes,
             request.SubHabits?.Select(MapToBulkHabitItem).ToList());
     }
 

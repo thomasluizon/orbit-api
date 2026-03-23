@@ -20,6 +20,9 @@ public record BulkHabitItem(
     IReadOnlyList<DayOfWeek>? Days = null,
     bool IsBadHabit = false,
     DateOnly? DueDate = null,
+    TimeOnly? DueTime = null,
+    bool ReminderEnabled = false,
+    IReadOnlyList<int>? ReminderTimes = null,
     IReadOnlyList<BulkHabitItem>? SubHabits = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
@@ -81,7 +84,10 @@ public class BulkCreateHabitsCommandHandler(
                         item.Description,
                         item.Days,
                         item.IsBadHabit,
-                        item.DueDate ?? userToday);
+                        item.DueDate ?? userToday,
+                        dueTime: item.DueTime,
+                        reminderEnabled: item.ReminderEnabled,
+                        reminderTimes: item.ReminderTimes);
 
                     if (habitResult.IsFailure)
                     {
