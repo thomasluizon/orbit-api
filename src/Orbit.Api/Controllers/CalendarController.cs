@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 
 namespace Orbit.Api.Controllers;
@@ -22,5 +23,13 @@ public class CalendarController(IMediator mediator, ILogger<CalendarController> 
 
         logger.LogWarning("Failed to fetch calendar events: {Error}", result.Error);
         return BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("dismiss")]
+    public async Task<IActionResult> DismissImport(CancellationToken cancellationToken)
+    {
+        var command = new DismissCalendarImportCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 }
