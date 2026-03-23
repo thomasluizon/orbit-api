@@ -127,6 +127,9 @@ public class ImportCalendarEventsCommandHandler(
             }
         }
 
+        if (imported.Count > 0)
+            user.MarkCalendarImported();
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new ImportCalendarEventsResult(imported.Count, imported));

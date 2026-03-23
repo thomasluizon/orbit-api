@@ -29,6 +29,7 @@ public class User : Entity
     public int AiMessagesUsedThisMonth { get; private set; } = 0;
     public DateTime? AiMessagesResetAt { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public bool HasImportedCalendar { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
     public string? GoogleRefreshToken { get; private set; }
 
@@ -145,4 +146,6 @@ public class User : Entity
         GoogleAccessToken = null;
         GoogleRefreshToken = null;
     }
+
+    public void MarkCalendarImported() => HasImportedCalendar = true;
 }

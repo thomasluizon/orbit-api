@@ -20,7 +20,9 @@ public record ProfileResponse(
     DateTime? TrialEndsAt,
     DateTime? PlanExpiresAt,
     int AiMessagesUsed,
-    int AiMessagesLimit);
+    int AiMessagesLimit,
+    bool HasImportedCalendar,
+    bool HasGoogleConnection);
 
 public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
 
@@ -53,6 +55,8 @@ public class GetProfileQueryHandler(
             user.TrialEndsAt,
             user.PlanExpiresAt,
             user.AiMessagesUsedThisMonth,
-            aiMessageLimit);
+            aiMessageLimit,
+            user.HasImportedCalendar,
+            user.GoogleAccessToken is not null);
     }
 }
