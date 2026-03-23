@@ -67,7 +67,7 @@ public class ProcessUserChatCommandHandler(
 
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId,
-            q => q.Include(h => h.Tags).Include(h => h.Children),
+            q => q.Include(h => h.Tags),
             cancellationToken);
 
         var userTags = await tagRepository.FindAsync(
