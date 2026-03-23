@@ -47,10 +47,10 @@ public class GoogleAuthCommandHandler(
                 name = n;
         }
 
-        // Find or create user
-        var users = await userRepository.GetAllAsync(cancellationToken);
-        var user = users.FirstOrDefault(u =>
-            u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
+        // Find or create user (tracked so token updates persist)
+        var user = await userRepository.FindOneTrackedAsync(
+            u => u.Email.ToLower() == email.ToLower(),
+            cancellationToken: cancellationToken);
 
         if (user is null)
         {
