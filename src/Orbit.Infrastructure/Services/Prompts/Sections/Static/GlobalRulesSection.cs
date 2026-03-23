@@ -20,6 +20,7 @@ public class GlobalRulesSection : IPromptSection
             5. SUB-HABIT AMBIGUITY: If both a parent and sub-habit match, prefer the standalone habit.
             6. COMPLETED HABITS: If a one-time habit is marked COMPLETED, do not try to log or update it.
             7. When user asks to perform an action on a habit AND its sub-habits, call the tool for BOTH the parent and each sub-habit separately.
+            8. NEVER expose internal habit IDs (GUIDs) to the user in your messages. Refer to habits by their title only.
             """);
         return sb.ToString();
     }
