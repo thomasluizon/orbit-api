@@ -13,7 +13,7 @@ public record ImportedHabitItem(Guid Id, string Title);
 
 public record ImportCalendarEventsResult(int Imported, List<ImportedHabitItem> Habits);
 
-public record ImportCalendarEventsCommand(Guid UserId, IReadOnlyList<string> EventIds)
+public record ImportCalendarEventsCommand(Guid UserId, IReadOnlyList<string> EventIds, IReadOnlyList<string>? EventTitles = null)
     : IRequest<Result<ImportCalendarEventsResult>>;
 
 public class ImportCalendarEventsCommandHandler(
@@ -52,8 +52,11 @@ public class ImportCalendarEventsCommandHandler(
         var existingTitles = new HashSet<string>(
             existingHabits.Select(h => h.Title.Trim()), StringComparer.OrdinalIgnoreCase);
 
-        // Fetch all events and filter by selected IDs (avoids issues with instance IDs)
-        var selectedIds = new HashSet<string>(request.EventIds);
+        // Match by both event IDs and titles (instance IDs are unstable between API calls)
+        var selectedEventIds = new HashSet<string>(request.EventIds);
+        var selectedTitles = request.EventTitles is not null
+            ? new HashSet<string>(request.EventTitles.Select(t => t.Trim()), StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var listRequest = service.Events.List("primary");
         listRequest.SingleEvents = true;
@@ -62,11 +65,13 @@ public class ImportCalendarEventsCommandHandler(
         listRequest.MaxResults = 250;
 
         var allEvents = await listRequest.ExecuteAsync(cancellationToken);
+        var processedTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var ev in allEvents.Items ?? [])
         {
             if (ev is null || string.IsNullOrWhiteSpace(ev.Summary)) continue;
-            if (!selectedIds.Contains(ev.Id)) continue;
+            if (!selectedEventIds.Contains(ev.Id) && !selectedTitles.Contains(ev.Summary.Trim())) continue;
+            if (!processedTitles.Add(ev.Summary.Trim())) continue; // one per title
 
             try
             {

@@ -25,14 +25,14 @@ public class CalendarController(IMediator mediator, ILogger<CalendarController> 
         return BadRequest(new { error = result.Error });
     }
 
-    public record ImportRequest(IReadOnlyList<string> EventIds);
+    public record ImportRequest(IReadOnlyList<string> EventIds, IReadOnlyList<string>? EventTitles = null);
 
     [HttpPost("import")]
     public async Task<IActionResult> Import(
         [FromBody] ImportRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new ImportCalendarEventsCommand(HttpContext.GetUserId(), request.EventIds);
+        var command = new ImportCalendarEventsCommand(HttpContext.GetUserId(), request.EventIds, request.EventTitles);
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
