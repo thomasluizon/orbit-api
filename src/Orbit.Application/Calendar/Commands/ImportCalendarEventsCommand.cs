@@ -74,13 +74,25 @@ public class ImportCalendarEventsCommandHandler(
 
                 if (dueDate < userToday) dueDate = userToday;
 
-                // Parse recurrence
+                // Parse recurrence - fetch master event for RRULE if this is a recurring instance
                 FrequencyUnit? freqUnit = null;
                 int? freqQty = null;
                 IReadOnlyList<DayOfWeek>? days = null;
 
-                var rrule = ev.Recurrence?.FirstOrDefault(r =>
-                    r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+                string? rrule = null;
+                if (ev.RecurringEventId is not null)
+                {
+                    try
+                    {
+                        var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
+                        rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+                    }
+                    catch { /* ignore - treat as one-time */ }
+                }
+                else
+                {
+                    rrule = ev.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+                }
 
                 if (rrule is not null)
                 {

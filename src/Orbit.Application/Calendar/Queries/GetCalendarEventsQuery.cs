@@ -47,23 +47,30 @@ public class GetCalendarEventsQueryHandler(
             });
 
             var listRequest = service.Events.List("primary");
+            listRequest.SingleEvents = true;
             listRequest.TimeMinDateTimeOffset = DateTimeOffset.UtcNow;
             listRequest.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddDays(60);
-            listRequest.SingleEvents = false; // Keep recurring events as masters
             listRequest.MaxResults = 250;
             listRequest.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
 
             var events = await listRequest.ExecuteAsync(cancellationToken);
 
             var items = new List<CalendarEventItem>();
+            var seenRecurring = new HashSet<string>();
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
 
+                // Deduplicate recurring event instances - show only the first occurrence
+                if (ev.RecurringEventId is not null)
+                {
+                    if (!seenRecurring.Add(ev.RecurringEventId)) continue;
+                }
+
                 var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
                 var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
                 var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
-                var isRecurring = ev.Recurrence?.Count > 0;
+                var isRecurring = ev.RecurringEventId is not null;
                 var rrule = ev.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
 
                 var reminders = new List<int>();
