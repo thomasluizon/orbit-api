@@ -46,12 +46,21 @@ public class ImportCalendarEventsCommandHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var imported = new List<ImportedHabitItem>();
 
+        // Load existing habit titles to skip duplicates
+        var existingHabits = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId, cancellationToken);
+        var existingTitles = new HashSet<string>(
+            existingHabits.Select(h => h.Title), StringComparer.OrdinalIgnoreCase);
+
         foreach (var eventId in request.EventIds)
         {
             try
             {
                 var ev = await service.Events.Get("primary", eventId).ExecuteAsync(cancellationToken);
                 if (ev is null || string.IsNullOrWhiteSpace(ev.Summary)) continue;
+
+                // Skip if habit with same title already exists
+                if (existingTitles.Contains(ev.Summary)) continue;
 
                 // Parse dates
                 DateOnly dueDate;
@@ -130,6 +139,7 @@ public class ImportCalendarEventsCommandHandler(
                 if (habitResult.IsFailure) continue;
 
                 await habitRepository.AddAsync(habitResult.Value, cancellationToken);
+                existingTitles.Add(ev.Summary);
                 imported.Add(new ImportedHabitItem(habitResult.Value.Id, ev.Summary));
             }
             catch
