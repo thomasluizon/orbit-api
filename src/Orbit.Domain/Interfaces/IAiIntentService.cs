@@ -18,4 +18,17 @@ public interface IAiIntentService
         IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
         IReadOnlyList<ChatHistoryMessage>? history = null,
         CancellationToken cancellationToken = default);
+
+    Task<Result<AiResponse>> SendWithToolsAsync(
+        string userMessage,
+        string systemPrompt,
+        IReadOnlyList<object> toolDeclarations,
+        byte[]? imageData = null,
+        string? imageMimeType = null,
+        IReadOnlyList<ChatHistoryMessage>? history = null,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<AiResponse>> ContinueWithToolResultsAsync(
+        IReadOnlyList<AiToolCallResult> results,
+        CancellationToken cancellationToken = default);
 }

@@ -11,6 +11,8 @@ using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Application.Chat.Tools;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Infrastructure.Services;
 using Scalar.AspNetCore;
 
@@ -161,6 +163,20 @@ builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>();
 
 // Retrospective always uses Gemini (free-text generation)
 builder.Services.AddHttpClient<IRetrospectiveService, GeminiRetrospectiveService>();
+
+// --- AI Tool Registration ---
+builder.Services.AddScoped<IAiTool, LogHabitTool>();
+builder.Services.AddScoped<IAiTool, SkipHabitTool>();
+builder.Services.AddScoped<IAiTool, CreateHabitTool>();
+builder.Services.AddScoped<IAiTool, UpdateHabitTool>();
+builder.Services.AddScoped<IAiTool, DeleteHabitTool>();
+builder.Services.AddScoped<IAiTool, CreateSubHabitTool>();
+builder.Services.AddScoped<IAiTool, AssignTagsTool>();
+builder.Services.AddScoped<IAiTool, SuggestBreakdownTool>();
+builder.Services.AddScoped<IAiTool, DuplicateHabitTool>();
+builder.Services.AddScoped<IAiTool, MoveHabitTool>();
+builder.Services.AddScoped<AiToolRegistry>();
+builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
 // --- In-Memory Cache ---
 builder.Services.AddMemoryCache();

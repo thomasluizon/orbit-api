@@ -1,6 +1,9 @@
+using System.Globalization;
+using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,7 +24,7 @@ public record ProcessUserChatCommand(
 public record ChatResponse(string? AiMessage, IReadOnlyList<ActionResult> Actions);
 
 public record ActionResult(
-    AiActionType Type,
+    string Type,
     ActionStatus Status,
     Guid? EntityId = null,
     string? EntityName = null,
@@ -35,7 +38,6 @@ public enum ActionStatus { Success, Failed, Suggestion }
 public class ProcessUserChatCommandHandler(
     IMediator mediator,
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserFact> userFactRepository,
     IGenericRepository<Tag> tagRepository,
@@ -46,8 +48,12 @@ public class ProcessUserChatCommandHandler(
     IUserDateService userDateService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
+    AiToolRegistry toolRegistry,
+    ISystemPromptBuilder systemPromptBuilder,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
+    private const int MaxToolIterations = 5;
+
     public async Task<Result<ChatResponse>> Handle(
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
@@ -102,7 +108,7 @@ public class ProcessUserChatCommandHandler(
         if (messageGate.IsFailure)
             return messageGate.PropagateError<ChatResponse>();
 
-        // 1c. Retrieve user's facts as context for the AI (skip if memory disabled)
+        // 1d. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)
         {
@@ -122,7 +128,7 @@ public class ProcessUserChatCommandHandler(
             logger.LogInformation("AI memory disabled for user, skipping fact retrieval");
         }
 
-        // 1d. Analyze user's routine patterns for AI context (non-critical)
+        // 1e. Analyze user's routine patterns for AI context (non-critical)
         logger.LogInformation("Fetching user's routine patterns...");
         var routineStopwatch = System.Diagnostics.Stopwatch.StartNew();
         IReadOnlyList<RoutinePattern> routinePatterns = [];
@@ -143,116 +149,133 @@ public class ProcessUserChatCommandHandler(
                 routineStopwatch.ElapsedMilliseconds);
         }
 
-        // 2. Send text + context to the AI intent service for interpretation
-        logger.LogInformation("Calling AI intent service...");
-        var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        // 2. Build system prompt and tool declarations
+        logger.LogInformation("Building system prompt and tool declarations...");
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        var planResult = await aiIntentService.InterpretAsync(
+        var systemPrompt = systemPromptBuilder.Build(
+            activeHabits, userFacts,
+            hasImage: request.ImageData is not null,
+            routinePatterns, userTags, userToday, metricsDict);
+
+        var tools = toolRegistry.GetAll();
+        var toolDeclarations = tools.Select(t => (object)new
+        {
+            name = t.Name,
+            description = t.Description,
+            parameters = t.GetParameterSchema()
+        }).ToList();
+
+        // 3. Call AI with tool declarations
+        logger.LogInformation("Calling AI intent service with {ToolCount} tools...", toolDeclarations.Count);
+        var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var response = await aiIntentService.SendWithToolsAsync(
             request.Message,
-            activeHabits,
-            userFacts,
+            systemPrompt,
+            toolDeclarations,
             request.ImageData,
             request.ImageMimeType,
-            routinePatterns,
-            userTags,
-            userToday,
-            metricsDict,
             request.History,
             cancellationToken);
 
         aiStopwatch.Stop();
         logger.LogInformation("AI intent service completed in {ElapsedMs}ms", aiStopwatch.ElapsedMilliseconds);
 
-        if (planResult.IsFailure)
-            return Result.Failure<ChatResponse>(planResult.Error);
+        if (response.IsFailure)
+            return Result.Failure<ChatResponse>(response.Error);
 
-        var plan = planResult.Value;
-        var actionResults = new List<ActionResult>();
-        var conflictWarnings = new Dictionary<int, ConflictWarning?>();
+        var aiResponse = response.Value;
 
-        // 3. Execute each action returned by the AI
-        logger.LogInformation("Executing {ActionCount} actions...", plan.Actions.Count);
+        // 4. Agentic tool-calling loop
+        var allActionResults = new List<ActionResult>();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        int iteration = 0;
 
-        for (int i = 0; i < plan.Actions.Count; i++)
+        while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
         {
-            var action = plan.Actions[i];
-            logger.LogInformation("Executing action: {ActionType} - {Title}", action.Type, action.Title ?? action.HabitId?.ToString() ?? "N/A");
+            iteration++;
+            logger.LogInformation("Tool-calling iteration {Iteration}, {CallCount} calls",
+                iteration, aiResponse.ToolCalls!.Count);
 
-            try
+            var toolResults = new List<AiToolCallResult>();
+
+            foreach (var call in aiResponse.ToolCalls!)
             {
-                var actionResult = action.Type switch
+                var tool = toolRegistry.GetTool(call.Name);
+                if (tool is null)
                 {
-                    AiActionType.LogHabit => await ExecuteLogHabitAsync(action, request.UserId, cancellationToken),
-                    AiActionType.CreateHabit => await ExecuteCreateHabitAsync(action, request.UserId, cancellationToken),
-                    AiActionType.SuggestBreakdown => ExecuteSuggestBreakdown(action),
-                    AiActionType.AssignTags => await ExecuteAssignTagsAsync(action, request.UserId, cancellationToken),
-                    AiActionType.UpdateHabit => await ExecuteUpdateHabitAsync(action, request.UserId, cancellationToken),
-                    AiActionType.DeleteHabit => await ExecuteDeleteHabitAsync(action, request.UserId, cancellationToken),
-                    AiActionType.CreateSubHabit => await ExecuteCreateSubHabitAsync(action, request.UserId, cancellationToken),
-                    AiActionType.SkipHabit => await ExecuteSkipHabitAsync(action, request.UserId, cancellationToken),
-                    _ => Result.Failure<(Guid? Id, string? Name)>($"Unknown action type: {action.Type}")
-                };
+                    logger.LogWarning("Unknown tool requested: {Name}", call.Name);
+                    toolResults.Add(new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"));
+                    allActionResults.Add(new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"));
+                    continue;
+                }
 
-                if (actionResult.IsSuccess)
+                try
                 {
-                    var (id, name) = actionResult.Value;
+                    var result = await tool.ExecuteAsync(call.Args, request.UserId, cancellationToken);
+                    toolResults.Add(new AiToolCallResult(call.Name, call.Id, result.Success, result.EntityId, result.EntityName, result.Error));
 
-                    // Detect conflicts for CreateHabit actions (non-critical)
-                    if (action.Type == AiActionType.CreateHabit && action.FrequencyUnit.HasValue)
+                    if (result.Success)
                     {
-                        try
+                        // Special handling for suggest_breakdown: carry suggestions in ActionResult
+                        if (call.Name == "suggest_breakdown")
                         {
-                            var conflictResult = await routineAnalysisService.DetectConflictsAsync(
-                                request.UserId, action.FrequencyUnit, action.FrequencyQuantity, action.Days, cancellationToken);
-                            if (conflictResult.IsSuccess)
-                                conflictWarnings[i] = conflictResult.Value;
+                            var suggestedSubHabits = ExtractSuggestedSubHabits(call.Args);
+                            allActionResults.Add(new ActionResult(
+                                ToolNameToPascalCase(call.Name),
+                                ActionStatus.Suggestion,
+                                EntityName: result.EntityName,
+                                SuggestedSubHabits: suggestedSubHabits));
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            logger.LogWarning(ex, "Conflict detection failed - non-critical");
+                            allActionResults.Add(new ActionResult(
+                                ToolNameToPascalCase(call.Name),
+                                ActionStatus.Success,
+                                result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
+                                result.EntityName));
                         }
-                    }
 
-                    if (action.Type == AiActionType.SuggestBreakdown)
-                    {
-                        actionResults.Add(new ActionResult(
-                            action.Type,
-                            ActionStatus.Suggestion,
-                            EntityName: action.Title,
-                            SuggestedSubHabits: action.SuggestedSubHabits));
+                        logger.LogInformation("Tool {Name} succeeded: {EntityName}", call.Name, result.EntityName);
                     }
                     else
                     {
-                        actionResults.Add(new ActionResult(
-                            action.Type,
-                            ActionStatus.Success,
-                            id,
-                            name,
-                            ConflictWarning: conflictWarnings.GetValueOrDefault(i)));
+                        allActionResults.Add(new ActionResult(
+                            ToolNameToPascalCase(call.Name),
+                            ActionStatus.Failed,
+                            EntityName: result.EntityName,
+                            Error: result.Error));
+                        logger.LogWarning("Tool {Name} failed: {Error}", call.Name, result.Error);
                     }
-
-                    logger.LogInformation("Action succeeded: {ActionType}", action.Type);
                 }
-                else
+                catch (Exception ex)
                 {
-                    actionResults.Add(new ActionResult(action.Type, ActionStatus.Failed, EntityName: action.Title, Error: actionResult.Error));
-                    logger.LogError("Action failed: {ActionType} - Error: {Error}", action.Type, actionResult.Error);
+                    logger.LogError(ex, "Tool {Name} threw an exception", call.Name);
+                    toolResults.Add(new AiToolCallResult(call.Name, call.Id, false, null, null, "An unexpected error occurred."));
+                    allActionResults.Add(new ActionResult(
+                        ToolNameToPascalCase(call.Name),
+                        ActionStatus.Failed,
+                        Error: "An unexpected error occurred."));
                 }
             }
-            catch (Exception ex)
+
+            // Send results back to the AI for next iteration or final message
+            var continueResult = await aiIntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
+            if (continueResult.IsFailure)
             {
-                logger.LogError(ex, "Unexpected error executing action {Type}", action.Type);
-                actionResults.Add(new ActionResult(action.Type, ActionStatus.Failed, EntityName: action.Title, Error: "An unexpected error occurred."));
+                logger.LogWarning("ContinueWithToolResultsAsync failed: {Error}", continueResult.Error);
+                break;
             }
+            aiResponse = continueResult.Value;
         }
 
         actionsStopwatch.Stop();
-        logger.LogInformation("Actions executed in {ElapsedMs}ms", actionsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("Tool execution completed in {ElapsedMs}ms ({Iterations} iterations, {ActionCount} actions)",
+            actionsStopwatch.ElapsedMilliseconds, iteration, allActionResults.Count);
 
-        // 4. Persist all changes in a single unit of work
+        // 5. Persist all changes in a single unit of work
         logger.LogInformation("Saving changes to database...");
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -261,7 +284,9 @@ public class ProcessUserChatCommandHandler(
         saveStopwatch.Stop();
         logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
 
-        // 5. Extract facts from conversation (non-blocking - failure doesn't affect response)
+        // 6. Extract facts from conversation (non-blocking - failure doesn't affect response)
+        var aiMessage = aiResponse.TextMessage;
+
         if (!aiMemoryEnabled || (user is not null && !user.HasProAccess))
         {
             logger.LogInformation("AI memory disabled for user or not Pro, skipping fact extraction");
@@ -273,7 +298,7 @@ public class ProcessUserChatCommandHandler(
 
             var extractionResult = await factExtractionService.ExtractFactsAsync(
                 request.Message,
-                plan.AiMessage,
+                aiMessage,
                 userFacts,
                 cancellationToken);
 
@@ -320,7 +345,7 @@ public class ProcessUserChatCommandHandler(
             logger.LogWarning(ex, "Fact extraction failed - non-critical, continuing");
         }
 
-        // Increment AI message counter (after all other processing)
+        // 7. Increment AI message counter (after all other processing)
         try
         {
             var userForIncrement = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
@@ -333,289 +358,79 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   DB queries: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   Execute actions: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Tool execution: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
 
-        return Result.Success(new ChatResponse(plan.AiMessage, actionResults));
+        return Result.Success(new ChatResponse(aiMessage, allActionResults));
     }
 
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteLogHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
+    /// <summary>
+    /// Converts snake_case tool names to PascalCase for backward compatibility with the frontend.
+    /// e.g., "log_habit" -> "LogHabit", "create_sub_habit" -> "CreateSubHabit"
+    /// </summary>
+    private static string ToolNameToPascalCase(string toolName)
     {
-        if (action.HabitId is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for logging.");
-
-        var habit = await habitRepository.GetByIdAsync(action.HabitId.Value, ct);
-
-        if (habit is null)
-            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
-
-        if (habit.UserId != userId)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit does not belong to this user.");
-
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var logResult = habit.Log(today, action.Note);
-
-        if (logResult.IsFailure)
-            return Result.Failure<(Guid? Id, string? Name)>(logResult.Error);
-
-        await habitLogRepository.AddAsync(logResult.Value, ct);
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
+        var parts = toolName.Split('_');
+        return string.Concat(parts.Select(p =>
+            string.IsNullOrEmpty(p) ? p : char.ToUpper(p[0], CultureInfo.InvariantCulture) + p[1..]));
     }
 
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteCreateHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
+    /// <summary>
+    /// Extracts suggested sub-habits from the suggest_breakdown tool call args
+    /// for backward-compatible ActionResult.SuggestedSubHabits.
+    /// </summary>
+    private static IReadOnlyList<AiAction>? ExtractSuggestedSubHabits(JsonElement args)
     {
-        if (string.IsNullOrWhiteSpace(action.Title))
-            return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a habit.");
+        if (!args.TryGetProperty("suggested_sub_habits", out var subHabitsEl) ||
+            subHabitsEl.ValueKind != JsonValueKind.Array)
+            return null;
 
-        // Check habit limit
-        var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
-        if (habitGate.IsFailure)
-            return habitGate.PropagateError<(Guid? Id, string? Name)>();
-
-        var dueDate = action.DueDate ?? await userDateService.GetUserTodayAsync(userId, ct);
-
-        var isBadHabit = action.IsBadHabit ?? false;
-        var slipAlertEnabled = action.SlipAlertEnabled ?? isBadHabit;
-
-        var habitResult = Habit.Create(
-            userId,
-            action.Title,
-            action.FrequencyUnit,
-            action.FrequencyQuantity,
-            action.Description,
-            days: action.Days,
-            isBadHabit: isBadHabit,
-            dueDate: dueDate,
-            dueTime: action.DueTime,
-            reminderEnabled: action.ReminderEnabled ?? false,
-            reminderTimes: action.ReminderTimes,
-            slipAlertEnabled: slipAlertEnabled,
-            checklistItems: action.ChecklistItems);
-
-        if (habitResult.IsFailure)
-            return Result.Failure<(Guid? Id, string? Name)>(habitResult.Error);
-
-        var habit = habitResult.Value;
-
-        // Handle inline sub-habits as child Habit entities (Pro only)
-        if (action.SubHabits is { Count: > 0 })
+        var suggestions = new List<AiAction>();
+        foreach (var item in subHabitsEl.EnumerateArray())
         {
-            var subGate = await payGate.CanCreateSubHabits(userId, ct);
-            if (subGate.IsFailure)
-                return subGate.PropagateError<(Guid? Id, string? Name)>();
-            foreach (var sub in action.SubHabits)
+            string? title = null;
+            string? description = null;
+            FrequencyUnit? frequencyUnit = null;
+            int? frequencyQuantity = null;
+            List<DayOfWeek>? days = null;
+
+            if (item.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
+                title = titleEl.GetString();
+
+            if (item.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String)
+                description = descEl.GetString();
+
+            if (item.TryGetProperty("frequency_unit", out var freqEl) && freqEl.ValueKind == JsonValueKind.String)
             {
-                var childResult = Habit.Create(
-                    userId,
-                    sub.Title ?? "Untitled",
-                    sub.FrequencyUnit ?? action.FrequencyUnit,
-                    sub.FrequencyQuantity ?? action.FrequencyQuantity,
-                    sub.Description,
-                    days: sub.Days ?? action.Days,
-                    isBadHabit: sub.IsBadHabit ?? false,
-                    dueDate: sub.DueDate ?? dueDate,
-                    parentHabitId: habit.Id);
-
-                if (childResult.IsFailure)
-                    return Result.Failure<(Guid? Id, string? Name)>(childResult.Error);
-
-                await habitRepository.AddAsync(childResult.Value, ct);
+                if (Enum.TryParse<FrequencyUnit>(freqEl.GetString(), true, out var fu))
+                    frequencyUnit = fu;
             }
-        }
 
-        await habitRepository.AddAsync(habit, ct);
+            if (item.TryGetProperty("frequency_quantity", out var fqEl) && fqEl.ValueKind == JsonValueKind.Number)
+                frequencyQuantity = fqEl.GetInt32();
 
-        // Assign tags if specified
-        if (action.TagNames is { Count: > 0 })
-        {
-            await AssignTagsToHabitAsync(habit, action.TagNames, userId, ct);
-        }
-
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
-    }
-
-    private static Result<(Guid? Id, string? Name)> ExecuteSuggestBreakdown(AiAction action)
-    {
-        // SuggestBreakdown creates nothing -- it just passes through the AI's suggestions
-        // The ActionResult will carry the suggestions for frontend rendering
-        return Result.Success<(Guid? Id, string? Name)>((null, action.Title));
-    }
-
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteAssignTagsAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for assigning tags.");
-
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == action.HabitId.Value && h.UserId == userId,
-            q => q.Include(h => h.Tags),
-            ct);
-
-        if (habit is null)
-            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
-
-        var resolvedTags = await ResolveTagsByNameAsync(action.TagNames, userId, ct);
-
-        // Clear existing and assign new
-        foreach (var existing in habit.Tags.ToList())
-            habit.RemoveTag(existing);
-        foreach (var tag in resolvedTags)
-            habit.AddTag(tag);
-
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
-    }
-
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteUpdateHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for updating.");
-
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == action.HabitId.Value && h.UserId == userId,
-            cancellationToken: ct);
-
-        if (habit is null)
-            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
-
-        var result = habit.Update(
-            action.Title ?? habit.Title,
-            action.Description ?? habit.Description,
-            action.FrequencyUnit ?? habit.FrequencyUnit,
-            action.FrequencyQuantity ?? habit.FrequencyQuantity,
-            action.Days,
-            action.IsBadHabit ?? habit.IsBadHabit,
-            action.DueDate ?? habit.DueDate,
-            dueTime: action.DueTime,
-            reminderEnabled: action.ReminderEnabled,
-            reminderTimes: action.ReminderTimes,
-            checklistItems: action.ChecklistItems);
-
-        if (result.IsFailure)
-            return Result.Failure<(Guid? Id, string? Name)>(result.Error);
-
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
-    }
-
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteDeleteHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for deleting.");
-
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == action.HabitId.Value && h.UserId == userId,
-            cancellationToken: ct);
-
-        if (habit is null)
-            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
-
-        var title = habit.Title;
-        habitRepository.Remove(habit);
-
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, title));
-    }
-
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteCreateSubHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Parent habit ID is required for creating a sub-habit.");
-
-        if (string.IsNullOrWhiteSpace(action.Title))
-            return Result.Failure<(Guid? Id, string? Name)>("Title is required to create a sub-habit.");
-
-        var result = await mediator.Send(new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
-            userId,
-            action.HabitId.Value,
-            action.Title,
-            action.Description,
-            action.FrequencyUnit,
-            action.FrequencyQuantity,
-            action.Days,
-            action.DueTime), ct);
-
-        if (result.IsFailure)
-            return Result.Failure<(Guid? Id, string? Name)>(result.Error);
-
-        return Result.Success<(Guid? Id, string? Name)>((result.Value, action.Title));
-    }
-
-    private async Task<Result<(Guid? Id, string? Name)>> ExecuteSkipHabitAsync(
-        AiAction action, Guid userId, CancellationToken ct)
-    {
-        if (action.HabitId is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Habit ID is required for skipping.");
-
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == action.HabitId.Value && h.UserId == userId,
-            cancellationToken: ct);
-
-        if (habit is null)
-            return Result.Failure<(Guid? Id, string? Name)>($"Habit {action.HabitId} not found.");
-
-        if (habit.IsCompleted)
-            return Result.Failure<(Guid? Id, string? Name)>("Cannot skip a completed habit.");
-
-        if (habit.FrequencyUnit is null)
-            return Result.Failure<(Guid? Id, string? Name)>("Cannot skip a one-time task.");
-
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
-
-        if (habit.DueDate > today)
-            return Result.Failure<(Guid? Id, string? Name)>("Cannot skip a habit that is not yet due.");
-
-        habit.AdvanceDueDate(today);
-
-        return Result.Success<(Guid? Id, string? Name)>((habit.Id, habit.Title));
-    }
-
-    private async Task AssignTagsToHabitAsync(Habit habit, List<string>? tagNames, Guid userId, CancellationToken ct)
-    {
-        if (tagNames is not { Count: > 0 }) return;
-
-        var resolvedTags = await ResolveTagsByNameAsync(tagNames, userId, ct);
-        foreach (var tag in resolvedTags)
-            habit.AddTag(tag);
-    }
-
-    private async Task<List<Tag>> ResolveTagsByNameAsync(List<string>? tagNames, Guid userId, CancellationToken ct)
-    {
-        if (tagNames is not { Count: > 0 }) return [];
-
-        var resolved = new List<Tag>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var name in tagNames)
-        {
-            var capitalized = Capitalize(name.Trim());
-            if (string.IsNullOrEmpty(capitalized) || !seen.Add(capitalized)) continue;
-
-            // Use tracked query so EF doesn't try to re-insert existing tags
-            var existing = await tagRepository.FindOneTrackedAsync(
-                t => t.UserId == userId && t.Name == capitalized, cancellationToken: ct);
-
-            if (existing is not null)
+            if (item.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
             {
-                resolved.Add(existing);
-            }
-            else
-            {
-                var createResult = Tag.Create(userId, capitalized, "#7c3aed");
-                if (createResult.IsSuccess)
+                days = [];
+                foreach (var dayEl in daysEl.EnumerateArray())
                 {
-                    await tagRepository.AddAsync(createResult.Value, ct);
-                    resolved.Add(createResult.Value);
+                    if (dayEl.ValueKind == JsonValueKind.String &&
+                        Enum.TryParse<DayOfWeek>(dayEl.GetString(), true, out var dow))
+                        days.Add(dow);
                 }
             }
+
+            suggestions.Add(new AiAction
+            {
+                Type = AiActionType.SuggestBreakdown,
+                Title = title,
+                Description = description,
+                FrequencyUnit = frequencyUnit,
+                FrequencyQuantity = frequencyQuantity,
+                Days = days
+            });
         }
 
-        return resolved;
+        return suggestions.Count > 0 ? suggestions : null;
     }
-
-    private static string Capitalize(string s) =>
-        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 }

@@ -1,24 +1,23 @@
 using System.Text;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Services.Prompts;
-using Orbit.Infrastructure.Services.Prompts.Sections.Auto;
 using Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
 using Orbit.Infrastructure.Services.Prompts.Sections.Static;
 
 namespace Orbit.Infrastructure.Services;
 
-public class SystemPromptBuilder
+public class SystemPromptBuilder : ISystemPromptBuilder
 {
     private readonly IReadOnlyList<IPromptSection> _sections;
 
-    public SystemPromptBuilder(ActionDiscoveryService discovery)
+    public SystemPromptBuilder()
     {
         _sections =
         [
             new CoreIdentitySection(),
-            new ActionCapabilitiesSection(discovery),
             new GlobalRulesSection(),
             new ActiveHabitsSection(),
             new UserTagsSection(),
@@ -27,8 +26,6 @@ public class SystemPromptBuilder
             new TodayDateSection(),
             new ImageInstructionsSection(),
             new HabitCountSection(),
-            new ActionSchemaSection(discovery),
-            new ConversationalExamplesSection(),
         ];
     }
 
@@ -43,7 +40,20 @@ public class SystemPromptBuilder
         return sb.ToString();
     }
 
-    // Static facade for backward compatibility
+    // ISystemPromptBuilder implementation
+    string ISystemPromptBuilder.Build(
+        IReadOnlyList<Habit> activeHabits,
+        IReadOnlyList<UserFact> userFacts,
+        bool hasImage,
+        IReadOnlyList<RoutinePattern>? routinePatterns,
+        IReadOnlyList<Tag>? userTags,
+        DateOnly? userToday,
+        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics)
+    {
+        var context = new PromptContext(activeHabits, userFacts, hasImage, routinePatterns, userTags, userToday, habitMetrics);
+        return Build(context);
+    }
+
     private static SystemPromptBuilder? _instance;
     private static readonly object _lock = new();
 
@@ -60,7 +70,7 @@ public class SystemPromptBuilder
         {
             lock (_lock)
             {
-                _instance ??= new SystemPromptBuilder(new ActionDiscoveryService());
+                _instance ??= new SystemPromptBuilder();
             }
         }
 

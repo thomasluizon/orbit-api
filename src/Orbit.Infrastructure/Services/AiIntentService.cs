@@ -136,6 +136,25 @@ public sealed class OllamaIntentService(
         }
     }
 
+    public Task<Result<AiResponse>> SendWithToolsAsync(
+        string userMessage,
+        string systemPrompt,
+        IReadOnlyList<object> toolDeclarations,
+        byte[]? imageData = null,
+        string? imageMimeType = null,
+        IReadOnlyList<ChatHistoryMessage>? history = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Result.Failure<AiResponse>("Ollama does not support function calling."));
+    }
+
+    public Task<Result<AiResponse>> ContinueWithToolResultsAsync(
+        IReadOnlyList<AiToolCallResult> results,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(Result.Failure<AiResponse>("Ollama does not support function calling."));
+    }
+
     // --- Ollama API DTOs ---
 
     private record OllamaRequest(
