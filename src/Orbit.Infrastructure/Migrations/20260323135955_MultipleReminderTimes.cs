@@ -21,7 +21,7 @@ namespace Orbit.Infrastructure.Migrations
                 nullable: false,
                 defaultValueSql: "'[15]'::jsonb");
 
-            // Migrate existing single values to array format
+            // Migrate existing single values to array format before dropping old column
             migrationBuilder.Sql(
                 """UPDATE "Habits" SET "ReminderTimes" = jsonb_build_array("ReminderMinutesBefore") WHERE "ReminderMinutesBefore" IS NOT NULL""");
 

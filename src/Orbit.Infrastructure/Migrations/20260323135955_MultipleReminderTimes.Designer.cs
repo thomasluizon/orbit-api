@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260323135513_MultipleReminderTimes")]
+    [Migration("20260323135955_MultipleReminderTimes")]
     partial class MultipleReminderTimes
     {
         /// <inheritdoc />
