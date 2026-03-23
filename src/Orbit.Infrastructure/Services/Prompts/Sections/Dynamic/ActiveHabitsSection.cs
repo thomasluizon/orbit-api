@@ -59,24 +59,33 @@ public class ActiveHabitsSection : IPromptSection
                 var dueTimeLabel = habit.DueTime.HasValue ? $" at {habit.DueTime.Value:HH:mm}" : "";
                 sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | Frequency: {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{dueTimeLabel}{dueLabel}{badHabitLabel}{slipAlertLabel}{completedLabel}{tagsLabel}{checklistLabel}{metricsLabel}");
 
-                foreach (var child in habit.Children)
-                {
-                    var childDueLabel = "";
-                    if (!child.IsCompleted && context.UserToday.HasValue)
-                    {
-                        if (child.DueDate == context.UserToday.Value)
-                            childDueLabel = " | DUE TODAY";
-                        else if (child.DueDate < context.UserToday.Value)
-                            childDueLabel = " | OVERDUE";
-                    }
-                    var childCompleted = child.IsCompleted ? " | COMPLETED" : "";
-                    sb.AppendLine($"  - [Sub-habit] \"{child.Title}\" | ID: {child.Id} | Due: {child.DueDate:yyyy-MM-dd}{childDueLabel}{childCompleted}");
-                }
+                AppendChildren(sb, habit.Id, context, depth: 1);
             }
             sb.AppendLine();
             sb.AppendLine("When user mentions an existing habit activity -> use LogHabit with the exact ID above");
             sb.AppendLine("When user mentions a NEW activity -> use CreateHabit");
         }
         return sb.ToString();
+    }
+
+    private static void AppendChildren(StringBuilder sb, Guid parentId, PromptContext context, int depth)
+    {
+        var children = context.ActiveHabits.Where(h => h.ParentHabitId == parentId);
+        var indent = new string(' ', depth * 2);
+        foreach (var child in children)
+        {
+            var childDueLabel = "";
+            if (!child.IsCompleted && context.UserToday.HasValue)
+            {
+                if (child.DueDate == context.UserToday.Value)
+                    childDueLabel = " | DUE TODAY";
+                else if (child.DueDate < context.UserToday.Value)
+                    childDueLabel = " | OVERDUE";
+            }
+            var childCompleted = child.IsCompleted ? " | COMPLETED" : "";
+            sb.AppendLine($"{indent}- [Sub-habit] \"{child.Title}\" | ID: {child.Id} | Due: {child.DueDate:yyyy-MM-dd}{childDueLabel}{childCompleted}");
+
+            AppendChildren(sb, child.Id, context, depth + 1);
+        }
     }
 }
