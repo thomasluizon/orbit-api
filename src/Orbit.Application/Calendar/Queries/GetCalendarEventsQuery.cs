@@ -63,17 +63,14 @@ public class GetCalendarEventsQueryHandler(
                 existingHabits.Select(h => h.Title), StringComparer.OrdinalIgnoreCase);
 
             var items = new List<CalendarEventItem>();
-            var seenRecurring = new HashSet<string>();
+            var seenTitles = new HashSet<string>(existingTitles, StringComparer.OrdinalIgnoreCase);
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
                 if (existingTitles.Contains(ev.Summary)) continue;
 
-                // Deduplicate recurring event instances - show only the first occurrence
-                if (ev.RecurringEventId is not null)
-                {
-                    if (!seenRecurring.Add(ev.RecurringEventId)) continue;
-                }
+                // Deduplicate by title (covers recurring instances + already-imported)
+                if (!seenTitles.Add(ev.Summary)) continue;
 
                 var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
                 var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
