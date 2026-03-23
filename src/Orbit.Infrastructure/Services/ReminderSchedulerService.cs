@@ -71,46 +71,44 @@ public class ReminderSchedulerService(
                 .AnyAsync(l => l.HabitId == habit.Id && l.Date == userToday, ct);
             if (alreadyLogged) continue;
 
-            // Calculate reminder time
-            var reminderTime = habit.DueTime!.Value.AddMinutes(-habit.ReminderMinutesBefore);
-
-            // Check if we're within the 1-minute window for sending
-            var diffMinutes = (userTimeNow - reminderTime).TotalMinutes;
-            if (diffMinutes < 0 || diffMinutes >= 1) continue;
-
-            // Check if already sent
-            var alreadySent = await dbContext.SentReminders
-                .AnyAsync(r => r.HabitId == habit.Id && r.Date == userToday, ct);
-            if (alreadySent) continue;
-
-            // Send push notification (translated)
-            var lang = user.Language ?? "en";
-            var minutesText = (lang.StartsWith("pt"), habit.ReminderMinutesBefore > 0) switch
+            foreach (var minutesBefore in habit.ReminderTimes)
             {
-                (true, true) => $"Em {habit.ReminderMinutesBefore} minutos",
-                (true, false) => "Agora",
-                (false, true) => $"Due in {habit.ReminderMinutesBefore} minutes",
-                (false, false) => "Due now"
-            };
+                var reminderTime = habit.DueTime!.Value.AddMinutes(-minutesBefore);
 
-            await pushService.SendToUserAsync(
-                habit.UserId,
-                habit.Title,
-                minutesText,
-                "/",
-                ct);
+                var diffMinutes = (userTimeNow - reminderTime).TotalMinutes;
+                if (diffMinutes < 0 || diffMinutes >= 1) continue;
 
-            // Record sent reminder + create in-app notification
-            var sentReminder = SentReminder.Create(habit.Id, userToday);
-            await dbContext.SentReminders.AddAsync(sentReminder, ct);
+                var alreadySent = await dbContext.SentReminders
+                    .AnyAsync(r => r.HabitId == habit.Id && r.Date == userToday && r.MinutesBefore == minutesBefore, ct);
+                if (alreadySent) continue;
 
-            var notification = Notification.Create(
-                habit.UserId, habit.Title, minutesText, "/", habit.Id);
-            await dbContext.Notifications.AddAsync(notification, ct);
+                var lang = user.Language ?? "en";
+                var minutesText = FormatReminderText(minutesBefore, lang);
 
-            await dbContext.SaveChangesAsync(ct);
+                await pushService.SendToUserAsync(habit.UserId, habit.Title, minutesText, "/", ct);
 
-            logger.LogInformation("Sent reminder for habit {HabitId} to user {UserId}", habit.Id, habit.UserId);
+                var sentReminder = SentReminder.Create(habit.Id, userToday, minutesBefore);
+                await dbContext.SentReminders.AddAsync(sentReminder, ct);
+
+                var notification = Notification.Create(habit.UserId, habit.Title, minutesText, "/", habit.Id);
+                await dbContext.Notifications.AddAsync(notification, ct);
+
+                await dbContext.SaveChangesAsync(ct);
+
+                logger.LogInformation("Sent reminder ({Minutes}min) for habit {HabitId} to user {UserId}", minutesBefore, habit.Id, habit.UserId);
+            }
         }
+    }
+
+    private static string FormatReminderText(int minutesBefore, string lang)
+    {
+        var isPt = lang.StartsWith("pt");
+        return minutesBefore switch
+        {
+            0 => isPt ? "Agora" : "Due now",
+            < 60 => isPt ? $"Em {minutesBefore} minutos" : $"Due in {minutesBefore} minutes",
+            < 1440 => isPt ? $"Em {minutesBefore / 60} hora{(minutesBefore / 60 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 60} hour{(minutesBefore / 60 > 1 ? "s" : "")}",
+            _ => isPt ? $"Em {minutesBefore / 1440} dia{(minutesBefore / 1440 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 1440} day{(minutesBefore / 1440 > 1 ? "s" : "")}"
+        };
     }
 }

@@ -61,6 +61,18 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<ChecklistItem>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
+            entity.Property(h => h.ReminderTimes)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<int>>(v, (JsonSerializerOptions?)null) ?? new List<int> { 15 })
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[15]'::jsonb")
+                .Metadata.SetValueComparer(
+                    new ValueComparer<IReadOnlyList<int>>(
+                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
+                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
+                        c => JsonSerializer.Deserialize<List<int>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
+
         });
 
         modelBuilder.Entity<HabitLog>(entity =>
@@ -93,7 +105,7 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
 
         modelBuilder.Entity<SentReminder>(entity =>
         {
-            entity.HasIndex(r => new { r.HabitId, r.Date }).IsUnique();
+            entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore }).IsUnique();
         });
 
         modelBuilder.Entity<SentSlipAlert>(entity =>

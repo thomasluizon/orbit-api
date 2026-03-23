@@ -15,7 +15,7 @@ public record AiAction
     public bool? IsBadHabit { get; init; }
     public bool? SlipAlertEnabled { get; init; }
     public bool? ReminderEnabled { get; init; }
-    public int? ReminderMinutesBefore { get; init; }
+    public List<int>? ReminderTimes { get; init; }
     public DateOnly? DueDate { get; init; }
     public TimeOnly? DueTime { get; init; }
     public string? Note { get; init; }

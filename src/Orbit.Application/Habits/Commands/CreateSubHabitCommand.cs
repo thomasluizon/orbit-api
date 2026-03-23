@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 using Orbit.Application.Common.Attributes;
@@ -28,7 +29,11 @@ public record CreateSubHabitCommand(
     Guid UserId,
     [property: AiField("string", "ID of existing PARENT habit from Active Habits list", Required = true, Name = "habitId")] Guid ParentHabitId,
     [property: AiField("string", "Name of the new sub-habit", Required = true)] string Title,
-    [property: AiField("string", "Optional description")] string? Description) : IRequest<Result<Guid>>;
+    [property: AiField("string", "Optional description")] string? Description,
+    [property: AiField("Day|Week|Month|Year", "Override parent frequency")] FrequencyUnit? FrequencyUnit = null,
+    [property: AiField("integer", "Override parent frequency quantity")] int? FrequencyQuantity = null,
+    [property: AiField("string[]", "Specific weekdays, only when frequencyQuantity is 1")] IReadOnlyList<System.DayOfWeek>? Days = null,
+    [property: AiField("string", "HH:mm 24h format")] TimeOnly? DueTime = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -65,10 +70,12 @@ public class CreateSubHabitCommandHandler(
         var childResult = Habit.Create(
             request.UserId,
             request.Title,
-            parent.FrequencyUnit,
-            parent.FrequencyQuantity,
+            request.FrequencyUnit ?? parent.FrequencyUnit,
+            request.FrequencyQuantity ?? parent.FrequencyQuantity,
             request.Description,
+            days: request.Days,
             dueDate: childDueDate,
+            dueTime: request.DueTime,
             parentHabitId: parent.Id);
 
         if (childResult.IsFailure)

@@ -389,7 +389,7 @@ public class ProcessUserChatCommandHandler(
             dueDate: dueDate,
             dueTime: action.DueTime,
             reminderEnabled: action.ReminderEnabled ?? false,
-            reminderMinutesBefore: action.ReminderMinutesBefore ?? 15,
+            reminderTimes: action.ReminderTimes,
             slipAlertEnabled: slipAlertEnabled,
             checklistItems: action.ChecklistItems);
 
@@ -490,7 +490,7 @@ public class ProcessUserChatCommandHandler(
             action.DueDate ?? habit.DueDate,
             dueTime: action.DueTime,
             reminderEnabled: action.ReminderEnabled,
-            reminderMinutesBefore: action.ReminderMinutesBefore,
+            reminderTimes: action.ReminderTimes,
             checklistItems: action.ChecklistItems);
 
         if (result.IsFailure)
@@ -531,7 +531,11 @@ public class ProcessUserChatCommandHandler(
             userId,
             action.HabitId.Value,
             action.Title,
-            action.Description), ct);
+            action.Description,
+            action.FrequencyUnit,
+            action.FrequencyQuantity,
+            action.Days,
+            action.DueTime), ct);
 
         if (result.IsFailure)
             return Result.Failure<(Guid? Id, string? Name)>(result.Error);

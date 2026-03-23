@@ -49,7 +49,7 @@ namespace Orbit.Application.Habits.Commands;
     Note = "with time")]
 [AiExample(
     "Exam tomorrow at 5pm, remind me 30 minutes before",
-    """{ "actions": [{ "type": "CreateHabit", "title": "Exam", "dueDate": "{TOMORROW}", "dueTime": "17:00", "reminderEnabled": true, "reminderMinutesBefore": 30 }], "aiMessage": "Scheduled your exam for tomorrow at 5pm with a reminder 30 minutes before!" }""",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Exam", "dueDate": "{TOMORROW}", "dueTime": "17:00", "reminderEnabled": true, "reminderTimes": [30] }], "aiMessage": "Scheduled your exam for tomorrow at 5pm with a reminder 30 minutes before!" }""",
     Note = "with reminder")]
 [AiExample(
     "Create a supermarket list with milk, eggs, bread",
@@ -67,7 +67,7 @@ public record CreateHabitCommand(
     [property: AiField("string", "YYYY-MM-DD, when the habit starts or is due", Required = true)] DateOnly? DueDate = null,
     [property: AiField("string", "HH:mm 24h format, e.g. \"15:00\" for 3pm. ONLY include when user mentions a specific time")] TimeOnly? DueTime = null,
     [property: AiField("boolean", "Set true when user asks for a reminder/notification")] bool ReminderEnabled = false,
-    [property: AiField("integer", "Minutes before dueTime to send reminder, default 15")] int ReminderMinutesBefore = 15,
+    [property: AiField("integer[]", "Array of minutes before dueTime to send reminders, e.g. [1440, 30] for 1 day and 30 min before. Default [15]")] IReadOnlyList<int>? ReminderTimes = null,
     [property: AiField("boolean", "Defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows")] bool SlipAlertEnabled = false,
     [property: AiField("string[]", "Array of tag name strings, ONLY when user explicitly asks to tag it", Name = "tagNames")] IReadOnlyList<Guid>? TagIds = null,
     [property: AiField("object[]", "Array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit")] IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result<Guid>>;
@@ -108,7 +108,7 @@ public class CreateHabitCommandHandler(
             dueDate,
             dueTime: request.DueTime,
             reminderEnabled: request.ReminderEnabled,
-            reminderMinutesBefore: request.ReminderMinutesBefore,
+            reminderTimes: request.ReminderTimes,
             slipAlertEnabled: request.SlipAlertEnabled,
             checklistItems: request.ChecklistItems);
 
