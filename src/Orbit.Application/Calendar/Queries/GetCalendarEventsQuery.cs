@@ -22,6 +22,7 @@ public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<Calenda
 
 public class GetCalendarEventsQueryHandler(
     IGenericRepository<User> userRepository,
+    IGenericRepository<Habit> habitRepository,
     IGoogleTokenService googleTokenService,
     IUnitOfWork unitOfWork) : IRequestHandler<GetCalendarEventsQuery, Result<List<CalendarEventItem>>>
 {
@@ -55,11 +56,18 @@ public class GetCalendarEventsQueryHandler(
 
             var events = await listRequest.ExecuteAsync(cancellationToken);
 
+            // Load existing habit titles to hide already-imported events
+            var existingHabits = await habitRepository.FindAsync(
+                h => h.UserId == request.UserId, cancellationToken);
+            var existingTitles = new HashSet<string>(
+                existingHabits.Select(h => h.Title), StringComparer.OrdinalIgnoreCase);
+
             var items = new List<CalendarEventItem>();
             var seenRecurring = new HashSet<string>();
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
+                if (existingTitles.Contains(ev.Summary)) continue;
 
                 // Deduplicate recurring event instances - show only the first occurrence
                 if (ev.RecurringEventId is not null)
