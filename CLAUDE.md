@@ -240,6 +240,7 @@ gh pr merge --squash
 - Never force push to `main`
 - Keep PRs focused: one feature or fix per PR
 - Branch names should be descriptive: `feature/add-tags-to-habits`, `fix/login-redirect`
+- **Never reuse a branch after its PR is squash-merged.** Always create a fresh branch from updated `main`. Reusing branches after squash merge causes repeated merge conflicts because the branch history diverges from main's squashed version.
 
 ## Testing
 
