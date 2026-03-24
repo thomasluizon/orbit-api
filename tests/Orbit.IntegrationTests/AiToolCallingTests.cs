@@ -1,0 +1,486 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using FluentAssertions;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+
+namespace Orbit.IntegrationTests;
+
+/// <summary>
+/// Integration tests for AI tool calling via Ollama.
+/// Requires: ollama serve running on localhost:11434 with qwen3:8b pulled.
+/// Tests are fully repeatable - create test user, run tests, clean up everything.
+/// </summary>
+[Collection("Sequential")]
+public class AiToolCallingTests : IAsyncLifetime
+{
+    private readonly HttpClient _client;
+    private string? _testUserId;
+    private readonly string _testEmail = $"ai-tool-test-{Guid.NewGuid()}@integration.test";
+    private const string TestCode = "999999";
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    // Rate limiting: Gemini free tier allows ~15 RPM
+    private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
+    private static DateTime LastApiCall = DateTime.MinValue;
+
+    public AiToolCallingTests(WebApplicationFactory<Program> factory)
+    {
+        // Register the test account via env var so send-code accepts a fixed code
+        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
+        var entry = $"{_testEmail}:{TestCode}";
+        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
+            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
+
+        _client = factory.CreateClient();
+        _client.Timeout = TimeSpan.FromMinutes(5);
+    }
+
+    public async Task InitializeAsync()
+    {
+        // Send verification code (uses TEST_ACCOUNTS bypass)
+        var sendCodeResponse = await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _testEmail });
+        sendCodeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Verify code to create account + get JWT
+        var verifyResponse = await _client.PostAsJsonAsync("/api/auth/verify-code", new
+        {
+            email = _testEmail,
+            code = TestCode
+        });
+        verifyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var loginResult = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+        _testUserId = loginResult!.UserId.ToString();
+        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {loginResult.Token}");
+    }
+
+    public async Task DisposeAsync()
+    {
+        if (!string.IsNullOrEmpty(_testUserId))
+        {
+            try
+            {
+                var habitsResponse = await _client.GetAsync("/api/habits");
+                if (habitsResponse.IsSuccessStatusCode)
+                {
+                    var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
+                    foreach (var habit in habits ?? [])
+                        await _client.DeleteAsync($"/api/habits/{habit.Id}");
+                }
+
+                await _client.DeleteAsync($"/api/users/{_testUserId}");
+            }
+            catch { /* cleanup best-effort */ }
+        }
+
+        _client.Dispose();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Habit Creation
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateHabit_SimpleDaily_CreatesWithCorrectFrequency()
+    {
+        var response = await SendChat("create a habit to meditate daily");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+        response.Actions[0].EntityId.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CreateHabit_WeeklyWithDays_CreatesWithDayRestrictions()
+    {
+        var response = await SendChat("create a habit to go to the gym on monday wednesday and friday");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task CreateHabit_OneTime_CreatesWithoutFrequency()
+    {
+        var response = await SendChat("remind me to buy groceries tomorrow");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task CreateHabit_BadHabit_SetsIsBadHabitTrue()
+    {
+        var response = await SendChat("i want to track when i smoke so i can quit");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task CreateHabit_WithDescription_SetsDescription()
+    {
+        var response = await SendChat("create a habit called Reading with description: read for 30 minutes before bed");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task CreateHabit_WithChecklist_SetsChecklistItems()
+    {
+        var response = await SendChat("create a morning routine checklist with items: brush teeth, shower, have breakfast");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Habit Logging
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LogHabit_ExistingHabit_LogsSuccessfully()
+    {
+        await CreateHabitViaApi("Morning Run", "Day");
+
+        var response = await SendChat("log my Morning Run habit as done for today");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("LogHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task LogHabit_ByName_MatchesCorrectHabit()
+    {
+        await CreateHabitViaApi("Yoga", "Day");
+        await CreateHabitViaApi("Meditation", "Day");
+
+        var response = await SendChat("I just finished yoga");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("LogHabit");
+        response.Actions[0].Status.Should().Be("Success");
+        response.Actions[0].EntityName.Should().NotBeNull();
+        response.Actions[0].EntityName!.ToLower().Should().Contain("yoga");
+    }
+
+    [Fact]
+    public async Task LogHabit_WithNote_PassesNoteThrough()
+    {
+        await CreateHabitViaApi("Running", "Day");
+
+        var response = await SendChat("I ran 5km in 25 minutes today");
+
+        response.Actions.Should().Contain(a => a.Type == "LogHabit" && a.Status == "Success");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Habit Update
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task UpdateHabit_ChangeTitle_UpdatesTitle()
+    {
+        await CreateHabitViaApi("Jogging", "Day");
+
+        var response = await SendChat("rename the habit Jogging to Morning Run");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("UpdateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_ChangeFrequency_UpdatesFrequency()
+    {
+        await CreateHabitViaApi("Stretching", "Day");
+
+        var response = await SendChat("change Stretching to 3 times per week instead of daily");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("UpdateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_AddDescription_SetsDescription()
+    {
+        await CreateHabitViaApi("Piano Practice", "Day");
+
+        var response = await SendChat("add a description to Piano Practice: practice scales and one song");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("UpdateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_ChangeDueTime_UpdatesTime()
+    {
+        await CreateHabitViaApi("Wake Up Early", "Day");
+
+        var response = await SendChat("set the time of Wake Up Early to 6:30 AM");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("UpdateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Habit Deletion
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task DeleteHabit_SingleHabit_DeletesSuccessfully()
+    {
+        await CreateHabitViaApi("Temporary Habit", "Day");
+
+        var response = await SendChat("delete the habit Temporary Habit");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("DeleteHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task DeleteHabit_ByExplicitRequest_DeletesCorrectOne()
+    {
+        await CreateHabitViaApi("Keep This", "Day");
+        await CreateHabitViaApi("Remove This", "Day");
+
+        var response = await SendChat("delete Remove This");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("DeleteHabit");
+        response.Actions[0].Status.Should().Be("Success");
+        response.Actions[0].EntityName.Should().NotBeNull();
+        response.Actions[0].EntityName!.ToLower().Should().Contain("remove");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Skip Habit
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SkipHabit_RecurringDueToday_SkipsSuccessfully()
+    {
+        await CreateHabitViaApi("Daily Walk", "Day");
+
+        var response = await SendChat("skip Daily Walk for today");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("SkipHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Sub-habits
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateSubHabit_UnderExistingParent_CreatesCorrectly()
+    {
+        await CreateHabitViaApi("Exercise", "Day");
+
+        var response = await SendChat("add a sub-habit called Push-ups under Exercise");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateSubHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task DuplicateHabit_ExistingHabit_CreatesClone()
+    {
+        await CreateHabitViaApi("Template Habit", "Day");
+
+        var response = await SendChat("duplicate the habit Template Habit");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("DuplicateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task MoveHabit_ToNewParent_MovesSuccessfully()
+    {
+        await CreateHabitViaApi("Fitness", "Day");
+        await CreateHabitViaApi("Squats", "Day");
+
+        var response = await SendChat("move the habit Squats under Fitness");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("MoveHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Tags
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task AssignTags_ToExistingHabit_AssignsCorrectly()
+    {
+        await CreateHabitViaApi("Swimming", "Week");
+
+        var response = await SendChat("tag Swimming with Health and Fitness");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("AssignTags");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Bulk Operations
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BulkCreate_MultipleHabits_CreatesAll()
+    {
+        var response = await SendChat("create these habits: meditate daily, run 3 times per week, read before bed every day");
+
+        response.Actions.Should().HaveCountGreaterThanOrEqualTo(3);
+        response.Actions.Should().OnlyContain(a => a.Type == "CreateHabit" && a.Status == "Success");
+    }
+
+    [Fact]
+    public async Task BulkLog_MultipleHabits_LogsAll()
+    {
+        await CreateHabitViaApi("Meditation", "Day");
+        await CreateHabitViaApi("Reading", "Day");
+
+        var response = await SendChat("I meditated and read today");
+
+        response.Actions.Should().HaveCountGreaterThanOrEqualTo(2);
+        response.Actions.Should().OnlyContain(a => a.Type == "LogHabit" && a.Status == "Success");
+    }
+
+    [Fact]
+    public async Task BulkAction_CreateAndLog_HandlesMixed()
+    {
+        await CreateHabitViaApi("Running", "Day");
+
+        var response = await SendChat("I just ran 5k today, also create a habit to stretch daily");
+
+        response.Actions.Should().HaveCountGreaterThanOrEqualTo(2);
+        response.Actions.Should().Contain(a => a.Type == "LogHabit");
+        response.Actions.Should().Contain(a => a.Type == "CreateHabit");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Edge Cases
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task OutOfScope_GeneralQuestion_NoActions()
+    {
+        var response = await SendChat("what is the capital of France?");
+
+        response.Actions.Should().BeEmpty();
+        response.AiMessage.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task LanguageDetection_PortugueseMessage_RespondsInPortuguese()
+    {
+        var response = await SendChat("crie um habito de meditar todos os dias");
+
+        response.Actions.Should().ContainSingle();
+        response.Actions[0].Type.Should().Be("CreateHabit");
+        response.Actions[0].Status.Should().Be("Success");
+    }
+
+    [Fact]
+    public async Task SuggestBreakdown_ComplexGoal_ReturnsSuggestions()
+    {
+        var response = await SendChat("help me break down learning to play guitar into sub-habits");
+
+        response.Actions.Should().Contain(a => a.Type == "SuggestBreakdown");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Helpers
+    // ───────────────────────────────────────────────────────────────
+
+    private async Task<ChatResponse> SendChat(string message, int maxRetries = 2)
+    {
+        for (int attempt = 0; attempt <= maxRetries; attempt++)
+        {
+            await RateLimitSemaphore.WaitAsync();
+            try
+            {
+                var timeSinceLastCall = DateTime.UtcNow - LastApiCall;
+                var minDelay = TimeSpan.FromSeconds(10);
+                if (timeSinceLastCall < minDelay)
+                    await Task.Delay(minDelay - timeSinceLastCall);
+
+                using var content = new MultipartFormDataContent();
+                content.Add(new StringContent(message), "message");
+
+                var httpResponse = await _client.PostAsync("/api/chat", content);
+                LastApiCall = DateTime.UtcNow;
+
+                if (!httpResponse.IsSuccessStatusCode)
+                {
+                    var errorContent = await httpResponse.Content.ReadAsStringAsync();
+                    if (attempt < maxRetries && errorContent.Contains("empty response"))
+                    {
+                        Console.WriteLine($"Retry {attempt + 1}/{maxRetries} for '{message}' (rate limited, waiting 15s)");
+                        await Task.Delay(TimeSpan.FromSeconds(15));
+                        continue;
+                    }
+
+                    httpResponse.StatusCode.Should().Be(HttpStatusCode.OK,
+                        $"Chat failed for: '{message}'. Error: {errorContent}");
+                }
+
+                var response = await httpResponse.Content.ReadFromJsonAsync<ChatResponse>(JsonOptions);
+                response.Should().NotBeNull();
+                return response!;
+            }
+            finally
+            {
+                RateLimitSemaphore.Release();
+            }
+        }
+
+        throw new InvalidOperationException($"All retries exhausted for: '{message}'");
+    }
+
+    private async Task<Guid> CreateHabitViaApi(string title, string frequencyUnit)
+    {
+        var response = await _client.PostAsJsonAsync("/api/habits", new
+        {
+            title,
+            type = "Boolean",
+            frequencyUnit,
+            frequencyQuantity = 1
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created,
+            $"Failed to create test habit '{title}'");
+
+        var id = await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        return id;
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  DTOs
+    // ───────────────────────────────────────────────────────────────
+
+    private record LoginResponse(Guid UserId, string Token, string Name, string Email);
+    private record ChatResponse(string? AiMessage, List<ActionResultDto> Actions);
+    private record ActionResultDto(string Type, string Status, Guid? EntityId = null, string? EntityName = null, string? Error = null);
+    private record HabitDto(Guid Id, string Title);
+}

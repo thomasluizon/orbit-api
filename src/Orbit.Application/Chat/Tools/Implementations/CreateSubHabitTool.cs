@@ -59,6 +59,7 @@ public class CreateSubHabitTool(
         int? frequencyQuantity = null;
         if (args.TryGetProperty("frequency_quantity", out var fqEl) && fqEl.ValueKind == JsonValueKind.Number)
             frequencyQuantity = fqEl.GetInt32();
+        frequencyQuantity ??= frequencyUnit is not null ? 1 : null;
 
         IReadOnlyList<DayOfWeek>? days = null;
         if (args.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
