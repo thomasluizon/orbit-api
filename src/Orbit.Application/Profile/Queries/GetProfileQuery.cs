@@ -22,7 +22,8 @@ public record ProfileResponse(
     int AiMessagesUsed,
     int AiMessagesLimit,
     bool HasImportedCalendar,
-    bool HasGoogleConnection);
+    bool HasGoogleConnection,
+    string? SubscriptionInterval);
 
 public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
 
@@ -57,6 +58,7 @@ public class GetProfileQueryHandler(
             user.AiMessagesUsedThisMonth,
             aiMessageLimit,
             user.HasImportedCalendar,
-            user.GoogleAccessToken is not null);
+            user.GoogleAccessToken is not null,
+            user.SubscriptionInterval?.ToString().ToLowerInvariant());
     }
 }
