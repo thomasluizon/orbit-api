@@ -67,6 +67,7 @@ builder.Services.Configure<VapidSettings>(
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddHostedService<ReminderSchedulerService>();
 builder.Services.AddHostedService<SlipAlertSchedulerService>();
+builder.Services.AddHostedService<AccountDeletionService>();
 builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>();
 
 // Initialize Firebase Admin SDK for FCM

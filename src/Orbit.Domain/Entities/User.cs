@@ -33,6 +33,10 @@ public class User : Entity
     public bool HasImportedCalendar { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
     public string? GoogleRefreshToken { get; private set; }
+    public bool IsDeactivated { get; private set; }
+    public DateTime? DeactivatedAt { get; private set; }
+    public DateTime? ScheduledDeletionAt { get; private set; }
+    public int WeekStartDay { get; private set; } = 1;
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -155,4 +159,27 @@ public class User : Entity
     }
 
     public void MarkCalendarImported() => HasImportedCalendar = true;
+
+    public void Deactivate(DateTime scheduledDeletion)
+    {
+        IsDeactivated = true;
+        DeactivatedAt = DateTime.UtcNow;
+        ScheduledDeletionAt = scheduledDeletion;
+    }
+
+    public void CancelDeactivation()
+    {
+        IsDeactivated = false;
+        DeactivatedAt = null;
+        ScheduledDeletionAt = null;
+    }
+
+    public Result SetWeekStartDay(int day)
+    {
+        if (day is not (0 or 1))
+            return Result.Failure("Week start day must be 0 (Sunday) or 1 (Monday)");
+
+        WeekStartDay = day;
+        return Result.Success();
+    }
 }

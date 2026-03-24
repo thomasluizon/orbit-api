@@ -16,6 +16,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     public record SetAiMemoryRequest(bool Enabled);
     public record SetAiSummaryRequest(bool Enabled);
     public record SetLanguageRequest(string Language);
+    public record SetWeekStartDayRequest(int WeekStartDay);
 
     [HttpGet]
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
@@ -77,6 +78,19 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
 
         if (result.IsSuccess)
             logger.LogInformation("Language changed to {Language} for user {UserId}", request.Language, HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("week-start-day")]
+    public async Task<IActionResult> SetWeekStartDay(
+        [FromBody] SetWeekStartDayRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetWeekStartDayCommand(HttpContext.GetUserId(), request.WeekStartDay);
+        var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Ok()
