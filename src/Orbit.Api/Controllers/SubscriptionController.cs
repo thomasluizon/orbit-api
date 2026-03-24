@@ -55,7 +55,7 @@ public class SubscriptionController(
         var countryCode = await geoLocationService.GetCountryCodeAsync(ip, ct);
         var isBrazil = countryCode == "BR";
 
-        var allowedIntervals = new[] { "monthly", "semiannual", "yearly" };
+        var allowedIntervals = new[] { "monthly", "yearly" };
         var interval = request.Interval?.ToLower();
         if (string.IsNullOrEmpty(interval) || !allowedIntervals.Contains(interval))
         {
@@ -66,8 +66,6 @@ public class SubscriptionController(
         {
             ("yearly", true) => _settings.YearlyPriceIdBrl,
             ("yearly", false) => _settings.YearlyPriceIdUsd,
-            ("semiannual", true) => _settings.SemiAnnualPriceIdBrl,
-            ("semiannual", false) => _settings.SemiAnnualPriceIdUsd,
             ("monthly", true) => _settings.MonthlyPriceIdBrl,
             ("monthly", false) => _settings.MonthlyPriceIdUsd,
             _ => _settings.MonthlyPriceIdBrl // unreachable after validation
@@ -301,7 +299,6 @@ public class SubscriptionController(
         return (interval, count) switch
         {
             ("year", _) => SubscriptionInterval.Yearly,
-            ("month", >= 4) => SubscriptionInterval.SemiAnnual,
             _ => SubscriptionInterval.Monthly
         };
     }
