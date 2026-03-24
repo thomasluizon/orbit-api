@@ -72,6 +72,15 @@ public class VerifyCodeCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
+        // Cancel deactivation if user was deactivated
+        var wasReactivated = false;
+        if (user.IsDeactivated)
+        {
+            user.CancelDeactivation();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            wasReactivated = true;
+        }
+
         // Generate JWT
         var token = tokenService.GenerateToken(user.Id, user.Email);
 
@@ -91,6 +100,6 @@ public class VerifyCodeCommandHandler(
             }, CancellationToken.None);
         }
 
-        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email));
+        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
     }
 }

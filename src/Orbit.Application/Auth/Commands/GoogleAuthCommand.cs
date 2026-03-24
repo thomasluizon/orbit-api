@@ -77,16 +77,26 @@ public class GoogleAuthCommandHandler(
             }, CancellationToken.None);
         }
 
+        // Cancel deactivation if user was deactivated
+        var wasReactivated = false;
+        if (user.IsDeactivated)
+        {
+            user.CancelDeactivation();
+            wasReactivated = true;
+        }
+
         // Store Google tokens for Calendar API access
         if (request.GoogleAccessToken is not null)
         {
             user.SetGoogleTokens(request.GoogleAccessToken, request.GoogleRefreshToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
+
+        if (wasReactivated || request.GoogleAccessToken is not null)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Generate app JWT
         var token = tokenService.GenerateToken(user.Id, user.Email);
 
-        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email));
+        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
     }
 }

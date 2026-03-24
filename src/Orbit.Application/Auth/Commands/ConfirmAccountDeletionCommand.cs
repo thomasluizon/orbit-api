@@ -6,29 +6,29 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record ConfirmAccountDeletionCommand(Guid UserId, string Code) : IRequest<Result>;
+public record ConfirmAccountDeletionCommand(Guid UserId, string Code) : IRequest<Result<DateTime>>;
 
 public class ConfirmAccountDeletionCommandHandler(
     IMemoryCache cache,
     IGenericRepository<User> userRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<ConfirmAccountDeletionCommand, Result>
+    IUnitOfWork unitOfWork) : IRequestHandler<ConfirmAccountDeletionCommand, Result<DateTime>>
 {
-    public async Task<Result> Handle(ConfirmAccountDeletionCommand request, CancellationToken cancellationToken)
+    public async Task<Result<DateTime>> Handle(ConfirmAccountDeletionCommand request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure("User not found");
+            return Result.Failure<DateTime>("User not found");
 
         var email = user.Email.ToLowerInvariant();
         var cacheKey = $"delete:{email}";
 
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure("Deletion code expired or not found");
+            return Result.Failure<DateTime>("Deletion code expired or not found");
 
         if (entry.Attempts >= 3)
         {
             cache.Remove(cacheKey);
-            return Result.Failure("Too many attempts. Please request a new code");
+            return Result.Failure<DateTime>("Too many attempts. Please request a new code");
         }
 
         if (entry.Code != request.Code)
@@ -42,15 +42,20 @@ public class ConfirmAccountDeletionCommandHandler(
                     AbsoluteExpirationRelativeToNow = remaining
                 });
             }
-            return Result.Failure("Invalid code");
+            return Result.Failure<DateTime>("Invalid code");
         }
 
         cache.Remove(cacheKey);
 
-        // Delete user - EF Core cascades all related data
-        userRepository.Remove(user);
+        // Calculate scheduled deletion date
+        var scheduledDate = user.HasProAccess && user.PlanExpiresAt.HasValue && user.PlanExpiresAt.Value > DateTime.UtcNow
+            ? user.PlanExpiresAt.Value.AddDays(7)
+            : DateTime.UtcNow.AddDays(7);
+
+        // Deactivate instead of hard-delete
+        user.Deactivate(scheduledDate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success();
+        return Result.Success(scheduledDate);
     }
 }

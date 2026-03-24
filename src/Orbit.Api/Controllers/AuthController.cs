@@ -97,8 +97,8 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Account deleted for {UserId}", HttpContext.GetUserId());
-            return Ok(new { message = "Account deleted" });
+            logger.LogInformation("Account deactivated for {UserId}, scheduled deletion at {ScheduledAt}", HttpContext.GetUserId(), result.Value);
+            return Ok(new { message = "Account deactivated", scheduledDeletionAt = result.Value });
         }
 
         logger.LogWarning("Deletion confirmation failed for {UserId}: {Error}", HttpContext.GetUserId(), result.Error);

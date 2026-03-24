@@ -24,7 +24,8 @@ public record ProfileResponse(
     bool HasImportedCalendar,
     bool HasGoogleConnection,
     string? SubscriptionInterval,
-    bool IsLifetimePro);
+    bool IsLifetimePro,
+    int WeekStartDay);
 
 public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
 
@@ -61,6 +62,7 @@ public class GetProfileQueryHandler(
             user.HasImportedCalendar,
             user.GoogleAccessToken is not null,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
-            user.IsLifetimePro);
+            user.IsLifetimePro,
+            user.WeekStartDay);
     }
 }
