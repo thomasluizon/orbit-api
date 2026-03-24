@@ -17,6 +17,11 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .GreaterThan(0)
             .When(x => x.FrequencyQuantity is not null);
 
+        RuleFor(x => x.FrequencyQuantity)
+            .NotNull()
+            .WithMessage("Frequency quantity is required when frequency unit is set")
+            .When(x => x.FrequencyUnit is not null);
+
         SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
 
         RuleFor(x => x.SubHabits)
