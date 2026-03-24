@@ -31,7 +31,8 @@ public record HabitScheduleItem(
     bool SlipAlertEnabled,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
-    IReadOnlyList<HabitScheduleChildItem> Children);
+    IReadOnlyList<HabitScheduleChildItem> Children,
+    bool HasSubHabits);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -200,7 +201,8 @@ public class GetHabitScheduleQueryHandler(
             h.SlipAlertEnabled,
             h.ChecklistItems,
             MapTags(h),
-            MapChildren(h.Id, lookup, dateFrom, dateTo));
+            MapChildren(h.Id, lookup, dateFrom, dateTo),
+            lookup[h.Id].Any());
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
     {
