@@ -44,7 +44,7 @@ public class User : Entity
     public bool HasProAccess => IsPro || IsTrialActive;
 
     [NotMapped]
-    public bool IsYearlyPro => IsPro && SubscriptionInterval == Enums.SubscriptionInterval.Yearly;
+    public bool IsYearlyPro => IsPro && (IsLifetimePro || SubscriptionInterval == Enums.SubscriptionInterval.Yearly);
 
     private User() { }
 

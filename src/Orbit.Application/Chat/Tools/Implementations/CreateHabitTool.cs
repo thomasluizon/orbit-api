@@ -10,7 +10,8 @@ public class CreateHabitTool(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
-    IPayGateService payGate) : IAiTool
+    IPayGateService payGate,
+    IUnitOfWork unitOfWork) : IAiTool
 {
     public string Name => "create_habit";
 
@@ -111,7 +112,7 @@ public class CreateHabitTool(
         // Parse optional fields
         string? description = GetOptionalString(args, "description");
         FrequencyUnit? frequencyUnit = ParseFrequencyUnit(args);
-        int? frequencyQuantity = GetOptionalInt(args, "frequency_quantity");
+        int? frequencyQuantity = GetOptionalInt(args, "frequency_quantity") ?? (frequencyUnit is not null ? 1 : null);
         DateOnly dueDate = ParseDateOnly(args, "due_date") ?? today;
         TimeOnly? dueTime = ParseTimeOnly(args, "due_time");
         bool isBadHabit = GetOptionalBool(args, "is_bad_habit") ?? false;
@@ -193,6 +194,9 @@ public class CreateHabitTool(
             if (tagNames.Count > 0)
                 await AssignTagsToHabitAsync(habit, tagNames, userId, ct);
         }
+
+        // Save immediately so subsequent tool calls (e.g. create_sub_habit) can find this habit
+        await unitOfWork.SaveChangesAsync(ct);
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }
