@@ -51,10 +51,10 @@ public class VerifyCodeCommandHandler(
         // Code valid - remove from cache
         cache.Remove(cacheKey);
 
-        // Find or create user
-        var users = await userRepository.GetAllAsync(cancellationToken);
-        var user = users.FirstOrDefault(u =>
-            u.Email.Equals(email, StringComparison.OrdinalIgnoreCase));
+        // Find or create user (tracked so deactivation cancellation persists)
+        var user = await userRepository.FindOneTrackedAsync(
+            u => u.Email.ToLower() == email,
+            cancellationToken: cancellationToken);
 
         var isNewUser = user is null;
 
