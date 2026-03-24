@@ -28,6 +28,7 @@ public class User : Entity
     public bool IsLifetimePro { get; private set; } = false;
     public int AiMessagesUsedThisMonth { get; private set; } = 0;
     public DateTime? AiMessagesResetAt { get; private set; }
+    public SubscriptionInterval? SubscriptionInterval { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
@@ -41,6 +42,9 @@ public class User : Entity
 
     [NotMapped]
     public bool HasProAccess => IsPro || IsTrialActive;
+
+    [NotMapped]
+    public bool IsYearlyPro => IsPro && SubscriptionInterval == Enums.SubscriptionInterval.Yearly;
 
     private User() { }
 
@@ -108,11 +112,13 @@ public class User : Entity
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
 
-    public void SetStripeSubscription(string subscriptionId, DateTime expiresAt)
+    public void SetStripeSubscription(string subscriptionId, DateTime expiresAt, SubscriptionInterval? interval = null)
     {
         StripeSubscriptionId = subscriptionId;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
+        if (interval.HasValue)
+            SubscriptionInterval = interval.Value;
     }
 
     public void CancelSubscription()
@@ -120,6 +126,7 @@ public class User : Entity
         Plan = UserPlan.Free;
         StripeSubscriptionId = null;
         PlanExpiresAt = null;
+        SubscriptionInterval = null;
     }
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 using Stripe;
@@ -35,7 +36,8 @@ public class SubscriptionController(
         DateTime? PlanExpiresAt,
         int AiMessagesUsed,
         int AiMessagesLimit,
-        bool IsLifetimePro);
+        bool IsLifetimePro,
+        string? SubscriptionInterval);
 
     [HttpPost("checkout")]
     public async Task<IActionResult> CreateCheckout(
@@ -134,7 +136,8 @@ public class SubscriptionController(
             user.PlanExpiresAt,
             user.AiMessagesUsedThisMonth,
             await payGate.GetAiMessageLimit(user.Id, ct),
-            user.IsLifetimePro));
+            user.IsLifetimePro,
+            user.SubscriptionInterval?.ToString().ToLowerInvariant()));
     }
 
     [AllowAnonymous]
@@ -196,7 +199,7 @@ public class SubscriptionController(
                                 : DateTime.UtcNow.AddMonths(1);
 
                             user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
-                            user.SetStripeSubscription(subscriptionId, periodEnd);
+                            user.SetStripeSubscription(subscriptionId, periodEnd, GetSubscriptionInterval(subscription));
                             await unitOfWork.SaveChangesAsync(ct);
                             logger.LogInformation("User {UserId} upgraded to Pro, expires {Expires}", uid, periodEnd);
                         }
@@ -226,7 +229,7 @@ public class SubscriptionController(
                             var periodEnd = subscription.Items?.Data?.Count > 0
                                 ? subscription.Items.Data[0].CurrentPeriodEnd
                                 : DateTime.UtcNow.AddMonths(1);
-                            user.SetStripeSubscription(invoiceSubId, periodEnd);
+                            user.SetStripeSubscription(invoiceSubId, periodEnd, GetSubscriptionInterval(subscription));
                             await unitOfWork.SaveChangesAsync(ct);
                             logger.LogInformation("User {UserId} subscription renewed, expires {Expires}", user.Id, periodEnd);
                         }
@@ -267,7 +270,7 @@ public class SubscriptionController(
                                 var periodEnd = subscription.Items?.Data?.Count > 0
                                     ? subscription.Items.Data[0].CurrentPeriodEnd
                                     : DateTime.UtcNow.AddMonths(1);
-                                user.SetStripeSubscription(subscription.Id, periodEnd);
+                                user.SetStripeSubscription(subscription.Id, periodEnd, GetSubscriptionInterval(subscription));
                             }
                             else if (subscription.Status == "canceled" || subscription.Status == "unpaid")
                             {
@@ -287,5 +290,19 @@ public class SubscriptionController(
         }
 
         return Ok();
+    }
+
+    private static SubscriptionInterval GetSubscriptionInterval(Stripe.Subscription subscription)
+    {
+        var item = subscription.Items?.Data?.FirstOrDefault();
+        var interval = item?.Price?.Recurring?.Interval;
+        var count = item?.Price?.Recurring?.IntervalCount ?? 1;
+
+        return (interval, count) switch
+        {
+            ("year", _) => SubscriptionInterval.Yearly,
+            ("month", >= 4) => SubscriptionInterval.SemiAnnual,
+            _ => SubscriptionInterval.Monthly
+        };
     }
 }
