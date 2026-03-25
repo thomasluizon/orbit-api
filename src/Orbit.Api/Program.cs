@@ -176,6 +176,7 @@ builder.Services.AddScoped<IAiTool, AssignTagsTool>();
 builder.Services.AddScoped<IAiTool, SuggestBreakdownTool>();
 builder.Services.AddScoped<IAiTool, DuplicateHabitTool>();
 builder.Services.AddScoped<IAiTool, MoveHabitTool>();
+builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
 builder.Services.AddScoped<AiToolRegistry>();
 builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
