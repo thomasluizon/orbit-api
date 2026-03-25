@@ -61,7 +61,7 @@ public class GetCalendarEventsQueryHandler(
             var existingHabits = await habitRepository.FindAsync(
                 h => h.UserId == request.UserId, cancellationToken);
             var existingHabitKeys = existingHabits
-                .Select(h => (Title: h.Title.Trim().ToLowerInvariant(), Date: h.DueDate.ToString("yyyy-MM-dd")))
+                .Select(h => (Title: h.Title.Trim().ToLowerInvariant(), Date: h.DueDate.ToString("yyyy-MM-dd"), Time: h.DueTime?.ToString("HH:mm") ?? ""))
                 .ToHashSet();
 
             var items = new List<CalendarEventItem>();
@@ -71,14 +71,14 @@ public class GetCalendarEventsQueryHandler(
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
                 var evTitle = ev.Summary.Trim();
                 var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
+                var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
 
-                // Skip if already imported (same title + same date)
-                if (existingHabitKeys.Contains((evTitle.ToLowerInvariant(), startDate ?? ""))) continue;
+                // Skip if already imported (same title + date + time)
+                if (existingHabitKeys.Contains((evTitle.ToLowerInvariant(), startDate ?? "", startTime ?? ""))) continue;
 
                 // Deduplicate recurring instances (keep only first occurrence per series)
                 if (ev.RecurringEventId is not null && !seenRecurringIds.Add(ev.RecurringEventId)) continue;
 
-                var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
                 var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
                 var isRecurring = ev.RecurringEventId is not null;
                 var rrule = ev.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
