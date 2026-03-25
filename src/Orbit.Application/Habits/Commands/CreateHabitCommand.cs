@@ -29,6 +29,7 @@ namespace Orbit.Application.Habits.Commands;
 [AiRule("TAGS: You can assign tags to habits using tagNames on CreateHabit actions, or use AssignTags action to change tags on existing habits. tagNames is an array of tag name strings. Use EXISTING tag names from the user's tags list when possible. If user asks for a tag that doesn't exist yet, use the new name - it will be auto-created")]
 [AiRule("FREQUENCY INTERPRETATION: 'X times per week' (e.g., '3x per week', '3 vezes por semana') means frequencyUnit: Day, frequencyQuantity: 1, days: [pick X evenly spread weekdays]. It does NOT mean frequencyQuantity: X, frequencyUnit: Week (that means every X weeks). Example: '3x/week' = Day/1/[Monday,Wednesday,Friday]. '2x/week' = Day/1/[Tuesday,Thursday]")]
 [AiRule("ONLY add/change tags when the user EXPLICITLY asks for it. NEVER auto-assign tags on your own initiative")]
+[AiRule("GENERAL HABITS: Set isGeneral to true for open-ended habits with no specific schedule or due date (e.g., 'drink more water', 'be more mindful', 'read more books'). Omit frequencyUnit, frequencyQuantity, days, and dueDate when isGeneral is true")]
 [AiExample(
     "Clean the house 3x per week",
     """{ "actions": [{ "type": "CreateHabit", "title": "Clean the House", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Wednesday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created 'Clean the House' for Monday, Wednesday, and Friday!" }""",
@@ -60,6 +61,10 @@ namespace Orbit.Application.Habits.Commands;
     "Create a supermarket list with milk, eggs, bread",
     """{ "actions": [{ "type": "CreateHabit", "title": "Supermarket", "dueDate": "{TODAY}", "checklistItems": [{"text": "Milk", "isChecked": false}, {"text": "Eggs", "isChecked": false}, {"text": "Bread", "isChecked": false}] }], "aiMessage": "Created your supermarket list with 3 items!" }""",
     Note = "with checklist")]
+[AiExample(
+    "I want to drink more water",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Drink More Water", "isGeneral": true }], "aiMessage": "Created a general habit to drink more water!" }""",
+    Note = "general habit, no schedule")]
 public record CreateHabitCommand(
     Guid UserId,
     [property: AiField("string", "Name of the habit", Required = true)] string Title,
@@ -75,7 +80,8 @@ public record CreateHabitCommand(
     [property: AiField("integer[]", "Array of minutes before dueTime to send reminders, e.g. [1440, 30] for 1 day and 30 min before. Default [15]")] IReadOnlyList<int>? ReminderTimes = null,
     [property: AiField("boolean", "Defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows")] bool SlipAlertEnabled = false,
     [property: AiField("string[]", "Array of tag name strings, ONLY when user explicitly asks to tag it", Name = "tagNames")] IReadOnlyList<Guid>? TagIds = null,
-    [property: AiField("object[]", "Array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit")] IReadOnlyList<ChecklistItem>? ChecklistItems = null) : IRequest<Result<Guid>>;
+    [property: AiField("object[]", "Array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit")] IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    [property: AiField("boolean", "True for general habits with no schedule or due date (open-ended goals)")] bool IsGeneral = false) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -115,7 +121,8 @@ public class CreateHabitCommandHandler(
             reminderEnabled: request.ReminderEnabled,
             reminderTimes: request.ReminderTimes,
             slipAlertEnabled: request.SlipAlertEnabled,
-            checklistItems: request.ChecklistItems);
+            checklistItems: request.ChecklistItems,
+            isGeneral: request.IsGeneral);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -132,7 +139,8 @@ public class CreateHabitCommandHandler(
                     request.FrequencyUnit,
                     request.FrequencyQuantity,
                     dueDate: request.DueDate ?? dueDate,
-                    parentHabitId: habit.Id);
+                    parentHabitId: habit.Id,
+                    isGeneral: request.IsGeneral);
 
                 if (childResult.IsFailure)
                     return Result.Failure<Guid>(childResult.Error);
