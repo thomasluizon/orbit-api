@@ -5,6 +5,7 @@ using Orbit.Api.Extensions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Enums;
+using Orbit.Application.Common;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 using Stripe;
@@ -46,7 +47,7 @@ public class SubscriptionController(
     {
         var userId = HttpContext.GetUserId();
         var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null) return NotFound(new { error = "User not found" });
+        if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
 
         // Prefer X-Forwarded-For (set by BFF/reverse proxy) over direct connection IP
         var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
@@ -104,7 +105,7 @@ public class SubscriptionController(
     {
         var userId = HttpContext.GetUserId();
         var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null) return NotFound(new { error = "User not found" });
+        if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
 
         if (string.IsNullOrEmpty(user.StripeCustomerId))
             return BadRequest(new { error = "No subscription found" });
@@ -124,7 +125,7 @@ public class SubscriptionController(
     {
         var userId = HttpContext.GetUserId();
         var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null) return NotFound(new { error = "User not found" });
+        if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
 
         return Ok(new SubscriptionStatusResponse(
             user.HasProAccess ? "pro" : "free",

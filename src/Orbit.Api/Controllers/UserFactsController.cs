@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/user-facts")]
-public class UserFactsController(IMediator mediator) : ControllerBase
+public class UserFactsController(IMediator mediator, ILogger<UserFactsController> logger) : ControllerBase
 {
     public record BulkDeleteUserFactsRequest(IReadOnlyList<Guid> FactIds);
 
@@ -18,8 +18,8 @@ public class UserFactsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> GetUserFacts(CancellationToken cancellationToken)
     {
         var query = new GetUserFactsQuery(HttpContext.GetUserId());
-        var facts = await mediator.Send(query, cancellationToken);
-        return Ok(facts);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("{id:guid}")]
@@ -27,6 +27,9 @@ public class UserFactsController(IMediator mediator) : ControllerBase
     {
         var command = new DeleteUserFactCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("User fact deleted {FactId} by user {UserId}", id, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()

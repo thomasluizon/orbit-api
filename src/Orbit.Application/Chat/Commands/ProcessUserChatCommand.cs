@@ -321,7 +321,7 @@ public class ProcessUserChatCommandHandler(
 
             if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
             {
-                var maxFacts = await appConfigService.GetAsync("MaxUserFacts", 50, cancellationToken);
+                var maxFacts = await appConfigService.GetAsync("MaxUserFacts", AppConstants.MaxUserFacts, cancellationToken);
                 if (userFacts.Count >= maxFacts)
                 {
                     logger.LogInformation("User has reached {MaxFacts} fact limit, skipping extraction persistence", maxFacts);
