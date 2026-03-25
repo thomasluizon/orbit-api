@@ -71,6 +71,7 @@ public class GetCalendarEventsQueryHandler(
 
             var items = new List<CalendarEventItem>();
             var seenRecurringIds = new HashSet<string>();
+            var seenRecurringTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
@@ -84,8 +85,18 @@ public class GetCalendarEventsQueryHandler(
                 // Skip if matching an existing one-time habit (title + date + time)
                 if (oneTimeHabitKeys.Contains((evTitleLower, startDate ?? "", startTime ?? ""))) continue;
 
-                // Deduplicate recurring instances (keep only first occurrence per series)
-                if (ev.RecurringEventId is not null && !seenRecurringIds.Add(ev.RecurringEventId)) continue;
+                // Deduplicate recurring instances: by RecurringEventId and by title
+                // (master event may have null RecurringEventId while instances have non-null)
+                if (ev.RecurringEventId is not null)
+                {
+                    if (!seenRecurringIds.Add(ev.RecurringEventId)) continue;
+                    if (!seenRecurringTitles.Add(evTitle)) continue;
+                }
+                else if (ev.Recurrence is not null && ev.Recurrence.Count > 0)
+                {
+                    // Master recurring event (has Recurrence rules but no RecurringEventId)
+                    if (!seenRecurringTitles.Add(evTitle)) continue;
+                }
 
                 var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
                 var isRecurring = ev.RecurringEventId is not null;
