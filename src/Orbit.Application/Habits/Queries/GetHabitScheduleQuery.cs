@@ -114,9 +114,6 @@ public class GetHabitScheduleQueryHandler(
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> HandleScheduledHabits(
         GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
-        var dateFrom = request.DateFrom!.Value;
-        var dateTo = request.DateTo!.Value;
-
         // Advance stale bad habit DueDates so they show on the correct next scheduled day
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var staleBadHabits = await habitRepository.FindTrackedAsync(
@@ -152,6 +149,27 @@ public class GetHabitScheduleQueryHandler(
                 topLevel = topLevel.Where(h => h.FrequencyUnit == unit);
         }
 
+        // No date range: return all habits without schedule computation (used by "all" view)
+        if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
+        {
+            var allFiltered = topLevel.ToList();
+            var allTotalCount = allFiltered.Count;
+            var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);
+            var allPage = Math.Max(1, Math.Min(request.Page, Math.Max(1, allTotalPages)));
+
+            var allPagedItems = allFiltered
+                .Skip((allPage - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true))
+                .ToList();
+
+            return Result.Success(new PaginatedResponse<HabitScheduleItem>(
+                allPagedItems, allPage, request.PageSize, allTotalCount, allTotalPages));
+        }
+
+        var dateFrom = request.DateFrom.Value;
+        var dateTo = request.DateTo.Value;
+
         // Schedule-aware filtering: keep habits that have at least one scheduled date in range,
         // OR are overdue, OR have any descendant due in range
         var filtered = new List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)>();
@@ -182,7 +200,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, x.scheduledDates, x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo))
+            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
