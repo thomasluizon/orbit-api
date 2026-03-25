@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -14,7 +15,7 @@ public class CreateUserFactCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateUserFactCommand request, CancellationToken cancellationToken)
     {
-        var maxFacts = await appConfigService.GetAsync("MaxUserFacts", 50, cancellationToken);
+        var maxFacts = await appConfigService.GetAsync("MaxUserFacts", AppConstants.MaxUserFacts, cancellationToken);
 
         // Check for duplicate/similar facts
         var existingFacts = await userFactRepository.FindAsync(

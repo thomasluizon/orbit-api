@@ -1,3 +1,4 @@
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 
@@ -44,13 +45,11 @@ public static class HabitScheduleService
     /// <summary>
     /// Returns all dates within [from, to] where the habit is scheduled.
     /// </summary>
-    private const int MaxRangeDays = 366;
-
     public static List<DateOnly> GetScheduledDates(Habit habit, DateOnly from, DateOnly to)
     {
         // Cap the range to prevent runaway iteration on absurd date ranges
-        if (to.DayNumber - from.DayNumber > MaxRangeDays)
-            to = from.AddDays(MaxRangeDays);
+        if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
+            to = from.AddDays(AppConstants.MaxRangeDays);
 
         var dates = new List<DateOnly>();
         var current = from;

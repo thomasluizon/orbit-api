@@ -5,12 +5,13 @@ namespace Orbit.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class ConfigController(IAppConfigService configService) : ControllerBase
+public class ConfigController(IAppConfigService configService, ILogger<ConfigController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetConfig(CancellationToken cancellationToken)
     {
         var config = await configService.GetAllAsync(cancellationToken);
+        logger.LogInformation("Config fetched");
         return Ok(config);
     }
 }

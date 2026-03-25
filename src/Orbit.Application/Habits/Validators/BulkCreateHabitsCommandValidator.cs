@@ -1,4 +1,5 @@
 using FluentValidation;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 
 namespace Orbit.Application.Habits.Validators;
@@ -13,8 +14,8 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
         RuleFor(x => x.Habits)
             .NotEmpty()
             .WithMessage("Habits list must not be empty")
-            .Must(habits => habits.Count <= 100)
-            .WithMessage("Cannot create more than 100 habits at once");
+            .Must(habits => habits.Count <= AppConstants.MaxBulkOperationSize)
+            .WithMessage($"Cannot create more than {AppConstants.MaxBulkOperationSize} habits at once");
 
         RuleForEach(x => x.Habits).ChildRules(habit =>
         {

@@ -9,7 +9,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class SupportController(IMediator mediator) : ControllerBase
+public class SupportController(IMediator mediator, ILogger<SupportController> logger) : ControllerBase
 {
     public record SupportRequest(string Name, string Email, string Subject, string Message);
 
@@ -26,6 +26,9 @@ public class SupportController(IMediator mediator) : ControllerBase
             request.Message);
 
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Support request sent by user {UserId} subject {Subject}", HttpContext.GetUserId(), request.Subject);
 
         return result.IsSuccess
             ? Ok(new { message = "Support request sent successfully" })

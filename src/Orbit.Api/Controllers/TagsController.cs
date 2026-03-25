@@ -21,7 +21,7 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
     {
         var query = new GetTagsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return Ok(result);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
     [HttpPost]

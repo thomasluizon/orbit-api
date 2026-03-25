@@ -5,6 +5,7 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Api.Controllers;
@@ -12,7 +13,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class HabitsController(IMediator mediator, ILogger<HabitsController> logger) : ControllerBase
+public class HabitsController(IMediator mediator, ILogger<HabitsController> logger, IUserDateService userDateService) : ControllerBase
 {
     public record CreateHabitRequest(
         string Title,
@@ -98,7 +99,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             page,
             pageSize);
         var result = await mediator.Send(query, cancellationToken);
-        return Ok(result);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
     [HttpGet("summary")]
@@ -126,7 +127,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         [FromQuery] string language = "en",
         CancellationToken cancellationToken = default)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = await userDateService.GetUserTodayAsync(HttpContext.GetUserId(), cancellationToken);
         var days = period.ToLowerInvariant() switch
         {
             "week" => 7,
@@ -331,6 +332,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.HabitIds);
 
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Bulk deleted {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)

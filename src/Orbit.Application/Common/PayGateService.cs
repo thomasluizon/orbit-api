@@ -13,12 +13,12 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure("User not found.");
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         if (user.HasProAccess)
             return Result.Success();
 
-        var maxHabits = await appConfig.GetAsync("FreeMaxHabits", 10, ct);
+        var maxHabits = await appConfig.GetAsync("FreeMaxHabits", AppConstants.DefaultFreeMaxHabits, ct);
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == userId, ct);
 
@@ -32,7 +32,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure("User not found.");
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var subHabitsProOnly = await appConfig.GetAsync("SubHabitsProOnly", true, ct);
         if (subHabitsProOnly && !user.HasProAccess)
@@ -45,10 +45,10 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure("User not found.");
+            return Result.Failure(ErrorMessages.UserNotFound);
 
-        var freeLimit = await appConfig.GetAsync("FreeAiMessagesPerMonth", 20, ct);
-        var proLimit = await appConfig.GetAsync("ProAiMessagesPerMonth", 500, ct);
+        var freeLimit = await appConfig.GetAsync("FreeAiMessagesPerMonth", AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync("ProAiMessagesPerMonth", AppConstants.DefaultProAiMessages, ct);
         var messageLimit = user.HasProAccess ? proLimit : freeLimit;
 
         if (user.AiMessagesUsedThisMonth >= messageLimit)
@@ -61,7 +61,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure("User not found.");
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var summaryProOnly = await appConfig.GetAsync("DailySummaryProOnly", true, ct);
         if (summaryProOnly && !user.HasProAccess)
@@ -74,7 +74,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure("User not found.");
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var proOnly = await appConfig.GetAsync("RetrospectiveProOnly", true, ct);
         if (proOnly && !user.IsYearlyPro)
@@ -89,10 +89,10 @@ public class PayGateService(
     public async Task<int> GetAiMessageLimit(Guid userId, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null) return 20;
+        if (user is null) return AppConstants.DefaultFreeAiMessages;
 
-        var freeLimit = await appConfig.GetAsync("FreeAiMessagesPerMonth", 20, ct);
-        var proLimit = await appConfig.GetAsync("ProAiMessagesPerMonth", 500, ct);
+        var freeLimit = await appConfig.GetAsync("FreeAiMessagesPerMonth", AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync("ProAiMessagesPerMonth", AppConstants.DefaultProAiMessages, ct);
         return user.HasProAccess ? proLimit : freeLimit;
     }
 }

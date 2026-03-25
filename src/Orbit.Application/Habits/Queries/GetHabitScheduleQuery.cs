@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -60,14 +61,14 @@ public record GetHabitScheduleQuery(
     bool? IsCompleted = null,
     IReadOnlyList<Guid>? TagIds = null,
     int Page = 1,
-    int PageSize = 50) : IRequest<PaginatedResponse<HabitScheduleItem>>;
+    int PageSize = 50) : IRequest<Result<PaginatedResponse<HabitScheduleItem>>>;
 
 public class GetHabitScheduleQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetHabitScheduleQuery, PaginatedResponse<HabitScheduleItem>>
+    IUnitOfWork unitOfWork) : IRequestHandler<GetHabitScheduleQuery, Result<PaginatedResponse<HabitScheduleItem>>>
 {
-    public async Task<PaginatedResponse<HabitScheduleItem>> Handle(GetHabitScheduleQuery request, CancellationToken cancellationToken)
+    public async Task<Result<PaginatedResponse<HabitScheduleItem>>> Handle(GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
         // Advance stale bad habit DueDates so they show on the correct next scheduled day
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -167,12 +168,12 @@ public class GetHabitScheduleQueryHandler(
             .Select(x => MapToScheduleItem(x.habit, x.scheduledDates, x.isOverdue, lookup, request.DateFrom, request.DateTo))
             .ToList();
 
-        return new PaginatedResponse<HabitScheduleItem>(
+        return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,
             page,
             request.PageSize,
             totalCount,
-            totalPages);
+            totalPages));
     }
 
     private static HabitScheduleItem MapToScheduleItem(
