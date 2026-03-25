@@ -57,24 +57,27 @@ public class GetCalendarEventsQueryHandler(
 
             var events = await listRequest.ExecuteAsync(cancellationToken);
 
-            // Load existing habit titles to hide already-imported events
+            // Load existing habits to hide already-imported events (by title + date)
             var existingHabits = await habitRepository.FindAsync(
                 h => h.UserId == request.UserId, cancellationToken);
-            var existingTitles = new HashSet<string>(
-                existingHabits.Select(h => h.Title.Trim()), StringComparer.OrdinalIgnoreCase);
+            var existingHabitKeys = existingHabits
+                .Select(h => (Title: h.Title.Trim().ToLowerInvariant(), Date: h.DueDate.ToString("yyyy-MM-dd")))
+                .ToHashSet();
 
             var items = new List<CalendarEventItem>();
-            var seenTitles = new HashSet<string>(existingTitles, StringComparer.OrdinalIgnoreCase);
+            var seenRecurringIds = new HashSet<string>();
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
                 var evTitle = ev.Summary.Trim();
-                if (existingTitles.Contains(evTitle)) continue;
-
-                // Deduplicate by title (covers recurring instances + already-imported)
-                if (!seenTitles.Add(evTitle)) continue;
-
                 var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
+
+                // Skip if already imported (same title + same date)
+                if (existingHabitKeys.Contains((evTitle.ToLowerInvariant(), startDate ?? ""))) continue;
+
+                // Deduplicate recurring instances (keep only first occurrence per series)
+                if (ev.RecurringEventId is not null && !seenRecurringIds.Add(ev.RecurringEventId)) continue;
+
                 var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
                 var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
                 var isRecurring = ev.RecurringEventId is not null;
