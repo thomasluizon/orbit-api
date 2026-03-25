@@ -17,6 +17,7 @@ public class Habit : Entity
     public TimeOnly? DueTime { get; private set; }
     public bool ReminderEnabled { get; private set; }
     public IReadOnlyList<int> ReminderTimes { get; private set; } = [15];
+    public bool IsGeneral { get; private set; }
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
     public int? Position { get; private set; }
@@ -50,13 +51,17 @@ public class Habit : Entity
         bool reminderEnabled = false,
         IReadOnlyList<int>? reminderTimes = null,
         bool slipAlertEnabled = false,
-        IReadOnlyList<ChecklistItem>? checklistItems = null)
+        IReadOnlyList<ChecklistItem>? checklistItems = null,
+        bool isGeneral = false)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
 
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure<Habit>("Title is required.");
+
+        if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
+            return Result.Failure<Habit>("General habits cannot have a frequency.");
 
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
@@ -73,6 +78,7 @@ public class Habit : Entity
             FrequencyQuantity = frequencyQuantity,
             Days = days?.ToList() ?? [],
             IsBadHabit = isBadHabit,
+            IsGeneral = isGeneral,
             DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             DueTime = dueTime,
             ParentHabitId = parentHabitId,
@@ -172,10 +178,15 @@ public class Habit : Entity
         bool? reminderEnabled = null,
         IReadOnlyList<int>? reminderTimes = null,
         bool? slipAlertEnabled = null,
-        IReadOnlyList<ChecklistItem>? checklistItems = null)
+        IReadOnlyList<ChecklistItem>? checklistItems = null,
+        bool? isGeneral = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
+
+        var effectiveIsGeneral = isGeneral ?? IsGeneral;
+        if (effectiveIsGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
+            return Result.Failure("General habits cannot have a frequency.");
 
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure("Frequency quantity must be greater than 0.");
@@ -189,6 +200,9 @@ public class Habit : Entity
         FrequencyQuantity = frequencyQuantity;
         Days = days?.ToList() ?? [];
         IsBadHabit = isBadHabit;
+
+        if (isGeneral.HasValue)
+            IsGeneral = isGeneral.Value;
 
         if (dueDate is not null)
             DueDate = dueDate.Value;
