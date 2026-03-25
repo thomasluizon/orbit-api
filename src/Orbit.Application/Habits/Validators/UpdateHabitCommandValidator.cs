@@ -31,5 +31,10 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
             x => x.FrequencyUnit,
             x => x.FrequencyQuantity,
             x => x.Days);
+
+        RuleFor(x => x.IsBadHabit)
+            .Equal(false)
+            .When(x => x.IsGeneral == true)
+            .WithMessage("General habits cannot be bad habits");
     }
 }
