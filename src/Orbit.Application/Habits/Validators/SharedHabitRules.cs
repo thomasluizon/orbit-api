@@ -38,20 +38,40 @@ public static class SharedHabitRules
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr)
     {
         var isGeneralFunc = isGeneralExpr.Compile();
+        AddGeneralHabitRulesCore(validator, x => isGeneralFunc(x), freqUnitExpr, freqQtyExpr, daysExpr);
+    }
 
+    public static void AddGeneralHabitRules<T>(
+        AbstractValidator<T> validator,
+        System.Linq.Expressions.Expression<Func<T, bool?>> isGeneralExpr,
+        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
+        System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
+        System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr)
+    {
+        var isGeneralFunc = isGeneralExpr.Compile();
+        AddGeneralHabitRulesCore(validator, x => isGeneralFunc(x) == true, freqUnitExpr, freqQtyExpr, daysExpr);
+    }
+
+    private static void AddGeneralHabitRulesCore<T>(
+        AbstractValidator<T> validator,
+        Func<T, bool> isGeneralPredicate,
+        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
+        System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
+        System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr)
+    {
         validator.RuleFor(freqUnitExpr)
             .Null()
-            .When(x => isGeneralFunc(x))
+            .When(isGeneralPredicate)
             .WithMessage("General habits cannot have a frequency unit");
 
         validator.RuleFor(freqQtyExpr)
             .Null()
-            .When(x => isGeneralFunc(x))
+            .When(isGeneralPredicate)
             .WithMessage("General habits cannot have a frequency quantity");
 
         validator.RuleFor(daysExpr)
             .Must(days => days is null || days.Count == 0)
-            .When(x => isGeneralFunc(x))
+            .When(isGeneralPredicate)
             .WithMessage("General habits cannot have specific days");
     }
 }

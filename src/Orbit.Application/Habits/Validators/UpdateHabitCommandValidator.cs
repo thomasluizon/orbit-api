@@ -26,19 +26,10 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 
         SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
 
-        RuleFor(x => x.FrequencyUnit)
-            .Null()
-            .When(x => x.IsGeneral == true)
-            .WithMessage("General habits cannot have a frequency unit");
-
-        RuleFor(x => x.FrequencyQuantity)
-            .Null()
-            .When(x => x.IsGeneral == true)
-            .WithMessage("General habits cannot have a frequency quantity");
-
-        RuleFor(x => x.Days)
-            .Must(days => days is null || days.Count == 0)
-            .When(x => x.IsGeneral == true)
-            .WithMessage("General habits cannot have specific days");
+        SharedHabitRules.AddGeneralHabitRules(this,
+            x => x.IsGeneral,
+            x => x.FrequencyUnit,
+            x => x.FrequencyQuantity,
+            x => x.Days);
     }
 }
