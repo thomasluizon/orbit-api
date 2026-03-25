@@ -1,10 +1,11 @@
 using MediatR;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.UserFacts.Queries;
 
-public record GetUserFactsQuery(Guid UserId) : IRequest<IReadOnlyList<UserFactDto>>;
+public record GetUserFactsQuery(Guid UserId) : IRequest<Result<IReadOnlyList<UserFactDto>>>;
 
 public record UserFactDto(
     Guid Id,
@@ -14,15 +15,15 @@ public record UserFactDto(
     DateTime? UpdatedAtUtc);
 
 public class GetUserFactsQueryHandler(
-    IGenericRepository<UserFact> userFactRepository) : IRequestHandler<GetUserFactsQuery, IReadOnlyList<UserFactDto>>
+    IGenericRepository<UserFact> userFactRepository) : IRequestHandler<GetUserFactsQuery, Result<IReadOnlyList<UserFactDto>>>
 {
-    public async Task<IReadOnlyList<UserFactDto>> Handle(GetUserFactsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<UserFactDto>>> Handle(GetUserFactsQuery request, CancellationToken cancellationToken)
     {
         var facts = await userFactRepository.FindAsync(
             f => f.UserId == request.UserId,
             cancellationToken);
 
-        return facts
+        var result = facts
             .OrderByDescending(f => f.ExtractedAtUtc)
             .Select(f => new UserFactDto(
                 f.Id,
@@ -31,5 +32,7 @@ public class GetUserFactsQueryHandler(
                 f.ExtractedAtUtc,
                 f.UpdatedAtUtc))
             .ToList();
+
+        return Result.Success<IReadOnlyList<UserFactDto>>(result);
     }
 }

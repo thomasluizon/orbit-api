@@ -1,4 +1,6 @@
 using MediatR;
+using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -27,22 +29,22 @@ public record ProfileResponse(
     bool IsLifetimePro,
     int WeekStartDay);
 
-public record GetProfileQuery(Guid UserId) : IRequest<ProfileResponse>;
+public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
 public class GetProfileQueryHandler(
     IGenericRepository<User> userRepository,
-    IPayGateService payGate) : IRequestHandler<GetProfileQuery, ProfileResponse>
+    IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
-    public async Task<ProfileResponse> Handle(GetProfileQuery request, CancellationToken cancellationToken)
+    public async Task<Result<ProfileResponse>> Handle(GetProfileQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
 
         if (user is null)
-            throw new InvalidOperationException("User not found.");
+            return Result.Failure<ProfileResponse>(ErrorMessages.UserNotFound);
 
         var aiMessageLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
 
-        return new ProfileResponse(
+        return Result.Success(new ProfileResponse(
             user.Name,
             user.Email,
             user.TimeZone,
@@ -63,6 +65,6 @@ public class GetProfileQueryHandler(
             user.GoogleAccessToken is not null,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
             user.IsLifetimePro,
-            user.WeekStartDay);
+            user.WeekStartDay));
     }
 }

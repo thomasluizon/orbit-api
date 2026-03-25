@@ -42,7 +42,7 @@ public class BulkDeleteHabitsCommandHandler(
                         Index: i,
                         Status: BulkItemStatus.Failed,
                         HabitId: habitId,
-                        Error: "Habit not found"));
+                        Error: ErrorMessages.HabitNotFound));
                     continue;
                 }
 
@@ -52,7 +52,7 @@ public class BulkDeleteHabitsCommandHandler(
                         Index: i,
                         Status: BulkItemStatus.Failed,
                         HabitId: habitId,
-                        Error: "Habit does not belong to user"));
+                        Error: ErrorMessages.HabitNotOwned));
                     continue;
                 }
 

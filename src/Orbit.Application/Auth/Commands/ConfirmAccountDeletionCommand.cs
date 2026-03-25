@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -17,7 +18,7 @@ public class ConfirmAccountDeletionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DateTime>("User not found");
+            return Result.Failure<DateTime>(ErrorMessages.UserNotFound);
 
         var email = user.Email.ToLowerInvariant();
         var cacheKey = $"delete:{email}";

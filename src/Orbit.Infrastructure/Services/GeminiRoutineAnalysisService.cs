@@ -42,7 +42,7 @@ public sealed class GeminiRoutineAnalysisService(
         var users = await userRepository.FindAsync(u => u.Id == userId, cancellationToken);
         var user = users.FirstOrDefault();
         if (user is null)
-            return Result.Failure<RoutineAnalysis>("User not found");
+            return Result.Failure<RoutineAnalysis>(Orbit.Application.Common.ErrorMessages.UserNotFound);
 
         if (string.IsNullOrEmpty(user.TimeZone))
         {
@@ -116,7 +116,7 @@ public sealed class GeminiRoutineAnalysisService(
         Analyze these habit log timestamps and detect recurring time-of-day patterns.
 
         User timezone: {{user.TimeZone}}
-        Current date: {{DateOnly.FromDateTime(DateTime.UtcNow)}}
+        Current date: {{DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timezone))}}
         Analysis window: Last {{AnalysisWindowDays}} days
 
         Habit logs (local time):

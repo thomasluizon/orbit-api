@@ -22,8 +22,8 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
     {
         var query = new GetProfileQuery(HttpContext.GetUserId());
-        var profile = await mediator.Send(query, cancellationToken);
-        return Ok(profile);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
     [HttpPut("timezone")]
@@ -50,6 +50,9 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var command = new SetAiMemoryCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
+        if (result.IsSuccess)
+            logger.LogInformation("AI memory {State} for user {UserId}", request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+
         return result.IsSuccess
             ? Ok()
             : BadRequest(new { error = result.Error });
@@ -62,6 +65,9 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     {
         var command = new SetAiSummaryCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("AI summary {State} for user {UserId}", request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()
@@ -91,6 +97,9 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     {
         var command = new SetWeekStartDayCommand(HttpContext.GetUserId(), request.WeekStartDay);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Week start day changed to {WeekStartDay} for user {UserId}", request.WeekStartDay, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()

@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -24,7 +25,7 @@ public class ReorderHabitsCommandHandler(
                 cancellationToken: cancellationToken);
 
             if (habit is null)
-                return Result.Failure($"Habit '{update.HabitId}' not found.");
+                return Result.Failure(ErrorMessages.HabitNotFound);
 
             habit.SetPosition(update.Position);
         }

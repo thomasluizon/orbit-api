@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -9,20 +10,22 @@ public record TagResponse(
     string Name,
     string Color);
 
-public record GetTagsQuery(Guid UserId) : IRequest<IReadOnlyList<TagResponse>>;
+public record GetTagsQuery(Guid UserId) : IRequest<Result<IReadOnlyList<TagResponse>>>;
 
 public class GetTagsQueryHandler(
-    IGenericRepository<Tag> tagRepository) : IRequestHandler<GetTagsQuery, IReadOnlyList<TagResponse>>
+    IGenericRepository<Tag> tagRepository) : IRequestHandler<GetTagsQuery, Result<IReadOnlyList<TagResponse>>>
 {
-    public async Task<IReadOnlyList<TagResponse>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<TagResponse>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
     {
         var tags = await tagRepository.FindAsync(
             t => t.UserId == request.UserId,
             cancellationToken);
 
-        return tags
+        var result = tags
             .OrderBy(t => t.Name)
             .Select(t => new TagResponse(t.Id, t.Name, t.Color))
             .ToList();
+
+        return Result.Success<IReadOnlyList<TagResponse>>(result);
     }
 }

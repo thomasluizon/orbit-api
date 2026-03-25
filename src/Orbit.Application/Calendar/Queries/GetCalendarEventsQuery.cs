@@ -1,6 +1,7 @@
 using Google.Apis.Calendar.v3;
 using Google.Apis.Services;
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -30,7 +31,7 @@ public class GetCalendarEventsQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<List<CalendarEventItem>>("User not found");
+            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound);
 
         var accessToken = await googleTokenService.GetValidAccessTokenAsync(user, cancellationToken);
         if (accessToken is null)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -36,7 +37,7 @@ public class LogHabitTool(
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
 
         if (habit.UserId != userId)
-            return new ToolResult(false, Error: "Habit does not belong to this user.");
+            return new ToolResult(false, Error: ErrorMessages.HabitNotOwned);
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
