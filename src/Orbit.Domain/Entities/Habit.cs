@@ -63,6 +63,9 @@ public class Habit : Entity
         if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
             return Result.Failure<Habit>("General habits cannot have a frequency.");
 
+        if (isGeneral && isBadHabit)
+            return Result.Failure<Habit>("General habits cannot be bad habits.");
+
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
 
@@ -187,6 +190,9 @@ public class Habit : Entity
         var effectiveIsGeneral = isGeneral ?? IsGeneral;
         if (effectiveIsGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
             return Result.Failure("General habits cannot have a frequency.");
+
+        if (effectiveIsGeneral && isBadHabit)
+            return Result.Failure("General habits cannot be bad habits.");
 
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure("Frequency quantity must be greater than 0.");
