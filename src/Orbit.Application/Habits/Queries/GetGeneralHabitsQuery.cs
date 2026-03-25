@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
@@ -42,12 +43,12 @@ public record GetGeneralHabitsQuery(
     bool? IsCompleted = null,
     IReadOnlyList<Guid>? TagIds = null,
     int Page = 1,
-    int PageSize = 50) : IRequest<PaginatedResponse<GeneralHabitItem>>;
+    int PageSize = 50) : IRequest<Result<PaginatedResponse<GeneralHabitItem>>>;
 
 public class GetGeneralHabitsQueryHandler(
-    IGenericRepository<Habit> habitRepository) : IRequestHandler<GetGeneralHabitsQuery, PaginatedResponse<GeneralHabitItem>>
+    IGenericRepository<Habit> habitRepository) : IRequestHandler<GetGeneralHabitsQuery, Result<PaginatedResponse<GeneralHabitItem>>>
 {
-    public async Task<PaginatedResponse<GeneralHabitItem>> Handle(GetGeneralHabitsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<PaginatedResponse<GeneralHabitItem>>> Handle(GetGeneralHabitsQuery request, CancellationToken cancellationToken)
     {
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
@@ -99,12 +100,12 @@ public class GetGeneralHabitsQueryHandler(
             .Select(h => MapToGeneralItem(h, lookup))
             .ToList();
 
-        return new PaginatedResponse<GeneralHabitItem>(
+        return Result.Success(new PaginatedResponse<GeneralHabitItem>(
             pagedItems,
             page,
             request.PageSize,
             totalCount,
-            totalPages);
+            totalPages));
     }
 
     private static GeneralHabitItem MapToGeneralItem(Habit h, ILookup<Guid?, Habit> lookup) => new(

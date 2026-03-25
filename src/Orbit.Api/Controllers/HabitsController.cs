@@ -122,7 +122,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             page,
             pageSize);
         var result = await mediator.Send(query, cancellationToken);
-        return Ok(result);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
     [HttpGet("summary")]
