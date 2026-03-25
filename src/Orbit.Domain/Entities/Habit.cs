@@ -15,6 +15,7 @@ public class Habit : Entity
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
     public TimeOnly? DueTime { get; private set; }
+    public TimeOnly? DueEndTime { get; private set; }
     public bool ReminderEnabled { get; private set; }
     public IReadOnlyList<int> ReminderTimes { get; private set; } = [15];
     public bool IsGeneral { get; private set; }
@@ -47,6 +48,7 @@ public class Habit : Entity
         bool isBadHabit = false,
         DateOnly? dueDate = null,
         TimeOnly? dueTime = null,
+        TimeOnly? dueEndTime = null,
         Guid? parentHabitId = null,
         bool reminderEnabled = false,
         IReadOnlyList<int>? reminderTimes = null,
@@ -84,6 +86,7 @@ public class Habit : Entity
             IsGeneral = isGeneral,
             DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
             DueTime = dueTime,
+            DueEndTime = dueEndTime,
             ParentHabitId = parentHabitId,
             ReminderEnabled = reminderEnabled,
             ReminderTimes = reminderTimes ?? [15],
@@ -178,6 +181,7 @@ public class Habit : Entity
         bool isBadHabit,
         DateOnly? dueDate,
         TimeOnly? dueTime = null,
+        TimeOnly? dueEndTime = null,
         bool? reminderEnabled = null,
         IReadOnlyList<int>? reminderTimes = null,
         bool? slipAlertEnabled = null,
@@ -214,6 +218,7 @@ public class Habit : Entity
             DueDate = dueDate.Value;
 
         DueTime = dueTime;
+        DueEndTime = dueEndTime;
 
         if (reminderEnabled.HasValue)
             ReminderEnabled = reminderEnabled.Value;

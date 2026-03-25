@@ -33,7 +33,8 @@ public record CreateSubHabitCommand(
     [property: AiField("Day|Week|Month|Year", "Override parent frequency")] FrequencyUnit? FrequencyUnit = null,
     [property: AiField("integer", "Override parent frequency quantity")] int? FrequencyQuantity = null,
     [property: AiField("string[]", "Specific weekdays, only when frequencyQuantity is 1")] IReadOnlyList<System.DayOfWeek>? Days = null,
-    [property: AiField("string", "HH:mm 24h format")] TimeOnly? DueTime = null) : IRequest<Result<Guid>>;
+    [property: AiField("string", "HH:mm 24h format")] TimeOnly? DueTime = null,
+    [property: AiField("string", "HH:mm 24h format end time")] TimeOnly? DueEndTime = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -76,6 +77,7 @@ public class CreateSubHabitCommandHandler(
             days: request.Days,
             dueDate: childDueDate,
             dueTime: request.DueTime,
+            dueEndTime: request.DueEndTime,
             parentHabitId: parent.Id,
             isGeneral: parent.IsGeneral);
 

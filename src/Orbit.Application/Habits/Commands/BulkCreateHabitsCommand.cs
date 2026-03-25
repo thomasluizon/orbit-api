@@ -21,6 +21,7 @@ public record BulkHabitItem(
     bool IsBadHabit = false,
     DateOnly? DueDate = null,
     TimeOnly? DueTime = null,
+    TimeOnly? DueEndTime = null,
     bool ReminderEnabled = false,
     IReadOnlyList<int>? ReminderTimes = null,
     IReadOnlyList<BulkHabitItem>? SubHabits = null,
@@ -87,6 +88,7 @@ public class BulkCreateHabitsCommandHandler(
                         item.IsBadHabit,
                         item.DueDate ?? userToday,
                         dueTime: item.DueTime,
+                        dueEndTime: item.DueEndTime,
                         reminderEnabled: item.ReminderEnabled,
                         reminderTimes: item.ReminderTimes,
                         isGeneral: item.IsGeneral);
