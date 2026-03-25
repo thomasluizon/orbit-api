@@ -60,7 +60,12 @@ public class GetCalendarEventsQueryHandler(
             // Load existing habits to hide already-imported events (by title + date)
             var existingHabits = await habitRepository.FindAsync(
                 h => h.UserId == request.UserId, cancellationToken);
-            var existingHabitKeys = existingHabits
+            // Recurring habits: match by title only (DueDate advances, so exact date won't match)
+            var recurringHabitTitles = new HashSet<string>(
+                existingHabits.Where(h => h.FrequencyUnit is not null).Select(h => h.Title.Trim().ToLowerInvariant()));
+            // One-time habits: match by title + date + time
+            var oneTimeHabitKeys = existingHabits
+                .Where(h => h.FrequencyUnit is null)
                 .Select(h => (Title: h.Title.Trim().ToLowerInvariant(), Date: h.DueDate.ToString("yyyy-MM-dd"), Time: h.DueTime?.ToString("HH:mm") ?? ""))
                 .ToHashSet();
 
@@ -70,11 +75,14 @@ public class GetCalendarEventsQueryHandler(
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
                 var evTitle = ev.Summary.Trim();
+                var evTitleLower = evTitle.ToLowerInvariant();
                 var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
                 var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
 
-                // Skip if already imported (same title + date + time)
-                if (existingHabitKeys.Contains((evTitle.ToLowerInvariant(), startDate ?? "", startTime ?? ""))) continue;
+                // Skip if matching an existing recurring habit (title only)
+                if (recurringHabitTitles.Contains(evTitleLower)) continue;
+                // Skip if matching an existing one-time habit (title + date + time)
+                if (oneTimeHabitKeys.Contains((evTitleLower, startDate ?? "", startTime ?? ""))) continue;
 
                 // Deduplicate recurring instances (keep only first occurrence per series)
                 if (ev.RecurringEventId is not null && !seenRecurringIds.Add(ev.RecurringEventId)) continue;
