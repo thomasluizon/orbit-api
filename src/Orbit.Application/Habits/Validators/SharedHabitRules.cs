@@ -29,4 +29,29 @@ public static class SharedHabitRules
             })
             .WithMessage("Days can only be specified when frequency quantity is 1");
     }
+
+    public static void AddGeneralHabitRules<T>(
+        AbstractValidator<T> validator,
+        System.Linq.Expressions.Expression<Func<T, bool>> isGeneralExpr,
+        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
+        System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
+        System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr)
+    {
+        var isGeneralFunc = isGeneralExpr.Compile();
+
+        validator.RuleFor(freqUnitExpr)
+            .Null()
+            .When(x => isGeneralFunc(x))
+            .WithMessage("General habits cannot have a frequency unit");
+
+        validator.RuleFor(freqQtyExpr)
+            .Null()
+            .When(x => isGeneralFunc(x))
+            .WithMessage("General habits cannot have a frequency quantity");
+
+        validator.RuleFor(daysExpr)
+            .Must(days => days is null || days.Count == 0)
+            .When(x => isGeneralFunc(x))
+            .WithMessage("General habits cannot have specific days");
+    }
 }
