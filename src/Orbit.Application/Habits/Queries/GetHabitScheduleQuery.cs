@@ -200,7 +200,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, x.scheduledDates, x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo))
+            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
