@@ -72,6 +72,7 @@ public class GetCalendarEventsQueryHandler(
             var items = new List<CalendarEventItem>();
             var seenRecurringIds = new HashSet<string>();
             var seenRecurringTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var masterRRuleCache = new Dictionary<string, string?>();
             foreach (var ev in events.Items ?? [])
             {
                 if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
@@ -99,8 +100,28 @@ public class GetCalendarEventsQueryHandler(
                 }
 
                 var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
-                var isRecurring = ev.RecurringEventId is not null;
-                var rrule = ev.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+                var isRecurring = ev.RecurringEventId is not null
+                    || (ev.Recurrence is not null && ev.Recurrence.Count > 0);
+
+                // Get RRULE: from own Recurrence (master event) or fetch from master for instances
+                string? rrule = null;
+                if (ev.Recurrence is not null)
+                {
+                    rrule = ev.Recurrence.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+                }
+                else if (ev.RecurringEventId is not null)
+                {
+                    if (!masterRRuleCache.TryGetValue(ev.RecurringEventId, out rrule))
+                    {
+                        try
+                        {
+                            var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
+                            rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+                        }
+                        catch { rrule = null; }
+                        masterRRuleCache[ev.RecurringEventId] = rrule;
+                    }
+                }
 
                 var reminders = new List<int>();
                 if (ev.Reminders?.Overrides is not null)
