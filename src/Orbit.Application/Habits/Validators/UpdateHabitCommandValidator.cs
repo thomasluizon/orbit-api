@@ -25,5 +25,11 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
             .When(x => x.FrequencyUnit is not null);
 
         SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
+
+        SharedHabitRules.AddGeneralHabitRules(this,
+            x => x.IsGeneral,
+            x => x.FrequencyUnit,
+            x => x.FrequencyQuantity,
+            x => x.Days);
     }
 }

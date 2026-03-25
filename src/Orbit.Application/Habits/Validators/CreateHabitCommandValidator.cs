@@ -33,5 +33,11 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithMessage("Sub-habit title must not be empty")
             .MaximumLength(AppConstants.MaxHabitTitleLength)
             .WithMessage($"Sub-habit title must not exceed {AppConstants.MaxHabitTitleLength} characters");
+
+        SharedHabitRules.AddGeneralHabitRules(this,
+            x => x.IsGeneral,
+            x => x.FrequencyUnit,
+            x => x.FrequencyQuantity,
+            x => x.Days);
     }
 }

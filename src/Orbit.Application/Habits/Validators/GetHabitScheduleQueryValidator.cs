@@ -8,13 +8,25 @@ public class GetHabitScheduleQueryValidator : AbstractValidator<GetHabitSchedule
 {
     public GetHabitScheduleQueryValidator()
     {
+        RuleFor(q => q.DateFrom)
+            .NotNull()
+            .WithMessage("dateFrom is required")
+            .When(q => q.IsGeneral != true);
+
         RuleFor(q => q.DateTo)
-            .GreaterThanOrEqualTo(q => q.DateFrom)
-            .WithMessage("dateTo must be >= dateFrom");
+            .NotNull()
+            .WithMessage("dateTo is required")
+            .When(q => q.IsGeneral != true);
+
+        RuleFor(q => q.DateTo)
+            .GreaterThanOrEqualTo(q => q.DateFrom!.Value)
+            .WithMessage("dateTo must be >= dateFrom")
+            .When(q => q.IsGeneral != true && q.DateFrom.HasValue && q.DateTo.HasValue);
 
         RuleFor(q => q)
-            .Must(q => q.DateTo.DayNumber - q.DateFrom.DayNumber <= AppConstants.MaxRangeDays)
-            .WithMessage($"Date range must not exceed {AppConstants.MaxRangeDays} days");
+            .Must(q => q.DateTo!.Value.DayNumber - q.DateFrom!.Value.DayNumber <= AppConstants.MaxRangeDays)
+            .WithMessage($"Date range must not exceed {AppConstants.MaxRangeDays} days")
+            .When(q => q.IsGeneral != true && q.DateFrom.HasValue && q.DateTo.HasValue);
 
         RuleFor(q => q.Page)
             .GreaterThanOrEqualTo(1);

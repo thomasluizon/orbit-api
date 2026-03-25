@@ -76,7 +76,8 @@ public class CreateSubHabitCommandHandler(
             days: request.Days,
             dueDate: childDueDate,
             dueTime: request.DueTime,
-            parentHabitId: parent.Id);
+            parentHabitId: parent.Id,
+            isGeneral: parent.IsGeneral);
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);

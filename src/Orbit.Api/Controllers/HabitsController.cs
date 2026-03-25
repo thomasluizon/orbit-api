@@ -29,7 +29,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         IReadOnlyList<int>? ReminderTimes = null,
         bool SlipAlertEnabled = false,
         IReadOnlyList<Guid>? TagIds = null,
-        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+        bool IsGeneral = false);
 
     public record UpdateHabitRequest(
         string Title,
@@ -43,7 +44,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         bool? ReminderEnabled = null,
         IReadOnlyList<int>? ReminderTimes = null,
         bool? SlipAlertEnabled = null,
-        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+        bool? IsGeneral = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -62,7 +64,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         TimeOnly? DueTime = null,
         bool ReminderEnabled = false,
         IReadOnlyList<int>? ReminderTimes = null,
-        IReadOnlyList<BulkHabitItemRequest>? SubHabits = null);
+        IReadOnlyList<BulkHabitItemRequest>? SubHabits = null,
+        bool IsGeneral = false);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -76,13 +79,14 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
-        [FromQuery] DateOnly dateFrom,
-        [FromQuery] DateOnly dateTo,
+        [FromQuery] DateOnly? dateFrom = null,
+        [FromQuery] DateOnly? dateTo = null,
         [FromQuery] bool includeOverdue = false,
         [FromQuery] string? search = null,
         [FromQuery] string? frequencyUnit = null,
         [FromQuery] bool? isCompleted = null,
         [FromQuery] Guid[]? tagIds = null,
+        [FromQuery] bool? isGeneral = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -96,6 +100,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             frequencyUnit,
             isCompleted,
             tagIds is { Length: > 0 } ? tagIds : null,
+            isGeneral,
             page,
             pageSize);
         var result = await mediator.Send(query, cancellationToken);
@@ -178,7 +183,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ReminderTimes,
             request.SlipAlertEnabled,
             request.TagIds,
-            request.ChecklistItems);
+            request.ChecklistItems,
+            request.IsGeneral);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -242,7 +248,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ReminderEnabled,
             request.ReminderTimes,
             request.SlipAlertEnabled,
-            request.ChecklistItems);
+            request.ChecklistItems,
+            request.IsGeneral);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -418,7 +425,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.DueTime,
             request.ReminderEnabled,
             request.ReminderTimes,
-            request.SubHabits?.Select(MapToBulkHabitItem).ToList());
+            request.SubHabits?.Select(MapToBulkHabitItem).ToList(),
+            request.IsGeneral);
     }
 
 }
