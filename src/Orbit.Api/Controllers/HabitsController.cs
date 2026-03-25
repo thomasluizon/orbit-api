@@ -74,6 +74,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     public record BulkLogHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
+    public record BulkSkipHabitsRequest(IReadOnlyList<Guid> HabitIds);
+
     public record ReorderHabitsRequest(IReadOnlyList<HabitPositionRequest> Positions);
 
     public record HabitPositionRequest(Guid HabitId, int Position);
@@ -368,6 +370,25 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
         if (result.IsSuccess)
             logger.LogInformation("Bulk logged {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("bulk/skip")]
+    public async Task<IActionResult> BulkSkip(
+        [FromBody] BulkSkipHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new BulkSkipHabitsCommand(
+            HttpContext.GetUserId(),
+            request.HabitIds);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Bulk skipped {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
