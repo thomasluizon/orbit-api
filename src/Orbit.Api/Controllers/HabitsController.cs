@@ -79,13 +79,14 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
-        [FromQuery] DateOnly dateFrom,
-        [FromQuery] DateOnly dateTo,
+        [FromQuery] DateOnly? dateFrom = null,
+        [FromQuery] DateOnly? dateTo = null,
         [FromQuery] bool includeOverdue = false,
         [FromQuery] string? search = null,
         [FromQuery] string? frequencyUnit = null,
         [FromQuery] bool? isCompleted = null,
         [FromQuery] Guid[]? tagIds = null,
+        [FromQuery] bool? isGeneral = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
@@ -99,26 +100,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             frequencyUnit,
             isCompleted,
             tagIds is { Length: > 0 } ? tagIds : null,
-            page,
-            pageSize);
-        var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
-    }
-
-    [HttpGet("general")]
-    public async Task<IActionResult> GetGeneralHabits(
-        [FromQuery] string? search = null,
-        [FromQuery] bool? isCompleted = null,
-        [FromQuery] Guid[]? tagIds = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
-        CancellationToken cancellationToken = default)
-    {
-        var query = new GetGeneralHabitsQuery(
-            HttpContext.GetUserId(),
-            search,
-            isCompleted,
-            tagIds is { Length: > 0 } ? tagIds : null,
+            isGeneral,
             page,
             pageSize);
         var result = await mediator.Send(query, cancellationToken);
