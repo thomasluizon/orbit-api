@@ -72,6 +72,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
+    public record BulkLogHabitsRequest(IReadOnlyList<Guid> HabitIds);
+
     public record ReorderHabitsRequest(IReadOnlyList<HabitPositionRequest> Positions);
 
     public record HabitPositionRequest(Guid HabitId, int Position);
@@ -347,6 +349,25 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
         if (result.IsSuccess)
             logger.LogInformation("Bulk deleted {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("bulk/log")]
+    public async Task<IActionResult> BulkLog(
+        [FromBody] BulkLogHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new BulkLogHabitsCommand(
+            HttpContext.GetUserId(),
+            request.HabitIds);
+
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Bulk logged {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
