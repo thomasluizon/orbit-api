@@ -8,15 +8,17 @@ public class GetHabitScheduleQueryValidator : AbstractValidator<GetHabitSchedule
 {
     public GetHabitScheduleQueryValidator()
     {
+        // Both null = "all habits" view. Both set = date-range query.
+        // Only reject when one is set but the other is missing.
         RuleFor(q => q.DateFrom)
             .NotNull()
             .WithMessage("dateFrom is required")
-            .When(q => q.IsGeneral != true);
+            .When(q => q.IsGeneral != true && q.DateTo.HasValue);
 
         RuleFor(q => q.DateTo)
             .NotNull()
             .WithMessage("dateTo is required")
-            .When(q => q.IsGeneral != true);
+            .When(q => q.IsGeneral != true && q.DateFrom.HasValue);
 
         RuleFor(q => q.DateTo)
             .GreaterThanOrEqualTo(q => q.DateFrom!.Value)
