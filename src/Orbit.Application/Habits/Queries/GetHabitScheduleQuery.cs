@@ -26,6 +26,7 @@ public record HabitScheduleItem(
     DateTime CreatedAtUtc,
     DateOnly DueDate,
     TimeOnly? DueTime,
+    TimeOnly? DueEndTime,
     IReadOnlyList<DateOnly> ScheduledDates,
     bool IsOverdue,
     bool ReminderEnabled,
@@ -48,6 +49,7 @@ public record HabitScheduleChildItem(
     IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     TimeOnly? DueTime,
+    TimeOnly? DueEndTime,
     int? Position,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
@@ -272,6 +274,7 @@ public class GetHabitScheduleQueryHandler(
             h.CreatedAtUtc,
             h.DueDate,
             h.DueTime,
+            h.DueEndTime,
             scheduledDates,
             isOverdue,
             h.ReminderEnabled,
@@ -322,7 +325,7 @@ public class GetHabitScheduleQueryHandler(
             .Select(c => new HabitScheduleChildItem(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
-                c.Days.ToList(), c.DueDate, c.DueTime,
+                c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime,
                 c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo),
                 lookup[c.Id].Any()))
             .ToList();
