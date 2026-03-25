@@ -51,7 +51,8 @@ public record HabitScheduleChildItem(
     int? Position,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
-    IReadOnlyList<HabitScheduleChildItem> Children);
+    IReadOnlyList<HabitScheduleChildItem> Children,
+    bool HasSubHabits);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -322,7 +323,8 @@ public class GetHabitScheduleQueryHandler(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
                 c.Days.ToList(), c.DueDate, c.DueTime,
-                c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo)))
+                c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo),
+                lookup[c.Id].Any()))
             .ToList();
     }
 
