@@ -14,6 +14,7 @@ public record HabitResponse(
     int? FrequencyQuantity,
     bool IsBadHabit,
     bool IsCompleted,
+    bool IsGeneral,
     DateOnly DueDate,
     TimeOnly? DueTime,
     IReadOnlyList<DayOfWeek> Days,
@@ -30,6 +31,7 @@ public record HabitChildResponse(
     int? FrequencyQuantity,
     bool IsBadHabit,
     bool IsCompleted,
+    bool IsGeneral,
     IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     TimeOnly? DueTime,
@@ -52,7 +54,7 @@ public class GetHabitsQueryHandler(
     {
         // Load all habits for the user in one query to build the tree in-memory
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId,
+            h => h.UserId == request.UserId && !h.IsGeneral,
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -99,6 +101,7 @@ public class GetHabitsQueryHandler(
         h.FrequencyQuantity,
         h.IsBadHabit,
         h.IsCompleted,
+        h.IsGeneral,
         h.DueDate,
         h.DueTime,
         h.Days.ToList(),
@@ -113,7 +116,7 @@ public class GetHabitsQueryHandler(
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitChildResponse(
                 c.Id, c.Title, c.Description,
-                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
+                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
                 c.Days.ToList(), c.DueDate, c.DueTime,
                 c.Position, c.ChecklistItems, MapChildren(c.Id, lookup)))
             .ToList();

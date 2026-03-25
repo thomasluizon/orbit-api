@@ -19,6 +19,7 @@ public record HabitScheduleItem(
     int? FrequencyQuantity,
     bool IsBadHabit,
     bool IsCompleted,
+    bool IsGeneral,
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
     DateTime CreatedAtUtc,
@@ -42,6 +43,7 @@ public record HabitScheduleChildItem(
     int? FrequencyQuantity,
     bool IsBadHabit,
     bool IsCompleted,
+    bool IsGeneral,
     IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     TimeOnly? DueTime,
@@ -83,7 +85,7 @@ public class GetHabitScheduleQueryHandler(
         }
 
         var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId,
+            h => h.UserId == request.UserId && !h.IsGeneral,
             q => q.Include(h => h.Tags),
             cancellationToken);
 
@@ -189,6 +191,7 @@ public class GetHabitScheduleQueryHandler(
             h.FrequencyQuantity,
             h.IsBadHabit,
             h.IsCompleted,
+            h.IsGeneral,
             h.Days.ToList(),
             h.Position,
             h.CreatedAtUtc,
@@ -228,7 +231,7 @@ public class GetHabitScheduleQueryHandler(
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitScheduleChildItem(
                 c.Id, c.Title, c.Description,
-                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted,
+                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
                 c.Days.ToList(), c.DueDate, c.DueTime,
                 c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, dateFrom, dateTo)))
             .ToList();
