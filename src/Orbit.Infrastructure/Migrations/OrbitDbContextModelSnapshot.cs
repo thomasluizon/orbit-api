@@ -482,6 +482,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Language")
                         .HasColumnType("text");
 
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -507,6 +510,9 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("TimeZone")
                         .HasColumnType("text");
 
+                    b.Property<int>("TotalXp")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("TrialEndsAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -519,6 +525,33 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.UserAchievement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AchievementId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("EarnedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "AchievementId")
+                        .IsUnique();
+
+                    b.ToTable("UserAchievements");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.UserFact", b =>
