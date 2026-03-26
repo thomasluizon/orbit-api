@@ -31,6 +31,7 @@ public record LogHabitCommand(
 public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
+    IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<LogHabitCommand, Result<Guid>>
@@ -39,7 +40,7 @@ public class LogHabitCommandHandler(
     {
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs),
+            q => q.Include(h => h.Logs).Include(h => h.Goals),
             cancellationToken);
 
         if (habit is null)
@@ -60,6 +61,9 @@ public class LogHabitCommandHandler(
 
             habitLogRepository.Remove(unlogResult.Value);
 
+            // Decrement linked goal progress
+            await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
+
             // If a child was unlogged, also unlog the auto-completed parent
             await TryUnlogParent(habit, today, cancellationToken);
 
@@ -76,6 +80,9 @@ public class LogHabitCommandHandler(
             return Result.Failure<Guid>(logResult.Error);
 
         await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
+
+        // Increment linked goal progress
+        await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
 
         // Auto-complete parent when all children are done (recursive up the tree)
         await TryAutoCompleteParent(habit, today, cancellationToken);
@@ -120,6 +127,22 @@ public class LogHabitCommandHandler(
 
         // Recurse up the tree
         await TryAutoCompleteParent(parent, today, ct);
+    }
+
+    private async Task UpdateLinkedGoalProgress(Habit habit, decimal delta, CancellationToken ct)
+    {
+        if (habit.Goals.Count == 0) return;
+
+        foreach (var goal in habit.Goals)
+        {
+            var trackedGoal = await goalRepository.FindOneTrackedAsync(
+                g => g.Id == goal.Id, cancellationToken: ct);
+
+            if (trackedGoal is null) continue;
+
+            var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
+            trackedGoal.UpdateProgress(newValue);
+        }
     }
 
     private async Task TryUnlogParent(Habit child, DateOnly today, CancellationToken ct)
