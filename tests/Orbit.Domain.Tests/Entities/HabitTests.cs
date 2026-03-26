@@ -392,6 +392,81 @@ public class HabitTests
         habit.Tags.Should().BeEmpty();
     }
 
+    // --- EndDate ---
+
+    [Fact]
+    public void Create_EndDateOnOneTime_ReturnsFailure()
+    {
+        var result = Habit.Create(ValidUserId, "Task", frequencyUnit: null, frequencyQuantity: null,
+            dueDate: new DateOnly(2026, 1, 1), endDate: new DateOnly(2026, 6, 30));
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("One-time tasks cannot have an end date");
+    }
+
+    [Fact]
+    public void Create_EndDateBeforeDueDate_ReturnsFailure()
+    {
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 6, 1), endDate: new DateOnly(2026, 1, 1));
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("End date must be on or after the start date");
+    }
+
+    [Fact]
+    public void Create_ValidEndDate_Success()
+    {
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 1, 1), endDate: new DateOnly(2026, 6, 30));
+        result.IsSuccess.Should().BeTrue();
+        result.Value.EndDate.Should().Be(new DateOnly(2026, 6, 30));
+    }
+
+    [Fact]
+    public void AdvanceDueDate_PastEndDate_MarksCompleted()
+    {
+        var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 1, 29), endDate: new DateOnly(2026, 1, 31)).Value;
+        habit.AdvanceDueDate(new DateOnly(2026, 1, 31));
+        habit.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AdvanceDueDate_NotPastEndDate_StaysActive()
+    {
+        var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 1, 1), endDate: new DateOnly(2026, 12, 31)).Value;
+        habit.AdvanceDueDate(new DateOnly(2026, 1, 1));
+        habit.IsCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Update_ClearEndDate_SetsNull()
+    {
+        var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 1, 1), endDate: new DateOnly(2026, 6, 30)).Value;
+        habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null, clearEndDate: true);
+        habit.EndDate.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_SetEndDate()
+    {
+        var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 1, 1)).Value;
+        habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null, endDate: new DateOnly(2026, 12, 31));
+        habit.EndDate.Should().Be(new DateOnly(2026, 12, 31));
+    }
+
+    [Fact]
+    public void Update_EndDateBeforeDueDate_ReturnsFailure()
+    {
+        var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            dueDate: new DateOnly(2026, 6, 1)).Value;
+        var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null, endDate: new DateOnly(2026, 1, 1));
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("End date must be on or after the start date");
+    }
+
     // --- Deactivate ---
 
     [Fact]
