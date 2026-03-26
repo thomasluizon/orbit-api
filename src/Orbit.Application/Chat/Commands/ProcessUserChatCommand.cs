@@ -160,34 +160,40 @@ public class ProcessUserChatCommandHandler(
 
                     if (result.Success)
                     {
-                        // Special handling for suggest_breakdown: carry suggestions in ActionResult
-                        if (call.Name == "suggest_breakdown")
+                        // Read-only tools don't produce action chips for the frontend
+                        if (!tool.IsReadOnly)
                         {
-                            var suggestedSubHabits = ExtractSuggestedSubHabits(call.Args);
-                            allActionResults.Add(new ActionResult(
-                                ToolNameToPascalCase(call.Name),
-                                ActionStatus.Suggestion,
-                                EntityName: result.EntityName,
-                                SuggestedSubHabits: suggestedSubHabits));
-                        }
-                        else
-                        {
-                            allActionResults.Add(new ActionResult(
-                                ToolNameToPascalCase(call.Name),
-                                ActionStatus.Success,
-                                result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
-                                result.EntityName));
+                            if (call.Name == "suggest_breakdown")
+                            {
+                                var suggestedSubHabits = ExtractSuggestedSubHabits(call.Args);
+                                allActionResults.Add(new ActionResult(
+                                    ToolNameToPascalCase(call.Name),
+                                    ActionStatus.Suggestion,
+                                    EntityName: result.EntityName,
+                                    SuggestedSubHabits: suggestedSubHabits));
+                            }
+                            else
+                            {
+                                allActionResults.Add(new ActionResult(
+                                    ToolNameToPascalCase(call.Name),
+                                    ActionStatus.Success,
+                                    result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
+                                    result.EntityName));
+                            }
                         }
 
                         logger.LogInformation("Tool {Name} succeeded: {EntityName}", call.Name, result.EntityName);
                     }
                     else
                     {
-                        allActionResults.Add(new ActionResult(
-                            ToolNameToPascalCase(call.Name),
-                            ActionStatus.Failed,
-                            EntityName: result.EntityName,
-                            Error: result.Error));
+                        if (!tool.IsReadOnly)
+                        {
+                            allActionResults.Add(new ActionResult(
+                                ToolNameToPascalCase(call.Name),
+                                ActionStatus.Failed,
+                                EntityName: result.EntityName,
+                                Error: result.Error));
+                        }
                         logger.LogWarning("Tool {Name} failed: {Error}", call.Name, result.Error);
                     }
                 }

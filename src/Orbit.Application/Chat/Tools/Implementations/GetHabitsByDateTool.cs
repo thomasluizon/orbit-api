@@ -12,6 +12,7 @@ public class GetHabitsByDateTool(
     IGenericRepository<User> userRepository) : IAiTool
 {
     public string Name => "get_habits_by_date";
+    public bool IsReadOnly => true;
 
     public string Description =>
         "Get habits scheduled for a specific date. Use this when the user asks about habits on a particular day (tomorrow, next Friday, etc.). Optionally include overdue habits.";
@@ -58,7 +59,7 @@ public class GetHabitsByDateTool(
 
         foreach (var habit in matchingHabits)
         {
-            var isOverdue = habit.DueDate < targetDate;
+            var isOverdue = !habit.IsGeneral && habit.DueDate < targetDate;
             var status = isOverdue ? "OVERDUE" : "DUE";
             var badLabel = habit.IsBadHabit ? " [BAD HABIT]" : "";
             var tagsLabel = habit.Tags.Count > 0 ? $" | Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}" : "";
