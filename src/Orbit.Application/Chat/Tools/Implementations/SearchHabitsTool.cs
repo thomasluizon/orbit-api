@@ -10,6 +10,7 @@ public class SearchHabitsTool(
     IGenericRepository<Habit> habitRepository) : IAiTool
 {
     public string Name => "search_habits";
+    public bool IsReadOnly => true;
 
     public string Description =>
         "Search habits by title. Use this to find a habit's ID when the user mentions a habit not in the Quick Reference. Returns matching habits with their IDs and details.";

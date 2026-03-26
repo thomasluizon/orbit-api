@@ -12,6 +12,7 @@ public class GetTodaysScheduleTool(
     IGenericRepository<User> userRepository) : IAiTool
 {
     public string Name => "get_todays_schedule";
+    public bool IsReadOnly => true;
 
     public string Description =>
         "Get all habits scheduled for today, including sub-habits, checklist progress, and completion status. Returns habits in the user's custom order. Call this when the user asks about today's habits, routine, or schedule.";
@@ -49,7 +50,7 @@ public class GetTodaysScheduleTool(
         foreach (var habit in todayHabits)
         {
             var metrics = HabitMetricsCalculator.Calculate(habit, today);
-            var isOverdue = habit.DueDate < today;
+            var isOverdue = !habit.IsGeneral && habit.DueDate < today;
             var status = isOverdue ? "OVERDUE" : "DUE TODAY";
             var loggedToday = habit.Logs.Any(l => l.Date == today);
             var logStatus = loggedToday ? " [DONE]" : "";
