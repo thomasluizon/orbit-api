@@ -42,7 +42,7 @@ public class User : Entity
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
 
     [NotMapped]
-    public bool IsTrialActive => TrialEndsAt.HasValue && TrialEndsAt.Value > DateTime.UtcNow;
+    public bool IsTrialActive => !IsPro && TrialEndsAt.HasValue && TrialEndsAt.Value > DateTime.UtcNow;
 
     [NotMapped]
     public bool HasProAccess => IsPro || IsTrialActive;
