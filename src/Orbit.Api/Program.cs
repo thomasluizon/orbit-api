@@ -178,9 +178,7 @@ builder.Services.AddScoped<IAiTool, DuplicateHabitTool>();
 builder.Services.AddScoped<IAiTool, MoveHabitTool>();
 builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
 builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
-builder.Services.AddScoped<IAiTool, GetTodaysScheduleTool>();
-builder.Services.AddScoped<IAiTool, GetHabitsByDateTool>();
-builder.Services.AddScoped<IAiTool, SearchHabitsTool>();
+builder.Services.AddScoped<IAiTool, QueryHabitsTool>();
 builder.Services.AddScoped<AiToolRegistry>();
 builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
