@@ -20,12 +20,14 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
+    public DbSet<Referral> Referrals => Set<Referral>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasIndex(u => u.Email).IsUnique();
+            entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
         });
 
         modelBuilder.Entity<Habit>(entity =>
@@ -141,6 +143,12 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
             entity.HasIndex(l => l.GoalId);
         });
 
+        modelBuilder.Entity<Referral>(entity =>
+        {
+            entity.HasIndex(r => r.ReferrerId);
+            entity.HasIndex(r => r.ReferredUserId).IsUnique();
+        });
+
         modelBuilder.Entity<AppConfig>(entity =>
         {
             entity.HasKey(c => c.Key);
@@ -151,7 +159,9 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
             entity.HasData(
                 AppConfig.Create("MaxUserFacts", "50", "Maximum number of facts the AI can remember per user"),
                 AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"),
-                AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"));
+                AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
+                AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
+                AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"));
         });
     }
 }
