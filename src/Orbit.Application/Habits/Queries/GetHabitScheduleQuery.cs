@@ -189,6 +189,10 @@ public class GetHabitScheduleQueryHandler(
 
         foreach (var habit in topLevel)
         {
+            // Flexible habits that have met their window target should not appear
+            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
+                continue;
+
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
             var isOverdue = false;
 

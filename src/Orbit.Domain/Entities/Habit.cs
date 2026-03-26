@@ -84,6 +84,9 @@ public class Habit : Entity
         if (days?.Count > 0 && frequencyQuantity != 1)
             return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
 
+        if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
+            return Result.Failure<Habit>("End time must be after start time.");
+
         if (endDate.HasValue && frequencyUnit is null && !isGeneral)
             return Result.Failure<Habit>("One-time tasks cannot have an end date.");
 
@@ -257,6 +260,11 @@ public class Habit : Entity
 
         if (!effectiveIsFlexible && days?.Count > 0 && frequencyQuantity != 1)
             return Result.Failure("Days can only be set when frequency quantity is 1.");
+
+        var effectiveDueEndTime = dueEndTime ?? DueEndTime;
+        var effectiveDueTime = dueTime ?? DueTime;
+        if (effectiveDueEndTime.HasValue && effectiveDueTime.HasValue && effectiveDueEndTime.Value <= effectiveDueTime.Value)
+            return Result.Failure("End time must be after start time.");
 
         // Validate endDate if being set
         if (endDate.HasValue)
