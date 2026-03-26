@@ -156,16 +156,16 @@ public class CreateHabitCommandHandler(
             }
         }
 
-        await habitRepository.AddAsync(habit, cancellationToken);
-
         if (request.TagIds is { Count: > 0 })
         {
-            var tags = await tagRepository.FindAsync(
+            var tags = await tagRepository.FindTrackedAsync(
                 t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,
                 cancellationToken);
             foreach (var tag in tags)
                 habit.AddTag(tag);
         }
+
+        await habitRepository.AddAsync(habit, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

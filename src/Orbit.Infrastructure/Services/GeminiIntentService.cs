@@ -108,6 +108,7 @@ public sealed class GeminiIntentService(
             GenerationConfig = new GeminiGenerationConfig
             {
                 Temperature = 0.1,
+                MaxOutputTokens = 8192,
                 ResponseMimeType = "application/json"
             }
         };
@@ -280,7 +281,7 @@ public sealed class GeminiIntentService(
         {
             SystemInstruction = _conversationSystemInstruction,
             Contents = _conversationContents!.ToArray(),
-            GenerationConfig = new GeminiGenerationConfig { Temperature = 0.1 },
+            GenerationConfig = new GeminiGenerationConfig { Temperature = 0.1, MaxOutputTokens = 8192 },
             Tools = _conversationTools,
             ToolConfig = _conversationToolConfig
         };
@@ -501,6 +502,10 @@ public sealed class GeminiIntentService(
     {
         [JsonPropertyName("temperature")]
         public double Temperature { get; init; }
+
+        [JsonPropertyName("maxOutputTokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int? MaxOutputTokens { get; init; }
 
         [JsonPropertyName("responseMimeType")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

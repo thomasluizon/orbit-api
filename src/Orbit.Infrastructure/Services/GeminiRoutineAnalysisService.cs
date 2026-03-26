@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
@@ -18,6 +19,7 @@ public sealed class GeminiRoutineAnalysisService(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
+    IMemoryCache cache,
     ILogger<GeminiRoutineAnalysisService> logger) : IRoutineAnalysisService
 {
     private readonly GeminiSettings _settings = options.Value;
@@ -32,10 +34,20 @@ public sealed class GeminiRoutineAnalysisService(
         Converters = { new JsonStringEnumConverter() }
     };
 
+    private static readonly TimeSpan RoutineCacheDuration = TimeSpan.FromHours(1);
+
     public async Task<Result<RoutineAnalysis>> AnalyzeRoutinesAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
     {
+        var cacheKey = $"routine_analysis_{userId}";
+        if (cache.TryGetValue(cacheKey, out RoutineAnalysis? cached) && cached is not null)
+        {
+            logger.LogInformation("Routine analysis cache hit for user {UserId} ({PatternCount} patterns)",
+                userId, cached.Patterns.Count);
+            return Result.Success(cached);
+        }
+
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // 1. Load user for timezone
@@ -153,16 +165,19 @@ public sealed class GeminiRoutineAnalysisService(
         - If habit has <{{MinLogsPerHabit}} logs, exclude from patterns
         """;
 
-        // 8. Call Gemini API
+        // 8. Call Gemini API (with 5s timeout - routine analysis is non-critical)
         logger.LogInformation("🔵 Calling Gemini API for routine analysis (user {UserId}, {LogCount} logs)...", userId, filteredLogs.Count);
 
-        var result = await CallGeminiAsync<RoutineAnalysis>(prompt, cancellationToken);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+        var result = await CallGeminiAsync<RoutineAnalysis>(prompt, timeoutCts.Token);
 
         stopwatch.Stop();
         if (result.IsSuccess)
         {
-            logger.LogInformation("✅ Routine analysis completed in {ElapsedMs}ms - detected {PatternCount} patterns",
-                stopwatch.ElapsedMilliseconds, result.Value.Patterns.Count);
+            cache.Set(cacheKey, result.Value, RoutineCacheDuration);
+            logger.LogInformation("✅ Routine analysis completed in {ElapsedMs}ms - detected {PatternCount} patterns (cached for {CacheMinutes}min)",
+                stopwatch.ElapsedMilliseconds, result.Value.Patterns.Count, RoutineCacheDuration.TotalMinutes);
         }
 
         return result;
