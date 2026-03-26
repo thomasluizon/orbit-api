@@ -84,7 +84,6 @@ public static class HabitScheduleService
 
     /// <summary>
     /// Returns the start of the window containing the target date.
-    /// Day = same day, Week = ISO Monday, Month = 1st, Year = Jan 1.
     /// </summary>
     public static DateOnly GetWindowStart(Habit habit, DateOnly target)
     {
@@ -100,7 +99,6 @@ public static class HabitScheduleService
 
     /// <summary>
     /// Returns the end of the window containing the target date.
-    /// Day = same day, Week = ISO Sunday, Month = last day, Year = Dec 31.
     /// </summary>
     public static DateOnly GetWindowEnd(Habit habit, DateOnly target)
     {
@@ -133,6 +131,7 @@ public static class HabitScheduleService
         var completed = GetCompletedInWindow(habit, target, logs);
         return Math.Max(0, targetCount - completed);
     }
+
 
     private static int TrueMod(int n, int m)
     {

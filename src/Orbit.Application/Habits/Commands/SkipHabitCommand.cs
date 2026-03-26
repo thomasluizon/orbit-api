@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Common.Attributes;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;

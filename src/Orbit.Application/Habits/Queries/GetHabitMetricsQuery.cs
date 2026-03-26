@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -69,6 +70,27 @@ public class GetHabitMetricsQueryHandler(
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
         {
             expectedDates.Add(habitStartDate);
+            return expectedDates;
+        }
+
+        // Flexible habits: generate one expected date per window boundary
+        if (habit.IsFlexible)
+        {
+            var windowEnd = HabitScheduleService.GetWindowEnd(habit, today);
+            var iterations = 0;
+
+            while (iterations < 365 && windowEnd >= habitStartDate)
+            {
+                var windowStart = HabitScheduleService.GetWindowStart(habit, windowEnd);
+                // Each window counts as FrequencyQuantity expected completions
+                for (var i = 0; i < habit.FrequencyQuantity.Value; i++)
+                    expectedDates.Add(windowStart);
+
+                // Move to previous window
+                windowEnd = windowStart.AddDays(-1);
+                iterations++;
+            }
+
             return expectedDates;
         }
 

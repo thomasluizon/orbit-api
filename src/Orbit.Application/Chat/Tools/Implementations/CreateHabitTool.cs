@@ -16,7 +16,7 @@ public class CreateHabitTool(
     public string Name => "create_habit";
 
     public string Description =>
-        "Create a new habit or one-time task. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. When user says 'X times per week' (e.g. '3x per week'), use frequency_unit='Day', frequency_quantity=1, and pick X evenly spread weekdays in the days array. Do NOT set frequency_quantity to X with frequency_unit='Week' (that means every X weeks, not X times per week).";
+        "Create a new habit or one-time task. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. When user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
 
     public object GetParameterSchema() => new
     {
@@ -43,6 +43,7 @@ public class CreateHabitTool(
             end_date = new { type = "STRING", description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
             due_time = new { type = "STRING", description = "HH:mm 24h format" },
             is_bad_habit = new { type = "BOOLEAN", description = "Whether this is a bad habit to reduce. Defaults to false." },
+            is_flexible = new { type = "BOOLEAN", description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
             slip_alert_enabled = new { type = "BOOLEAN", description = "Enable slip pattern alerts. Defaults to true for bad habits." },
             reminder_enabled = new { type = "BOOLEAN", description = "Enable reminders" },
             reminder_times = new
@@ -117,6 +118,7 @@ public class CreateHabitTool(
         DateOnly dueDate = ParseDateOnly(args, "due_date") ?? today;
         TimeOnly? dueTime = ParseTimeOnly(args, "due_time");
         bool isBadHabit = GetOptionalBool(args, "is_bad_habit") ?? false;
+        bool isFlexible = GetOptionalBool(args, "is_flexible") ?? false;
         bool slipAlertEnabled = GetOptionalBool(args, "slip_alert_enabled") ?? isBadHabit;
         bool reminderEnabled = GetOptionalBool(args, "reminder_enabled") ?? false;
         var reminderTimes = ParseIntArray(args, "reminder_times");
@@ -138,6 +140,7 @@ public class CreateHabitTool(
             reminderTimes: reminderTimes,
             slipAlertEnabled: slipAlertEnabled,
             checklistItems: checklistItems,
+            isFlexible: isFlexible,
             endDate: endDate);
 
         if (habitResult.IsFailure)

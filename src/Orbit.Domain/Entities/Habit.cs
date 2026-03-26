@@ -75,14 +75,14 @@ public class Habit : Entity
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
 
-        if (days?.Count > 0 && frequencyQuantity != 1)
-            return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
-
         if (isFlexible && frequencyUnit is null)
             return Result.Failure<Habit>("Flexible habits must have a frequency unit.");
 
         if (isFlexible && days?.Count > 0)
-            return Result.Failure<Habit>("Flexible habits cannot have specific days.");
+            return Result.Failure<Habit>("Flexible habits cannot have specific days set.");
+
+        if (days?.Count > 0 && frequencyQuantity != 1)
+            return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
 
         if (endDate.HasValue && frequencyUnit is null && !isGeneral)
             return Result.Failure<Habit>("One-time tasks cannot have an end date.");
@@ -247,15 +247,16 @@ public class Habit : Entity
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
             return Result.Failure("Frequency quantity must be greater than 0.");
 
-        if (days?.Count > 0 && frequencyQuantity != 1)
-            return Result.Failure("Days can only be set when frequency quantity is 1.");
-
         var effectiveIsFlexible = isFlexible ?? IsFlexible;
+
         if (effectiveIsFlexible && frequencyUnit is null)
             return Result.Failure("Flexible habits must have a frequency unit.");
 
         if (effectiveIsFlexible && days?.Count > 0)
-            return Result.Failure("Flexible habits cannot have specific days.");
+            return Result.Failure("Flexible habits cannot have specific days set.");
+
+        if (!effectiveIsFlexible && days?.Count > 0 && frequencyQuantity != 1)
+            return Result.Failure("Days can only be set when frequency quantity is 1.");
 
         // Validate endDate if being set
         if (endDate.HasValue)

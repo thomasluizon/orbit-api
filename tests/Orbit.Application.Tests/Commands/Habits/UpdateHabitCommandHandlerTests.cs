@@ -121,7 +121,7 @@ public class UpdateHabitCommandHandlerTests
     public async Task Handle_DueTimeChanged_ClearsSentReminder()
     {
         var habit = CreateTestHabit();
-        var reminder = SentReminder.Create(habit.Id, Today);
+        var reminder = SentReminder.Create(habit.Id, Today, 15);
 
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

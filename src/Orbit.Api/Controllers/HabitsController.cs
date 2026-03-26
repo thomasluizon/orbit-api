@@ -200,7 +200,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.TagIds,
             request.ChecklistItems,
             request.IsGeneral,
-            IsFlexible: request.IsFlexible);
+            request.IsFlexible);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -267,7 +267,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.SlipAlertEnabled,
             request.ChecklistItems,
             request.IsGeneral,
-            IsFlexible: request.IsFlexible);
+            request.IsFlexible);
 
         var result = await mediator.Send(command, cancellationToken);
 

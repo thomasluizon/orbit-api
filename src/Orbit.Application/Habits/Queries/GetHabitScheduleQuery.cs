@@ -95,7 +95,7 @@ public class GetHabitScheduleQueryHandler(
     {
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
-            q => q.Include(h => h.Tags),
+            q => q.Include(h => h.Tags).Include(h => h.Logs),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -298,7 +298,7 @@ public class GetHabitScheduleQueryHandler(
         {
             if (HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count > 0)
                 return true;
-            if (!child.IsCompleted && !child.IsBadHabit && child.DueDate < dateFrom)
+            if (!child.IsCompleted && !child.IsBadHabit && !child.IsFlexible && child.DueDate < dateFrom)
                 return true;
             if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo))
                 return true;
@@ -320,7 +320,7 @@ public class GetHabitScheduleQueryHandler(
             children = children
                 .Where(c => HabitScheduleService.GetScheduledDates(c, df, dt).Count > 0
                     || c.IsCompleted
-                    || (!c.IsCompleted && !c.IsBadHabit && c.DueDate < df)
+                    || (!c.IsCompleted && !c.IsBadHabit && !c.IsFlexible && c.DueDate < df)
                     || HasAnyDescendantDue(c.Id, lookup, df, dt));
         }
 

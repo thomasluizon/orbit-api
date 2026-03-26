@@ -33,8 +33,8 @@ namespace Orbit.Application.Habits.Commands;
 [AiRule("END DATE: endDate is only for recurring habits, not one-time tasks. Use when user specifies a limited time period (e.g., 'daily for 30 days', 'until March 15th')")]
 [AiExample(
     "Clean the house 3x per week",
-    """{ "actions": [{ "type": "CreateHabit", "title": "Clean the House", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Wednesday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created 'Clean the House' for Monday, Wednesday, and Friday!" }""",
-    Note = "X times per week")]
+    """{ "actions": [{ "type": "CreateHabit", "title": "Clean the House", "frequencyUnit": "Week", "frequencyQuantity": 3, "isFlexible": true, "dueDate": "{TODAY}" }], "aiMessage": "Created 'Clean the House' - 3 times per week, any days you choose!" }""",
+    Note = "X times per week without specific days = flexible")]
 [AiExample(
     "I want to meditate on weekdays",
     """{ "actions": [{ "type": "CreateHabit", "title": "Meditation", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created a weekday meditation habit!" }""")]

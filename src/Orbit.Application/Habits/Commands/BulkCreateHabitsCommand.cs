@@ -130,7 +130,7 @@ public class BulkCreateHabitsCommandHandler(
                                 subItem.DueDate ?? item.DueDate ?? userToday,
                                 parentHabitId: parentHabit.Id,
                                 isGeneral: item.IsGeneral,
-                                isFlexible: item.IsFlexible);
+                                isFlexible: subItem.IsFlexible);
 
                             if (childResult.IsFailure)
                             {

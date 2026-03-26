@@ -59,6 +59,7 @@ public class GetHabitByIdQueryHandler(
             habit.IsBadHabit,
             habit.IsCompleted,
             habit.IsGeneral,
+            habit.IsFlexible,
             habit.DueDate,
             habit.DueTime,
             habit.DueEndTime,
@@ -72,7 +73,7 @@ public class GetHabitByIdQueryHandler(
 
     private static HabitChildResponse MapChild(Habit c, ILookup<Guid?, Habit> lookup) => new(
         c.Id, c.Title, c.Description,
-        c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
+        c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
         c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
         c.Position, c.ChecklistItems, MapChildren(c.Id, lookup));
 

@@ -22,9 +22,11 @@ public class ActiveHabitsSection : IPromptSection
             {
                 var freqLabel = habit.FrequencyUnit is null
                     ? "One-time"
-                    : habit.FrequencyQuantity == 1
-                        ? $"Every {habit.FrequencyUnit.ToString()!.ToLower()}"
-                        : $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString()!.ToLower()}s";
+                    : habit.IsFlexible
+                        ? $"{habit.FrequencyQuantity}x per {habit.FrequencyUnit.ToString()!.ToLower()} (flexible)"
+                        : habit.FrequencyQuantity == 1
+                            ? $"Every {habit.FrequencyUnit.ToString()!.ToLower()}"
+                            : $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString()!.ToLower()}s";
 
                 var dueLabel = "";
                 if (!habit.IsCompleted && context.UserToday.HasValue)
