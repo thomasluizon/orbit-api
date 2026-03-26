@@ -77,12 +77,12 @@ public class QueryHabitsTool(
         if (args.TryGetProperty("search", out var searchEl) && searchEl.ValueKind == JsonValueKind.String)
         {
             var searchText = searchEl.GetString()!;
-            // Search parents AND children, return matching parents or parents of matching children
-            var matchingParentIds = allHabits
+            // Search all habits (any depth), then walk up to root parent for display
+            var matchingRootIds = allHabits
                 .Where(h => h.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase))
-                .Select(h => h.ParentHabitId ?? h.Id)
+                .Select(h => GetRootParentId(allHabits, h))
                 .ToHashSet();
-            query = query.Where(h => matchingParentIds.Contains(h.Id));
+            query = query.Where(h => matchingRootIds.Contains(h.Id));
         }
 
         // Date filter
@@ -184,24 +184,43 @@ public class QueryHabitsTool(
             var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
             sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}");
 
-            // Sub-habits
+            // Sub-habits (recursive, all depth levels)
             if (includeSubs)
             {
-                var children = allHabits
-                    .Where(h => h.ParentHabitId == habit.Id)
-                    .OrderBy(h => h.Position);
-
-                foreach (var child in children)
-                {
-                    var childLabels = new List<string>();
-                    if (includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
-                    if (child.IsCompleted) childLabels.Add("COMPLETED");
-                    var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
-                    sb.AppendLine($"  - \"{child.Title}\" | ID: {child.Id}{childLabelStr}");
-                }
+                AppendChildren(sb, allHabits, habit.Id, today, includeMetrics, 1);
             }
         }
 
         return new ToolResult(true, EntityName: sb.ToString());
+    }
+
+    private static Guid GetRootParentId(IReadOnlyList<Habit> allHabits, Habit habit)
+    {
+        var current = habit;
+        for (var i = 0; i < 10 && current.ParentHabitId is not null; i++)
+        {
+            var parent = allHabits.FirstOrDefault(h => h.Id == current.ParentHabitId);
+            if (parent is null) break;
+            current = parent;
+        }
+        return current.Id;
+    }
+
+    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, bool includeMetrics, int depth)
+    {
+        var indent = new string(' ', depth * 2);
+        var children = allHabits
+            .Where(h => h.ParentHabitId == parentId)
+            .OrderBy(h => h.Position);
+
+        foreach (var child in children)
+        {
+            var childLabels = new List<string>();
+            if (includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
+            if (child.IsCompleted) childLabels.Add("COMPLETED");
+            var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
+            sb.AppendLine($"{indent}- \"{child.Title}\" | ID: {child.Id}{childLabelStr}");
+            AppendChildren(sb, allHabits, child.Id, today, includeMetrics, depth + 1);
+        }
     }
 }
