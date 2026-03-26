@@ -39,6 +39,8 @@ public class User : Entity
     public int WeekStartDay { get; private set; } = 1;
     public string? ReferralCode { get; private set; }
     public Guid? ReferredByUserId { get; private set; }
+    public int TotalXp { get; private set; } = 0;
+    public int Level { get; private set; } = 1;
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -195,5 +197,17 @@ public class User : Entity
             TrialEndsAt = DateTime.UtcNow.AddDays(days);
         else
             TrialEndsAt = TrialEndsAt.Value.AddDays(days);
+    }
+
+    public void AddXp(int amount)
+    {
+        if (amount <= 0) return;
+        TotalXp += amount;
+    }
+
+    public void SetLevel(int level)
+    {
+        if (level < 1 || level > 10) return;
+        Level = level;
     }
 }

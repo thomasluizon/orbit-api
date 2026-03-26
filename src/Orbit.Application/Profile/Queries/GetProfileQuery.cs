@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -27,7 +28,10 @@ public record ProfileResponse(
     bool HasGoogleConnection,
     string? SubscriptionInterval,
     bool IsLifetimePro,
-    int WeekStartDay);
+    int WeekStartDay,
+    int TotalXp,
+    int Level,
+    string LevelTitle);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -43,6 +47,8 @@ public class GetProfileQueryHandler(
             return Result.Failure<ProfileResponse>(ErrorMessages.UserNotFound);
 
         var aiMessageLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
+
+        var levelTitle = LevelDefinitions.GetLevelForXp(user.TotalXp).Title;
 
         return Result.Success(new ProfileResponse(
             user.Name,
@@ -65,6 +71,9 @@ public class GetProfileQueryHandler(
             user.GoogleAccessToken is not null,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
             user.IsLifetimePro,
-            user.WeekStartDay));
+            user.WeekStartDay,
+            user.TotalXp,
+            user.Level,
+            levelTitle));
     }
 }

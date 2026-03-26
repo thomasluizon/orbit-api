@@ -17,4 +17,5 @@ public static class ErrorMessages
     public const string ReferralCapReached = "Maximum referral limit reached.";
     public const string SelfReferral = "You cannot refer yourself.";
     public const string AlreadyReferred = "This account was already referred.";
+    public const string AchievementNotFound = "Achievement not found.";
 }

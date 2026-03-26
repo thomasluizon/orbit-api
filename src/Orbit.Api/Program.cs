@@ -13,6 +13,7 @@ using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Gamification.Services;
 using Orbit.Infrastructure.Services;
 using Scalar.AspNetCore;
 
@@ -28,6 +29,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IAppConfigService, AppConfigService>();
 builder.Services.AddScoped<IUserDateService, UserDateService>();
 builder.Services.AddScoped<IPayGateService, Orbit.Application.Common.PayGateService>();
+builder.Services.AddScoped<IGamificationService, GamificationService>();
 builder.Services.AddScoped<Orbit.Domain.Interfaces.IGoogleTokenService, GoogleTokenService>();
 
 // --- Token Service ---
