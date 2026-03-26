@@ -38,7 +38,7 @@ public class GetTodaysScheduleTool(
             ct);
 
         var todayHabits = habits
-            .Where(h => h.ParentHabitId is null && h.DueDate <= today && !h.IsCompleted)
+            .Where(h => h.ParentHabitId is null && !h.IsGeneral && h.DueDate <= today && !h.IsCompleted)
             .OrderBy(h => h.Position)
             .ToList();
 

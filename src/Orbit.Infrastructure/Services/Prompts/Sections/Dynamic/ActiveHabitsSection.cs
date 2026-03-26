@@ -14,7 +14,7 @@ public class ActiveHabitsSection : IPromptSection
 
         var parents = context.ActiveHabits.Where(h => h.ParentHabitId is null).ToList();
         var todayHabits = context.UserToday.HasValue
-            ? parents.Where(h => !h.IsCompleted && h.DueDate <= context.UserToday.Value).OrderBy(h => h.Position).ToList()
+            ? parents.Where(h => !h.IsCompleted && !h.IsGeneral && h.DueDate <= context.UserToday.Value).OrderBy(h => h.Position).ToList()
             : [];
         var dueToday = context.UserToday.HasValue
             ? todayHabits.Count(h => h.DueDate == context.UserToday.Value)
