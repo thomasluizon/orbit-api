@@ -20,6 +20,7 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
+    public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -139,6 +140,13 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         modelBuilder.Entity<GoalProgressLog>(entity =>
         {
             entity.HasIndex(l => l.GoalId);
+        });
+
+        modelBuilder.Entity<UserAchievement>(entity =>
+        {
+            entity.HasIndex(ua => new { ua.UserId, ua.AchievementId }).IsUnique();
+            entity.HasIndex(ua => ua.UserId);
+            entity.Property(ua => ua.AchievementId).HasMaxLength(50);
         });
 
         modelBuilder.Entity<AppConfig>(entity =>
