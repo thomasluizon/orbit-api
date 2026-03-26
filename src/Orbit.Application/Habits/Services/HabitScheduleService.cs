@@ -13,6 +13,10 @@ public static class HabitScheduleService
     /// </summary>
     public static bool IsHabitDueOnDate(Habit habit, DateOnly target)
     {
+        // EndDate check: habit is never due after its end date
+        if (habit.EndDate.HasValue && target > habit.EndDate.Value)
+            return false;
+
         if (habit.IsFlexible)
         {
             // Flexible habit: due on any date at or after its start

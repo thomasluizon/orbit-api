@@ -10,12 +10,18 @@ namespace Orbit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "IsFlexible",
-                table: "Habits",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
+            migrationBuilder.Sql(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'Habits' AND column_name = 'IsFlexible'
+                    ) THEN
+                        ALTER TABLE "Habits" ADD "IsFlexible" boolean NOT NULL DEFAULT FALSE;
+                    END IF;
+                END $$;
+                """);
         }
 
         /// <inheritdoc />
