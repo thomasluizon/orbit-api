@@ -169,6 +169,9 @@ builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>();
 // Retrospective always uses Gemini (free-text generation)
 builder.Services.AddHttpClient<IRetrospectiveService, GeminiRetrospectiveService>();
 
+// Goal review always uses Gemini (free-text generation)
+builder.Services.AddHttpClient<IGoalReviewService, GeminiGoalReviewService>();
+
 // --- AI Tool Registration ---
 builder.Services.AddScoped<IAiTool, LogHabitTool>();
 builder.Services.AddScoped<IAiTool, SkipHabitTool>();
@@ -186,6 +189,7 @@ builder.Services.AddScoped<IAiTool, QueryHabitsTool>();
 builder.Services.AddScoped<IAiTool, CreateGoalTool>();
 builder.Services.AddScoped<IAiTool, UpdateGoalProgressTool>();
 builder.Services.AddScoped<IAiTool, LinkHabitsToGoalTool>();
+builder.Services.AddScoped<IAiTool, GoalReviewTool>();
 builder.Services.AddScoped<AiToolRegistry>();
 builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
