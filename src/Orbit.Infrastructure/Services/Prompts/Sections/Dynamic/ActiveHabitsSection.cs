@@ -1,4 +1,5 @@
 using System.Text;
+using Orbit.Domain.Entities;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
 
@@ -37,11 +38,7 @@ public class ActiveHabitsSection : IPromptSection
                 sb.AppendLine($"- \"{habit.Title}\" | {habit.Id} | {label}");
 
 
-                var children = context.ActiveHabits
-                    .Where(h => h.ParentHabitId == habit.Id)
-                    .OrderBy(h => h.Position);
-                foreach (var child in children)
-                    sb.AppendLine($"  - \"{child.Title}\" | {child.Id}");
+                AppendChildren(sb, context.ActiveHabits, habit.Id, 1);
             }
             sb.AppendLine();
         }
@@ -50,5 +47,18 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine("When user mentions a NEW activity -> use create_habit");
 
         return sb.ToString();
+    }
+
+    private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, int depth)
+    {
+        var indent = new string(' ', depth * 2);
+        var children = allHabits
+            .Where(h => h.ParentHabitId == parentId)
+            .OrderBy(h => h.Position);
+        foreach (var child in children)
+        {
+            sb.AppendLine($"{indent}- \"{child.Title}\" | {child.Id}");
+            AppendChildren(sb, allHabits, child.Id, depth + 1);
+        }
     }
 }
