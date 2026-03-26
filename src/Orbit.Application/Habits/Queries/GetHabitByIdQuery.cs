@@ -16,9 +16,11 @@ public record HabitDetailResponse(
     bool IsBadHabit,
     bool IsCompleted,
     bool IsGeneral,
+    bool IsFlexible,
     DateOnly DueDate,
     TimeOnly? DueTime,
     TimeOnly? DueEndTime,
+    DateOnly? EndDate,
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
     IReadOnlyList<ChecklistItem> ChecklistItems,
@@ -60,6 +62,7 @@ public class GetHabitByIdQueryHandler(
             habit.DueDate,
             habit.DueTime,
             habit.DueEndTime,
+            habit.EndDate,
             habit.Days.ToList(),
             habit.Position,
             habit.ChecklistItems,
@@ -70,7 +73,7 @@ public class GetHabitByIdQueryHandler(
     private static HabitChildResponse MapChild(Habit c, ILookup<Guid?, Habit> lookup) => new(
         c.Id, c.Title, c.Description,
         c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
-        c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime,
+        c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
         c.Position, c.ChecklistItems, MapChildren(c.Id, lookup));
 
     private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>

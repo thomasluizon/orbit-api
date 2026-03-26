@@ -95,6 +95,8 @@ public class DuplicateHabitCommandHandler(
             source.DueEndTime,
             parentHabitId,
             checklistItems: source.ChecklistItems,
-            isGeneral: source.IsGeneral);
+            isGeneral: source.IsGeneral,
+            isFlexible: source.IsFlexible,
+            endDate: source.EndDate);
     }
 }

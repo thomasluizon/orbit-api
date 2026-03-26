@@ -40,6 +40,7 @@ public class CreateHabitTool(
                 items = new { type = "STRING" }
             },
             due_date = new { type = "STRING", description = "YYYY-MM-DD. Defaults to today." },
+            end_date = new { type = "STRING", description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
             due_time = new { type = "STRING", description = "HH:mm 24h format" },
             is_bad_habit = new { type = "BOOLEAN", description = "Whether this is a bad habit to reduce. Defaults to false." },
             slip_alert_enabled = new { type = "BOOLEAN", description = "Enable slip pattern alerts. Defaults to true for bad habits." },
@@ -121,6 +122,7 @@ public class CreateHabitTool(
         var reminderTimes = ParseIntArray(args, "reminder_times");
         var days = ParseDays(args);
         var checklistItems = ParseChecklistItems(args);
+        DateOnly? endDate = ParseDateOnly(args, "end_date");
 
         var habitResult = Habit.Create(
             userId,
@@ -135,7 +137,8 @@ public class CreateHabitTool(
             reminderEnabled: reminderEnabled,
             reminderTimes: reminderTimes,
             slipAlertEnabled: slipAlertEnabled,
-            checklistItems: checklistItems);
+            checklistItems: checklistItems,
+            endDate: endDate);
 
         if (habitResult.IsFailure)
             return new ToolResult(false, Error: habitResult.Error);

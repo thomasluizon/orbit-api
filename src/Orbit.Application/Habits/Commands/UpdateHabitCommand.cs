@@ -46,7 +46,10 @@ public record UpdateHabitCommand(
     [property: AiField("integer[]", "Array of minutes before dueTime for reminders")] IReadOnlyList<int>? ReminderTimes = null,
     [property: AiField("boolean", "Enable or disable slip alerts")] bool? SlipAlertEnabled = null,
     [property: AiField("object[]", "New checklist items")] IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    [property: AiField("boolean", "Set to true to make a general habit (no schedule)")] bool? IsGeneral = null) : IRequest<Result>;
+    [property: AiField("boolean", "Set to true to make a general habit (no schedule)")] bool? IsGeneral = null,
+    [property: AiField("string", "YYYY-MM-DD, optional end date. Set to null to clear. Habit stops appearing after this date")] DateOnly? EndDate = null,
+    [property: AiField("boolean", "Set to true to remove the end date")] bool? ClearEndDate = null,
+    [property: AiField("boolean", "Set to true for flexible frequency (X times per period without fixed days)")] bool? IsFlexible = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -78,7 +81,8 @@ public class UpdateHabitCommandHandler(
             reminderTimes: request.ReminderTimes,
             slipAlertEnabled: request.SlipAlertEnabled,
             checklistItems: request.ChecklistItems,
-            isGeneral: request.IsGeneral);
+            isGeneral: request.IsGeneral,
+            isFlexible: request.IsFlexible);
 
         if (result.IsFailure)
             return result;

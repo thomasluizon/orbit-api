@@ -59,10 +59,15 @@ public class SkipHabitCommandHandler(
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        if (habit.DueDate > today)
+        // For flexible habits, skip means advance past current window
+        // For regular habits, they must be due today or overdue
+        if (!habit.IsFlexible && habit.DueDate > today)
             return Result.Failure("Cannot skip a habit that is not yet due.");
 
-        habit.AdvanceDueDate(today);
+        if (habit.IsFlexible)
+            habit.AdvanceDueDatePastWindow(today);
+        else
+            habit.AdvanceDueDate(today);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

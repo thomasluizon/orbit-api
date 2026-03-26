@@ -19,8 +19,10 @@ public class Habit : Entity
     public bool ReminderEnabled { get; private set; }
     public IReadOnlyList<int> ReminderTimes { get; private set; } = [15];
     public bool IsGeneral { get; private set; }
+    public bool IsFlexible { get; private set; }
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
+    public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
@@ -54,7 +56,9 @@ public class Habit : Entity
         IReadOnlyList<int>? reminderTimes = null,
         bool slipAlertEnabled = false,
         IReadOnlyList<ChecklistItem>? checklistItems = null,
-        bool isGeneral = false)
+        bool isGeneral = false,
+        bool isFlexible = false,
+        DateOnly? endDate = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -74,6 +78,19 @@ public class Habit : Entity
         if (days?.Count > 0 && frequencyQuantity != 1)
             return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
 
+        if (isFlexible && frequencyUnit is null)
+            return Result.Failure<Habit>("Flexible habits must have a frequency unit.");
+
+        if (isFlexible && days?.Count > 0)
+            return Result.Failure<Habit>("Flexible habits cannot have specific days.");
+
+        if (endDate.HasValue && frequencyUnit is null && !isGeneral)
+            return Result.Failure<Habit>("One-time tasks cannot have an end date.");
+
+        var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        if (endDate.HasValue && endDate.Value < effectiveDueDate)
+            return Result.Failure<Habit>("End date must be on or after the start date.");
+
         return Result.Success(new Habit
         {
             UserId = userId,
@@ -81,10 +98,11 @@ public class Habit : Entity
             Description = description?.Trim(),
             FrequencyUnit = frequencyUnit,
             FrequencyQuantity = frequencyQuantity,
-            Days = days?.ToList() ?? [],
+            Days = isFlexible ? [] : (days?.ToList() ?? []),
             IsBadHabit = isBadHabit,
             IsGeneral = isGeneral,
-            DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            IsFlexible = isFlexible,
+            DueDate = effectiveDueDate,
             DueTime = dueTime,
             DueEndTime = dueEndTime,
             ParentHabitId = parentHabitId,
@@ -92,6 +110,7 @@ public class Habit : Entity
             ReminderTimes = reminderTimes ?? [15],
             SlipAlertEnabled = slipAlertEnabled,
             ChecklistItems = checklistItems ?? [],
+            EndDate = endDate,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -101,7 +120,8 @@ public class Habit : Entity
         if (IsCompleted)
             return Result.Failure<HabitLog>("Cannot log a completed habit.");
 
-        if (!IsBadHabit && _logs.Exists(l => l.Date == date))
+        // Flexible and bad habits allow multiple logs per day; regular habits do not
+        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date))
             return Result.Failure<HabitLog>("This habit has already been logged for this date.");
 
         var log = HabitLog.Create(Id, date, 1, note);
@@ -112,9 +132,9 @@ public class Habit : Entity
         {
             IsCompleted = true;
         }
-        else
+        else if (!IsFlexible)
         {
-            // Recurring habit: advance DueDate past today
+            // Recurring (non-flexible) habit: advance DueDate past today
             AdvanceDueDate(date);
 
             // Reset checklist for next occurrence
@@ -150,6 +170,29 @@ public class Habit : Entity
 
             if (DueDate == prev) break;
         } while (DueDate <= today);
+
+        // If the habit has run past its end date, mark it as completed
+        if (EndDate.HasValue && DueDate > EndDate.Value)
+        {
+            IsCompleted = true;
+        }
+    }
+
+    /// <summary>
+    /// Advances DueDate past the current flexible window.
+    /// Day=next day, Week=next Monday, Month=next 1st, Year=next Jan 1.
+    /// </summary>
+    public void AdvanceDueDatePastWindow(DateOnly today)
+    {
+        var windowEnd = FrequencyUnit switch
+        {
+            Enums.FrequencyUnit.Day => today,
+            Enums.FrequencyUnit.Week => today.AddDays(6 - ((int)today.DayOfWeek + 6) % 7), // end of ISO week (Sunday)
+            Enums.FrequencyUnit.Month => new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)),
+            Enums.FrequencyUnit.Year => new DateOnly(today.Year, 12, 31),
+            _ => today
+        };
+        DueDate = windowEnd.AddDays(1);
     }
 
     public Result<HabitLog> Unlog(DateOnly date)
@@ -164,7 +207,7 @@ public class Habit : Entity
         {
             IsCompleted = false;
         }
-        else
+        else if (!IsFlexible)
         {
             DueDate = date;
         }
@@ -186,7 +229,10 @@ public class Habit : Entity
         IReadOnlyList<int>? reminderTimes = null,
         bool? slipAlertEnabled = null,
         IReadOnlyList<ChecklistItem>? checklistItems = null,
-        bool? isGeneral = null)
+        bool? isGeneral = null,
+        bool? isFlexible = null,
+        DateOnly? endDate = null,
+        bool? clearEndDate = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
@@ -204,15 +250,32 @@ public class Habit : Entity
         if (days?.Count > 0 && frequencyQuantity != 1)
             return Result.Failure("Days can only be set when frequency quantity is 1.");
 
+        var effectiveIsFlexible = isFlexible ?? IsFlexible;
+        if (effectiveIsFlexible && frequencyUnit is null)
+            return Result.Failure("Flexible habits must have a frequency unit.");
+
+        if (effectiveIsFlexible && days?.Count > 0)
+            return Result.Failure("Flexible habits cannot have specific days.");
+
+        // Validate endDate if being set
+        if (endDate.HasValue)
+        {
+            var effectiveDueDate = dueDate ?? DueDate;
+            if (endDate.Value < effectiveDueDate)
+                return Result.Failure("End date must be on or after the start date.");
+        }
+
         Title = title.Trim();
         Description = description?.Trim();
         FrequencyUnit = frequencyUnit;
         FrequencyQuantity = frequencyQuantity;
-        Days = days?.ToList() ?? [];
+        Days = effectiveIsFlexible ? [] : (days?.ToList() ?? []);
         IsBadHabit = isBadHabit;
 
         if (isGeneral.HasValue)
             IsGeneral = isGeneral.Value;
+        if (isFlexible.HasValue)
+            IsFlexible = isFlexible.Value;
 
         if (dueDate is not null)
             DueDate = dueDate.Value;
@@ -228,6 +291,11 @@ public class Habit : Entity
             SlipAlertEnabled = slipAlertEnabled.Value;
         if (checklistItems is not null)
             ChecklistItems = checklistItems;
+
+        if (clearEndDate == true)
+            EndDate = null;
+        else if (endDate.HasValue)
+            EndDate = endDate.Value;
 
         return Result.Success();
     }

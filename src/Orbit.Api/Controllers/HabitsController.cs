@@ -31,7 +31,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         bool SlipAlertEnabled = false,
         IReadOnlyList<Guid>? TagIds = null,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-        bool IsGeneral = false);
+        bool IsGeneral = false,
+        DateOnly? EndDate = null,
+        bool IsFlexible = false);
 
     public record UpdateHabitRequest(
         string Title,
@@ -47,7 +49,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         IReadOnlyList<int>? ReminderTimes = null,
         bool? SlipAlertEnabled = null,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-        bool? IsGeneral = null);
+        bool? IsGeneral = null,
+        DateOnly? EndDate = null,
+        bool? ClearEndDate = null,
+        bool? IsFlexible = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -68,7 +73,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         bool ReminderEnabled = false,
         IReadOnlyList<int>? ReminderTimes = null,
         IReadOnlyList<BulkHabitItemRequest>? SubHabits = null,
-        bool IsGeneral = false);
+        bool IsGeneral = false,
+        DateOnly? EndDate = null,
+        bool IsFlexible = false);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -192,7 +199,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.SlipAlertEnabled,
             request.TagIds,
             request.ChecklistItems,
-            request.IsGeneral);
+            request.IsGeneral,
+            IsFlexible: request.IsFlexible);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -258,7 +266,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ReminderTimes,
             request.SlipAlertEnabled,
             request.ChecklistItems,
-            request.IsGeneral);
+            request.IsGeneral,
+            IsFlexible: request.IsFlexible);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -474,7 +483,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ReminderEnabled,
             request.ReminderTimes,
             request.SubHabits?.Select(MapToBulkHabitItem).ToList(),
-            request.IsGeneral);
+            request.IsGeneral,
+            request.EndDate,
+            request.IsFlexible);
     }
 
 }

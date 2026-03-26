@@ -37,6 +37,7 @@ public class UpdateHabitTool(
                 items = new { type = "STRING" }
             },
             due_date = new { type = "STRING", description = "New due date (YYYY-MM-DD)" },
+            end_date = new { type = "STRING", description = "New end date (YYYY-MM-DD). Set to null to clear. Habit stops after this date.", nullable = true },
             due_time = new { type = "STRING", description = "New due time (HH:mm). Set to null to clear.", nullable = true },
             is_bad_habit = new { type = "BOOLEAN", description = "Whether this is a bad habit" },
             reminder_enabled = new { type = "BOOLEAN", description = "Enable or disable reminders" },
@@ -146,6 +147,18 @@ public class UpdateHabitTool(
             ? ParseChecklistItems(args)
             : null;
 
+        // end_date: absent = keep, null = clear, value = set
+        DateOnly? endDate = null;
+        bool? clearEndDate = null;
+        if (PropertyExists(args, "end_date"))
+        {
+            var edStr = GetString(args, "end_date");
+            if (edStr is null)
+                clearEndDate = true;
+            else
+                endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", out var ed) ? ed : null;
+        }
+
         var result = habit.Update(
             title,
             description,
@@ -157,7 +170,9 @@ public class UpdateHabitTool(
             dueTime: dueTime,
             reminderEnabled: reminderEnabled,
             reminderTimes: reminderTimes,
-            checklistItems: checklistItems);
+            checklistItems: checklistItems,
+            endDate: endDate,
+            clearEndDate: clearEndDate);
 
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);
