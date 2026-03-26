@@ -48,9 +48,10 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         IReadOnlyList<RoutinePattern>? routinePatterns,
         IReadOnlyList<Tag>? userTags,
         DateOnly? userToday,
-        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics)
+        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics,
+        IReadOnlyList<Goal>? activeGoals)
     {
-        var context = new PromptContext(activeHabits, userFacts, hasImage, routinePatterns, userTags, userToday, habitMetrics);
+        var context = new PromptContext(activeHabits, userFacts, hasImage, routinePatterns, userTags, userToday, habitMetrics, activeGoals);
         return Build(context);
     }
 

@@ -18,6 +18,8 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Goal> Goals => Set<Goal>();
+    public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,6 +118,21 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.HasIndex(n => new { n.UserId, n.IsRead });
+        });
+
+        modelBuilder.Entity<Goal>(entity =>
+        {
+            entity.HasIndex(g => g.UserId);
+
+            entity.HasMany(g => g.ProgressLogs)
+                .WithOne()
+                .HasForeignKey(l => l.GoalId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GoalProgressLog>(entity =>
+        {
+            entity.HasIndex(l => l.GoalId);
         });
 
         modelBuilder.Entity<AppConfig>(entity =>
