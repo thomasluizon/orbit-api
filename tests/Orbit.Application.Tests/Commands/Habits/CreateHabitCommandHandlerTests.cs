@@ -73,7 +73,7 @@ public class CreateHabitCommandHandlerTests
         var tagId = Guid.NewGuid();
         var tag = Tag.Create(UserId, "Health", "#00ff00").Value;
 
-        _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Tag> { tag });
 
         var command = new CreateHabitCommand(
@@ -83,7 +83,7 @@ public class CreateHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _tagRepo.Received(1).FindAsync(
+        await _tagRepo.Received(1).FindTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>());
     }
 
