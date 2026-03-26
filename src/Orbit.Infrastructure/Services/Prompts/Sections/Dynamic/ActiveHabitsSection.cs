@@ -18,7 +18,7 @@ public class ActiveHabitsSection : IPromptSection
         }
         else
         {
-            foreach (var habit in context.ActiveHabits.Where(h => h.ParentHabitId is null))
+            foreach (var habit in context.ActiveHabits.Where(h => h.ParentHabitId is null).OrderBy(h => h.Position))
             {
                 var freqLabel = habit.FrequencyUnit is null
                     ? "One-time"
@@ -70,7 +70,7 @@ public class ActiveHabitsSection : IPromptSection
 
     private static void AppendChildren(StringBuilder sb, Guid parentId, PromptContext context, int depth)
     {
-        var children = context.ActiveHabits.Where(h => h.ParentHabitId == parentId);
+        var children = context.ActiveHabits.Where(h => h.ParentHabitId == parentId).OrderBy(h => h.Position);
         var indent = new string(' ', depth * 2);
         foreach (var child in children)
         {
