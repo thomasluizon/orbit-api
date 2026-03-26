@@ -165,11 +165,11 @@ public sealed class GeminiRoutineAnalysisService(
         - If habit has <{{MinLogsPerHabit}} logs, exclude from patterns
         """;
 
-        // 8. Call Gemini API (with 15s timeout - routine analysis is non-critical)
+        // 8. Call Gemini API (with 5s timeout - routine analysis is non-critical)
         logger.LogInformation("🔵 Calling Gemini API for routine analysis (user {UserId}, {LogCount} logs)...", userId, filteredLogs.Count);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
         var result = await CallGeminiAsync<RoutineAnalysis>(prompt, timeoutCts.Token);
 
         stopwatch.Stop();
