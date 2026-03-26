@@ -110,6 +110,22 @@ public class ResendEmailService(
 
     private async Task SendEmailAsync(string to, string subject, string html, CancellationToken cancellationToken, string? replyTo = null)
     {
+        // Suppress emails to test accounts
+        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        if (!string.IsNullOrEmpty(testAccountsEnv))
+        {
+            var toNormalized = to.Trim().ToLowerInvariant();
+            foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = pair.Split(':', 2);
+                if (parts.Length >= 1 && parts[0].Trim().ToLowerInvariant() == toNormalized)
+                {
+                    logger.LogInformation("Skipping email to test account {To} subject={Subject}", to, subject);
+                    return;
+                }
+            }
+        }
+
         var client = httpClientFactory.CreateClient("Resend");
 
         object payload = replyTo != null

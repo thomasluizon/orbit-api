@@ -2,14 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using FluentAssertions.Extensions;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Xunit;
-
 namespace Orbit.IntegrationTests;
 
 /// <summary>
-/// Core integration tests for the AI Chat endpoint (12 essential scenarios).
+/// Core integration tests for the AI Chat endpoint (20 essential scenarios).
 /// Tests are fully repeatable - they create a test user, run tests, and clean up everything.
 /// Habits-only: no task creation or task completion tests.
 /// </summary>
@@ -17,11 +14,11 @@ namespace Orbit.IntegrationTests;
 public class AiChatIntegrationTests : IAsyncLifetime
 {
     private readonly HttpClient _client;
-    private readonly WebApplicationFactory<Program> _factory;
     private string? _testUserId;
-    private string? _authToken;
-    private readonly string _testUserEmail = $"test-{Guid.NewGuid()}@integration.test";
-    private const string TestUserPassword = "TestPassword123!";
+    private readonly string _testUserEmail = $"ai-chat-test-{Guid.NewGuid()}@integration.test";
+    private const string TestCode = "999999";
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     // Rate limiting: Gemini free tier allows ~15 RPM
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
@@ -29,63 +26,52 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     public AiChatIntegrationTests(WebApplicationFactory<Program> factory)
     {
-        _factory = factory;
+        // Register the test account via env var so send-code accepts a fixed code
+        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
+        var entry = $"{_testUserEmail}:{TestCode}";
+        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
+            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
+
         _client = factory.CreateClient();
+        _client.Timeout = TimeSpan.FromMinutes(5);
     }
 
     public async Task InitializeAsync()
     {
-        // Register test user
-        var registerResponse = await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "AI Test User",
-            email = _testUserEmail,
-            password = TestUserPassword
-        });
+        // Send verification code (uses TEST_ACCOUNTS bypass)
+        var sendCodeResponse = await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _testUserEmail });
+        sendCodeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        registerResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var registerResult = await registerResponse.Content.ReadFromJsonAsync<RegisterResponse>();
-        _testUserId = registerResult!.UserId;
-
-        // Login to get auth token
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
+        // Verify code to create account + get JWT
+        var verifyResponse = await _client.PostAsJsonAsync("/api/auth/verify-code", new
         {
             email = _testUserEmail,
-            password = TestUserPassword
+            code = TestCode
         });
+        verifyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var loginResult = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>();
-        _authToken = loginResult!.Token;
-
-        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {_authToken}");
+        var loginResult = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+        _testUserId = loginResult!.UserId.ToString();
+        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {loginResult.Token}");
     }
 
     public async Task DisposeAsync()
     {
-        // Clean up all data created by this test user
         if (!string.IsNullOrEmpty(_testUserId))
         {
             try
             {
-                // Delete all habits (will cascade delete habit logs)
                 var habitsResponse = await _client.GetAsync("/api/habits");
                 if (habitsResponse.IsSuccessStatusCode)
                 {
-                    var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>();
+                    var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
                     foreach (var habit in habits ?? [])
-                    {
                         await _client.DeleteAsync($"/api/habits/{habit.Id}");
-                    }
                 }
 
-                // Delete the test user
                 await _client.DeleteAsync($"/api/users/{_testUserId}");
             }
-            catch
-            {
-                // Cleanup failed - log but don't throw to avoid masking test failures
-            }
+            catch { /* cleanup best-effort */ }
         }
 
         _client.Dispose();
@@ -334,10 +320,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
             httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseText = await httpResponse.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<ChatResponse>(responseText, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var response = JsonSerializer.Deserialize<ChatResponse>(responseText, JsonOptions);
 
             response.Should().NotBeNull();
             response!.AiMessage.Should().NotBeNullOrEmpty();
@@ -496,10 +479,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
             httpResponse.StatusCode.Should().Be(HttpStatusCode.OK, $"Error: {await httpResponse.Content.ReadAsStringAsync()}");
 
             var responseText = await httpResponse.Content.ReadAsStringAsync();
-            var response = JsonSerializer.Deserialize<ChatResponse>(responseText, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var response = JsonSerializer.Deserialize<ChatResponse>(responseText, JsonOptions);
 
             response.Should().NotBeNull();
             return response!;
@@ -514,8 +494,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     #region DTOs
 
-    private record RegisterResponse(string UserId, string Message);
-    private record LoginResponse(string UserId, string Token, string Name, string Email);
+    private record LoginResponse(Guid UserId, string Token, string Name, string Email);
     private record ChatResponse(string? AiMessage, List<ActionResultDto> Actions);
     private record ActionResultDto(string Type, string Status, Guid? EntityId = null, string? EntityName = null, string? Error = null);
     private record HabitDto(Guid Id, string Title);
