@@ -13,5 +13,6 @@ public interface ISystemPromptBuilder
         IReadOnlyList<RoutinePattern>? routinePatterns = null,
         IReadOnlyList<Tag>? userTags = null,
         DateOnly? userToday = null,
-        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null);
+        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
+        IReadOnlyList<Goal>? activeGoals = null);
 }

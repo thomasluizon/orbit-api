@@ -11,4 +11,5 @@ public record PromptContext(
     IReadOnlyList<RoutinePattern>? RoutinePatterns,
     IReadOnlyList<Tag>? UserTags,
     DateOnly? UserToday,
-    IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics);
+    IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics,
+    IReadOnlyList<Goal>? ActiveGoals = null);
