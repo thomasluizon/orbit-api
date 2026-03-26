@@ -273,4 +273,76 @@ public class UserTests
         // Counter was reset (0) then incremented to 1
         user.AiMessagesUsedThisMonth.Should().Be(1);
     }
+
+    // ----- Referral Methods -----
+
+    [Fact]
+    public void SetReferralCode_SetsCode()
+    {
+        var user = CreateValidUser();
+
+        user.SetReferralCode("ABC12345");
+
+        user.ReferralCode.Should().Be("ABC12345");
+    }
+
+    [Fact]
+    public void SetReferredBy_SetsReferrerUserId()
+    {
+        var user = CreateValidUser();
+        var referrerId = Guid.NewGuid();
+
+        user.SetReferredBy(referrerId);
+
+        user.ReferredByUserId.Should().Be(referrerId);
+    }
+
+    [Fact]
+    public void ExtendTrial_ExpiredTrial_ExtendsFromNow()
+    {
+        var user = CreateValidUser();
+        // Force trial to past (expired)
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+
+        var before = DateTime.UtcNow.AddDays(10).AddSeconds(-1);
+
+        user.ExtendTrial(10);
+
+        var after = DateTime.UtcNow.AddDays(10).AddSeconds(1);
+
+        user.TrialEndsAt.Should().NotBeNull();
+        user.TrialEndsAt!.Value.Should().BeOnOrAfter(before);
+        user.TrialEndsAt!.Value.Should().BeOnOrBefore(after);
+    }
+
+    [Fact]
+    public void ExtendTrial_NullTrial_ExtendsFromNow()
+    {
+        var user = CreateValidUser();
+        // Force trial to null via reflection
+        typeof(User).GetProperty("TrialEndsAt")!.SetValue(user, null);
+
+        var before = DateTime.UtcNow.AddDays(10).AddSeconds(-1);
+
+        user.ExtendTrial(10);
+
+        var after = DateTime.UtcNow.AddDays(10).AddSeconds(1);
+
+        user.TrialEndsAt.Should().NotBeNull();
+        user.TrialEndsAt!.Value.Should().BeOnOrAfter(before);
+        user.TrialEndsAt!.Value.Should().BeOnOrBefore(after);
+    }
+
+    [Fact]
+    public void ExtendTrial_ActiveTrial_ExtendsFromExistingDate()
+    {
+        var user = CreateValidUser();
+        // Fresh user has TrialEndsAt ~7 days from now
+        var existingTrialEnd = user.TrialEndsAt!.Value;
+
+        user.ExtendTrial(10);
+
+        user.TrialEndsAt.Should().NotBeNull();
+        user.TrialEndsAt!.Value.Should().BeCloseTo(existingTrialEnd.AddDays(10), TimeSpan.FromSeconds(2));
+    }
 }
