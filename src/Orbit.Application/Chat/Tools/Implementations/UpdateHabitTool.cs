@@ -12,7 +12,7 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null.";
+        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null. Set is_flexible to true for window-based tracking (e.g. '3x per week, any days').";
 
     public object GetParameterSchema() => new
     {
@@ -37,8 +37,10 @@ public class UpdateHabitTool(
                 items = new { type = "STRING" }
             },
             due_date = new { type = "STRING", description = "New due date (YYYY-MM-DD)" },
+            end_date = new { type = "STRING", description = "New end date (YYYY-MM-DD). Set to null to clear. Habit stops after this date.", nullable = true },
             due_time = new { type = "STRING", description = "New due time (HH:mm). Set to null to clear.", nullable = true },
             is_bad_habit = new { type = "BOOLEAN", description = "Whether this is a bad habit" },
+            is_flexible = new { type = "BOOLEAN", description = "True for window-based tracking. Cannot have days set." },
             reminder_enabled = new { type = "BOOLEAN", description = "Enable or disable reminders" },
             reminder_times = new
             {
@@ -146,6 +148,22 @@ public class UpdateHabitTool(
             ? ParseChecklistItems(args)
             : null;
 
+        bool? isFlexible = PropertyExists(args, "is_flexible")
+            ? GetBool(args, "is_flexible")
+            : null;
+
+        // end_date: absent = keep, null = clear, value = set
+        DateOnly? endDate = null;
+        bool? clearEndDate = null;
+        if (PropertyExists(args, "end_date"))
+        {
+            var edStr = GetString(args, "end_date");
+            if (edStr is null)
+                clearEndDate = true;
+            else
+                endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", out var ed) ? ed : null;
+        }
+
         var result = habit.Update(
             title,
             description,
@@ -157,7 +175,10 @@ public class UpdateHabitTool(
             dueTime: dueTime,
             reminderEnabled: reminderEnabled,
             reminderTimes: reminderTimes,
-            checklistItems: checklistItems);
+            checklistItems: checklistItems,
+            isFlexible: isFlexible,
+            endDate: endDate,
+            clearEndDate: clearEndDate);
 
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);

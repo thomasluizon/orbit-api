@@ -50,9 +50,9 @@ public class LogHabitCommandHandler(
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        // Toggle: if already logged for today, unlog it
+        // Toggle: if already logged for today, unlog it (skip for flexible/bad habits which allow multiple logs)
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == today);
-        if (existingLog is not null)
+        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
         {
             var unlogResult = habit.Unlog(today);
             if (unlogResult.IsFailure)

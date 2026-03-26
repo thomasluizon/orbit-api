@@ -32,5 +32,6 @@ public class GetHabitMetricsQueryHandler(
 
         var today = HabitMetricsCalculator.GetUserToday(user);
         return Result.Success(HabitMetricsCalculator.Calculate(habit, today));
+
     }
 }

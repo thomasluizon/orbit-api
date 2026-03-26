@@ -27,13 +27,14 @@ namespace Orbit.Application.Habits.Commands;
 [AiRule("BAD HABITS: Set isBadHabit to true for habits the user wants to AVOID or STOP doing. Bad habits track slip-ups/occurrences (smoking, nail biting, etc.)")]
 [AiRule("When logging habits, include a note if the user provides context or feelings about the activity")]
 [AiRule("TAGS: You can assign tags to habits using tagNames on CreateHabit actions, or use AssignTags action to change tags on existing habits. tagNames is an array of tag name strings. Use EXISTING tag names from the user's tags list when possible. If user asks for a tag that doesn't exist yet, use the new name - it will be auto-created")]
-[AiRule("FREQUENCY INTERPRETATION: 'X times per week' (e.g., '3x per week', '3 vezes por semana') means frequencyUnit: Day, frequencyQuantity: 1, days: [pick X evenly spread weekdays]. It does NOT mean frequencyQuantity: X, frequencyUnit: Week (that means every X weeks). Example: '3x/week' = Day/1/[Monday,Wednesday,Friday]. '2x/week' = Day/1/[Tuesday,Thursday]")]
+[AiRule("FREQUENCY INTERPRETATION: 'X times per week' (e.g., '3x per week', '3 vezes por semana') WITHOUT specifying days means isFlexible=true, frequencyUnit: Week, frequencyQuantity: X. If user specifies days, use frequencyUnit: Day, frequencyQuantity: 1, days: [...]. Example: '3x/week' (no specific days) = isFlexible=true, Week/3. '3x/week on Mon/Wed/Fri' = Day/1/[Monday,Wednesday,Friday]")]
 [AiRule("ONLY add/change tags when the user EXPLICITLY asks for it. NEVER auto-assign tags on your own initiative")]
 [AiRule("GENERAL HABITS: Set isGeneral to true for open-ended habits with no specific schedule or due date (e.g., 'drink more water', 'be more mindful', 'read more books'). Omit frequencyUnit, frequencyQuantity, days, and dueDate when isGeneral is true")]
+[AiRule("END DATE: endDate is only for recurring habits, not one-time tasks. Use when user specifies a limited time period (e.g., 'daily for 30 days', 'until March 15th')")]
 [AiExample(
     "Clean the house 3x per week",
-    """{ "actions": [{ "type": "CreateHabit", "title": "Clean the House", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Wednesday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created 'Clean the House' for Monday, Wednesday, and Friday!" }""",
-    Note = "X times per week")]
+    """{ "actions": [{ "type": "CreateHabit", "title": "Clean the House", "frequencyUnit": "Week", "frequencyQuantity": 3, "isFlexible": true, "dueDate": "{TODAY}" }], "aiMessage": "Created 'Clean the House' - 3 times per week, any days you choose!" }""",
+    Note = "X times per week without specific days = flexible")]
 [AiExample(
     "I want to meditate on weekdays",
     """{ "actions": [{ "type": "CreateHabit", "title": "Meditation", "frequencyUnit": "Day", "frequencyQuantity": 1, "days": ["Monday","Tuesday","Wednesday","Thursday","Friday"], "dueDate": "{TODAY}" }], "aiMessage": "Created a weekday meditation habit!" }""")]
@@ -82,7 +83,9 @@ public record CreateHabitCommand(
     [property: AiField("boolean", "Defaults to true when isBadHabit is true -- sends AI-generated motivational alerts before predicted slip windows")] bool SlipAlertEnabled = false,
     [property: AiField("string[]", "Array of tag name strings, ONLY when user explicitly asks to tag it", Name = "tagNames")] IReadOnlyList<Guid>? TagIds = null,
     [property: AiField("object[]", "Array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit")] IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    [property: AiField("boolean", "True for general habits with no schedule or due date (open-ended goals)")] bool IsGeneral = false) : IRequest<Result<Guid>>;
+    [property: AiField("boolean", "True for general habits with no schedule or due date (open-ended goals)")] bool IsGeneral = false,
+    [property: AiField("string", "YYYY-MM-DD, optional end date. Habit stops appearing after this date. Only for recurring habits, not one-time tasks")] DateOnly? EndDate = null,
+    [property: AiField("boolean", "True for flexible frequency habits. When user says 'X times per week' without specifying days, set isFlexible=true, frequencyUnit to the period, frequencyQuantity to X")] bool IsFlexible = false) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -124,7 +127,8 @@ public class CreateHabitCommandHandler(
             reminderTimes: request.ReminderTimes,
             slipAlertEnabled: request.SlipAlertEnabled,
             checklistItems: request.ChecklistItems,
-            isGeneral: request.IsGeneral);
+            isGeneral: request.IsGeneral,
+            isFlexible: request.IsFlexible);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -142,7 +146,8 @@ public class CreateHabitCommandHandler(
                     request.FrequencyQuantity,
                     dueDate: request.DueDate ?? dueDate,
                     parentHabitId: habit.Id,
-                    isGeneral: request.IsGeneral);
+                    isGeneral: request.IsGeneral,
+                    endDate: request.EndDate);
 
                 if (childResult.IsFailure)
                     return Result.Failure<Guid>(childResult.Error);
