@@ -10,9 +10,15 @@ public record GamificationProfileResponse(
     int TotalXp,
     int Level,
     string LevelTitle,
+    int XpForCurrentLevel,
+    int XpForNextLevel,
     int? XpToNextLevel,
     int AchievementsEarned,
-    int AchievementsTotal);
+    int AchievementsTotal,
+    IReadOnlyList<AchievementDto> Achievements,
+    IReadOnlyList<UserAchievementDto> UserAchievements);
+
+public record UserAchievementDto(string AchievementId, DateTime EarnedAtUtc);
 
 public record GetGamificationProfileQuery(Guid UserId) : IRequest<Result<GamificationProfileResponse>>;
 
@@ -29,16 +35,36 @@ public class GetGamificationProfileQueryHandler(
         if (!user.HasProAccess)
             return Result.PayGateFailure<GamificationProfileResponse>("Gamification is a Pro feature. Upgrade to unlock!");
 
-        var level = LevelDefinitions.GetLevelForXp(user.TotalXp);
+        var currentLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
         var xpToNext = LevelDefinitions.GetXpToNextLevel(user.TotalXp);
+        var nextLevel = currentLevel.Level < 10
+            ? LevelDefinitions.All[currentLevel.Level]
+            : currentLevel;
         var earned = await achievementRepository.FindAsync(a => a.UserId == request.UserId, ct);
+        var earnedMap = earned.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
+
+        var achievements = AchievementDefinitions.All.Select(def =>
+        {
+            var isEarned = earnedMap.TryGetValue(def.Id, out var earnedAt);
+            return new AchievementDto(
+                def.Id, def.Name, def.Description,
+                def.Category.ToString(), def.Rarity.ToString(),
+                def.XpReward, def.IconKey, isEarned, isEarned ? earnedAt : null);
+        }).ToList();
+
+        var userAchievements = earned.Select(e =>
+            new UserAchievementDto(e.AchievementId, e.EarnedAtUtc)).ToList();
 
         return Result.Success(new GamificationProfileResponse(
             user.TotalXp,
-            level.Level,
-            level.Title,
+            currentLevel.Level,
+            currentLevel.Title,
+            currentLevel.XpRequired,
+            nextLevel.XpRequired,
             xpToNext,
             earned.Count,
-            AchievementDefinitions.All.Count));
+            AchievementDefinitions.All.Count,
+            achievements,
+            userAchievements));
     }
 }

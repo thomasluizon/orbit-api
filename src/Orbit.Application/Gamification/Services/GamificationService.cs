@@ -95,12 +95,12 @@ public class GamificationService(
 
         // Notifications
         foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, ct);
+            await SendAchievementNotification(userId, definition, user.Language, ct);
 
         if (user.Level > previousLevel)
         {
             var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, ct);
+            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -129,12 +129,12 @@ public class GamificationService(
         UpdateLevel(user);
 
         foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, ct);
+            await SendAchievementNotification(userId, definition, user.Language, ct);
 
         if (user.Level > previousLevel)
         {
             var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, ct);
+            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -165,12 +165,12 @@ public class GamificationService(
         UpdateLevel(user);
 
         foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, ct);
+            await SendAchievementNotification(userId, definition, user.Language, ct);
 
         if (user.Level > previousLevel)
         {
             var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, ct);
+            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -209,12 +209,12 @@ public class GamificationService(
         UpdateLevel(user);
 
         foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, ct);
+            await SendAchievementNotification(userId, definition, user.Language, ct);
 
         if (user.Level > previousLevel)
         {
             var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, ct);
+            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -428,22 +428,20 @@ public class GamificationService(
             user.SetLevel(newLevel.Level);
     }
 
-    private async Task SendAchievementNotification(Guid userId, AchievementDefinition achievement, CancellationToken ct)
+    private async Task SendAchievementNotification(Guid userId, AchievementDefinition achievement, string? language, CancellationToken ct)
     {
-        var notification = Notification.Create(
-            userId,
-            $"Achievement Unlocked: {achievement.Name}",
-            $"{achievement.Description} (+{achievement.XpReward} XP)");
+        var isPt = language?.StartsWith("pt") == true;
+        var title = isPt
+            ? $"Conquista Desbloqueada: {achievement.Name}"
+            : $"Achievement Unlocked: {achievement.Name}";
+        var body = $"{achievement.Description} (+{achievement.XpReward} XP)";
 
+        var notification = Notification.Create(userId, title, body);
         await notificationRepository.AddAsync(notification, ct);
 
         try
         {
-            await pushService.SendToUserAsync(
-                userId,
-                $"Achievement Unlocked: {achievement.Name}",
-                $"{achievement.Description} (+{achievement.XpReward} XP)",
-                cancellationToken: ct);
+            await pushService.SendToUserAsync(userId, title, body, cancellationToken: ct);
         }
         catch
         {
@@ -451,22 +449,22 @@ public class GamificationService(
         }
     }
 
-    private async Task SendLevelUpNotification(Guid userId, LevelDefinition newLevel, CancellationToken ct)
+    private async Task SendLevelUpNotification(Guid userId, LevelDefinition newLevel, string? language, CancellationToken ct)
     {
-        var notification = Notification.Create(
-            userId,
-            $"Level Up! You're now Level {newLevel.Level}",
-            $"You've reached {newLevel.Title}! Keep going!");
+        var isPt = language?.StartsWith("pt") == true;
+        var title = isPt
+            ? $"Subiu de nivel! Agora voce e Nivel {newLevel.Level}"
+            : $"Level Up! You're now Level {newLevel.Level}";
+        var body = isPt
+            ? $"Voce alcancou {newLevel.Title}! Continue assim!"
+            : $"You've reached {newLevel.Title}! Keep going!";
 
+        var notification = Notification.Create(userId, title, body);
         await notificationRepository.AddAsync(notification, ct);
 
         try
         {
-            await pushService.SendToUserAsync(
-                userId,
-                $"Level Up! You're now Level {newLevel.Level}",
-                $"You've reached {newLevel.Title}! Keep going!",
-                cancellationToken: ct);
+            await pushService.SendToUserAsync(userId, title, body, cancellationToken: ct);
         }
         catch
         {
