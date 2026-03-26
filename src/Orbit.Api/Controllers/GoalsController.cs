@@ -19,6 +19,7 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
     public record UpdateStatusRequest(GoalStatus Status);
     public record ReorderGoalsRequest(IReadOnlyList<GoalPositionRequest> Positions);
     public record GoalPositionRequest(Guid Id, int Position);
+    public record LinkHabitsRequest(List<Guid> HabitIds);
 
     [HttpGet]
     public async Task<IActionResult> GetGoals(
@@ -82,6 +83,22 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         var command = new ReorderGoalsCommand(HttpContext.GetUserId(), positions);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("{goalId:guid}/habits")]
+    public async Task<IActionResult> LinkHabits(
+        Guid goalId,
+        [FromBody] LinkHabitsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new LinkHabitsToGoalCommand(HttpContext.GetUserId(), goalId, request.HabitIds);
+        var result = await mediator.Send(command, cancellationToken);
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Linked {Count} habits to goal {GoalId} by user {UserId}", request.HabitIds.Count, goalId, HttpContext.GetUserId());
+            return NoContent();
+        }
+        return BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("{id:guid}")]

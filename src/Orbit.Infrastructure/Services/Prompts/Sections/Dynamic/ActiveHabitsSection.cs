@@ -37,6 +37,11 @@ public class ActiveHabitsSection : IPromptSection
                 var label = habit.DueDate < context.UserToday!.Value ? "OVERDUE" : "TODAY";
                 sb.AppendLine($"- \"{habit.Title}\" | {habit.Id} | {label}");
 
+                if (habit.Goals.Count > 0)
+                {
+                    var goalNames = string.Join(", ", habit.Goals.Select(g => g.Title));
+                    sb.AppendLine($"  Goals: {goalNames}");
+                }
 
                 AppendChildren(sb, context.ActiveHabits, habit.Id, 1);
             }

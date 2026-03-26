@@ -180,6 +180,9 @@ builder.Services.AddScoped<IAiTool, MoveHabitTool>();
 builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
 builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
 builder.Services.AddScoped<IAiTool, QueryHabitsTool>();
+builder.Services.AddScoped<IAiTool, CreateGoalTool>();
+builder.Services.AddScoped<IAiTool, UpdateGoalProgressTool>();
+builder.Services.AddScoped<IAiTool, LinkHabitsToGoalTool>();
 builder.Services.AddScoped<AiToolRegistry>();
 builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 

@@ -38,6 +38,9 @@ public class Habit : Entity
     private readonly List<Tag> _tags = [];
     public IReadOnlyCollection<Tag> Tags => _tags.AsReadOnly();
 
+    private readonly List<Goal> _goals = [];
+    public IReadOnlyCollection<Goal> Goals => _goals.AsReadOnly();
+
     private Habit() { }
 
     public static Result<Habit> Create(
@@ -318,5 +321,9 @@ public class Habit : Entity
     public void AddTag(Tag tag) { if (!_tags.Contains(tag)) _tags.Add(tag); }
 
     public void RemoveTag(Tag tag) => _tags.Remove(tag);
+
+    public void AddGoal(Goal goal) { if (!_goals.Contains(goal)) _goals.Add(goal); }
+
+    public void RemoveGoal(Goal goal) => _goals.Remove(goal);
 
 }

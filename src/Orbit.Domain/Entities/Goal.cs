@@ -20,6 +20,12 @@ public class Goal : Entity
     private readonly List<GoalProgressLog> _progressLogs = [];
     public IReadOnlyCollection<GoalProgressLog> ProgressLogs => _progressLogs.AsReadOnly();
 
+    private readonly List<Habit> _habits = [];
+    public IReadOnlyCollection<Habit> Habits => _habits.AsReadOnly();
+
+    public void AddHabit(Habit habit) { if (!_habits.Contains(habit)) _habits.Add(habit); }
+    public void RemoveHabit(Habit habit) => _habits.Remove(habit);
+
     private Goal() { }
 
     public static Result<Goal> Create(

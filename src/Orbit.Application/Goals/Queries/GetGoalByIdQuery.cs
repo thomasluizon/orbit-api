@@ -27,7 +27,8 @@ public record GoalDetailDto(
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
     decimal ProgressPercentage,
-    IReadOnlyList<GoalProgressEntryDto> ProgressHistory);
+    IReadOnlyList<GoalProgressEntryDto> ProgressHistory,
+    List<LinkedHabitDto> LinkedHabits);
 
 public record GetGoalByIdQuery(
     Guid UserId,
@@ -40,7 +41,7 @@ public class GetGoalByIdQueryHandler(
     {
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            includes: q => q.Include(g => g.ProgressLogs),
+            includes: q => q.Include(g => g.ProgressLogs).Include(g => g.Habits),
             cancellationToken: cancellationToken);
 
         if (goal is null)
@@ -55,9 +56,13 @@ public class GetGoalByIdQueryHandler(
             .Select(l => new GoalProgressEntryDto(l.Value, l.PreviousValue, l.Note, l.CreatedAtUtc))
             .ToList();
 
+        var linkedHabits = goal.Habits
+            .Select(h => new LinkedHabitDto(h.Id, h.Title))
+            .ToList();
+
         return Result.Success(new GoalDetailDto(
             goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.CurrentValue,
             goal.Unit, goal.Status, goal.Deadline, goal.Position, goal.CreatedAtUtc,
-            goal.CompletedAtUtc, progressPercentage, progressHistory));
+            goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits));
     }
 }

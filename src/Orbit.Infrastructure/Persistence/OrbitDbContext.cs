@@ -128,6 +128,12 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                 .WithOne()
                 .HasForeignKey(l => l.GoalId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(g => g.Habits)
+                .WithMany(h => h.Goals)
+                .UsingEntity("HabitGoals",
+                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey("HabitId").OnDelete(DeleteBehavior.Cascade),
+                    r => r.HasOne(typeof(Goal)).WithMany().HasForeignKey("GoalId").OnDelete(DeleteBehavior.Cascade));
         });
 
         modelBuilder.Entity<GoalProgressLog>(entity =>
