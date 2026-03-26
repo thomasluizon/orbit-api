@@ -74,8 +74,8 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
                 var habitsResponse = await _client.GetAsync("/api/habits");
                 if (habitsResponse.IsSuccessStatusCode)
                 {
-                    var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-                    foreach (var habit in habits ?? [])
+                    var paginated = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+                    foreach (var habit in paginated?.Items ?? [])
                         await _client.DeleteAsync($"/api/habits/{habit.Id}");
                 }
 
@@ -736,7 +736,8 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create test habit '{title}'");
 
-        return await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        var id = await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        return id;
     }
 
     private async Task<Guid> CreateHabitViaApiOneTime(string title)
@@ -798,14 +799,16 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create sub-habit '{title}' under {parentId}");
 
-        return await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<IdResponse>(JsonOptions);
+        return result!.Id;
     }
 
     private async Task<List<HabitDto>> GetAllHabits()
     {
         var response = await _client.GetAsync("/api/habits");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        return await response.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions) ?? [];
+        var paginated = await response.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+        return paginated?.Items ?? [];
     }
 
     // ===================================================================
@@ -822,4 +825,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         string? Error = null);
     private record HabitDto(Guid Id, string Title);
     private record TagDto(Guid Id, string Name);
+    private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
+    private record IdResponse(Guid Id);
 }

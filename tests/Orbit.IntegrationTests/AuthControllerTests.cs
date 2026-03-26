@@ -1,16 +1,29 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
 
 [Collection("Sequential")]
-public class AuthControllerTests(WebApplicationFactory<Program> factory) : IAsyncLifetime
+public class AuthControllerTests : IAsyncLifetime
 {
-    private readonly HttpClient _client = factory.CreateClient();
+    private readonly HttpClient _client;
     private readonly string _email = $"auth-test-{Guid.NewGuid()}@integration.test";
-    private const string Password = "TestPassword123!";
+    private const string TestCode = "999999";
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    public AuthControllerTests(WebApplicationFactory<Program> factory)
+    {
+        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
+        var entry = $"{_email}:{TestCode}";
+        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
+            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
+
+        _client = factory.CreateClient();
+    }
 
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -20,97 +33,75 @@ public class AuthControllerTests(WebApplicationFactory<Program> factory) : IAsyn
         return Task.CompletedTask;
     }
 
-    // ── Register ──────────────────────────────────────────────
+    // -- SendCode -----------------------------------------------
 
     [Fact]
-    public async Task Register_ValidData_ReturnsUserId()
+    public async Task SendCode_ValidEmail_ReturnsOk()
     {
-        var response = await _client.PostAsJsonAsync("/api/auth/register", new
+        var response = await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // -- VerifyCode ---------------------------------------------
+
+    [Fact]
+    public async Task VerifyCode_ValidCode_ReturnsToken()
+    {
+        await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
+
+        var response = await _client.PostAsJsonAsync("/api/auth/verify-code", new
         {
-            name = "Test User",
             email = _email,
-            password = Password
+            code = TestCode
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await response.Content.ReadFromJsonAsync<RegisterResponse>();
-        body!.UserId.Should().NotBeNullOrEmpty();
-        body.Message.Should().Be("Registration successful");
-    }
-
-    [Fact]
-    public async Task Register_DuplicateEmail_ReturnsBadRequest()
-    {
-        var email = $"dup-{Guid.NewGuid()}@integration.test";
-
-        await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "First",
-            email,
-            password = Password
-        });
-
-        var response = await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "Second",
-            email,
-            password = Password
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    // ── Login ─────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Login_ValidCredentials_ReturnsToken()
-    {
-        var email = $"login-{Guid.NewGuid()}@integration.test";
-
-        await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "Login User",
-            email,
-            password = Password
-        });
-
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email,
-            password = Password
-        });
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var body = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        var body = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
         body!.Token.Should().NotBeNullOrEmpty();
-        body.Email.Should().Be(email);
+        body.UserId.Should().NotBeEmpty();
     }
 
     [Fact]
-    public async Task Login_WrongPassword_ReturnsUnauthorized()
+    public async Task VerifyCode_WrongCode_ReturnsUnauthorized()
     {
-        var email = $"badpw-{Guid.NewGuid()}@integration.test";
+        await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
 
-        await _client.PostAsJsonAsync("/api/auth/register", new
+        var response = await _client.PostAsJsonAsync("/api/auth/verify-code", new
         {
-            name = "Bad PW User",
-            email,
-            password = Password
-        });
-
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email,
-            password = "WrongPassword999!"
+            email = _email,
+            code = "000000"
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    // ── DTOs ──────────────────────────────────────────────────
+    [Fact]
+    public async Task VerifyCode_SameEmail_ReturnsSameUser()
+    {
+        await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
 
-    private record RegisterResponse(string UserId, string Message);
-    private record LoginResponse(string UserId, string Token, string Name, string Email);
+        var first = await _client.PostAsJsonAsync("/api/auth/verify-code", new
+        {
+            email = _email,
+            code = TestCode
+        });
+        var firstResult = await first.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+
+        await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
+
+        var second = await _client.PostAsJsonAsync("/api/auth/verify-code", new
+        {
+            email = _email,
+            code = TestCode
+        });
+        var secondResult = await second.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+
+        secondResult!.UserId.Should().Be(firstResult!.UserId);
+    }
+
+    // -- DTOs ---------------------------------------------------
+
+    private record LoginResponse(Guid UserId, string Token, string Name, string Email);
 }

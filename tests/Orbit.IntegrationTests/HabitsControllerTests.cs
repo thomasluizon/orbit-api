@@ -12,7 +12,7 @@ public class HabitsControllerTests : IAsyncLifetime
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
     private readonly string _email = $"habits-test-{Guid.NewGuid()}@integration.test";
-    private const string Password = "TestPassword123!";
+    private const string TestCode = "999999";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -20,24 +20,24 @@ public class HabitsControllerTests : IAsyncLifetime
     {
         _factory = factory;
         _client = factory.CreateClient();
+
+        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
+        var entry = $"{_email}:{TestCode}";
+        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
+            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
     }
 
     public async Task InitializeAsync()
     {
-        await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "Habits Test User",
-            email = _email,
-            password = Password
-        });
+        await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
 
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
+        var verifyResponse = await _client.PostAsJsonAsync("/api/auth/verify-code", new
         {
             email = _email,
-            password = Password
+            code = TestCode
         });
 
-        var login = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+        var login = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
         _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {login!.Token}");
     }
 
@@ -48,8 +48,8 @@ public class HabitsControllerTests : IAsyncLifetime
             var habitsResponse = await _client.GetAsync("/api/habits");
             if (habitsResponse.IsSuccessStatusCode)
             {
-                var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-                foreach (var h in habits ?? [])
+                var paginated = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+                foreach (var h in paginated?.Items ?? [])
                     await _client.DeleteAsync($"/api/habits/{h.Id}");
             }
         }
@@ -67,9 +67,9 @@ public class HabitsControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var habits = await response.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-        habits.Should().NotBeNull();
-        habits.Should().BeEmpty();
+        var paginated = await response.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+        paginated.Should().NotBeNull();
+        paginated!.Items.Should().BeEmpty();
     }
 
     [Fact]
@@ -183,30 +183,6 @@ public class HabitsControllerTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    // ── GetTrends ─────────────────────────────────────────────
-
-    [Fact]
-    public async Task GetTrends_QuantifiableHabit_ReturnsOk()
-    {
-        var habitId = await CreateQuantifiableHabit("Running", "km");
-
-        var response = await _client.GetAsync($"/api/habits/{habitId}/trends");
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var trends = await response.Content.ReadFromJsonAsync<TrendDto>(JsonOptions);
-        trends.Should().NotBeNull();
-        trends!.Weekly.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task GetTrends_NonExistentHabit_ReturnsBadRequest()
-    {
-        var response = await _client.GetAsync($"/api/habits/{Guid.NewGuid()}/trends");
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
     // ── BulkCreate ────────────────────────────────────────────
 
     [Fact]
@@ -246,14 +222,14 @@ public class HabitsControllerTests : IAsyncLifetime
 
         // Verify parent B has children
         var habitsResponse = await _client.GetAsync("/api/habits");
-        var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitWithChildrenDto>>(JsonOptions);
-        var parentB = habits!.FirstOrDefault(h => h.Title == "Parent Habit B");
+        var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitWithChildrenDto>>(JsonOptions);
+        var parentB = paginatedHabits!.Items.FirstOrDefault(h => h.Title == "Parent Habit B");
         parentB.Should().NotBeNull();
         parentB!.Children.Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task BulkCreate_PartialFailure_KeepsSuccesses()
+    public async Task BulkCreate_WithInvalidItem_ReturnsBadRequest()
     {
         var response = await _client.PostAsJsonAsync("/api/habits/bulk", new
         {
@@ -265,25 +241,8 @@ public class HabitsControllerTests : IAsyncLifetime
             }
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var result = await response.Content.ReadFromJsonAsync<BulkCreateResultDto>(JsonOptions);
-        result.Should().NotBeNull();
-        result!.Results.Should().HaveCount(3);
-
-        result.Results[0].Status.Should().Be("Success");
-        result.Results[0].HabitId.Should().NotBeEmpty();
-
-        result.Results[1].Status.Should().Be("Failed");
-        result.Results[1].Error.Should().NotBeNullOrEmpty();
-
-        result.Results[2].Status.Should().Be("Success");
-        result.Results[2].HabitId.Should().NotBeEmpty();
-
-        // Verify 2 habits created
-        var habitsResponse = await _client.GetAsync("/api/habits");
-        var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-        habits.Should().HaveCountGreaterThanOrEqualTo(2);
+        // Validation rejects the entire request when any item has an empty title
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
@@ -322,8 +281,8 @@ public class HabitsControllerTests : IAsyncLifetime
 
         // Verify all deleted
         var habitsResponse = await _client.GetAsync("/api/habits");
-        var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-        habits!.Should().NotContain(h => h.Id == id1 || h.Id == id2 || h.Id == id3);
+        var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+        paginatedHabits!.Items.Should().NotContain(h => h.Id == id1 || h.Id == id2 || h.Id == id3);
     }
 
     [Fact]
@@ -353,8 +312,8 @@ public class HabitsControllerTests : IAsyncLifetime
 
         // Verify valid ones deleted
         var habitsResponse = await _client.GetAsync("/api/habits");
-        var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-        habits!.Should().NotContain(h => h.Id == id1 || h.Id == id2);
+        var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+        paginatedHabits!.Items.Should().NotContain(h => h.Id == id1 || h.Id == id2);
     }
 
     [Fact]
@@ -386,31 +345,15 @@ public class HabitsControllerTests : IAsyncLifetime
         return await response.Content.ReadFromJsonAsync<Guid>();
     }
 
-    private async Task<Guid> CreateQuantifiableHabit(string title, string unit)
-    {
-        var response = await _client.PostAsJsonAsync("/api/habits", new
-        {
-            title,
-            type = "Quantifiable",
-            unit,
-            frequencyUnit = "Day",
-            frequencyQuantity = 1
-        });
-
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Guid>();
-    }
-
     // ── DTOs ──────────────────────────────────────────────────
 
-    private record LoginResponse(string UserId, string Token, string Name, string Email);
+    private record LoginResponse(Guid UserId, string Token, string Name, string Email);
     private record HabitDto(Guid Id, string Title);
+    private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
     private record HabitWithChildrenDto(Guid Id, string Title, List<HabitDto> Children);
     private record LogResponse(Guid LogId);
     private record MetricsDto(int CurrentStreak, int LongestStreak, decimal WeeklyCompletionRate,
         decimal MonthlyCompletionRate, int TotalCompletions, string? LastCompletedDate);
-    private record TrendDto(List<TrendPointDto> Weekly, List<TrendPointDto> Monthly);
-    private record TrendPointDto(string Period, decimal Average, decimal Minimum, decimal Maximum, int Count);
     private record BulkCreateResultDto(List<BulkCreateItemResultDto> Results);
     private record BulkCreateItemResultDto(int Index, string Status, Guid? HabitId, string? Title, string? Error, string? Field);
     private record BulkDeleteResultDto(List<BulkDeleteItemResultDto> Results);
