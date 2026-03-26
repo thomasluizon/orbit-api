@@ -15,4 +15,8 @@ public static class AppConstants
     public const int MaxBulkOperationSize = 100;
     public const int MaxGoalsPerHabit = 10;
     public const int MaxHabitsPerGoal = 20;
+    public const int DefaultReferralRewardDays = 10;
+    public const int DefaultMaxReferrals = 10;
+    public const int ReferralCompletionThreshold = 3;
+    public const int ReferralCompletionWindowDays = 7;
 }

@@ -37,6 +37,8 @@ public class User : Entity
     public DateTime? DeactivatedAt { get; private set; }
     public DateTime? ScheduledDeletionAt { get; private set; }
     public int WeekStartDay { get; private set; } = 1;
+    public string? ReferralCode { get; private set; }
+    public Guid? ReferredByUserId { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -181,5 +183,17 @@ public class User : Entity
 
         WeekStartDay = day;
         return Result.Success();
+    }
+
+    public void SetReferralCode(string code) => ReferralCode = code;
+
+    public void SetReferredBy(Guid referrerUserId) => ReferredByUserId = referrerUserId;
+
+    public void ExtendTrial(int days)
+    {
+        if (TrialEndsAt is null || TrialEndsAt.Value < DateTime.UtcNow)
+            TrialEndsAt = DateTime.UtcNow.AddDays(days);
+        else
+            TrialEndsAt = TrialEndsAt.Value.AddDays(days);
     }
 }
