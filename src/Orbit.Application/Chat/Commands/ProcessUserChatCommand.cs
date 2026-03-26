@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
-using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -43,7 +42,6 @@ public class ProcessUserChatCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
     IGenericRepository<Tag> tagRepository,
     IAiIntentService aiIntentService,
-    IRoutineAnalysisService routineAnalysisService,
     IUserDateService userDateService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
@@ -61,48 +59,16 @@ public class ProcessUserChatCommandHandler(
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         logger.LogInformation("Processing chat message: '{Message}'", request.Message);
 
-        // 1. Retrieve user's active habits as context for the AI
-        logger.LogInformation("Fetching habits from database...");
+        // 1. Load lightweight context for system prompt (no Logs, no metrics)
+        logger.LogInformation("Fetching context from database...");
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId,
-            q => q.Include(h => h.Tags).Include(h => h.Logs),
+            q => q.Include(h => h.Tags),
             cancellationToken);
 
-        var userTags = await tagRepository.FindAsync(
-            t => t.UserId == request.UserId,
-            cancellationToken);
-
-        dbStopwatch.Stop();
-        logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
-            dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
-
-        // 1b. Load user (needed for metrics, memory check, and fact extraction)
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
-
-        // 1c. Compute metrics in-memory (habits already loaded with Logs)
-        var metricsDict = new Dictionary<Guid, HabitMetrics>();
-        var metricsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        try
-        {
-            var today = user is not null ? HabitMetricsCalculator.GetUserToday(user) : DateOnly.FromDateTime(DateTime.UtcNow);
-            foreach (var habit in activeHabits)
-            {
-                metricsDict[habit.Id] = HabitMetricsCalculator.Calculate(habit, today);
-            }
-            metricsStopwatch.Stop();
-            logger.LogInformation("Metrics computed for {Count} habits in {ElapsedMs}ms",
-                metricsDict.Count, metricsStopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            metricsStopwatch.Stop();
-            logger.LogWarning(ex, "Metrics computation failed in {ElapsedMs}ms - continuing without metrics",
-                metricsStopwatch.ElapsedMilliseconds);
-        }
-
-        // 1d. Check if user has AI memory enabled
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
         // Check AI message limits
@@ -110,56 +76,29 @@ public class ProcessUserChatCommandHandler(
         if (messageGate.IsFailure)
             return messageGate.PropagateError<ChatResponse>();
 
-        // 1e. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)
         {
-            logger.LogInformation("Fetching user facts from database...");
-            var factDbStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
             userFacts = await userFactRepository.FindAsync(
                 f => f.UserId == request.UserId,
                 cancellationToken);
-
-            factDbStopwatch.Stop();
-            logger.LogInformation("Fact query completed in {ElapsedMs}ms (Facts: {FactCount})",
-                factDbStopwatch.ElapsedMilliseconds, userFacts.Count);
-        }
-        else
-        {
-            logger.LogInformation("AI memory disabled for user, skipping fact retrieval");
         }
 
-        // 1f. Analyze user's routine patterns for AI context (non-critical)
-        logger.LogInformation("Fetching user's routine patterns...");
-        var routineStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        IReadOnlyList<RoutinePattern> routinePatterns = [];
-        try
-        {
-            var routineResult = await routineAnalysisService.AnalyzeRoutinesAsync(request.UserId, cancellationToken);
-            if (routineResult.IsSuccess)
-                routinePatterns = routineResult.Value.Patterns;
-
-            routineStopwatch.Stop();
-            logger.LogInformation("Routine analysis completed in {ElapsedMs}ms (Patterns: {PatternCount})",
-                routineStopwatch.ElapsedMilliseconds, routinePatterns.Count);
-        }
-        catch (Exception ex)
-        {
-            routineStopwatch.Stop();
-            logger.LogWarning(ex, "Routine analysis failed in {ElapsedMs}ms - non-critical, continuing without patterns",
-                routineStopwatch.ElapsedMilliseconds);
-        }
-
-        // 2. Build system prompt and tool declarations
-        logger.LogInformation("Building system prompt and tool declarations...");
+        var userTags = await tagRepository.FindAsync(
+            t => t.UserId == request.UserId,
+            cancellationToken);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
+        dbStopwatch.Stop();
+        logger.LogInformation("Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})",
+            dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
+
+        // 2. Build slim system prompt (habit index only, details fetched via read tools)
         var systemPrompt = systemPromptBuilder.Build(
             activeHabits, userFacts,
             hasImage: request.ImageData is not null,
-            routinePatterns, userTags, userToday, metricsDict);
+            routinePatterns: null, userTags, userToday, habitMetrics: null);
 
         var tools = toolRegistry.GetAll();
         var toolDeclarations = tools.Select(t => (object)new
@@ -372,11 +311,9 @@ public class ProcessUserChatCommandHandler(
 
         totalStopwatch.Stop();
         logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   DB queries: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   Metrics: {MetricsMs}ms", metricsStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   Routine analysis: {RoutineMs}ms", routineStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Context loading: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   Tool execution: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Tool execution: {ActionsMs}ms ({Iterations} iterations)", actionsStopwatch.ElapsedMilliseconds, iteration);
         logger.LogInformation("   Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
 
         return Result.Success(new ChatResponse(aiMessage, allActionResults));
