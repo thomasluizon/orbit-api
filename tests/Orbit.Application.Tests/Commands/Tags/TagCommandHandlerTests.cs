@@ -153,7 +153,7 @@ public class TagCommandHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habit);
-        _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Tag> { tag });
 
         var handler = new AssignTagsCommandHandler(_habitRepo, _tagRepo, _appConfigService, _unitOfWork);
