@@ -35,6 +35,7 @@ public class ActiveGoalsSection : IPromptSection
         sb.AppendLine("When user mentions updating goal progress -> use update_goal_progress with the goal name");
         sb.AppendLine("When user mentions a NEW goal -> use create_goal");
         sb.AppendLine("When user wants to link/associate habits to/with goals -> use link_habits_to_goal");
+        sb.AppendLine("When user asks about goal progress, status, review, or how goals are going -> use review_goals");
 
         return sb.ToString();
     }
