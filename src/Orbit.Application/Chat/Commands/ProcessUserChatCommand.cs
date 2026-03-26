@@ -5,12 +5,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Domain.ValueObjects;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Orbit.Application.Chat.Commands;
 
@@ -36,20 +38,18 @@ public record ActionResult(
 public enum ActionStatus { Success, Failed, Suggestion }
 
 public class ProcessUserChatCommandHandler(
-    IMediator mediator,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserFact> userFactRepository,
     IGenericRepository<Tag> tagRepository,
     IAiIntentService aiIntentService,
-    IFactExtractionService factExtractionService,
     IRoutineAnalysisService routineAnalysisService,
-    IAppConfigService appConfigService,
     IUserDateService userDateService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
     AiToolRegistry toolRegistry,
     ISystemPromptBuilder systemPromptBuilder,
+    IServiceScopeFactory serviceScopeFactory,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private const int MaxToolIterations = 5;
@@ -67,7 +67,7 @@ public class ProcessUserChatCommandHandler(
 
         var activeHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId,
-            q => q.Include(h => h.Tags),
+            q => q.Include(h => h.Tags).Include(h => h.Logs),
             cancellationToken);
 
         var userTags = await tagRepository.FindAsync(
@@ -78,29 +78,31 @@ public class ProcessUserChatCommandHandler(
         logger.LogInformation("Database query completed in {ElapsedMs}ms (Habits: {HabitCount})",
             dbStopwatch.ElapsedMilliseconds, activeHabits.Count);
 
-        // 1b. Fetch metrics for all habits (for AI context)
+        // 1b. Load user (needed for metrics, memory check, and fact extraction)
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+
+        // 1c. Compute metrics in-memory (habits already loaded with Logs)
         var metricsDict = new Dictionary<Guid, HabitMetrics>();
+        var metricsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var metricsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var metricsTasks = activeHabits.Select(h =>
-                mediator.Send(new Orbit.Application.Habits.Queries.GetHabitMetricsQuery(request.UserId, h.Id), cancellationToken));
-            var metricsResults = await Task.WhenAll(metricsTasks);
-            for (int i = 0; i < activeHabits.Count; i++)
+            var today = user is not null ? HabitMetricsCalculator.GetUserToday(user) : DateOnly.FromDateTime(DateTime.UtcNow);
+            foreach (var habit in activeHabits)
             {
-                if (metricsResults[i].IsSuccess)
-                    metricsDict[activeHabits[i].Id] = metricsResults[i].Value;
+                metricsDict[habit.Id] = HabitMetricsCalculator.Calculate(habit, today);
             }
             metricsStopwatch.Stop();
-            logger.LogInformation("Metrics fetched for {Count} habits in {ElapsedMs}ms", metricsDict.Count, metricsStopwatch.ElapsedMilliseconds);
+            logger.LogInformation("Metrics computed for {Count} habits in {ElapsedMs}ms",
+                metricsDict.Count, metricsStopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Metrics fetch failed - non-critical, continuing without metrics");
+            metricsStopwatch.Stop();
+            logger.LogWarning(ex, "Metrics computation failed in {ElapsedMs}ms - continuing without metrics",
+                metricsStopwatch.ElapsedMilliseconds);
         }
 
-        // 1c. Check if user has AI memory enabled
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        // 1d. Check if user has AI memory enabled
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
         // Check AI message limits
@@ -108,7 +110,7 @@ public class ProcessUserChatCommandHandler(
         if (messageGate.IsFailure)
             return messageGate.PropagateError<ChatResponse>();
 
-        // 1d. Retrieve user's facts as context for the AI (skip if memory disabled)
+        // 1e. Retrieve user's facts as context for the AI (skip if memory disabled)
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)
         {
@@ -128,7 +130,7 @@ public class ProcessUserChatCommandHandler(
             logger.LogInformation("AI memory disabled for user, skipping fact retrieval");
         }
 
-        // 1e. Analyze user's routine patterns for AI context (non-critical)
+        // 1f. Analyze user's routine patterns for AI context (non-critical)
         logger.LogInformation("Fetching user's routine patterns...");
         var routineStopwatch = System.Diagnostics.Stopwatch.StartNew();
         IReadOnlyList<RoutinePattern> routinePatterns = [];
@@ -300,78 +302,79 @@ public class ProcessUserChatCommandHandler(
             }
         }
 
-        // 7. Extract facts from conversation (non-blocking - failure doesn't affect response)
+        // 7. Fire-and-forget: fact extraction + message counter (non-blocking background work)
+        var userId = request.UserId;
+        var userMessage = request.Message;
+        var shouldExtractFacts = aiMemoryEnabled && user is not null && user.HasProAccess;
+        var existingFactCount = userFacts.Count;
+        var existingFacts = userFacts;
 
-        if (!aiMemoryEnabled || (user is not null && !user.HasProAccess))
+        _ = Task.Run(async () =>
         {
-            logger.LogInformation("AI memory disabled for user or not Pro, skipping fact extraction");
-        }
-        else try
-        {
-            logger.LogInformation("Extracting facts from conversation...");
-            var extractionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var extractionResult = await factExtractionService.ExtractFactsAsync(
-                request.Message,
-                aiMessage,
-                userFacts,
-                cancellationToken);
-
-            extractionStopwatch.Stop();
-
-            if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
+            try
             {
-                var maxFacts = await appConfigService.GetAsync("MaxUserFacts", AppConstants.MaxUserFacts, cancellationToken);
-                if (userFacts.Count >= maxFacts)
-                {
-                    logger.LogInformation("User has reached {MaxFacts} fact limit, skipping extraction persistence", maxFacts);
-                }
-                else
-                {
-                    var remaining = maxFacts - userFacts.Count;
-                    logger.LogInformation("Extracted {FactCount} facts in {ElapsedMs}ms (room for {Remaining})",
-                        extractionResult.Value.Facts.Count, extractionStopwatch.ElapsedMilliseconds, remaining);
+                using var scope = serviceScopeFactory.CreateScope();
+                var bgFactService = scope.ServiceProvider.GetRequiredService<IFactExtractionService>();
+                var bgUserFactRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<UserFact>>();
+                var bgUserRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<User>>();
+                var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                var bgAppConfig = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
+                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessUserChatCommandHandler>>();
 
-                    foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
+                // Fact extraction
+                if (shouldExtractFacts)
+                {
+                    try
                     {
-                        var factResult = UserFact.Create(request.UserId, candidate.FactText, candidate.Category);
-                        if (factResult.IsSuccess)
+                        var extractionResult = await bgFactService.ExtractFactsAsync(
+                            userMessage, aiMessage, existingFacts, CancellationToken.None);
+
+                        if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
                         {
-                            await userFactRepository.AddAsync(factResult.Value, cancellationToken);
+                            var maxFacts = await bgAppConfig.GetAsync("MaxUserFacts", AppConstants.MaxUserFacts, CancellationToken.None);
+                            if (existingFactCount < maxFacts)
+                            {
+                                var remaining = maxFacts - existingFactCount;
+                                foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
+                                {
+                                    var factResult = UserFact.Create(userId, candidate.FactText, candidate.Category);
+                                    if (factResult.IsSuccess)
+                                        await bgUserFactRepo.AddAsync(factResult.Value, CancellationToken.None);
+                                }
+                                await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
+                                bgLogger.LogInformation("Background: {FactCount} facts persisted", extractionResult.Value.Facts.Count);
+                            }
                         }
-                        else
-                        {
-                            logger.LogWarning("Failed to create fact: {Error}", factResult.Error);
-                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        bgLogger.LogWarning(ex, "Background fact extraction failed");
                     }
                 }
 
-                await unitOfWork.SaveChangesAsync(cancellationToken);
-                logger.LogInformation("Facts persisted to database");
+                // Increment AI message counter
+                try
+                {
+                    var userForIncrement = await bgUserRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: CancellationToken.None);
+                    userForIncrement?.IncrementAiMessageCount();
+                    await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    bgLogger.LogWarning(ex, "Background message counter increment failed");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                logger.LogInformation("No facts extracted from conversation in {ElapsedMs}ms",
-                    extractionStopwatch.ElapsedMilliseconds);
+                logger.LogWarning(ex, "Background post-response work failed");
             }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Fact extraction failed - non-critical, continuing");
-        }
-
-        // 7. Increment AI message counter (after all other processing)
-        try
-        {
-            var userForIncrement = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
-            userForIncrement?.IncrementAiMessageCount();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch { /* non-critical */ }
+        });
 
         totalStopwatch.Stop();
         logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   DB queries: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Metrics: {MetricsMs}ms", metricsStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("   Routine analysis: {RoutineMs}ms", routineStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   Tool execution: {ActionsMs}ms", actionsStopwatch.ElapsedMilliseconds);
         logger.LogInformation("   Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
