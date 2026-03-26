@@ -273,4 +273,100 @@ public class UserTests
         // Counter was reset (0) then incremented to 1
         user.AiMessagesUsedThisMonth.Should().Be(1);
     }
+
+    // --- XP / Level tests ---
+
+    [Fact]
+    public void AddXp_PositiveAmount_IncrementsTotalXp()
+    {
+        var user = CreateValidUser();
+        user.TotalXp.Should().Be(0);
+
+        user.AddXp(50);
+
+        user.TotalXp.Should().Be(50);
+    }
+
+    [Fact]
+    public void AddXp_MultipleCalls_Accumulates()
+    {
+        var user = CreateValidUser();
+
+        user.AddXp(25);
+        user.AddXp(75);
+
+        user.TotalXp.Should().Be(100);
+    }
+
+    [Fact]
+    public void AddXp_ZeroAmount_NoChange()
+    {
+        var user = CreateValidUser();
+        user.AddXp(50);
+
+        user.AddXp(0);
+
+        user.TotalXp.Should().Be(50);
+    }
+
+    [Fact]
+    public void AddXp_NegativeAmount_NoChange()
+    {
+        var user = CreateValidUser();
+        user.AddXp(50);
+
+        user.AddXp(-10);
+
+        user.TotalXp.Should().Be(50);
+    }
+
+    [Fact]
+    public void SetLevel_ValidLevel_UpdatesLevel()
+    {
+        var user = CreateValidUser();
+        user.Level.Should().Be(1);
+
+        user.SetLevel(5);
+
+        user.Level.Should().Be(5);
+    }
+
+    [Fact]
+    public void SetLevel_MaxLevel_UpdatesLevel()
+    {
+        var user = CreateValidUser();
+
+        user.SetLevel(10);
+
+        user.Level.Should().Be(10);
+    }
+
+    [Fact]
+    public void SetLevel_BelowMinimum_NoChange()
+    {
+        var user = CreateValidUser();
+
+        user.SetLevel(0);
+
+        user.Level.Should().Be(1);
+    }
+
+    [Fact]
+    public void SetLevel_AboveMaximum_NoChange()
+    {
+        var user = CreateValidUser();
+
+        user.SetLevel(11);
+
+        user.Level.Should().Be(1);
+    }
+
+    [Fact]
+    public void Create_DefaultXpAndLevel()
+    {
+        var user = CreateValidUser();
+
+        user.TotalXp.Should().Be(0);
+        user.Level.Should().Be(1);
+    }
 }
