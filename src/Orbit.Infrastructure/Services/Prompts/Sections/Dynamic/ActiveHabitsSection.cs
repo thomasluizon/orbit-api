@@ -36,6 +36,7 @@ public class ActiveHabitsSection : IPromptSection
                 var label = habit.DueDate < context.UserToday!.Value ? "OVERDUE" : "TODAY";
                 sb.AppendLine($"- \"{habit.Title}\" | {habit.Id} | {label}");
 
+
                 var children = context.ActiveHabits
                     .Where(h => h.ParentHabitId == habit.Id)
                     .OrderBy(h => h.Position);

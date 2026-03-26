@@ -9,9 +9,21 @@ public static class HabitScheduleService
     /// <summary>
     /// Determines if a habit is scheduled on a given date based on its
     /// frequency, quantity, active days, and anchor (due) date.
+    /// For flexible habits, they appear on every date in range (filtering by log count is done separately).
     /// </summary>
     public static bool IsHabitDueOnDate(Habit habit, DateOnly target)
     {
+        // EndDate check: habit is never due after its end date
+        if (habit.EndDate.HasValue && target > habit.EndDate.Value)
+            return false;
+
+        if (habit.IsFlexible)
+        {
+            // Flexible habit: due on any date at or after its start
+            if (habit.FrequencyUnit is null) return false;
+            return target >= habit.DueDate;
+        }
+
         var anchor = habit.DueDate;
         var unit = habit.FrequencyUnit;
         var qty = habit.FrequencyQuantity ?? 1;
@@ -61,6 +73,69 @@ public static class HabitScheduleService
         }
         return dates;
     }
+
+    // --- Flexible habit methods ---
+
+    /// <summary>
+    /// Checks if the flexible habit still needs completions within the window containing target.
+    /// </summary>
+    public static bool IsFlexibleHabitDueOnDate(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    {
+        if (!habit.IsFlexible || habit.FrequencyUnit is null) return false;
+        if (target < habit.DueDate) return false;
+        return GetRemainingCompletions(habit, target, logs) > 0;
+    }
+
+    /// <summary>
+    /// Returns the start of the window containing the target date.
+    /// </summary>
+    public static DateOnly GetWindowStart(Habit habit, DateOnly target)
+    {
+        return habit.FrequencyUnit switch
+        {
+            FrequencyUnit.Day => target,
+            FrequencyUnit.Week => target.AddDays(-(((int)target.DayOfWeek + 6) % 7)), // ISO Monday
+            FrequencyUnit.Month => new DateOnly(target.Year, target.Month, 1),
+            FrequencyUnit.Year => new DateOnly(target.Year, 1, 1),
+            _ => target
+        };
+    }
+
+    /// <summary>
+    /// Returns the end of the window containing the target date.
+    /// </summary>
+    public static DateOnly GetWindowEnd(Habit habit, DateOnly target)
+    {
+        return habit.FrequencyUnit switch
+        {
+            FrequencyUnit.Day => target,
+            FrequencyUnit.Week => GetWindowStart(habit, target).AddDays(6),
+            FrequencyUnit.Month => new DateOnly(target.Year, target.Month, DateTime.DaysInMonth(target.Year, target.Month)),
+            FrequencyUnit.Year => new DateOnly(target.Year, 12, 31),
+            _ => target
+        };
+    }
+
+    /// <summary>
+    /// Count of logs within the window containing target.
+    /// </summary>
+    public static int GetCompletedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    {
+        var start = GetWindowStart(habit, target);
+        var end = GetWindowEnd(habit, target);
+        return logs.Count(l => l.Date >= start && l.Date <= end);
+    }
+
+    /// <summary>
+    /// How many more completions are needed in the window containing target.
+    /// </summary>
+    public static int GetRemainingCompletions(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    {
+        var targetCount = habit.FrequencyQuantity ?? 1;
+        var completed = GetCompletedInWindow(habit, target, logs);
+        return Math.Max(0, targetCount - completed);
+    }
+
 
     private static int TrueMod(int n, int m)
     {

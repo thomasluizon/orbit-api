@@ -66,6 +66,7 @@ builder.Services.Configure<VapidSettings>(
     builder.Configuration.GetSection(VapidSettings.SectionName));
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddHostedService<ReminderSchedulerService>();
+builder.Services.AddHostedService<GoalDeadlineNotificationService>();
 builder.Services.AddHostedService<SlipAlertSchedulerService>();
 builder.Services.AddHostedService<AccountDeletionService>();
 builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>();

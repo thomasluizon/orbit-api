@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260326022001_AddIsFlexibleToHabit")]
+    partial class AddIsFlexibleToHabit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -77,82 +80,6 @@ namespace Orbit.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.Goal", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("CurrentValue")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateOnly?>("Deadline")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Position")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("TargetValue")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("Goals");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.GoalProgressLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("GoalId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("PreviousValue")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("Value")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GoalId");
-
-                    b.ToTable("GoalProgressLogs");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -183,9 +110,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<TimeOnly?>("DueTime")
                         .HasColumnType("time without time zone");
-
-                    b.Property<DateOnly?>("EndDate")
-                        .HasColumnType("date");
 
                     b.Property<int?>("FrequencyQuantity")
                         .HasColumnType("integer");
@@ -556,15 +480,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.GoalProgressLog", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Goal", null)
-                        .WithMany("ProgressLogs")
-                        .HasForeignKey("GoalId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
@@ -580,11 +495,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasForeignKey("HabitId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.Goal", b =>
-                {
-                    b.Navigation("ProgressLogs");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Habit", b =>
