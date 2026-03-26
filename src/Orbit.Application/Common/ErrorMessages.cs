@@ -12,4 +12,5 @@ public static class ErrorMessages
     public const string HabitNotOwned = "Habit does not belong to this user.";
     public const string GoalNotFound = "Goal not found.";
     public const string GoalNotOwned = "Goal does not belong to this user.";
+    public const string AchievementNotFound = "Achievement not found.";
 }
