@@ -23,8 +23,8 @@ public class GlobalRulesSection : IPromptSection
             8. NEVER expose internal habit IDs (GUIDs) to the user in your messages. Refer to habits by their title only.
             9. FORMAT: Always use line breaks between items when listing habits or information. Use bullet points with newlines for readability. Keep responses concise and well-structured. Never output a wall of text.
             10. ORDERING: When listing habits from tool results, always preserve the exact order returned. Never reorder or skip habits.
-            11. QUERY BEFORE LISTING: When listing habits or answering questions about habits, ALWAYS call get_todays_schedule, get_habits_by_date, or search_habits first. Do not guess from the Quick Reference alone - it only has IDs for quick actions.
-            12. HABIT LOOKUP: When the user mentions a habit by name and it's not in the Quick Reference, call search_habits to find its ID before taking any write action.
+            11. QUERY BEFORE LISTING: When listing habits or answering questions about habits, ALWAYS call query_habits with appropriate filters first. Do not guess from the Quick Reference alone - it only has IDs for quick actions.
+            12. HABIT LOOKUP: When the user mentions a habit by name and it's not in the Quick Reference, call query_habits(search: "name") to find its ID before taking any write action.
             """);
         return sb.ToString();
     }
