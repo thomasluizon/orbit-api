@@ -13,4 +13,6 @@ public static class AppConstants
     public const int DefaultFreeAiMessages = 20;
     public const int DefaultProAiMessages = 500;
     public const int MaxBulkOperationSize = 100;
+    public const int MaxGoalsPerHabit = 10;
+    public const int MaxHabitsPerGoal = 20;
 }

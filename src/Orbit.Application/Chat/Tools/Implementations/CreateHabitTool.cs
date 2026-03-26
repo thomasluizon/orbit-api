@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -9,6 +10,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class CreateHabitTool(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
+    IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork) : IAiTool
@@ -72,6 +74,12 @@ public class CreateHabitTool(
                     },
                     required = new[] { "text" }
                 }
+            },
+            goal_ids = new
+            {
+                type = "ARRAY",
+                description = "IDs of goals to link this habit to",
+                items = new { type = "STRING" }
             },
             sub_habits = new
             {
@@ -199,6 +207,27 @@ public class CreateHabitTool(
 
             if (tagNames.Count > 0)
                 await AssignTagsToHabitAsync(habit, tagNames, userId, ct);
+        }
+
+        // Link goals
+        if (args.TryGetProperty("goal_ids", out var goalIdsEl) && goalIdsEl.ValueKind == JsonValueKind.Array)
+        {
+            var goalIds = new List<Guid>();
+            foreach (var g in goalIdsEl.EnumerateArray())
+            {
+                if (Guid.TryParse(g.GetString(), out var gid))
+                    goalIds.Add(gid);
+            }
+
+            if (goalIds.Count > 0)
+            {
+                var goals = await goalRepository.FindTrackedAsync(
+                    gl => goalIds.Contains(gl.Id) && gl.UserId == userId,
+                    ct);
+
+                foreach (var goal in goals)
+                    habit.AddGoal(goal);
+            }
         }
 
         // Save immediately so subsequent tool calls (e.g. create_sub_habit) can find this habit

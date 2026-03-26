@@ -11,6 +11,7 @@ using Orbit.Domain.ValueObjects;
 namespace Orbit.Application.Habits.Queries;
 
 public record HabitTagItem(Guid Id, string Name, string Color);
+public record LinkedGoalDto(Guid Id, string Title);
 
 public record HabitScheduleItem(
     Guid Id,
@@ -36,6 +37,7 @@ public record HabitScheduleItem(
     bool SlipAlertEnabled,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
+    IReadOnlyList<LinkedGoalDto> LinkedGoals,
     IReadOnlyList<HabitScheduleChildItem> Children,
     bool HasSubHabits,
     int? FlexibleTarget,
@@ -95,7 +97,7 @@ public class GetHabitScheduleQueryHandler(
     {
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
-            q => q.Include(h => h.Tags).Include(h => h.Logs),
+            q => q.Include(h => h.Tags).Include(h => h.Logs).Include(h => h.Goals),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -142,7 +144,7 @@ public class GetHabitScheduleQueryHandler(
         // Include Logs for flexible habits so we can compute window progress
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
-            q => q.Include(h => h.Tags).Include(h => h.Logs),
+            q => q.Include(h => h.Tags).Include(h => h.Logs).Include(h => h.Goals),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -290,7 +292,7 @@ public class GetHabitScheduleQueryHandler(
             h.DueDate, h.DueTime, h.DueEndTime, h.EndDate,
             scheduledDates, isOverdue,
             h.ReminderEnabled, h.ReminderTimes, h.SlipAlertEnabled,
-            h.ChecklistItems, MapTags(h),
+            h.ChecklistItems, MapTags(h), MapGoals(h),
             MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo, referenceDate),
             lookup[h.Id].Any(),
             flexibleTarget, flexibleCompleted);
@@ -353,4 +355,7 @@ public class GetHabitScheduleQueryHandler(
 
     private static List<HabitTagItem> MapTags(Habit h) =>
         h.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList();
+
+    private static List<LinkedGoalDto> MapGoals(Habit h) =>
+        h.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList();
 }

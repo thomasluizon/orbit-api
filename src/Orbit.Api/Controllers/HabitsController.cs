@@ -90,6 +90,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     public record MoveHabitParentRequest(Guid? ParentId);
 
     public record CreateSubHabitRequest(string Title, string? Description);
+    public record LinkGoalsRequest(List<Guid> GoalIds);
 
     [HttpGet]
     public async Task<IActionResult> GetHabits(
@@ -469,6 +470,22 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             return Created($"/api/habits/{result.Value}", new { id = result.Value });
 
         return result.ToPayGateAwareResult(v => Created($"/api/habits/{v}", new { id = v }));
+    }
+
+    [HttpPut("{habitId:guid}/goals")]
+    public async Task<IActionResult> LinkGoals(
+        Guid habitId,
+        [FromBody] LinkGoalsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new LinkGoalsToHabitCommand(HttpContext.GetUserId(), habitId, request.GoalIds);
+        var result = await mediator.Send(command, cancellationToken);
+        if (result.IsSuccess)
+        {
+            logger.LogInformation("Linked {Count} goals to habit {HabitId} by user {UserId}", request.GoalIds.Count, habitId, HttpContext.GetUserId());
+            return NoContent();
+        }
+        return BadRequest(new { error = result.Error });
     }
 
     private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemRequest request)
