@@ -101,6 +101,24 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         return BadRequest(new { error = result.Error });
     }
 
+    [HttpGet("{id:guid}/metrics")]
+    public async Task<IActionResult> GetGoalMetrics(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetGoalMetricsQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("review")]
+    public async Task<IActionResult> GetGoalReview(
+        [FromQuery] string language = "en",
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetGoalReviewQuery(HttpContext.GetUserId(), language);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteGoal(Guid id, CancellationToken cancellationToken)
     {
