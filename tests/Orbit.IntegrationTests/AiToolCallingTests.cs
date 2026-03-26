@@ -66,8 +66,8 @@ public class AiToolCallingTests : IAsyncLifetime
                 var habitsResponse = await _client.GetAsync("/api/habits");
                 if (habitsResponse.IsSuccessStatusCode)
                 {
-                    var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-                    foreach (var habit in habits ?? [])
+                    var paginated = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+                    foreach (var habit in paginated?.Items ?? [])
                         await _client.DeleteAsync($"/api/habits/{habit.Id}");
                 }
 
@@ -483,4 +483,5 @@ public class AiToolCallingTests : IAsyncLifetime
     private record ChatResponse(string? AiMessage, List<ActionResultDto> Actions);
     private record ActionResultDto(string Type, string Status, Guid? EntityId = null, string? EntityName = null, string? Error = null);
     private record HabitDto(Guid Id, string Title);
+    private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
 }

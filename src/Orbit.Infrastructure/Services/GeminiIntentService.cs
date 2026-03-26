@@ -115,59 +115,76 @@ public sealed class GeminiIntentService(
 
         try
         {
-            logger.LogInformation("Calling Gemini API (Model: {Model})...", _settings.Model);
-            var apiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
             var url = $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
+            const int maxEmptyRetries = 2;
 
-            var response = await SendWithRetryAsync(url, request, cancellationToken);
-
-            apiStopwatch.Stop();
-            logger.LogInformation("Gemini API responded in {ElapsedMs}ms", apiStopwatch.ElapsedMilliseconds);
-
-            if (!response.IsSuccessStatusCode)
+            for (int emptyRetry = 0; emptyRetry <= maxEmptyRetries; emptyRetry++)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("Gemini API returned {Status}: {Body}", response.StatusCode, errorBody);
-                return Result.Failure<AiActionPlan>($"Gemini API error: {response.StatusCode}");
+                logger.LogInformation("Calling Gemini API (Model: {Model})...", _settings.Model);
+                var apiStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var response = await SendWithRetryAsync(url, request, cancellationToken);
+
+                apiStopwatch.Stop();
+                logger.LogInformation("Gemini API responded in {ElapsedMs}ms", apiStopwatch.ElapsedMilliseconds);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    logger.LogError("Gemini API returned {Status}: {Body}", response.StatusCode, errorBody);
+                    return Result.Failure<AiActionPlan>($"Gemini API error: {response.StatusCode}");
+                }
+
+                logger.LogInformation("Deserializing Gemini response...");
+                var deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var geminiResponse = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken);
+                var text = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    if (emptyRetry < maxEmptyRetries)
+                    {
+                        var delayMs = (int)Math.Pow(2, emptyRetry + 1) * 1000;
+                        logger.LogWarning("Gemini returned empty response. Retrying in {DelayMs}ms (attempt {Retry}/{Max})...",
+                            delayMs, emptyRetry + 1, maxEmptyRetries);
+                        await Task.Delay(delayMs, cancellationToken);
+                        continue;
+                    }
+
+                    return Result.Failure<AiActionPlan>("Gemini returned an empty response.");
+                }
+
+                logger.LogInformation("Gemini response (length: {Length} chars)", text.Length);
+                logger.LogInformation("GEMINI RAW JSON: {Json}", text);
+
+                // Fix invalid JSON escape sequences (e.g., \P, \C) that Gemini may generate
+                text = Regex.Replace(text, @"\\([^""\\\/bfnrtu])", "$1");
+
+                var plan = JsonSerializer.Deserialize<AiActionPlan>(text, ActionPlanJsonOptions);
+
+                if (plan is null)
+                {
+                    logger.LogError("Deserialization returned null for text: {Text}", text);
+                    return Result.Failure<AiActionPlan>("Failed to deserialize AI response.");
+                }
+
+                logger.LogInformation("Deserialized {ActionCount} actions: {ActionTypes}",
+                    plan.Actions.Count,
+                    string.Join(", ", plan.Actions.Select(a => a.Type.ToString())));
+
+                deserializeStopwatch.Stop();
+
+                totalStopwatch.Stop();
+                logger.LogInformation("TOTAL InterpretAsync time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
+                logger.LogInformation("   Prompt build: {PromptMs}ms", promptStopwatch.ElapsedMilliseconds);
+                logger.LogInformation("   Gemini call: {GeminiMs}ms", apiStopwatch.ElapsedMilliseconds);
+                logger.LogInformation("   Deserialize: {DeserializeMs}ms", deserializeStopwatch.ElapsedMilliseconds);
+
+                return Result.Success(plan);
             }
 
-            logger.LogInformation("Deserializing Gemini response...");
-            var deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var geminiResponse = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken);
-            var text = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
-
-            if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<AiActionPlan>("Gemini returned an empty response.");
-
-            logger.LogInformation("Gemini response (length: {Length} chars)", text.Length);
-            logger.LogInformation("GEMINI RAW JSON: {Json}", text);
-
-            // Fix invalid JSON escape sequences (e.g., \P, \C) that Gemini may generate
-            text = Regex.Replace(text, @"\\([^""\\\/bfnrtu])", "$1");
-
-            var plan = JsonSerializer.Deserialize<AiActionPlan>(text, ActionPlanJsonOptions);
-
-            if (plan is null)
-            {
-                logger.LogError("Deserialization returned null for text: {Text}", text);
-                return Result.Failure<AiActionPlan>("Failed to deserialize AI response.");
-            }
-
-            logger.LogInformation("Deserialized {ActionCount} actions: {ActionTypes}",
-                plan.Actions.Count,
-                string.Join(", ", plan.Actions.Select(a => a.Type.ToString())));
-
-            deserializeStopwatch.Stop();
-
-            totalStopwatch.Stop();
-            logger.LogInformation("TOTAL InterpretAsync time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("   Prompt build: {PromptMs}ms", promptStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("   Gemini call: {GeminiMs}ms", apiStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("   Deserialize: {DeserializeMs}ms", deserializeStopwatch.ElapsedMilliseconds);
-
-            return Result.Success(plan);
+            return Result.Failure<AiActionPlan>("Gemini returned an empty response.");
         }
         catch (JsonException ex)
         {
@@ -277,72 +294,90 @@ public sealed class GeminiIntentService(
 
     private async Task<Result<AiResponse>> CallGeminiWithToolsAsync(CancellationToken cancellationToken)
     {
-        var request = new GeminiRequest
-        {
-            SystemInstruction = _conversationSystemInstruction,
-            Contents = _conversationContents!.ToArray(),
-            GenerationConfig = new GeminiGenerationConfig { Temperature = 0.1, MaxOutputTokens = 8192 },
-            Tools = _conversationTools,
-            ToolConfig = _conversationToolConfig
-        };
+        const int maxEmptyRetries = 2;
 
         try
         {
             var url = $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
 
-            logger.LogInformation("Calling Gemini API with tools (Model: {Model})...", _settings.Model);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var response = await SendWithRetryAsync(url, request, cancellationToken);
-
-            stopwatch.Stop();
-            logger.LogInformation("Gemini API responded in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
-
-            if (!response.IsSuccessStatusCode)
+            for (int emptyRetry = 0; emptyRetry <= maxEmptyRetries; emptyRetry++)
             {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("Gemini API returned {Status}: {Body}", response.StatusCode, errorBody);
-                return Result.Failure<AiResponse>($"Gemini API error: {response.StatusCode}");
+                var request = new GeminiRequest
+                {
+                    SystemInstruction = _conversationSystemInstruction,
+                    Contents = _conversationContents!.ToArray(),
+                    GenerationConfig = new GeminiGenerationConfig { Temperature = 0.1, MaxOutputTokens = 8192 },
+                    Tools = _conversationTools,
+                    ToolConfig = _conversationToolConfig
+                };
+
+                logger.LogInformation("Calling Gemini API with tools (Model: {Model})...", _settings.Model);
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var response = await SendWithRetryAsync(url, request, cancellationToken);
+
+                stopwatch.Stop();
+                logger.LogInformation("Gemini API responded in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    logger.LogError("Gemini API returned {Status}: {Body}", response.StatusCode, errorBody);
+                    return Result.Failure<AiResponse>($"Gemini API error: {response.StatusCode}");
+                }
+
+                var geminiResponse = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken);
+                var candidateContent = geminiResponse?.Candidates?.FirstOrDefault()?.Content;
+
+                if (candidateContent?.Parts is null or { Length: 0 })
+                {
+                    if (emptyRetry < maxEmptyRetries)
+                    {
+                        var delayMs = (int)Math.Pow(2, emptyRetry + 1) * 1000;
+                        logger.LogWarning("Gemini returned empty response. Retrying in {DelayMs}ms (attempt {Retry}/{Max})...",
+                            delayMs, emptyRetry + 1, maxEmptyRetries);
+                        await Task.Delay(delayMs, cancellationToken);
+                        continue;
+                    }
+
+                    return Result.Failure<AiResponse>("Gemini returned an empty response.");
+                }
+
+                // Append model response to conversation state
+                _conversationContents!.Add(candidateContent);
+
+                // Check if response contains function calls
+                var functionCalls = candidateContent.Parts
+                    .Where(p => p.FunctionCall is not null)
+                    .Select((p, i) => new AiToolCall(
+                        p.FunctionCall!.Name,
+                        $"call_{i}",
+                        p.FunctionCall.Args))
+                    .ToList();
+
+                if (functionCalls.Count > 0)
+                {
+                    logger.LogInformation("Gemini returned {Count} function call(s): {Names}",
+                        functionCalls.Count,
+                        string.Join(", ", functionCalls.Select(fc => fc.Name)));
+
+                    return Result.Success(new AiResponse { ToolCalls = functionCalls });
+                }
+
+                // Otherwise it's a text response
+                var text = string.Join("", candidateContent.Parts
+                    .Where(p => p.Text is not null)
+                    .Select(p => p.Text));
+
+                if (string.IsNullOrWhiteSpace(text))
+                    return Result.Failure<AiResponse>("Gemini returned neither function calls nor text.");
+
+                logger.LogInformation("Gemini returned text response (length: {Length} chars)", text.Length);
+
+                return Result.Success(new AiResponse { TextMessage = text });
             }
 
-            var geminiResponse = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken);
-            var candidateContent = geminiResponse?.Candidates?.FirstOrDefault()?.Content;
-
-            if (candidateContent?.Parts is null or { Length: 0 })
-                return Result.Failure<AiResponse>("Gemini returned an empty response.");
-
-            // Append model response to conversation state
-            _conversationContents!.Add(candidateContent);
-
-            // Check if response contains function calls
-            var functionCalls = candidateContent.Parts
-                .Where(p => p.FunctionCall is not null)
-                .Select((p, i) => new AiToolCall(
-                    p.FunctionCall!.Name,
-                    $"call_{i}",
-                    p.FunctionCall.Args))
-                .ToList();
-
-            if (functionCalls.Count > 0)
-            {
-                logger.LogInformation("Gemini returned {Count} function call(s): {Names}",
-                    functionCalls.Count,
-                    string.Join(", ", functionCalls.Select(fc => fc.Name)));
-
-                return Result.Success(new AiResponse { ToolCalls = functionCalls });
-            }
-
-            // Otherwise it's a text response
-            var text = string.Join("", candidateContent.Parts
-                .Where(p => p.Text is not null)
-                .Select(p => p.Text));
-
-            if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<AiResponse>("Gemini returned neither function calls nor text.");
-
-            logger.LogInformation("Gemini returned text response (length: {Length} chars)", text.Length);
-
-            return Result.Success(new AiResponse { TextMessage = text });
+            return Result.Failure<AiResponse>("Gemini returned an empty response.");
         }
         catch (JsonException ex)
         {
