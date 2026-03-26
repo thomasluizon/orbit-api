@@ -65,6 +65,7 @@ if (!string.IsNullOrEmpty(stripeKey))
 builder.Services.Configure<VapidSettings>(
     builder.Configuration.GetSection(VapidSettings.SectionName));
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddScoped<ISubscriptionRewardService, StripeSubscriptionRewardService>();
 builder.Services.AddHostedService<ReminderSchedulerService>();
 builder.Services.AddHostedService<GoalDeadlineNotificationService>();
 builder.Services.AddHostedService<SlipAlertSchedulerService>();

@@ -17,6 +17,7 @@ public class CheckReferralCompletionCommandHandler(
     IGenericRepository<Notification> notificationRepository,
     IAppConfigService appConfigService,
     IPushNotificationService pushNotificationService,
+    ISubscriptionRewardService subscriptionRewardService,
     IUnitOfWork unitOfWork) : IRequestHandler<CheckReferralCompletionCommand, Result>
 {
     public async Task<Result> Handle(CheckReferralCompletionCommand request, CancellationToken cancellationToken)
@@ -80,7 +81,17 @@ public class CheckReferralCompletionCommandHandler(
 
         if (referrer is not null)
         {
-            referrer.ExtendTrial(rewardDays);
+            if (referrer.IsPro && !string.IsNullOrEmpty(referrer.StripeSubscriptionId))
+            {
+                // Pro user: extend Stripe subscription trial_end to delay next charge
+                await subscriptionRewardService.ExtendSubscriptionAsync(
+                    referrer.StripeSubscriptionId, rewardDays, cancellationToken);
+            }
+            else
+            {
+                // Free/Trial user: extend trial period
+                referrer.ExtendTrial(rewardDays);
+            }
         }
 
         trackedReferral.MarkRewarded();
