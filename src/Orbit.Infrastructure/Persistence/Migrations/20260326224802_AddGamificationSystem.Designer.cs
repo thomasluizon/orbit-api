@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Migrations
+namespace Orbit.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260326224802_AddGamificationSystem")]
+    partial class AddGamificationSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,18 +92,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "MaxTagsPerHabit",
                             Description = "Maximum number of tags per habit",
                             Value = "5"
-                        },
-                        new
-                        {
-                            Key = "ReferralRewardDays",
-                            Description = "Days of Pro added per successful referral",
-                            Value = "10"
-                        },
-                        new
-                        {
-                            Key = "MaxReferrals",
-                            Description = "Maximum successful referrals per user",
-                            Value = "10"
                         });
                 });
 
@@ -362,40 +353,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("PushSubscriptions");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.Referral", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ReferredUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ReferrerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("RewardGrantedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReferredUserId")
-                        .IsUnique();
-
-                    b.HasIndex("ReferrerId");
-
-                    b.ToTable("Referrals");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.SentReminder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -541,12 +498,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime?>("PlanExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ReferralCode")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("ReferredByUserId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTime?>("ScheduledDeletionAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -575,10 +526,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
-
-                    b.HasIndex("ReferralCode")
-                        .IsUnique()
-                        .HasFilter("\"ReferralCode\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
