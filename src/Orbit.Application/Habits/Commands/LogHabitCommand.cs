@@ -33,6 +33,7 @@ public class LogHabitCommandHandler(
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
+    IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<LogHabitCommand, Result<Guid>>
 {
@@ -88,6 +89,13 @@ public class LogHabitCommandHandler(
         await TryAutoCompleteParent(habit, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Gamification: process habit completion (fire-and-forget style, don't fail the log)
+        try
+        {
+            await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
+        }
+        catch { /* gamification failure should not block habit logging */ }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 

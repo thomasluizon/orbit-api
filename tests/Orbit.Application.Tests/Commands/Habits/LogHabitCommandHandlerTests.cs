@@ -13,7 +13,9 @@ public class LogHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly LogHabitCommandHandler _handler;
@@ -24,7 +26,7 @@ public class LogHabitCommandHandlerTests
     public LogHabitCommandHandlerTests()
     {
         _handler = new LogHabitCommandHandler(
-            _habitRepo, _habitLogRepo, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _habitLogRepo, _goalRepo, _userDateService, _gamificationService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
