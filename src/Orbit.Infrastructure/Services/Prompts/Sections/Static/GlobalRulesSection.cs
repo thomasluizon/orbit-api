@@ -22,6 +22,7 @@ public class GlobalRulesSection : IPromptSection
             7. When user asks to perform an action on a habit AND its sub-habits, call the tool for BOTH the parent and each sub-habit separately.
             8. NEVER expose internal habit IDs (GUIDs) to the user in your messages. Refer to habits by their title only.
             9. FORMAT: Always use line breaks between items when listing habits or information. Use bullet points with newlines for readability. Keep responses concise and well-structured. Never output a wall of text.
+            10. ORDERING: The Active Habits list is in the user's custom order. When listing habits, always preserve this exact order. Never reorder or skip habits.
             """);
         return sb.ToString();
     }
