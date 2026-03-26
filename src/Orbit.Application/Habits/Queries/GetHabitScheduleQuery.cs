@@ -21,6 +21,7 @@ public record HabitScheduleItem(
     bool IsBadHabit,
     bool IsCompleted,
     bool IsGeneral,
+    bool IsFlexible,
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
     DateTime CreatedAtUtc,
@@ -35,7 +36,9 @@ public record HabitScheduleItem(
     IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children,
-    bool HasSubHabits);
+    bool HasSubHabits,
+    int? FlexibleTarget,
+    int? FlexibleCompleted);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -46,6 +49,7 @@ public record HabitScheduleChildItem(
     bool IsBadHabit,
     bool IsCompleted,
     bool IsGeneral,
+    bool IsFlexible,
     IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     TimeOnly? DueTime,
@@ -54,7 +58,9 @@ public record HabitScheduleChildItem(
     IReadOnlyList<ChecklistItem> ChecklistItems,
     IReadOnlyList<HabitTagItem> Tags,
     IReadOnlyList<HabitScheduleChildItem> Children,
-    bool HasSubHabits);
+    bool HasSubHabits,
+    int? FlexibleTarget,
+    int? FlexibleCompleted);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -87,7 +93,7 @@ public class GetHabitScheduleQueryHandler(
     {
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
-            q => q.Include(h => h.Tags),
+            q => q.Include(h => h.Tags).Include(h => h.Logs),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -132,7 +138,7 @@ public class GetHabitScheduleQueryHandler(
 
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
-            q => q.Include(h => h.Tags),
+            q => q.Include(h => h.Tags).Include(h => h.Logs),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -182,7 +188,7 @@ public class GetHabitScheduleQueryHandler(
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
             var isOverdue = false;
 
-            if (request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && habit.DueDate < dateFrom)
+            if (request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && !habit.IsFlexible && habit.DueDate < dateFrom)
             {
                 isOverdue = true;
             }
@@ -260,7 +266,20 @@ public class GetHabitScheduleQueryHandler(
         ILookup<Guid?, Habit> lookup,
         bool includeAllChildren = false,
         DateOnly? dateFrom = null,
-        DateOnly? dateTo = null) => new(
+        DateOnly? dateTo = null)
+    {
+        int? flexTarget = null;
+        int? flexCompleted = null;
+
+        if (h.IsFlexible && h.FrequencyQuantity.HasValue)
+        {
+            // Use dateFrom as window reference (the date being viewed), fallback to today
+            var windowRef = dateFrom ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            flexTarget = h.FrequencyQuantity.Value;
+            flexCompleted = HabitScheduleService.GetCompletedInWindow(h, windowRef, h.Logs);
+        }
+
+        return new(
             h.Id,
             h.Title,
             h.Description,
@@ -269,6 +288,7 @@ public class GetHabitScheduleQueryHandler(
             h.IsBadHabit,
             h.IsCompleted,
             h.IsGeneral,
+            h.IsFlexible,
             h.Days.ToList(),
             h.Position,
             h.CreatedAtUtc,
@@ -283,7 +303,10 @@ public class GetHabitScheduleQueryHandler(
             h.ChecklistItems,
             MapTags(h),
             MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo),
-            lookup[h.Id].Any());
+            lookup[h.Id].Any(),
+            flexTarget,
+            flexCompleted);
+    }
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
     {
@@ -291,7 +314,7 @@ public class GetHabitScheduleQueryHandler(
         {
             if (HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count > 0)
                 return true;
-            if (!child.IsCompleted && !child.IsBadHabit && child.DueDate < dateFrom)
+            if (!child.IsCompleted && !child.IsBadHabit && !child.IsFlexible && child.DueDate < dateFrom)
                 return true;
             if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo))
                 return true;
@@ -315,19 +338,32 @@ public class GetHabitScheduleQueryHandler(
             children = children
                 .Where(c => HabitScheduleService.GetScheduledDates(c, df, dt).Count > 0
                     || c.IsCompleted
-                    || (!c.IsCompleted && !c.IsBadHabit && c.DueDate < df)
+                    || (!c.IsCompleted && !c.IsBadHabit && !c.IsFlexible && c.DueDate < df)
                     || HasAnyDescendantDue(c.Id, lookup, df, dt));
         }
 
         return children
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
-            .Select(c => new HabitScheduleChildItem(
-                c.Id, c.Title, c.Description,
-                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
-                c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime,
-                c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo),
-                lookup[c.Id].Any()))
+            .Select(c =>
+            {
+                int? flexTarget = null;
+                int? flexCompleted = null;
+
+                if (c.IsFlexible && c.FrequencyQuantity.HasValue)
+                {
+                    var windowRef = dateFrom ?? DateOnly.FromDateTime(DateTime.UtcNow);
+                    flexTarget = c.FrequencyQuantity.Value;
+                    flexCompleted = HabitScheduleService.GetCompletedInWindow(c, windowRef, c.Logs);
+                }
+
+                return new HabitScheduleChildItem(
+                    c.Id, c.Title, c.Description,
+                    c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
+                    c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime,
+                    c.Position, c.ChecklistItems, MapTags(c), MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo),
+                    lookup[c.Id].Any(), flexTarget, flexCompleted);
+            })
             .ToList();
     }
 

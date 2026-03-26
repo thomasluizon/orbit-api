@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Common.Attributes;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -59,10 +60,19 @@ public class SkipHabitCommandHandler(
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        if (habit.DueDate > today)
+        if (!habit.IsFlexible && habit.DueDate > today)
             return Result.Failure("Cannot skip a habit that is not yet due.");
 
-        habit.AdvanceDueDate(today);
+        if (habit.IsFlexible)
+        {
+            // For flexible habits, advance DueDate past the current window end
+            var windowEnd = HabitScheduleService.GetWindowEnd(habit, today);
+            habit.AdvanceDueDate(windowEnd);
+        }
+        else
+        {
+            habit.AdvanceDueDate(today);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

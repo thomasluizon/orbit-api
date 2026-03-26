@@ -49,7 +49,6 @@ public class HabitTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Title.Should().Be("Exercise");
         result.Value.UserId.Should().Be(ValidUserId);
-        result.Value.IsActive.Should().BeTrue();
         result.Value.IsCompleted.Should().BeFalse();
     }
 
@@ -141,19 +140,6 @@ public class HabitTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Date.Should().Be(today);
         habit.Logs.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public void Log_InactiveHabit_ReturnsFailure()
-    {
-        var habit = CreateValidHabit();
-        habit.Deactivate();
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        var result = habit.Log(today);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Cannot log an inactive habit");
     }
 
     [Fact]
@@ -264,20 +250,6 @@ public class HabitTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("No log found for this date");
-    }
-
-    [Fact]
-    public void Unlog_InactiveHabit_ReturnsFailure()
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var habit = CreateValidHabit(dueDate: today);
-        habit.Log(today);
-        habit.Deactivate();
-
-        var result = habit.Unlog(today);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Cannot unlog an inactive habit");
     }
 
     [Fact]
@@ -392,15 +364,192 @@ public class HabitTests
         habit.Tags.Should().BeEmpty();
     }
 
-    // --- Deactivate ---
+    // --- Flexible Habit Create tests ---
 
     [Fact]
-    public void Deactivate_SetsIsActiveFalse()
+    public void Create_Flexible_WithFrequency_ReturnsSuccess()
     {
-        var habit = CreateValidHabit();
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Week,
+            3,
+            isFlexible: true);
 
-        habit.Deactivate();
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsFlexible.Should().BeTrue();
+        result.Value.FrequencyUnit.Should().Be(FrequencyUnit.Week);
+        result.Value.FrequencyQuantity.Should().Be(3);
+    }
 
-        habit.IsActive.Should().BeFalse();
+    [Fact]
+    public void Create_Flexible_WithoutFrequencyUnit_ReturnsFailure()
+    {
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isFlexible: true);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Flexible habits must have a frequency unit");
+    }
+
+    [Fact]
+    public void Create_Flexible_WithDays_ReturnsFailure()
+    {
+        var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
+
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Week,
+            3,
+            days: days,
+            isFlexible: true);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Flexible habits cannot have specific days set");
+    }
+
+    [Fact]
+    public void Create_Flexible_DefaultsFalse()
+    {
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsFlexible.Should().BeFalse();
+    }
+
+    // --- Flexible Habit Log tests ---
+
+    [Fact]
+    public void Log_FlexibleHabit_AllowsMultipleLogsPerDay()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Week,
+            3,
+            dueDate: today,
+            isFlexible: true);
+        var habit = result.Value;
+
+        var log1 = habit.Log(today);
+        var log2 = habit.Log(today);
+
+        log1.IsSuccess.Should().BeTrue();
+        log2.IsSuccess.Should().BeTrue();
+        habit.Logs.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Log_FlexibleHabit_DoesNotAdvanceDueDate()
+    {
+        var startDate = new DateOnly(2025, 1, 6);
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Week,
+            3,
+            dueDate: startDate,
+            isFlexible: true);
+        var habit = result.Value;
+
+        habit.Log(startDate);
+
+        habit.DueDate.Should().Be(startDate);
+    }
+
+    [Fact]
+    public void Log_NonFlexibleHabit_StillBlocksDuplicateDate()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var habit = CreateValidHabit(dueDate: today);
+        habit.Log(today);
+
+        var result = habit.Log(today);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("already been logged for this date");
+    }
+
+    // --- Flexible Habit Update tests ---
+
+    [Fact]
+    public void Update_SwitchToFlexible_ClearsDays()
+    {
+        var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
+        var habit = CreateValidHabit(
+            frequencyUnit: FrequencyUnit.Day,
+            frequencyQuantity: 1,
+            days: days);
+        habit.Days.Should().HaveCount(2);
+
+        var result = habit.Update(
+            "Exercise",
+            null,
+            FrequencyUnit.Week,
+            3,
+            days: null,
+            isBadHabit: false,
+            dueDate: null,
+            isFlexible: true);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsFlexible.Should().BeTrue();
+        habit.Days.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Update_FlexibleWithDays_ReturnsFailure()
+    {
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Week,
+            3,
+            isFlexible: true);
+        var habit = result.Value;
+
+        var updateResult = habit.Update(
+            "Exercise",
+            null,
+            FrequencyUnit.Week,
+            3,
+            days: new[] { DayOfWeek.Monday },
+            isBadHabit: false,
+            dueDate: null,
+            isFlexible: true);
+
+        updateResult.IsFailure.Should().BeTrue();
+        updateResult.Error.Should().Contain("Flexible habits cannot have specific days set");
+    }
+
+    [Fact]
+    public void Update_FlexibleWithoutFrequency_ReturnsFailure()
+    {
+        var result = Habit.Create(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Week,
+            3,
+            isFlexible: true);
+        var habit = result.Value;
+
+        var updateResult = habit.Update(
+            "Exercise",
+            null,
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            days: null,
+            isBadHabit: false,
+            dueDate: null,
+            isFlexible: true);
+
+        updateResult.IsFailure.Should().BeTrue();
+        updateResult.Error.Should().Contain("Flexible habits must have a frequency unit");
     }
 }

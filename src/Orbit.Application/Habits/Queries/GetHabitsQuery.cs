@@ -15,6 +15,7 @@ public record HabitResponse(
     bool IsBadHabit,
     bool IsCompleted,
     bool IsGeneral,
+    bool IsFlexible,
     DateOnly DueDate,
     TimeOnly? DueTime,
     TimeOnly? DueEndTime,
@@ -33,6 +34,7 @@ public record HabitChildResponse(
     bool IsBadHabit,
     bool IsCompleted,
     bool IsGeneral,
+    bool IsFlexible,
     IReadOnlyList<DayOfWeek> Days,
     DateOnly DueDate,
     TimeOnly? DueTime,
@@ -104,6 +106,7 @@ public class GetHabitsQueryHandler(
         h.IsBadHabit,
         h.IsCompleted,
         h.IsGeneral,
+        h.IsFlexible,
         h.DueDate,
         h.DueTime,
         h.DueEndTime,
@@ -119,7 +122,7 @@ public class GetHabitsQueryHandler(
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => new HabitChildResponse(
                 c.Id, c.Title, c.Description,
-                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral,
+                c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
                 c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime,
                 c.Position, c.ChecklistItems, MapChildren(c.Id, lookup)))
             .ToList();
