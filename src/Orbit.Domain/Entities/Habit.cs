@@ -121,7 +121,7 @@ public class Habit : Entity
         });
     }
 
-    public Result<HabitLog> Log(DateOnly date, string? note = null)
+    public Result<HabitLog> Log(DateOnly date, string? note = null, bool advanceDueDate = true)
     {
         if (IsCompleted)
             return Result.Failure<HabitLog>("Cannot log a completed habit.");
@@ -138,9 +138,9 @@ public class Habit : Entity
         {
             IsCompleted = true;
         }
-        else if (!IsFlexible)
+        else if (!IsFlexible && advanceDueDate)
         {
-            // Recurring (non-flexible) habit: advance DueDate past today
+            // Recurring (non-flexible) habit: advance DueDate past the logged date
             AdvanceDueDate(date);
 
             // Reset checklist for next occurrence

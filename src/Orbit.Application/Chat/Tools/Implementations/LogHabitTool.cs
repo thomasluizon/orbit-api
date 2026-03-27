@@ -13,7 +13,7 @@ public class LogHabitTool(
     public string Name => "log_habit";
 
     public string Description =>
-        "Log a habit as completed for today. If already logged today, this will unlog it (toggle behavior). Include a note if the user shares context about the activity.";
+        "Log a habit as completed for a specific date (defaults to today). If already logged for that date, this will unlog it (toggle behavior). Include a note if the user shares context about the activity. Use the date parameter to log overdue instances.";
 
     public object GetParameterSchema() => new
     {
@@ -21,7 +21,8 @@ public class LogHabitTool(
         properties = new
         {
             habit_id = new { type = "STRING", description = "ID of the habit to log" },
-            note = new { type = "STRING", description = "Optional note about the completion" }
+            note = new { type = "STRING", description = "Optional note about the completion" },
+            date = new { type = "STRING", description = "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today." }
         },
         required = new[] { "habit_id" }
     };
@@ -41,11 +42,24 @@ public class LogHabitTool(
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
+        DateOnly targetDate = today;
+        if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
+        {
+            if (DateOnly.TryParse(dateEl.GetString(), out var parsed))
+                targetDate = parsed;
+            else
+                return new ToolResult(false, Error: "Invalid date format. Use YYYY-MM-DD.");
+        }
+
+        if (targetDate > today)
+            return new ToolResult(false, Error: "Cannot log a future date.");
+
         string? note = null;
         if (args.TryGetProperty("note", out var noteEl) && noteEl.ValueKind == JsonValueKind.String)
             note = noteEl.GetString();
 
-        var logResult = habit.Log(today, note);
+        var shouldAdvanceDueDate = targetDate >= today;
+        var logResult = habit.Log(targetDate, note, advanceDueDate: shouldAdvanceDueDate);
         if (logResult.IsFailure)
             return new ToolResult(false, Error: logResult.Error);
 

@@ -41,7 +41,8 @@ public record HabitScheduleItem(
     IReadOnlyList<HabitScheduleChildItem> Children,
     bool HasSubHabits,
     int? FlexibleTarget,
-    int? FlexibleCompleted);
+    int? FlexibleCompleted,
+    IReadOnlyList<HabitInstanceItem> Instances);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -65,7 +66,8 @@ public record HabitScheduleChildItem(
     bool HasSubHabits,
     int? FlexibleTarget,
     int? FlexibleCompleted,
-    bool IsLoggedInRange);
+    bool IsLoggedInRange,
+    IReadOnlyList<HabitInstanceItem> Instances);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -118,7 +120,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true))
+            .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, userToday: null))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -176,7 +178,7 @@ public class GetHabitScheduleQueryHandler(
             var allPagedItems = allFiltered
                 .Skip((allPage - 1) * request.PageSize)
                 .Take(request.PageSize)
-                .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, referenceDate: today))
+                .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, referenceDate: today, userToday: today))
                 .ToList();
 
             return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -222,7 +224,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo, referenceDate: dateFrom))
+            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo, referenceDate: dateFrom, userToday: today))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -276,7 +278,8 @@ public class GetHabitScheduleQueryHandler(
         bool includeAllChildren = false,
         DateOnly? dateFrom = null,
         DateOnly? dateTo = null,
-        DateOnly? referenceDate = null)
+        DateOnly? referenceDate = null,
+        DateOnly? userToday = null)
     {
         int? flexibleTarget = null;
         int? flexibleCompleted = null;
@@ -286,6 +289,10 @@ public class GetHabitScheduleQueryHandler(
             flexibleCompleted = HabitScheduleService.GetCompletedInWindow(h, referenceDate.Value, h.Logs);
         }
 
+        var instances = dateFrom.HasValue && dateTo.HasValue && userToday.HasValue
+            ? HabitScheduleService.GetInstances(h, dateFrom.Value, dateTo.Value, userToday.Value)
+            : [];
+
         return new HabitScheduleItem(
             h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
             h.IsBadHabit, h.IsCompleted, h.IsGeneral, h.IsFlexible,
@@ -294,9 +301,10 @@ public class GetHabitScheduleQueryHandler(
             scheduledDates, isOverdue,
             h.ReminderEnabled, h.ReminderTimes, h.SlipAlertEnabled,
             h.ChecklistItems, MapTags(h), MapGoals(h),
-            MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo, referenceDate),
+            MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo, referenceDate, userToday),
             lookup[h.Id].Any(),
-            flexibleTarget, flexibleCompleted);
+            flexibleTarget, flexibleCompleted,
+            instances);
     }
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
@@ -318,7 +326,7 @@ public class GetHabitScheduleQueryHandler(
     private static List<HabitScheduleChildItem> MapChildren(
         Guid parentId, ILookup<Guid?, Habit> lookup,
         bool includeAll = false, DateOnly? dateFrom = null, DateOnly? dateTo = null,
-        DateOnly? referenceDate = null)
+        DateOnly? referenceDate = null, DateOnly? userToday = null)
     {
         var children = lookup[parentId];
 
@@ -349,13 +357,18 @@ public class GetHabitScheduleQueryHandler(
                 var isLoggedInRange = dateFrom.HasValue && dateTo.HasValue
                     && c.Logs.Any(l => l.Date >= dateFrom.Value && l.Date <= dateTo.Value);
 
+                var instances = dateFrom.HasValue && dateTo.HasValue && userToday.HasValue
+                    ? HabitScheduleService.GetInstances(c, dateFrom.Value, dateTo.Value, userToday.Value)
+                    : [];
+
                 return new HabitScheduleChildItem(
                     c.Id, c.Title, c.Description,
                     c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
                     c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
                     c.Position, c.ChecklistItems, MapTags(c),
-                    MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate),
-                    lookup[c.Id].Any(), ft, fc, isLoggedInRange);
+                    MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate, userToday),
+                    lookup[c.Id].Any(), ft, fc, isLoggedInRange,
+                    instances);
             })
             .ToList();
     }

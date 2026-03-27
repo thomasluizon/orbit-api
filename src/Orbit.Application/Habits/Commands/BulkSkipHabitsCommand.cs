@@ -1,15 +1,18 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
+public record BulkSkipItem(Guid HabitId, DateOnly? Date = null);
+
 public record BulkSkipHabitsCommand(
     Guid UserId,
-    IReadOnlyList<Guid> HabitIds) : IRequest<Result<BulkSkipResult>>;
+    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>;
 
 public record BulkSkipResult(IReadOnlyList<BulkSkipItemResult> Results);
 
@@ -30,12 +33,24 @@ public class BulkSkipHabitsCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
-        for (int i = 0; i < request.HabitIds.Count; i++)
+        for (int i = 0; i < request.Items.Count; i++)
         {
-            var habitId = request.HabitIds[i];
+            var item = request.Items[i];
+            var habitId = item.HabitId;
+            var targetDate = item.Date ?? today;
 
             try
             {
+                if (targetDate > today)
+                {
+                    results.Add(new BulkSkipItemResult(
+                        Index: i,
+                        Status: BulkItemStatus.Failed,
+                        HabitId: habitId,
+                        Error: "Cannot skip a future date."));
+                    continue;
+                }
+
                 var habit = await habitRepository.FindOneTrackedAsync(
                     h => h.Id == habitId,
                     cancellationToken: cancellationToken);
@@ -80,7 +95,7 @@ public class BulkSkipHabitsCommandHandler(
                     continue;
                 }
 
-                if (habit.DueDate > today)
+                if (!habit.IsFlexible && habit.DueDate > targetDate)
                 {
                     results.Add(new BulkSkipItemResult(
                         Index: i,
@@ -90,7 +105,20 @@ public class BulkSkipHabitsCommandHandler(
                     continue;
                 }
 
-                habit.AdvanceDueDate(today);
+                if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+                {
+                    results.Add(new BulkSkipItemResult(
+                        Index: i,
+                        Status: BulkItemStatus.Failed,
+                        HabitId: habitId,
+                        Error: "Habit is not scheduled on this date."));
+                    continue;
+                }
+
+                if (habit.IsFlexible)
+                    habit.AdvanceDueDatePastWindow(today);
+                else
+                    habit.AdvanceDueDate(targetDate);
 
                 results.Add(new BulkSkipItemResult(
                     Index: i,

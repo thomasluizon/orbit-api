@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -27,7 +28,8 @@ namespace Orbit.Application.Habits.Commands;
 public record LogHabitCommand(
     Guid UserId,
     [property: AiField("string", "ID of the habit to log", Required = true)] Guid HabitId,
-    [property: AiField("string", "Include if user shares context or feelings")] string? Note = null) : IRequest<Result<Guid>>;
+    [property: AiField("string", "Include if user shares context or feelings")] string? Note = null,
+    [property: AiField("string", "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today.")] DateOnly? Date = null) : IRequest<Result<Guid>>;
 
 public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -53,12 +55,25 @@ public class LogHabitCommandHandler(
             return Result.Failure<Guid>(ErrorMessages.HabitNotOwned);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var targetDate = request.Date ?? today;
 
-        // Toggle: if already logged for today, unlog it (skip for flexible/bad habits which allow multiple logs)
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == today);
+        // Validate target date
+        if (targetDate > today)
+            return Result.Failure<Guid>("Cannot log a future date.");
+
+        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
+            return Result.Failure<Guid>("Cannot log a date beyond the overdue window.");
+
+        // Validate the habit is actually scheduled on the target date (for recurring habits)
+        if (habit.FrequencyUnit is not null && !habit.IsFlexible
+            && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+            return Result.Failure<Guid>("Habit is not scheduled on this date.");
+
+        // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
         {
-            var unlogResult = habit.Unlog(today);
+            var unlogResult = habit.Unlog(targetDate);
             if (unlogResult.IsFailure)
                 return Result.Failure<Guid>(unlogResult.Error);
 
@@ -68,7 +83,7 @@ public class LogHabitCommandHandler(
             await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
 
             // If a child was unlogged, also unlog the auto-completed parent
-            await TryUnlogParent(habit, today, cancellationToken);
+            await TryUnlogParent(habit, targetDate, cancellationToken);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -77,7 +92,9 @@ public class LogHabitCommandHandler(
             return Result.Success(unlogResult.Value.Id);
         }
 
-        var logResult = habit.Log(today, request.Note);
+        // Only advance DueDate when logging today or future-adjacent (not past overdue instances)
+        var shouldAdvanceDueDate = targetDate >= today;
+        var logResult = habit.Log(targetDate, request.Note, advanceDueDate: shouldAdvanceDueDate);
 
         if (logResult.IsFailure)
             return Result.Failure<Guid>(logResult.Error);
