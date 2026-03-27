@@ -133,6 +133,12 @@ public class GetCalendarEventsQueryHandler(
                     }
                 }
 
+                // Auto-add default reminder for timed events with no explicit reminders
+                if (reminders.Count == 0 && startTime is not null)
+                {
+                    reminders.Add(AppConstants.DefaultReminderMinutes);
+                }
+
                 items.Add(new CalendarEventItem(
                     ev.Id,
                     ev.Summary,
