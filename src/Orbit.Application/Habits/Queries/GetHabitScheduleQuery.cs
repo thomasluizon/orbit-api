@@ -64,7 +64,8 @@ public record HabitScheduleChildItem(
     IReadOnlyList<HabitScheduleChildItem> Children,
     bool HasSubHabits,
     int? FlexibleTarget,
-    int? FlexibleCompleted);
+    int? FlexibleCompleted,
+    bool IsLoggedInRange);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -306,6 +307,8 @@ public class GetHabitScheduleQueryHandler(
                 return true;
             if (!child.IsCompleted && !child.IsBadHabit && !child.IsFlexible && child.DueDate < dateFrom)
                 return true;
+            if (child.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo))
+                return true;
             if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo))
                 return true;
         }
@@ -327,7 +330,8 @@ public class GetHabitScheduleQueryHandler(
                 .Where(c => HabitScheduleService.GetScheduledDates(c, df, dt).Count > 0
                     || c.IsCompleted
                     || (!c.IsCompleted && !c.IsBadHabit && !c.IsFlexible && c.DueDate < df)
-                    || HasAnyDescendantDue(c.Id, lookup, df, dt));
+                    || HasAnyDescendantDue(c.Id, lookup, df, dt)
+                    || c.Logs.Any(l => l.Date >= df && l.Date <= dt));
         }
 
         return children
@@ -342,13 +346,16 @@ public class GetHabitScheduleQueryHandler(
                     ft = c.FrequencyQuantity ?? 1;
                     fc = HabitScheduleService.GetCompletedInWindow(c, referenceDate.Value, c.Logs);
                 }
+                var isLoggedInRange = dateFrom.HasValue && dateTo.HasValue
+                    && c.Logs.Any(l => l.Date >= dateFrom.Value && l.Date <= dateTo.Value);
+
                 return new HabitScheduleChildItem(
                     c.Id, c.Title, c.Description,
                     c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
                     c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
                     c.Position, c.ChecklistItems, MapTags(c),
                     MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate),
-                    lookup[c.Id].Any(), ft, fc);
+                    lookup[c.Id].Any(), ft, fc, isLoggedInRange);
             })
             .ToList();
     }
