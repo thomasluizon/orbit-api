@@ -1,13 +1,14 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record VerifyCodeCommand(string Email, string Code, string Language = "en")
+public record VerifyCodeCommand(string Email, string Code, string Language = "en", string? ReferralCode = null)
     : IRequest<Result<LoginResponse>>;
 
 public class VerifyCodeCommandHandler(
@@ -15,7 +16,8 @@ public class VerifyCodeCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     ITokenService tokenService,
-    IEmailService emailService) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    IEmailService emailService,
+    IMediator mediator) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -70,6 +72,19 @@ public class VerifyCodeCommandHandler(
             user.SetLanguage(request.Language);
             await userRepository.AddAsync(user, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        // Process referral code for new users (fire and forget -- don't fail login)
+        if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
+        {
+            try
+            {
+                await mediator.Send(new ProcessReferralCodeCommand(user.Id, request.ReferralCode), cancellationToken);
+            }
+            catch
+            {
+                // Silently ignore referral processing failures
+            }
         }
 
         // Cancel deactivation if user was deactivated

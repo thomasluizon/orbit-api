@@ -12,4 +12,10 @@ public static class ErrorMessages
     public const string HabitNotOwned = "Habit does not belong to this user.";
     public const string GoalNotFound = "Goal not found.";
     public const string GoalNotOwned = "Goal does not belong to this user.";
+    public const string ReferralNotFound = "Referral not found.";
+    public const string InvalidReferralCode = "Invalid referral code.";
+    public const string ReferralCapReached = "Maximum referral limit reached.";
+    public const string SelfReferral = "You cannot refer yourself.";
+    public const string AlreadyReferred = "This account was already referred.";
+    public const string AchievementNotFound = "Achievement not found.";
 }

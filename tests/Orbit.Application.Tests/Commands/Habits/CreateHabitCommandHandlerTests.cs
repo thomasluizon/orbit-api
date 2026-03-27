@@ -16,6 +16,7 @@ public class CreateHabitCommandHandlerTests
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CreateHabitCommandHandler _handler;
@@ -26,7 +27,7 @@ public class CreateHabitCommandHandlerTests
     public CreateHabitCommandHandlerTests()
     {
         _handler = new CreateHabitCommandHandler(
-            _habitRepo, _tagRepo, _userDateService, _payGate, _unitOfWork, _cache);
+            _habitRepo, _tagRepo, _userDateService, _payGate, _gamificationService, _unitOfWork, _cache);
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());

@@ -14,6 +14,7 @@ public record UpdateGoalStatusCommand(
 
 public class UpdateGoalStatusCommandHandler(
     IGenericRepository<Goal> goalRepository,
+    IGamificationService gamificationService,
     IUnitOfWork unitOfWork) : IRequestHandler<UpdateGoalStatusCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalStatusCommand request, CancellationToken cancellationToken)
@@ -36,6 +37,16 @@ public class UpdateGoalStatusCommandHandler(
         if (result.IsFailure) return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (request.NewStatus == GoalStatus.Completed)
+        {
+            try
+            {
+                await gamificationService.ProcessGoalCompleted(request.UserId, cancellationToken);
+            }
+            catch { /* gamification failure should not block goal status update */ }
+        }
+
         return Result.Success();
     }
 }

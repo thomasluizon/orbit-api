@@ -92,6 +92,7 @@ public class CreateHabitCommandHandler(
     IGenericRepository<Tag> tagRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
+    IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
@@ -168,6 +169,13 @@ public class CreateHabitCommandHandler(
         await habitRepository.AddAsync(habit, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Gamification: process habit creation
+        try
+        {
+            await gamificationService.ProcessHabitCreated(request.UserId, cancellationToken);
+        }
+        catch { /* gamification failure should not block habit creation */ }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
