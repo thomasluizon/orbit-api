@@ -68,7 +68,7 @@ public class AuthCommandHandlerTests
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
             .Returns("jwt-token");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -85,7 +85,7 @@ public class AuthCommandHandlerTests
     {
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService);
         var command = new VerifyCodeCommand(TestEmail, "999999");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -105,7 +105,7 @@ public class AuthCommandHandlerTests
         _cache.Set($"verify:{TestEmail}", entry,
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -126,7 +126,7 @@ public class AuthCommandHandlerTests
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
             .Returns("jwt-token");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -145,7 +145,7 @@ public class AuthCommandHandlerTests
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
             .Returns("jwt-token");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService);
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);

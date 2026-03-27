@@ -2,14 +2,13 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Auth.Queries;
-using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record GoogleAuthCommand(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null)
+public record GoogleAuthCommand(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null)
     : IRequest<Result<LoginResponse>>;
 
 public class GoogleAuthCommandHandler(
@@ -17,8 +16,7 @@ public class GoogleAuthCommandHandler(
     IUnitOfWork unitOfWork,
     ITokenService tokenService,
     IHttpClientFactory httpClientFactory,
-    IEmailService emailService,
-    IMediator mediator) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
+    IEmailService emailService) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
     {
@@ -54,8 +52,6 @@ public class GoogleAuthCommandHandler(
             u => u.Email.ToLower() == email.ToLower(),
             cancellationToken: cancellationToken);
 
-        var isNewUser = user is null;
-
         if (user is null)
         {
             var createResult = User.Create(name, email);
@@ -79,19 +75,6 @@ public class GoogleAuthCommandHandler(
                     // Silently ignore email failures - don't block authentication
                 }
             }, CancellationToken.None);
-        }
-
-        // Process referral code for new users (fire and forget -- don't fail login)
-        if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
-        {
-            try
-            {
-                await mediator.Send(new ProcessReferralCodeCommand(user.Id, request.ReferralCode), cancellationToken);
-            }
-            catch
-            {
-                // Silently ignore referral processing failures
-            }
         }
 
         // Cancel deactivation if user was deactivated

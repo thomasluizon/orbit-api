@@ -16,7 +16,6 @@ public record CreateGoalCommand(
 
 public class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
-    IGamificationService gamificationService,
     IUnitOfWork unitOfWork) : IRequestHandler<CreateGoalCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
@@ -36,13 +35,6 @@ public class CreateGoalCommandHandler(
         var goal = goalResult.Value;
         await goalRepository.AddAsync(goal, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Gamification: process goal creation
-        try
-        {
-            await gamificationService.ProcessGoalCreated(request.UserId, cancellationToken);
-        }
-        catch { /* gamification failure should not block goal creation */ }
 
         return Result.Success(goal.Id);
     }

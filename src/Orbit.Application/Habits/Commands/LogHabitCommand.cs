@@ -2,7 +2,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
-using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -34,10 +33,8 @@ public class LogHabitCommandHandler(
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
-    IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache,
-    IMediator mediator) : IRequestHandler<LogHabitCommand, Result<Guid>>
+    IMemoryCache cache) : IRequestHandler<LogHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
     {
@@ -92,24 +89,7 @@ public class LogHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Gamification: process habit completion (fire-and-forget style, don't fail the log)
-        try
-        {
-            await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
-        }
-        catch { /* gamification failure should not block habit logging */ }
-
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
-
-        // Check referral completion (fire and forget -- don't fail the log)
-        try
-        {
-            await mediator.Send(new CheckReferralCompletionCommand(request.UserId), cancellationToken);
-        }
-        catch
-        {
-            // Silently ignore -- referral is secondary to habit logging
-        }
 
         return Result.Success(logResult.Value.Id);
     }

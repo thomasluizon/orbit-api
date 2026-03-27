@@ -89,18 +89,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "MaxTagsPerHabit",
                             Description = "Maximum number of tags per habit",
                             Value = "5"
-                        },
-                        new
-                        {
-                            Key = "ReferralRewardDays",
-                            Description = "Days of Pro added per successful referral",
-                            Value = "10"
-                        },
-                        new
-                        {
-                            Key = "MaxReferrals",
-                            Description = "Maximum successful referrals per user",
-                            Value = "10"
                         });
                 });
 
@@ -362,40 +350,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("PushSubscriptions");
                 });
 
-            modelBuilder.Entity("Orbit.Domain.Entities.Referral", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ReferredUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ReferrerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("RewardGrantedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReferredUserId")
-                        .IsUnique();
-
-                    b.HasIndex("ReferrerId");
-
-                    b.ToTable("Referrals");
-                });
-
             modelBuilder.Entity("Orbit.Domain.Entities.SentReminder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -528,9 +482,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Language")
                         .HasColumnType("text");
 
-                    b.Property<int>("Level")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -540,12 +491,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<DateTime?>("PlanExpiresAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ReferralCode")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("ReferredByUserId")
-                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("ScheduledDeletionAt")
                         .HasColumnType("timestamp with time zone");
@@ -562,9 +507,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("TimeZone")
                         .HasColumnType("text");
 
-                    b.Property<int>("TotalXp")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("TrialEndsAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -576,38 +518,7 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.HasIndex("ReferralCode")
-                        .IsUnique()
-                        .HasFilter("\"ReferralCode\" IS NOT NULL");
-
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.UserAchievement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AchievementId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("EarnedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId", "AchievementId")
-                        .IsUnique();
-
-                    b.ToTable("UserAchievements");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.UserFact", b =>

@@ -21,8 +21,7 @@ public record GoalDto(
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
     decimal ProgressPercentage,
-    List<LinkedHabitDto> LinkedHabits,
-    string? TrackingStatus);
+    List<LinkedHabitDto> LinkedHabits);
 
 public record PaginatedGoalResult(
     IReadOnlyList<GoalDto> Items,
@@ -38,8 +37,7 @@ public record GetGoalsQuery(
     int PageSize = 50) : IRequest<PaginatedGoalResult>;
 
 public class GetGoalsQueryHandler(
-    IGenericRepository<Goal> goalRepository,
-    IUserDateService userDateService) : IRequestHandler<GetGoalsQuery, PaginatedGoalResult>
+    IGenericRepository<Goal> goalRepository) : IRequestHandler<GetGoalsQuery, PaginatedGoalResult>
 {
     public async Task<PaginatedGoalResult> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
@@ -47,8 +45,6 @@ public class GetGoalsQueryHandler(
             g => g.UserId == request.UserId,
             q => q.Include(g => g.Habits),
             cancellationToken);
-
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         IEnumerable<Goal> filtered = allGoals;
 
@@ -66,38 +62,15 @@ public class GetGoalsQueryHandler(
         var items = ordered
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(g => MapToDto(g, userToday))
+            .Select(MapToDto)
             .ToList();
 
         return new PaginatedGoalResult(items, request.Page, request.PageSize, totalCount, totalPages);
     }
 
-    private static GoalDto MapToDto(Goal g, DateOnly userToday) => new(
+    private static GoalDto MapToDto(Goal g) => new(
         g.Id, g.Title, g.Description, g.TargetValue, g.CurrentValue,
         g.Unit, g.Status, g.Deadline, g.Position, g.CreatedAtUtc, g.CompletedAtUtc,
         g.TargetValue > 0 ? Math.Min(100, Math.Round(g.CurrentValue / g.TargetValue * 100, 1)) : 0,
-        g.Habits.Select(h => new LinkedHabitDto(h.Id, h.Title)).ToList(),
-        ComputeSimpleTrackingStatus(g, userToday));
-
-    private static string? ComputeSimpleTrackingStatus(Goal goal, DateOnly userToday)
-    {
-        if (goal.Status == GoalStatus.Completed) return "completed";
-        if (goal.Status == GoalStatus.Abandoned) return null;
-        if (!goal.Deadline.HasValue) return "no_deadline";
-
-        var daysToDeadline = goal.Deadline.Value.DayNumber - userToday.DayNumber;
-        if (daysToDeadline < 0) return "behind"; // overdue
-
-        var creationDate = DateOnly.FromDateTime(goal.CreatedAtUtc);
-        var totalDays = Math.Max(1, goal.Deadline.Value.DayNumber - creationDate.DayNumber);
-        var elapsedDays = Math.Max(1, userToday.DayNumber - creationDate.DayNumber);
-        var expectedProgress = (decimal)elapsedDays / totalDays * 100;
-        var actualProgress = goal.TargetValue > 0
-            ? goal.CurrentValue / goal.TargetValue * 100
-            : 0;
-
-        if (actualProgress >= expectedProgress) return "on_track";
-        if (actualProgress >= expectedProgress * 0.8m) return "at_risk";
-        return "behind";
-    }
+        g.Habits.Select(h => new LinkedHabitDto(h.Id, h.Title)).ToList());
 }

@@ -11,8 +11,8 @@ namespace Orbit.Api.Controllers;
 public class AuthController(IMediator mediator, ILogger<AuthController> logger) : ControllerBase
 {
     public record SendCodeRequest(string Email, string Language = "en");
-    public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
-    public record GoogleAuthRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
+    public record VerifyCodeRequest(string Email, string Code, string Language = "en");
+    public record GoogleAuthRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null);
     public record ConfirmDeletionRequest(string Code);
 
     [HttpPost("send-code")]
@@ -38,7 +38,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
         [FromBody] VerifyCodeRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new VerifyCodeCommand(request.Email, request.Code, request.Language, request.ReferralCode);
+        var command = new VerifyCodeCommand(request.Email, request.Code, request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
@@ -56,7 +56,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
         [FromBody] GoogleAuthRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new GoogleAuthCommand(request.AccessToken, request.Language, request.GoogleAccessToken, request.GoogleRefreshToken, request.ReferralCode);
+        var command = new GoogleAuthCommand(request.AccessToken, request.Language, request.GoogleAccessToken, request.GoogleRefreshToken);
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
