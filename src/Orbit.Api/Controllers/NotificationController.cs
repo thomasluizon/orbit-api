@@ -109,6 +109,20 @@ public class NotificationController(
             return BadRequest(new { error = result.Error });
 
         await dbContext.PushSubscriptions.AddAsync(result.Value, ct);
+
+        // Enforce per-user subscription cap: keep only the 5 most recent subscriptions
+        const int maxSubscriptionsPerUser = 5;
+        var userSubs = await dbContext.PushSubscriptions
+            .Where(s => s.UserId == userId)
+            .OrderByDescending(s => s.CreatedAtUtc)
+            .ToListAsync(ct);
+
+        if (userSubs.Count >= maxSubscriptionsPerUser)
+        {
+            var toRemove = userSubs.Skip(maxSubscriptionsPerUser - 1);
+            dbContext.PushSubscriptions.RemoveRange(toRemove);
+        }
+
         await dbContext.SaveChangesAsync(ct);
 
         return Ok();

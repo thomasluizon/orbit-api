@@ -72,8 +72,12 @@ public class GoalDeadlineNotificationService(
             {
                 if (daysUntilDeadline != daysBefore) continue;
 
-                // Check if we already sent a notification for this goal + daysBefore
-                // Use the Notification table to check for duplicates (by checking title + date match)
+                // Check if we already sent a notification for this goal + daysBefore.
+                // TODO: The Url field is being repurposed as a deduplication key here (notificationKey).
+                // This is a hack -- the Notification entity's Url field was designed to hold a navigation URL,
+                // not an opaque string identifier. This should be replaced with a proper SentGoalDeadlineNotification
+                // entity (similar to SentReminder/SentSlipAlert) that tracks (GoalId, DaysBefore) with a unique
+                // constraint, eliminating the need to abuse the Url column for dedup.
                 var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
                 var alreadySent = await dbContext.Notifications
                     .AnyAsync(n => n.UserId == goal.UserId && n.Url == notificationKey, ct);

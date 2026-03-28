@@ -35,11 +35,11 @@ public class ActiveHabitsSection : IPromptSection
             foreach (var habit in todayHabits)
             {
                 var label = habit.DueDate < context.UserToday!.Value ? "OVERDUE" : "TODAY";
-                sb.AppendLine($"- \"{habit.Title}\" | {habit.Id} | {label}");
+                sb.AppendLine($"- \"{SanitizeTitle(habit.Title)}\" | {habit.Id} | {label}");
 
                 if (habit.Goals.Count > 0)
                 {
-                    var goalNames = string.Join(", ", habit.Goals.Select(g => g.Title));
+                    var goalNames = string.Join(", ", habit.Goals.Select(g => SanitizeTitle(g.Title)));
                     sb.AppendLine($"  Goals: {goalNames}");
                 }
 
@@ -62,8 +62,20 @@ public class ActiveHabitsSection : IPromptSection
             .OrderBy(h => h.Position);
         foreach (var child in children)
         {
-            sb.AppendLine($"{indent}- \"{child.Title}\" | {child.Id}");
+            sb.AppendLine($"{indent}- \"{SanitizeTitle(child.Title)}\" | {child.Id}");
             AppendChildren(sb, allHabits, child.Id, depth + 1);
         }
+    }
+
+    /// <summary>
+    /// Strips control characters (newlines, tabs, etc.) and truncates to 100 chars
+    /// to prevent prompt injection via malicious habit titles.
+    /// </summary>
+    private static string SanitizeTitle(string title)
+    {
+        // Remove control characters (newlines, tabs, carriage returns, etc.)
+        var sanitized = new string(title.Where(c => !char.IsControl(c)).ToArray());
+        // Truncate to 100 characters
+        return sanitized.Length > 100 ? sanitized[..100] : sanitized;
     }
 }
