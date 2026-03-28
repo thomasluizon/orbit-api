@@ -115,6 +115,12 @@ public sealed class GeminiRetrospectiveService(
             _ => "English"
         };
 
+        var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = language.ToLowerInvariant() switch
+        {
+            "pt-br" or "pt" => ("Destaques", "Oportunidades Perdidas", "Tendencias", "Sugestao"),
+            _ => ("Highlights", "Missed Opportunities", "Trends", "Suggestion")
+        };
+
         var totalDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
 
         var habitLines = new List<string>();
@@ -176,10 +182,10 @@ public sealed class GeminiRetrospectiveService(
             {habitSection}
 
             Write a retrospective with these sections (use these exact headings):
-            1. **Highlights** -- What went well, milestones reached, strong completion rates
-            2. **Missed Opportunities** -- What was skipped or neglected, patterns of avoidance
-            3. **Trends** -- Improving or declining patterns, consistency observations
-            4. **Suggestion** -- One specific, actionable tip for the next period
+            1. **{highlightsHeading}** -- What went well, milestones reached, strong completion rates
+            2. **{missedHeading}** -- What was skipped or neglected, patterns of avoidance
+            3. **{trendsHeading}** -- Improving or declining patterns, consistency observations
+            4. **{suggestionHeading}** -- One specific, actionable tip for the next period
 
             Rules:
             - Be honest but encouraging -- celebrate real wins, acknowledge real gaps
