@@ -78,11 +78,18 @@ public sealed class EncryptionService : IEncryptionService
         if (!_isConfigured)
             return ciphertextBase64;
 
-        // Deterministic check: only values we encrypted have the prefix
-        if (!ciphertextBase64.StartsWith(EncPrefix))
-            return ciphertextBase64;
+        // New format: prefixed with "enc:"
+        if (ciphertextBase64.StartsWith(EncPrefix))
+            return DecryptRaw(ciphertextBase64[EncPrefix.Length..]);
 
-        var combined = Convert.FromBase64String(ciphertextBase64[EncPrefix.Length..]);
+        // Legacy format: encrypted without prefix (migration transition).
+        // Try to decrypt -- if it fails, it's genuinely plaintext.
+        return TryDecryptLegacy(ciphertextBase64);
+    }
+
+    private string DecryptRaw(string base64)
+    {
+        var combined = Convert.FromBase64String(base64);
 
         if (combined.Length < NonceSize + TagSize)
             throw new CryptographicException("Ciphertext is too short to contain nonce and tag.");
@@ -97,6 +104,23 @@ public sealed class EncryptionService : IEncryptionService
         aes.Decrypt(nonce, ciphertext, tag, plaintext);
 
         return Encoding.UTF8.GetString(plaintext);
+    }
+
+    private string TryDecryptLegacy(string value)
+    {
+        try
+        {
+            var bytes = Convert.FromBase64String(value);
+            if (bytes.Length < NonceSize + TagSize)
+                return value;
+
+            return DecryptRaw(value);
+        }
+        catch
+        {
+            // Not valid Base64 or decryption failed -- it's plaintext
+            return value;
+        }
     }
 
     public string? EncryptNullable(string? plaintext)
