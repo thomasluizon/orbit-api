@@ -4,6 +4,8 @@ public static class AppConstants
 {
     public const int MaxSubHabits = 20;
     public const int MaxHabitTitleLength = 200;
+    public const int MaxHabitDescriptionLength = 2000;
+    public const int MaxChecklistItemTextLength = 500;
     public const int MaxHabitDepth = 5;
     public const int MaxTagsPerHabit = 5;
     public const int MaxUserFacts = 50;

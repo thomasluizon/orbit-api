@@ -1,7 +1,9 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Api.Middleware;
@@ -227,6 +229,21 @@ builder.Services.AddCors(options =>
     });
 });
 
+// --- Rate Limiting ---
+// NOTE: IMemoryCache-backed rate limiting is not shared across replicas.
+// For multi-replica deployments, replace with a distributed store (e.g., Redis).
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", limiterOptions =>
+    {
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.PermitLimit = 5;
+        limiterOptions.QueueLimit = 0;
+        limiterOptions.AutoReplenishment = true;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 // --- Request Size Limit ---
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -263,8 +280,11 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    // Accept only a single forwarded hop. KnownProxies should be configured per deployment environment.
+    ForwardLimit = 1
 });
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {

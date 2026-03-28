@@ -63,13 +63,13 @@ public class BulkDeleteHabitsCommandHandler(
                     Status: BulkItemStatus.Success,
                     HabitId: habitId));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 results.Add(new BulkDeleteItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,
                     HabitId: habitId,
-                    Error: ex.Message));
+                    Error: "An error occurred processing this item"));
             }
         }
 

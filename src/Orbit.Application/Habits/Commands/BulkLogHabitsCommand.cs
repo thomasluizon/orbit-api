@@ -136,13 +136,13 @@ public class BulkLogHabitsCommandHandler(
                     HabitId: habitId,
                     LogId: logResult.Value.Id));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 results.Add(new BulkLogItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,
                     HabitId: habitId,
-                    Error: ex.Message));
+                    Error: "An error occurred processing this item"));
             }
         }
 

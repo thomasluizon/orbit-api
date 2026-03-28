@@ -132,7 +132,7 @@ public class NotificationController(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Test push failed for user {UserId}", userId);
-            return Ok(new { subscriptionCount, status = "failed", error = ex.Message });
+            return Ok(new { subscriptionCount, status = "failed", error = "Failed to send push notification" });
         }
     }
 
