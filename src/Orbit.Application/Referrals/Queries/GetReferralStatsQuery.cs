@@ -13,7 +13,8 @@ public record ReferralStatsResponse(
     int SuccessfulReferrals,
     int PendingReferrals,
     int MaxReferrals,
-    int RewardDays);
+    string RewardType,
+    int DiscountPercent);
 
 public record GetReferralStatsQuery(Guid UserId) : IRequest<Result<ReferralStatsResponse>>;
 
@@ -37,8 +38,6 @@ public class GetReferralStatsQueryHandler(
 
         var maxReferrals = await appConfigService.GetAsync(
             "MaxReferrals", AppConstants.DefaultMaxReferrals, cancellationToken);
-        var rewardDays = await appConfigService.GetAsync(
-            "ReferralRewardDays", AppConstants.DefaultReferralRewardDays, cancellationToken);
 
         var referralLink = user.ReferralCode is not null
             ? $"https://app.useorbit.org/r/{user.ReferralCode}"
@@ -50,6 +49,7 @@ public class GetReferralStatsQueryHandler(
             successful,
             pending,
             maxReferrals,
-            rewardDays));
+            "discount",
+            AppConstants.ReferralDiscountPercent));
     }
 }

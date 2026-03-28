@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Migrations
+namespace Orbit.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260328152918_ChangeReferralToDiscountCoupon")]
+    partial class ChangeReferralToDiscountCoupon
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -354,6 +357,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Endpoint")
+                        .IsUnique();
+
                     b.HasIndex("UserId");
 
                     b.ToTable("PushSubscriptions");
@@ -501,10 +507,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("EmailHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("GoogleAccessToken")
                         .HasColumnType("text");
 
@@ -577,7 +579,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EmailHash")
+                    b.HasIndex("Email")
                         .IsUnique();
 
                     b.HasIndex("ReferralCode")

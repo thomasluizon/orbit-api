@@ -13,6 +13,7 @@ public class ProcessReferralCodeCommandHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Referral> referralRepository,
     IAppConfigService appConfigService,
+    IReferralRewardService referralRewardService,
     IUnitOfWork unitOfWork) : IRequestHandler<ProcessReferralCodeCommand, Result>
 {
     public async Task<Result> Handle(ProcessReferralCodeCommand request, CancellationToken cancellationToken)
@@ -51,9 +52,10 @@ public class ProcessReferralCodeCommandHandler(
         var referral = Referral.Create(referrer.Id, newUser.Id);
         await referralRepository.AddAsync(referral, cancellationToken);
 
-        // Give referred user bonus trial days on top of the default 7-day trial
-        var rewardDays = await appConfigService.GetAsync("ReferralRewardDays", AppConstants.DefaultReferralRewardDays, cancellationToken);
-        newUser.ExtendTrial(rewardDays);
+        // Create a 10% discount coupon for the referred user
+        var promoCodeId = await referralRewardService.CreateReferralCouponAsync(
+            newUser.Id, cancellationToken);
+        newUser.SetReferralCoupon(promoCodeId);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

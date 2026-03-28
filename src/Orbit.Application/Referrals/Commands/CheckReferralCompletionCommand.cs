@@ -15,9 +15,8 @@ public class CheckReferralCompletionCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Notification> notificationRepository,
-    IAppConfigService appConfigService,
     IPushNotificationService pushNotificationService,
-    ISubscriptionRewardService subscriptionRewardService,
+    IReferralRewardService referralRewardService,
     IUnitOfWork unitOfWork) : IRequestHandler<CheckReferralCompletionCommand, Result>
 {
     public async Task<Result> Handle(CheckReferralCompletionCommand request, CancellationToken cancellationToken)
@@ -71,27 +70,17 @@ public class CheckReferralCompletionCommandHandler(
         // Mark referral as completed
         trackedReferral.MarkCompleted();
 
-        // Grant reward to referrer
-        var rewardDays = await appConfigService.GetAsync(
-            "ReferralRewardDays", AppConstants.DefaultReferralRewardDays, cancellationToken);
-
+        // Grant discount coupon to referrer
         var referrer = await userRepository.FindOneTrackedAsync(
             u => u.Id == trackedReferral.ReferrerId,
             cancellationToken: cancellationToken);
 
         if (referrer is not null)
         {
-            if (referrer.IsPro && !string.IsNullOrEmpty(referrer.StripeSubscriptionId))
-            {
-                // Pro user: extend Stripe subscription trial_end to delay next charge
-                await subscriptionRewardService.ExtendSubscriptionAsync(
-                    referrer.StripeSubscriptionId, rewardDays, cancellationToken);
-            }
-            else
-            {
-                // Free/Trial user: extend trial period
-                referrer.ExtendTrial(rewardDays);
-            }
+            // Create a 10% discount coupon for the referrer (service handles Stripe customer creation)
+            var promoCodeId = await referralRewardService.CreateReferralCouponAsync(
+                referrer.Id, cancellationToken);
+            referrer.SetReferralCoupon(promoCodeId);
         }
 
         trackedReferral.MarkRewarded();
@@ -103,7 +92,7 @@ public class CheckReferralCompletionCommandHandler(
             var notification = Notification.Create(
                 referrer.Id,
                 "Referral Completed!",
-                $"Your friend joined Orbit and you earned {rewardDays} extra days of Pro!",
+                "Your friend joined Orbit and you earned a 10% discount coupon for Pro!",
                 "/profile");
             await notificationRepository.AddAsync(notification, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -115,7 +104,7 @@ public class CheckReferralCompletionCommandHandler(
                     await pushNotificationService.SendToUserAsync(
                         referrer.Id,
                         "Referral Completed!",
-                        $"You earned {rewardDays} extra days of Pro!",
+                        "You earned a 10% discount coupon for Pro!",
                         "/profile",
                         CancellationToken.None);
                 }

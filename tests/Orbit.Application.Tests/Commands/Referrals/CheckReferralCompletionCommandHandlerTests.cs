@@ -16,9 +16,8 @@ public class CheckReferralCompletionCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
-    private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
     private readonly IPushNotificationService _pushNotification = Substitute.For<IPushNotificationService>();
-    private readonly ISubscriptionRewardService _subscriptionReward = Substitute.For<ISubscriptionRewardService>();
+    private readonly IReferralRewardService _referralReward = Substitute.For<IReferralRewardService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly CheckReferralCompletionCommandHandler _handler;
 
@@ -29,11 +28,11 @@ public class CheckReferralCompletionCommandHandlerTests
     {
         _handler = new CheckReferralCompletionCommandHandler(
             _userRepo, _referralRepo, _habitRepo, _habitLogRepo,
-            _notificationRepo, _appConfig, _pushNotification,
-            _subscriptionReward, _unitOfWork);
+            _notificationRepo, _pushNotification,
+            _referralReward, _unitOfWork);
 
-        _appConfig.GetAsync("ReferralRewardDays", AppConstants.DefaultReferralRewardDays, Arg.Any<CancellationToken>())
-            .Returns(AppConstants.DefaultReferralRewardDays);
+        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns("promo_test123");
     }
 
     private static User CreateReferrer()
@@ -160,17 +159,14 @@ public class CheckReferralCompletionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ThresholdMet_FreeReferrer_CompletesAndExtendsReferrerTrial()
+    public async Task Handle_ThresholdMet_CreatesCouponForReferrer()
     {
         var referral = CreatePendingReferral();
         var referredUser = CreateReferredUser();
         var referrer = CreateReferrer();
-        // Referrer is free/trial user (default state)
         SetupPendingReferral(referral);
         SetupReferredAndReferrerUsers(referredUser, referrer);
         SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
-
-        var referrerTrialBefore = referrer.TrialEndsAt!.Value;
 
         var command = new CheckReferralCompletionCommand(ReferredUserId);
 
@@ -180,17 +176,15 @@ public class CheckReferralCompletionCommandHandlerTests
         referral.Status.Should().Be(ReferralStatus.Rewarded);
         referral.CompletedAtUtc.Should().NotBeNull();
         referral.RewardGrantedAtUtc.Should().NotBeNull();
-        // Free user gets trial extension
-        referrer.TrialEndsAt!.Value.Should().BeCloseTo(
-            referrerTrialBefore.AddDays(AppConstants.DefaultReferralRewardDays),
-            TimeSpan.FromSeconds(2));
-        await _subscriptionReward.DidNotReceive().ExtendSubscriptionAsync(
-            Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        // Coupon should be created for the referrer
+        await _referralReward.Received(1).CreateReferralCouponAsync(
+            ReferrerId, Arg.Any<CancellationToken>());
+        referrer.ReferralCouponId.Should().Be("promo_test123");
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ThresholdMet_ProReferrer_UsesSubscriptionService()
+    public async Task Handle_ThresholdMet_ProReferrer_StillGetsCoupon()
     {
         var referral = CreatePendingReferral();
         var referredUser = CreateReferredUser();
@@ -207,8 +201,9 @@ public class CheckReferralCompletionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Rewarded);
-        await _subscriptionReward.Received(1).ExtendSubscriptionAsync(
-            "sub_test123", AppConstants.DefaultReferralRewardDays, Arg.Any<CancellationToken>());
+        // Pro users also get a coupon (same behavior for all users now)
+        await _referralReward.Received(1).CreateReferralCouponAsync(
+            ReferrerId, Arg.Any<CancellationToken>());
     }
 
     [Fact]

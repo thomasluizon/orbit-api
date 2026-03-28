@@ -24,8 +24,6 @@ public class GetReferralStatsQueryHandlerTests
 
         _appConfig.GetAsync("MaxReferrals", AppConstants.DefaultMaxReferrals, Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultMaxReferrals);
-        _appConfig.GetAsync("ReferralRewardDays", AppConstants.DefaultReferralRewardDays, Arg.Any<CancellationToken>())
-            .Returns(AppConstants.DefaultReferralRewardDays);
     }
 
     private static User CreateTestUser()
@@ -50,7 +48,7 @@ public class GetReferralStatsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NoReferrals_ReturnsZeroCounts()
+    public async Task Handle_NoReferrals_ReturnsZeroCountsWithDiscountInfo()
     {
         var user = CreateTestUser();
         user.SetReferralCode("CODE1234");
@@ -70,7 +68,8 @@ public class GetReferralStatsQueryHandlerTests
         result.Value.SuccessfulReferrals.Should().Be(0);
         result.Value.PendingReferrals.Should().Be(0);
         result.Value.MaxReferrals.Should().Be(AppConstants.DefaultMaxReferrals);
-        result.Value.RewardDays.Should().Be(AppConstants.DefaultReferralRewardDays);
+        result.Value.RewardType.Should().Be("discount");
+        result.Value.DiscountPercent.Should().Be(AppConstants.ReferralDiscountPercent);
     }
 
     [Fact]

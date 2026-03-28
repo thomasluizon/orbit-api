@@ -42,6 +42,7 @@ public class User : Entity
     public Guid? ReferredByUserId { get; private set; }
     public int TotalXp { get; private set; } = 0;
     public int Level { get; private set; } = 1;
+    public string? ReferralCouponId { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -201,6 +202,8 @@ public class User : Entity
         else
             TrialEndsAt = TrialEndsAt.Value.AddDays(days);
     }
+
+    public void SetReferralCoupon(string? couponId) => ReferralCouponId = couponId;
 
     public void AddXp(int amount)
     {
