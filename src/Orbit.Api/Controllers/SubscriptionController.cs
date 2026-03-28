@@ -313,7 +313,8 @@ public class SubscriptionController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error processing Stripe webhook event {Type}", stripeEvent.Type);
-            // Still return 200 to prevent Stripe from retrying
+            // Return 500 so Stripe retries the webhook on business logic failures
+            return StatusCode(500);
         }
 
         return Ok();

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -17,7 +18,8 @@ public class CheckReferralCompletionCommandHandler(
     IGenericRepository<Notification> notificationRepository,
     IPushNotificationService pushNotificationService,
     IReferralRewardService referralRewardService,
-    IUnitOfWork unitOfWork) : IRequestHandler<CheckReferralCompletionCommand, Result>
+    IUnitOfWork unitOfWork,
+    ILogger<CheckReferralCompletionCommandHandler> logger) : IRequestHandler<CheckReferralCompletionCommand, Result>
 {
     public async Task<Result> Handle(CheckReferralCompletionCommand request, CancellationToken cancellationToken)
     {
@@ -93,13 +95,32 @@ public class CheckReferralCompletionCommandHandler(
     /// </summary>
     private async Task GrantCoupon(User user, CancellationToken cancellationToken)
     {
-        var couponId = await referralRewardService.CreateReferralCouponAsync(
-            user.Id, cancellationToken);
+        string couponId;
+        try
+        {
+            couponId = await referralRewardService.CreateReferralCouponAsync(
+                user.Id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to create referral coupon for user {UserId}", user.Id);
+            return;
+        }
 
         if (user.IsPro && !string.IsNullOrEmpty(user.StripeSubscriptionId))
         {
-            await referralRewardService.ApplyCouponToSubscriptionAsync(
-                user.StripeSubscriptionId, couponId, cancellationToken);
+            try
+            {
+                await referralRewardService.ApplyCouponToSubscriptionAsync(
+                    user.StripeSubscriptionId, couponId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to apply referral coupon {CouponId} to subscription {SubscriptionId} for user {UserId}",
+                    couponId, user.StripeSubscriptionId, user.Id);
+                // Fall back to storing coupon for next checkout
+                user.SetReferralCoupon(couponId);
+            }
         }
         else
         {
@@ -131,7 +152,7 @@ public class CheckReferralCompletionCommandHandler(
         _ = Task.Run(async () =>
         {
             try { await pushNotificationService.SendToUserAsync(user.Id, title, body, "/profile", CancellationToken.None); }
-            catch { }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to send referral push notification for user {UserId}", user.Id); }
         }, CancellationToken.None);
     }
 }

@@ -19,7 +19,10 @@ public class StripeCouponRewardService(
             cancellationToken: cancellationToken);
 
         if (user is null)
+        {
+            logger.LogError("User {UserId} not found for referral coupon creation", userId);
             throw new InvalidOperationException($"User {userId} not found for coupon creation");
+        }
 
         var couponService = new CouponService();
         var coupon = await couponService.CreateAsync(new CouponCreateOptions
