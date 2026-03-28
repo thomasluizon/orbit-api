@@ -257,6 +257,7 @@ public class GetHabitScheduleQueryHandler(
             {
                 foreach (var child in lkp[parentId])
                 {
+                    if (child.IsCompleted) continue;
                     if (FuzzyMatcher.FuzzyContains(child.Title, t)) return true;
                     if (HasDescendantMatchingSearch(child.Id, lkp, t)) return true;
                 }
@@ -342,6 +343,7 @@ public class GetHabitScheduleQueryHandler(
         }
         foreach (var child in lookup[h.Id])
         {
+            if (child.IsCompleted) continue;
             if (FuzzyMatcher.FuzzyContains(child.Title, search))
                 matches.Add(new SearchMatchField("child", child.Title));
         }

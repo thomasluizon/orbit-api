@@ -40,16 +40,17 @@ public static class FuzzyMatcher
         if (term.Length <= 2)
             return false;
 
-        var maxDistance = term.Length >= 5 ? 2 : 1;
-
         var searchWords = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var textWords = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
         foreach (var searchWord in searchWords)
         {
+            var maxDistance = searchWord.Length >= 8 ? 2 : 1;
             var wordMatched = false;
             foreach (var textWord in textWords)
             {
+                if (Math.Abs(searchWord.Length - textWord.Length) > maxDistance)
+                    continue;
                 if (LevenshteinDistance(searchWord, textWord) <= maxDistance)
                 {
                     wordMatched = true;
