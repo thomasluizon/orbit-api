@@ -78,6 +78,14 @@ public class EncryptionTests
     }
 
     [Fact]
+    public void Encrypt_OutputStartsWithPrefix()
+    {
+        var encrypted = _encryptionService.Encrypt("test");
+
+        encrypted.Should().StartWith("enc:");
+    }
+
+    [Fact]
     public void Decrypt_PlaintextPassthrough_ReturnsAsIs()
     {
         // Pre-encryption data should pass through without error
@@ -86,6 +94,17 @@ public class EncryptionTests
         var result = _encryptionService.Decrypt(plaintext);
 
         result.Should().Be(plaintext);
+    }
+
+    [Fact]
+    public void Decrypt_LongBase64Plaintext_ReturnsAsIs()
+    {
+        // Values that look like Base64 but aren't encrypted should pass through
+        var url = "https://fcm.googleapis.com/fcm/send/cY2M7GEaPK0:APA91bHxyz";
+
+        var result = _encryptionService.Decrypt(url);
+
+        result.Should().Be(url);
     }
 
     [Fact]

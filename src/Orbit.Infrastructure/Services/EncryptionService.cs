@@ -11,6 +11,7 @@ public sealed class EncryptionService : IEncryptionService
 {
     private const int NonceSize = 12;  // AES-GCM standard nonce size
     private const int TagSize = 16;    // AES-GCM standard tag size
+    private const string EncPrefix = "enc:"; // Deterministic prefix for encrypted values
 
     private readonly byte[]? _key;
     private readonly byte[]? _hmacKey;
@@ -76,7 +77,7 @@ public sealed class EncryptionService : IEncryptionService
         ciphertext.CopyTo(result, NonceSize);
         tag.CopyTo(result, NonceSize + ciphertext.Length);
 
-        return Convert.ToBase64String(result);
+        return EncPrefix + Convert.ToBase64String(result);
     }
 
     public string Decrypt(string ciphertextBase64)
@@ -84,12 +85,11 @@ public sealed class EncryptionService : IEncryptionService
         if (!_isConfigured)
             return ciphertextBase64;
 
-        // Backward compatibility: if the value does not look like Base64 ciphertext,
-        // return it as-is (plaintext passthrough for pre-encryption data)
-        if (!IsEncrypted(ciphertextBase64))
+        // Deterministic check: only values we encrypted have the prefix
+        if (!ciphertextBase64.StartsWith(EncPrefix))
             return ciphertextBase64;
 
-        var combined = Convert.FromBase64String(ciphertextBase64);
+        var combined = Convert.FromBase64String(ciphertextBase64[EncPrefix.Length..]);
 
         if (combined.Length < NonceSize + TagSize)
             throw new CryptographicException("Ciphertext is too short to contain nonce and tag.");
@@ -133,27 +133,4 @@ public sealed class EncryptionService : IEncryptionService
         return Convert.ToHexStringLower(hash);
     }
 
-    /// <summary>
-    /// Checks if a value appears to be encrypted (valid Base64 with minimum length for nonce + tag).
-    /// Used for backward compatibility during migration from plaintext to encrypted data.
-    /// </summary>
-    private static bool IsEncrypted(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return false;
-
-        // Minimum Base64 length for nonce (12) + tag (16) = 28 bytes = ~40 Base64 chars
-        if (value.Length < 40)
-            return false;
-
-        try
-        {
-            var bytes = Convert.FromBase64String(value);
-            return bytes.Length >= NonceSize + TagSize;
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-    }
 }
