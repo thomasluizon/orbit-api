@@ -21,16 +21,14 @@ public class CheckReferralCompletionCommandHandler(
 {
     public async Task<Result> Handle(CheckReferralCompletionCommand request, CancellationToken cancellationToken)
     {
-        // Find pending referral where this user is the referred user
         var pendingReferrals = await referralRepository.FindAsync(
             r => r.ReferredUserId == request.UserId && r.Status == ReferralStatus.Pending,
             cancellationToken: cancellationToken);
 
         var referral = pendingReferrals.FirstOrDefault();
         if (referral is null)
-            return Result.Success(); // No pending referral, nothing to do
+            return Result.Success();
 
-        // Need tracked entity for state changes
         var trackedReferral = await referralRepository.FindOneTrackedAsync(
             r => r.Id == referral.Id,
             cancellationToken: cancellationToken);
@@ -38,7 +36,6 @@ public class CheckReferralCompletionCommandHandler(
         if (trackedReferral is null)
             return Result.Success();
 
-        // Load the referred user to check signup date
         var referredUser = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);
@@ -46,12 +43,9 @@ public class CheckReferralCompletionCommandHandler(
         if (referredUser is null)
             return Result.Success();
 
-        // Check if within the completion window
         if (DateTime.UtcNow > referredUser.CreatedAtUtc.AddDays(AppConstants.ReferralCompletionWindowDays))
-            return Result.Success(); // Window expired, leave as Pending
+            return Result.Success();
 
-        // Count total habit logs for this user
-        // HabitLog doesn't have UserId, so first get user's habit IDs, then count logs
         var userHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId,
             cancellationToken: cancellationToken);
@@ -65,70 +59,79 @@ public class CheckReferralCompletionCommandHandler(
             cancellationToken: cancellationToken);
 
         if (userLogs.Count < AppConstants.ReferralCompletionThreshold)
-            return Result.Success(); // Not enough logs yet
+            return Result.Success();
 
-        // Mark referral as completed
         trackedReferral.MarkCompleted();
 
-        // Grant discount coupon to both referrer and referred user
+        // Grant coupon to referrer
         var referrer = await userRepository.FindOneTrackedAsync(
             u => u.Id == trackedReferral.ReferrerId,
             cancellationToken: cancellationToken);
 
         if (referrer is not null)
-        {
-            var referrerPromoId = await referralRewardService.CreateReferralCouponAsync(
-                referrer.Id, cancellationToken);
-            referrer.SetReferralCoupon(referrerPromoId);
-        }
+            await GrantCoupon(referrer, cancellationToken);
 
-        // Referred user also gets a coupon
-        var referredPromoId = await referralRewardService.CreateReferralCouponAsync(
-            referredUser.Id, cancellationToken);
-        referredUser.SetReferralCoupon(referredPromoId);
+        // Grant coupon to referred user
+        await GrantCoupon(referredUser, cancellationToken);
 
         trackedReferral.MarkRewarded();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Send notifications to both users
+        // Send notifications
         if (referrer is not null)
-        {
-            var isPtReferrer = referrer.Language?.StartsWith("pt") == true;
-            var referrerTitle = isPtReferrer ? "Indicacao Concluida!" : "Referral Completed!";
-            var referrerBody = isPtReferrer
-                ? "Seu amigo comecou a usar o Orbit e voce ganhou um cupom de 10% de desconto no Pro!"
-                : "Your friend joined Orbit and you earned a 10% discount coupon for Pro!";
+            await SendNotification(referrer, isReferrer: true, cancellationToken);
 
-            await notificationRepository.AddAsync(
-                Notification.Create(referrer.Id, referrerTitle, referrerBody, "/profile"), cancellationToken);
-
-            _ = Task.Run(async () =>
-            {
-                try { await pushNotificationService.SendToUserAsync(referrer.Id, referrerTitle, referrerBody, "/profile", CancellationToken.None); }
-                catch { }
-            }, CancellationToken.None);
-        }
-
-        // Notify referred user they earned a coupon too
-        if (referredUser is not null)
-        {
-            var isPtReferred = referredUser.Language?.StartsWith("pt") == true;
-            var referredTitle = isPtReferred ? "Voce ganhou um cupom!" : "You earned a coupon!";
-            var referredBody = isPtReferred
-                ? "Bem-vindo ao Orbit! Voce ganhou um cupom de 10% de desconto no Pro!"
-                : "Welcome to Orbit! You earned a 10% discount coupon for Pro!";
-
-            await notificationRepository.AddAsync(
-                Notification.Create(referredUser.Id, referredTitle, referredBody, "/profile"), cancellationToken);
-
-            _ = Task.Run(async () =>
-            {
-                try { await pushNotificationService.SendToUserAsync(referredUser.Id, referredTitle, referredBody, "/profile", CancellationToken.None); }
-                catch { }
-            }, CancellationToken.None);
-        }
+        await SendNotification(referredUser, isReferrer: false, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// If user is Pro with active subscription, apply coupon to next invoice directly.
+    /// Otherwise, store coupon ID for checkout.
+    /// </summary>
+    private async Task GrantCoupon(User user, CancellationToken cancellationToken)
+    {
+        var couponId = await referralRewardService.CreateReferralCouponAsync(
+            user.Id, cancellationToken);
+
+        if (user.IsPro && !string.IsNullOrEmpty(user.StripeSubscriptionId))
+        {
+            await referralRewardService.ApplyCouponToSubscriptionAsync(
+                user.StripeSubscriptionId, couponId, cancellationToken);
+        }
+        else
+        {
+            user.SetReferralCoupon(couponId);
+        }
+    }
+
+    private async Task SendNotification(User user, bool isReferrer, CancellationToken cancellationToken)
+    {
+        var isPt = user.Language?.StartsWith("pt") == true;
+
+        var (title, body) = isReferrer
+            ? (isPt ? "Indicacao Concluida!" : "Referral Completed!",
+               isPt
+                   ? user.IsPro
+                       ? "Seu amigo comecou a usar o Orbit! 10% de desconto aplicado na sua proxima fatura."
+                       : "Seu amigo comecou a usar o Orbit e voce ganhou um cupom de 10% de desconto no Pro!"
+                   : user.IsPro
+                       ? "Your friend joined Orbit! 10% discount applied to your next invoice."
+                       : "Your friend joined Orbit and you earned a 10% discount coupon for Pro!")
+            : (isPt ? "Voce ganhou um cupom!" : "You earned a coupon!",
+               isPt
+                   ? "Bem-vindo ao Orbit! Voce ganhou um cupom de 10% de desconto no Pro!"
+                   : "Welcome to Orbit! You earned a 10% discount coupon for Pro!");
+
+        await notificationRepository.AddAsync(
+            Notification.Create(user.Id, title, body, "/profile"), cancellationToken);
+
+        _ = Task.Run(async () =>
+        {
+            try { await pushNotificationService.SendToUserAsync(user.Id, title, body, "/profile", CancellationToken.None); }
+            catch { }
+        }, CancellationToken.None);
     }
 }

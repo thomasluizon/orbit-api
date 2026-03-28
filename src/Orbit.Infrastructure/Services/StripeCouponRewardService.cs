@@ -8,7 +8,6 @@ namespace Orbit.Infrastructure.Services;
 
 public class StripeCouponRewardService(
     IGenericRepository<User> userRepository,
-    IUnitOfWork unitOfWork,
     ILogger<StripeCouponRewardService> logger) : IReferralRewardService
 {
     private const string ProductId = "prod_UBUPrTlZg8chuk";
@@ -42,9 +41,16 @@ public class StripeCouponRewardService(
         return coupon.Id;
     }
 
-    public async Task<string?> GetUserPromotionCodeAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task ApplyCouponToSubscriptionAsync(string subscriptionId, string couponId, CancellationToken cancellationToken = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
-        return user?.ReferralCouponId;
+        var subscriptionService = new SubscriptionService();
+        await subscriptionService.UpdateAsync(subscriptionId, new SubscriptionUpdateOptions
+        {
+            Discounts = [new SubscriptionDiscountOptions { Coupon = couponId }]
+        }, cancellationToken: cancellationToken);
+
+        logger.LogInformation(
+            "Applied coupon {CouponId} to subscription {SubscriptionId}",
+            couponId, subscriptionId);
     }
 }
