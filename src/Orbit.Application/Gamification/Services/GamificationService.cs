@@ -428,13 +428,55 @@ public class GamificationService(
             user.SetLevel(newLevel.Level);
     }
 
+    private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
+    {
+        ["first_orbit"] = ("Primeira Orbita", "Crie seu primeiro habito"),
+        ["liftoff"] = ("Decolagem", "Complete seu primeiro habito"),
+        ["mission_control"] = ("Controle de Missao", "Crie sua primeira meta"),
+        ["week_warrior"] = ("Guerreiro da Semana", "Alcance uma sequencia de 7 dias"),
+        ["fortnight_focus"] = ("Foco Quinzenal", "Alcance uma sequencia de 14 dias"),
+        ["monthly_master"] = ("Mestre Mensal", "Alcance uma sequencia de 30 dias"),
+        ["quarter_champion"] = ("Campeao Trimestral", "Alcance uma sequencia de 90 dias"),
+        ["centurion"] = ("Centuriao", "Alcance uma sequencia de 100 dias"),
+        ["year_of_discipline"] = ("Ano de Disciplina", "Alcance uma sequencia de 365 dias"),
+        ["getting_momentum"] = ("Ganhando Ritmo", "Complete 10 habitos no total"),
+        ["building_habits"] = ("Construindo Habitos", "Complete 50 habitos no total"),
+        ["dedicated"] = ("Dedicado", "Complete 100 habitos no total"),
+        ["relentless"] = ("Imparavel", "Complete 500 habitos no total"),
+        ["legendary"] = ("Lendario", "Complete 1.000 habitos no total"),
+        ["goal_setter"] = ("Definidor de Metas", "Crie 3 metas"),
+        ["goal_crusher"] = ("Destruidor de Metas", "Complete sua primeira meta"),
+        ["overachiever"] = ("Superador", "Complete 5 metas"),
+        ["dream_maker"] = ("Realizador de Sonhos", "Complete 10 metas"),
+        ["perfect_day"] = ("Dia Perfeito", "Complete todos os habitos em um dia"),
+        ["perfect_week"] = ("Semana Perfeita", "Complete todos os habitos por 7 dias consecutivos"),
+        ["perfect_month"] = ("Mes Perfeito", "Complete todos os habitos por 30 dias consecutivos"),
+        ["early_bird"] = ("Madrugador", "Complete um habito antes das 7h (10 vezes)"),
+        ["night_owl"] = ("Coruja Noturna", "Complete um habito apos as 22h (10 vezes)"),
+        ["comeback"] = ("Retorno", "Retome apos 7+ dias de inatividade"),
+        ["bad_habit_breaker"] = ("Quebrador de Maus Habitos", "Alcance 30 dias sem um mau habito"),
+    };
+
     private async Task SendAchievementNotification(Guid userId, AchievementDefinition achievement, string? language, CancellationToken ct)
     {
         var isPt = language?.StartsWith("pt") == true;
+        string name, description;
+
+        if (isPt && AchievementTranslationsPt.TryGetValue(achievement.Id, out var pt))
+        {
+            name = pt.Name;
+            description = pt.Description;
+        }
+        else
+        {
+            name = achievement.Name;
+            description = achievement.Description;
+        }
+
         var title = isPt
-            ? $"Conquista Desbloqueada: {achievement.Name}"
-            : $"Achievement Unlocked: {achievement.Name}";
-        var body = $"{achievement.Description} (+{achievement.XpReward} XP)";
+            ? $"Conquista Desbloqueada: {name}"
+            : $"Achievement Unlocked: {name}";
+        var body = $"{description} (+{achievement.XpReward} XP)";
 
         var notification = Notification.Create(userId, title, body);
         await notificationRepository.AddAsync(notification, ct);

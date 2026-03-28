@@ -121,7 +121,7 @@ public class Habit : Entity
         });
     }
 
-    public Result<HabitLog> Log(DateOnly date, string? note = null)
+    public Result<HabitLog> Log(DateOnly date, string? note = null, bool advanceDueDate = true)
     {
         if (IsCompleted)
             return Result.Failure<HabitLog>("Cannot log a completed habit.");
@@ -138,9 +138,9 @@ public class Habit : Entity
         {
             IsCompleted = true;
         }
-        else if (!IsFlexible)
+        else if (!IsFlexible && advanceDueDate)
         {
-            // Recurring (non-flexible) habit: advance DueDate past today
+            // Recurring (non-flexible) habit: advance DueDate past the logged date
             AdvanceDueDate(date);
 
             // Reset checklist for next occurrence
@@ -181,6 +181,40 @@ public class Habit : Entity
         if (EndDate.HasValue && DueDate > EndDate.Value)
         {
             IsCompleted = true;
+        }
+    }
+
+    /// <summary>
+    /// Advances DueDate to the nearest scheduled date on or after today, without going past it.
+    /// Used by background service to keep DueDate current for recurring habits.
+    /// </summary>
+    public void CatchUpDueDate(DateOnly today)
+    {
+        while (DueDate < today && !IsCompleted)
+        {
+            var prev = DueDate;
+            DueDate = (FrequencyUnit, FrequencyQuantity) switch
+            {
+                (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
+                (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
+                (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
+                (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
+                _ => DueDate
+            };
+
+            if (Days.Count > 0)
+            {
+                while (!Days.Contains(DueDate.DayOfWeek))
+                    DueDate = DueDate.AddDays(1);
+            }
+
+            if (DueDate == prev) break;
+
+            if (EndDate.HasValue && DueDate > EndDate.Value)
+            {
+                IsCompleted = true;
+                break;
+            }
         }
     }
 

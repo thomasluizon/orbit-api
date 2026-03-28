@@ -32,7 +32,8 @@ namespace Orbit.Application.Habits.Commands;
     Note = "multiple habits due today")]
 public record SkipHabitCommand(
     Guid UserId,
-    [property: AiField("string", "ID of the habit to skip", Required = true)] Guid HabitId) : IRequest<Result>;
+    [property: AiField("string", "ID of the habit to skip", Required = true)] Guid HabitId,
+    [property: AiField("string", "ISO date (YYYY-MM-DD) to skip a specific instance. Defaults to today.")] DateOnly? Date = null) : IRequest<Result>;
 
 public class SkipHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -59,16 +60,25 @@ public class SkipHabitCommandHandler(
             return Result.Failure("Cannot skip a one-time task.");
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var targetDate = request.Date ?? today;
+
+        // Validate target date
+        if (targetDate > today)
+            return Result.Failure("Cannot skip a future date.");
 
         // For flexible habits, skip means advance past current window
-        // For regular habits, they must be due today or overdue
-        if (!habit.IsFlexible && habit.DueDate > today)
+        // For regular habits, they must be due on or before the target date
+        if (!habit.IsFlexible && habit.DueDate > targetDate)
             return Result.Failure("Cannot skip a habit that is not yet due.");
+
+        // Validate the habit is actually scheduled on the target date (for non-flexible)
+        if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+            return Result.Failure("Habit is not scheduled on this date.");
 
         if (habit.IsFlexible)
             habit.AdvanceDueDatePastWindow(today);
         else
-            habit.AdvanceDueDate(today);
+            habit.AdvanceDueDate(targetDate);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

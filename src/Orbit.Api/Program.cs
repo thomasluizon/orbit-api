@@ -72,6 +72,7 @@ builder.Services.AddHostedService<ReminderSchedulerService>();
 builder.Services.AddHostedService<GoalDeadlineNotificationService>();
 builder.Services.AddHostedService<SlipAlertSchedulerService>();
 builder.Services.AddHostedService<AccountDeletionService>();
+builder.Services.AddHostedService<HabitDueDateAdvancementService>();
 builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>();
 
 // Initialize Firebase Admin SDK for FCM

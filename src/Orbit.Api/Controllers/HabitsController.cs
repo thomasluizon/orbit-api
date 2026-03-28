@@ -56,7 +56,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
-    public record LogHabitRequest(string? Note = null);
+    public record LogHabitRequest(string? Note = null, DateOnly? Date = null);
+
+    public record SkipHabitRequest(DateOnly? Date = null);
 
     public record BulkCreateHabitsRequest(IReadOnlyList<BulkHabitItemRequest> Habits);
 
@@ -79,9 +81,11 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
-    public record BulkLogHabitsRequest(IReadOnlyList<Guid> HabitIds);
+    public record BulkLogHabitItem(Guid HabitId, DateOnly? Date = null);
+    public record BulkLogHabitsRequest(IReadOnlyList<BulkLogHabitItem> Items);
 
-    public record BulkSkipHabitsRequest(IReadOnlyList<Guid> HabitIds);
+    public record BulkSkipHabitItem(Guid HabitId, DateOnly? Date = null);
+    public record BulkSkipHabitsRequest(IReadOnlyList<BulkSkipHabitItem> Items);
 
     public record ReorderHabitsRequest(IReadOnlyList<HabitPositionRequest> Positions);
 
@@ -224,7 +228,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var command = new LogHabitCommand(
             HttpContext.GetUserId(),
             id,
-            request?.Note);
+            request?.Note,
+            request?.Date);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -236,9 +241,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     [HttpPost("{id:guid}/skip")]
     public async Task<IActionResult> SkipHabit(
         Guid id,
+        [FromBody] SkipHabitRequest? request,
         CancellationToken cancellationToken)
     {
-        var command = new SkipHabitCommand(HttpContext.GetUserId(), id);
+        var command = new SkipHabitCommand(HttpContext.GetUserId(), id, request?.Date);
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
@@ -375,14 +381,15 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         [FromBody] BulkLogHabitsRequest request,
         CancellationToken cancellationToken)
     {
+        var items = request.Items.Select(i => new BulkLogItem(i.HabitId, i.Date)).ToList();
         var command = new BulkLogHabitsCommand(
             HttpContext.GetUserId(),
-            request.HabitIds);
+            items);
 
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Bulk logged {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
+            logger.LogInformation("Bulk logged {Count} habits for user {UserId}", request.Items.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
@@ -394,14 +401,15 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         [FromBody] BulkSkipHabitsRequest request,
         CancellationToken cancellationToken)
     {
+        var items = request.Items.Select(i => new BulkSkipItem(i.HabitId, i.Date)).ToList();
         var command = new BulkSkipHabitsCommand(
             HttpContext.GetUserId(),
-            request.HabitIds);
+            items);
 
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Bulk skipped {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
+            logger.LogInformation("Bulk skipped {Count} habits for user {UserId}", request.Items.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
