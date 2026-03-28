@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -6,6 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class BulkSkipHabitsTool(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService) : IAiTool
 {
     public string Name => "bulk_skip_habits";
@@ -51,7 +54,8 @@ public class BulkSkipHabitsTool(
         {
             var habit = await habitRepository.FindOneTrackedAsync(
                 h => h.Id == habitId && h.UserId == userId,
-                cancellationToken: ct);
+                q => q.Include(h => h.Logs),
+                ct);
 
             if (habit is null)
                 continue;
@@ -62,10 +66,25 @@ public class BulkSkipHabitsTool(
             if (habit.FrequencyUnit is null)
                 continue;
 
-            if (habit.DueDate > today)
+            if (!habit.IsFlexible && habit.DueDate > today)
                 continue;
 
-            habit.AdvanceDueDate(today);
+            if (habit.IsFlexible)
+            {
+                var remaining = HabitScheduleService.GetRemainingCompletions(habit, today, habit.Logs);
+                if (remaining <= 0)
+                    continue;
+
+                var skipResult = habit.SkipFlexible(today);
+                if (skipResult.IsFailure)
+                    continue;
+
+                await habitLogRepository.AddAsync(skipResult.Value, ct);
+            }
+            else
+            {
+                habit.AdvanceDueDate(today);
+            }
 
             skippedCount++;
             skippedNames.Add(habit.Title);

@@ -70,7 +70,8 @@ public class LogHabitCommandHandler(
             return Result.Failure<Guid>("Habit is not scheduled on this date.");
 
         // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate);
+        // Only match completion logs (Value > 0) to prevent toggle from removing skip logs (Value == 0)
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
         {
             var unlogResult = habit.Unlog(targetDate);

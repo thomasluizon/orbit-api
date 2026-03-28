@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -7,6 +8,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class SkipHabitTool(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService) : IAiTool
 {
     public string Name => "skip_habit";
@@ -33,7 +35,8 @@ public class SkipHabitTool(
 
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == habitId && h.UserId == userId,
-            cancellationToken: ct);
+            q => q.Include(h => h.Logs),
+            ct);
 
         if (habit is null)
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
@@ -65,9 +68,21 @@ public class SkipHabitTool(
             return new ToolResult(false, Error: "Habit is not scheduled on this date.");
 
         if (habit.IsFlexible)
-            habit.AdvanceDueDatePastWindow(today);
+        {
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+            if (remaining <= 0)
+                return new ToolResult(false, Error: "All instances for this period have already been completed or skipped.");
+
+            var skipResult = habit.SkipFlexible(targetDate);
+            if (skipResult.IsFailure)
+                return new ToolResult(false, Error: skipResult.Error);
+
+            await habitLogRepository.AddAsync(skipResult.Value, ct);
+        }
         else
+        {
             habit.AdvanceDueDate(targetDate);
+        }
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }
