@@ -49,4 +49,4 @@ Desktop.ini
 
 ## Docker / Caddy
 caddy_data/
-caddy_config/
+caddy_config/.claude/worktrees/

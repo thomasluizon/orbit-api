@@ -46,7 +46,7 @@ public class SubscriptionController(
         CancellationToken ct)
     {
         var userId = HttpContext.GetUserId();
-        var user = await userRepository.GetByIdAsync(userId, ct);
+        var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
 
         // Prefer X-Forwarded-For (set by BFF/reverse proxy) over direct connection IP
@@ -85,8 +85,7 @@ public class SubscriptionController(
             await unitOfWork.SaveChangesAsync(ct);
         }
 
-        var sessionService = new SessionService();
-        var session = await sessionService.CreateAsync(new SessionCreateOptions
+        var sessionOptions = new SessionCreateOptions
         {
             Customer = user.StripeCustomerId,
             Mode = "subscription",
@@ -94,7 +93,17 @@ public class SubscriptionController(
             SuccessUrl = _settings.SuccessUrl,
             CancelUrl = _settings.CancelUrl,
             Metadata = new Dictionary<string, string> { { "userId", userId.ToString() } }
-        }, cancellationToken: ct);
+        };
+
+        // Apply referral discount coupon if user has one
+        if (!string.IsNullOrEmpty(user.ReferralCouponId))
+        {
+            sessionOptions.Discounts = [new SessionDiscountOptions { PromotionCode = user.ReferralCouponId }];
+            logger.LogInformation("Applying referral coupon {CouponId} to checkout for user {UserId}", user.ReferralCouponId, userId);
+        }
+
+        var sessionService = new SessionService();
+        var session = await sessionService.CreateAsync(sessionOptions, cancellationToken: ct);
 
         logger.LogInformation("Checkout created for user {UserId} price={PriceId} country={Country}", userId, priceId, countryCode);
         return Ok(new CheckoutResponse(session.Url));
@@ -199,6 +208,14 @@ public class SubscriptionController(
 
                             user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
                             user.SetStripeSubscription(subscriptionId, periodEnd, GetSubscriptionInterval(subscription));
+
+                            // Clear referral coupon after successful checkout (mark as redeemed)
+                            if (!string.IsNullOrEmpty(user.ReferralCouponId))
+                            {
+                                logger.LogInformation("Clearing referral coupon {CouponId} for user {UserId} after checkout", user.ReferralCouponId, uid);
+                                user.SetReferralCoupon(null);
+                            }
+
                             await unitOfWork.SaveChangesAsync(ct);
                             logger.LogInformation("User {UserId} upgraded to Pro, expires {Expires}", uid, periodEnd);
                         }

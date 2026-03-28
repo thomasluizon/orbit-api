@@ -51,7 +51,7 @@ public class GoogleAuthCommandHandler(
 
         // Find or create user (tracked so token updates persist)
         var user = await userRepository.FindOneTrackedAsync(
-            u => u.Email.ToLower() == email.ToLower(),
+            u => u.Email == email,
             cancellationToken: cancellationToken);
 
         var isNewUser = user is null;

@@ -55,7 +55,7 @@ public class VerifyCodeCommandHandler(
 
         // Find or create user (tracked so deactivation cancellation persists)
         var user = await userRepository.FindOneTrackedAsync(
-            u => u.Email.ToLower() == email,
+            u => u.Email == email,
             cancellationToken: cancellationToken);
 
         var isNewUser = user is null;

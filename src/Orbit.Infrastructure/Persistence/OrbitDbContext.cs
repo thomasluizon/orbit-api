@@ -2,12 +2,21 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContext(options)
+public class OrbitDbContext : DbContext
 {
+    private readonly IEncryptionService? _encryptionService;
+
+    public OrbitDbContext(DbContextOptions<OrbitDbContext> options, IEncryptionService? encryptionService = null)
+        : base(options)
+    {
+        _encryptionService = encryptionService;
+    }
+
     public DbSet<User> Users => Set<User>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();
@@ -25,10 +34,26 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // --- Encryption Value Converters ---
+        EncryptionValueConverter? encConverter = null;
+        NullableEncryptionValueConverter? nullableEncConverter = null;
+
+        if (_encryptionService is not null)
+        {
+            encConverter = new EncryptionValueConverter(_encryptionService);
+            nullableEncConverter = new NullableEncryptionValueConverter(_encryptionService);
+        }
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
+
+            if (nullableEncConverter is not null)
+            {
+                entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
+                entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
+            }
         });
 
         modelBuilder.Entity<Habit>(entity =>
@@ -78,17 +103,32 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<int>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
+            if (encConverter is not null && nullableEncConverter is not null)
+            {
+                entity.Property(h => h.Title).HasConversion(encConverter).HasColumnType("text");
+                entity.Property(h => h.Description).HasConversion(nullableEncConverter).HasColumnType("text");
+            }
         });
 
         modelBuilder.Entity<HabitLog>(entity =>
         {
             entity.HasIndex(l => new { l.HabitId, l.Date });
+
+            if (nullableEncConverter is not null)
+            {
+                entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
+            }
         });
 
         modelBuilder.Entity<UserFact>(entity =>
         {
             entity.HasIndex(f => new { f.UserId, f.IsDeleted });
             entity.HasQueryFilter(f => !f.IsDeleted);
+
+            if (encConverter is not null)
+            {
+                entity.Property(f => f.FactText).HasConversion(encConverter).HasColumnType("text");
+            }
         });
 
         modelBuilder.Entity<Tag>(entity =>
@@ -137,11 +177,22 @@ public class OrbitDbContext(DbContextOptions<OrbitDbContext> options) : DbContex
                 .UsingEntity("HabitGoals",
                     l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey("HabitId").OnDelete(DeleteBehavior.Cascade),
                     r => r.HasOne(typeof(Goal)).WithMany().HasForeignKey("GoalId").OnDelete(DeleteBehavior.Cascade));
+
+            if (encConverter is not null && nullableEncConverter is not null)
+            {
+                entity.Property(g => g.Title).HasConversion(encConverter).HasColumnType("text");
+                entity.Property(g => g.Description).HasConversion(nullableEncConverter).HasColumnType("text");
+            }
         });
 
         modelBuilder.Entity<GoalProgressLog>(entity =>
         {
             entity.HasIndex(l => l.GoalId);
+
+            if (nullableEncConverter is not null)
+            {
+                entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
+            }
         });
 
         modelBuilder.Entity<Referral>(entity =>

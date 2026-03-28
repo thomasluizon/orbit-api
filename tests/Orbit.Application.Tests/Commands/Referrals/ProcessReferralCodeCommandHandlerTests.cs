@@ -14,6 +14,7 @@ public class ProcessReferralCodeCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Referral> _referralRepo = Substitute.For<IGenericRepository<Referral>>();
     private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
+    private readonly IReferralRewardService _referralReward = Substitute.For<IReferralRewardService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ProcessReferralCodeCommandHandler _handler;
 
@@ -23,13 +24,14 @@ public class ProcessReferralCodeCommandHandlerTests
     public ProcessReferralCodeCommandHandlerTests()
     {
         _handler = new ProcessReferralCodeCommandHandler(
-            _userRepo, _referralRepo, _appConfig, _unitOfWork);
+            _userRepo, _referralRepo, _appConfig, _referralReward, _unitOfWork);
 
         // Default config values
         _appConfig.GetAsync("MaxReferrals", AppConstants.DefaultMaxReferrals, Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultMaxReferrals);
-        _appConfig.GetAsync("ReferralRewardDays", AppConstants.DefaultReferralRewardDays, Arg.Any<CancellationToken>())
-            .Returns(AppConstants.DefaultReferralRewardDays);
+
+        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns("promo_test456");
     }
 
     private static User CreateReferrer()
@@ -62,7 +64,7 @@ public class ProcessReferralCodeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidCode_LinksReferrerAndExtendsTrialAndCreatesReferral()
+    public async Task Handle_ValidCode_LinksReferrerAndCreatesCouponAndReferral()
     {
         var referrer = CreateReferrer();
         var newUser = CreateNewUser();
@@ -87,11 +89,10 @@ public class ProcessReferralCodeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidCode_ExtendsNewUserTrial()
+    public async Task Handle_ValidCode_CreatesCouponForNewUser()
     {
         var referrer = CreateReferrer();
         var newUser = CreateNewUser();
-        var originalTrialEnd = newUser.TrialEndsAt!.Value;
         SetupUsersFound(referrer, newUser);
 
         _referralRepo.FindAsync(
@@ -103,10 +104,10 @@ public class ProcessReferralCodeCommandHandlerTests
 
         await _handler.Handle(command, CancellationToken.None);
 
-        // Trial should be extended by default reward days (10)
-        newUser.TrialEndsAt!.Value.Should().BeCloseTo(
-            originalTrialEnd.AddDays(AppConstants.DefaultReferralRewardDays),
-            TimeSpan.FromSeconds(2));
+        // Coupon should be created for the new user
+        await _referralReward.Received(1).CreateReferralCouponAsync(
+            NewUserId, Arg.Any<CancellationToken>());
+        newUser.ReferralCouponId.Should().Be("promo_test456");
     }
 
     [Fact]
