@@ -17,7 +17,8 @@ public class VerifyCodeCommandHandler(
     IUnitOfWork unitOfWork,
     ITokenService tokenService,
     IEmailService emailService,
-    IMediator mediator) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
+    IMediator mediator,
+    IEncryptionService encryptionService) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
@@ -54,8 +55,9 @@ public class VerifyCodeCommandHandler(
         cache.Remove(cacheKey);
 
         // Find or create user (tracked so deactivation cancellation persists)
+        var emailHash = encryptionService.ComputeHmac(email);
         var user = await userRepository.FindOneTrackedAsync(
-            u => u.Email.ToLower() == email,
+            u => u.EmailHash == emailHash,
             cancellationToken: cancellationToken);
 
         var isNewUser = user is null;
@@ -69,6 +71,7 @@ public class VerifyCodeCommandHandler(
                 return Result.Failure<LoginResponse>(createResult.Error);
 
             user = createResult.Value;
+            user.SetEmailHash(emailHash);
             user.SetLanguage(request.Language);
             await userRepository.AddAsync(user, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);

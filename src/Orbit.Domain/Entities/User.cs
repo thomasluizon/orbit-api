@@ -13,6 +13,7 @@ public class User : Entity
 
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
+    public string EmailHash { get; private set; } = null!;
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
@@ -104,6 +105,8 @@ public class User : Entity
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 
     public void SetLanguage(string? language) => Language = language;
+
+    public void SetEmailHash(string hash) => EmailHash = hash;
 
     public void CompleteOnboarding() => HasCompletedOnboarding = true;
 

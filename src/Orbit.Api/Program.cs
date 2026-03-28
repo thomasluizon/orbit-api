@@ -19,6 +19,11 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// --- Encryption ---
+builder.Services.Configure<EncryptionSettings>(
+    builder.Configuration.GetSection(EncryptionSettings.SectionName));
+builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
+
 // --- Database ---
 builder.Services.AddDbContext<OrbitDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -73,6 +78,7 @@ builder.Services.AddHostedService<GoalDeadlineNotificationService>();
 builder.Services.AddHostedService<SlipAlertSchedulerService>();
 builder.Services.AddHostedService<AccountDeletionService>();
 builder.Services.AddHostedService<HabitDueDateAdvancementService>();
+builder.Services.AddHostedService<DataEncryptionMigrationService>();
 builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>();
 
 // Initialize Firebase Admin SDK for FCM

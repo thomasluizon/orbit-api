@@ -18,7 +18,8 @@ public class GoogleAuthCommandHandler(
     ITokenService tokenService,
     IHttpClientFactory httpClientFactory,
     IEmailService emailService,
-    IMediator mediator) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
+    IMediator mediator,
+    IEncryptionService encryptionService) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
     {
@@ -50,8 +51,9 @@ public class GoogleAuthCommandHandler(
         }
 
         // Find or create user (tracked so token updates persist)
+        var emailHash = encryptionService.ComputeHmac(email);
         var user = await userRepository.FindOneTrackedAsync(
-            u => u.Email.ToLower() == email.ToLower(),
+            u => u.EmailHash == emailHash,
             cancellationToken: cancellationToken);
 
         var isNewUser = user is null;
@@ -63,6 +65,7 @@ public class GoogleAuthCommandHandler(
                 return Result.Failure<LoginResponse>(createResult.Error);
 
             user = createResult.Value;
+            user.SetEmailHash(emailHash);
             user.SetLanguage(request.Language);
             await userRepository.AddAsync(user, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
