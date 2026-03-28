@@ -7,6 +7,9 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
 
+// TODO: This controller injects OrbitDbContext directly, bypassing the CQRS/MediatR pattern.
+// All read and write operations should be migrated to dedicated Query/Command handlers in
+// Orbit.Application. OrbitDbContext should be removed from this controller entirely.
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
