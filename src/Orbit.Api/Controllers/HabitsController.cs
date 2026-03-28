@@ -95,7 +95,23 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     public record MoveHabitParentRequest(Guid? ParentId);
 
-    public record CreateSubHabitRequest(string Title, string? Description);
+    public record CreateSubHabitRequest(
+        string Title,
+        string? Description = null,
+        FrequencyUnit? FrequencyUnit = null,
+        int? FrequencyQuantity = null,
+        IReadOnlyList<System.DayOfWeek>? Days = null,
+        bool IsBadHabit = false,
+        DateOnly? DueDate = null,
+        TimeOnly? DueTime = null,
+        TimeOnly? DueEndTime = null,
+        bool ReminderEnabled = false,
+        IReadOnlyList<int>? ReminderTimes = null,
+        bool SlipAlertEnabled = false,
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+        IReadOnlyList<Guid>? TagIds = null,
+        DateOnly? EndDate = null,
+        bool IsFlexible = false);
     public record LinkGoalsRequest(List<Guid> GoalIds);
 
     [HttpGet]
@@ -485,7 +501,21 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             HttpContext.GetUserId(),
             parentId,
             request.Title,
-            request.Description);
+            request.Description,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
+            request.Days,
+            request.DueTime,
+            request.DueEndTime,
+            request.IsBadHabit,
+            request.ReminderEnabled,
+            request.ReminderTimes,
+            request.SlipAlertEnabled,
+            request.ChecklistItems,
+            request.TagIds,
+            request.EndDate,
+            request.IsFlexible,
+            request.DueDate);
 
         var result = await mediator.Send(command, cancellationToken);
 
