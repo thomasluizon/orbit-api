@@ -80,10 +80,13 @@ public sealed class EncryptionService : IEncryptionService
 
         // New format: prefixed with "enc:"
         if (ciphertextBase64.StartsWith(EncPrefix))
-            return DecryptRaw(ciphertextBase64[EncPrefix.Length..]);
+        {
+            var decrypted = DecryptRaw(ciphertextBase64[EncPrefix.Length..]);
+            // Handle double-encryption: legacy data that was re-encrypted with prefix
+            return TryDecryptLegacy(decrypted);
+        }
 
         // Legacy format: encrypted without prefix (migration transition).
-        // Try to decrypt -- if it fails, it's genuinely plaintext.
         return TryDecryptLegacy(ciphertextBase64);
     }
 
