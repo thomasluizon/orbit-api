@@ -319,6 +319,17 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         return BadRequest(new { error = result.Error });
     }
 
+    [HttpGet("logs")]
+    public async Task<IActionResult> GetAllLogs(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetAllHabitLogsQuery(HttpContext.GetUserId(), dateFrom, dateTo);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
     [HttpGet("{id:guid}/logs")]
     public async Task<IActionResult> GetLogs(Guid id, CancellationToken cancellationToken)
     {
