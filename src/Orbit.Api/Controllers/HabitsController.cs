@@ -33,7 +33,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
         bool IsGeneral = false,
         DateOnly? EndDate = null,
-        bool IsFlexible = false);
+        bool IsFlexible = false,
+        IReadOnlyList<Guid>? GoalIds = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -52,7 +53,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         bool? IsGeneral = null,
         DateOnly? EndDate = null,
         bool? ClearEndDate = null,
-        bool? IsFlexible = null);
+        bool? IsFlexible = null,
+        IReadOnlyList<Guid>? GoalIds = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -206,17 +208,18 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ChecklistItems,
             request.IsGeneral,
             EndDate: request.EndDate,
-            IsFlexible: request.IsFlexible);
+            IsFlexible: request.IsFlexible,
+            GoalIds: request.GoalIds);
 
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
         {
             logger.LogInformation("Habit created {HabitId} by user {UserId}", result.Value, HttpContext.GetUserId());
-            return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, result.Value);
+            return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, new { id = result.Value });
         }
 
-        return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, v));
+        return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
     }
 
     [HttpPost("{id:guid}/log")]
@@ -277,7 +280,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.IsGeneral,
             EndDate: request.EndDate,
             ClearEndDate: request.ClearEndDate,
-            IsFlexible: request.IsFlexible);
+            IsFlexible: request.IsFlexible,
+            GoalIds: request.GoalIds);
 
         var result = await mediator.Send(command, cancellationToken);
 

@@ -85,11 +85,13 @@ public record CreateHabitCommand(
     [property: AiField("object[]", "Array of {text, isChecked} for inline checklists, e.g. shopping lists, packing lists. Use INSTEAD of sub-habits when user wants a simple checklist within a habit")] IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     [property: AiField("boolean", "True for general habits with no schedule or due date (open-ended goals)")] bool IsGeneral = false,
     [property: AiField("string", "YYYY-MM-DD, optional end date. Habit stops appearing after this date. Only for recurring habits, not one-time tasks")] DateOnly? EndDate = null,
-    [property: AiField("boolean", "True for flexible frequency habits. When user says 'X times per week' without specifying days, set isFlexible=true, frequencyUnit to the period, frequencyQuantity to X")] bool IsFlexible = false) : IRequest<Result<Guid>>;
+    [property: AiField("boolean", "True for flexible frequency habits. When user says 'X times per week' without specifying days, set isFlexible=true, frequencyUnit to the period, frequencyQuantity to X")] bool IsFlexible = false,
+    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
+    IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
     IGamificationService gamificationService,
@@ -164,6 +166,18 @@ public class CreateHabitCommandHandler(
                 cancellationToken);
             foreach (var tag in tags)
                 habit.AddTag(tag);
+        }
+
+        if (request.GoalIds is { Count: > 0 })
+        {
+            if (request.GoalIds.Count > AppConstants.MaxGoalsPerHabit)
+                return Result.Failure<Guid>($"A habit can have at most {AppConstants.MaxGoalsPerHabit} linked goals.");
+
+            var goals = await goalRepository.FindTrackedAsync(
+                g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,
+                cancellationToken);
+            foreach (var goal in goals)
+                habit.AddGoal(goal);
         }
 
         await habitRepository.AddAsync(habit, cancellationToken);
