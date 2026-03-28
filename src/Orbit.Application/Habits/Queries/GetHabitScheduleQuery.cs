@@ -12,6 +12,7 @@ namespace Orbit.Application.Habits.Queries;
 
 public record HabitTagItem(Guid Id, string Name, string Color);
 public record LinkedGoalDto(Guid Id, string Title);
+public record SearchMatchField(string Field, string? Value);
 
 public record HabitScheduleItem(
     Guid Id,
@@ -42,7 +43,8 @@ public record HabitScheduleItem(
     bool HasSubHabits,
     int? FlexibleTarget,
     int? FlexibleCompleted,
-    IReadOnlyList<HabitInstanceItem> Instances);
+    IReadOnlyList<HabitInstanceItem> Instances,
+    IReadOnlyList<SearchMatchField>? SearchMatches = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -67,7 +69,8 @@ public record HabitScheduleChildItem(
     int? FlexibleTarget,
     int? FlexibleCompleted,
     bool IsLoggedInRange,
-    IReadOnlyList<HabitInstanceItem> Instances);
+    IReadOnlyList<HabitInstanceItem> Instances,
+    IReadOnlyList<SearchMatchField>? SearchMatches = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -120,7 +123,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, userToday: null))
+            .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, userToday: null, search: request.Search))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -178,7 +181,7 @@ public class GetHabitScheduleQueryHandler(
             var allPagedItems = allFiltered
                 .Skip((allPage - 1) * request.PageSize)
                 .Take(request.PageSize)
-                .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, referenceDate: today, userToday: today))
+                .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, referenceDate: today, userToday: today, search: request.Search))
                 .ToList();
 
             return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -224,7 +227,7 @@ public class GetHabitScheduleQueryHandler(
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo, referenceDate: dateFrom, userToday: today))
+            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo, referenceDate: dateFrom, userToday: today, search: request.Search))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -243,9 +246,23 @@ public class GetHabitScheduleQueryHandler(
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();
-            topLevel = topLevel.Where(h =>
-                h.Title.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                (h.Description != null && h.Description.Contains(term, StringComparison.OrdinalIgnoreCase)));
+            bool MatchesSearch(Habit h)
+            {
+                if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
+                if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
+                if (h.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
+                return HasDescendantMatchingSearch(h.Id, lookup, term);
+            }
+            bool HasDescendantMatchingSearch(Guid parentId, ILookup<Guid?, Habit> lkp, string t)
+            {
+                foreach (var child in lkp[parentId])
+                {
+                    if (FuzzyMatcher.FuzzyContains(child.Title, t)) return true;
+                    if (HasDescendantMatchingSearch(child.Id, lkp, t)) return true;
+                }
+                return false;
+            }
+            topLevel = topLevel.Where(MatchesSearch);
         }
 
         if (request.IsCompleted.HasValue)
@@ -279,7 +296,8 @@ public class GetHabitScheduleQueryHandler(
         DateOnly? dateFrom = null,
         DateOnly? dateTo = null,
         DateOnly? referenceDate = null,
-        DateOnly? userToday = null)
+        DateOnly? userToday = null,
+        string? search = null)
     {
         int? flexibleTarget = null;
         int? flexibleCompleted = null;
@@ -301,10 +319,33 @@ public class GetHabitScheduleQueryHandler(
             scheduledDates, isOverdue,
             h.ReminderEnabled, h.ReminderTimes, h.SlipAlertEnabled,
             h.ChecklistItems, MapTags(h), MapGoals(h),
-            MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo, referenceDate, userToday),
+            MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo, referenceDate, userToday, search),
             lookup[h.Id].Any(),
             flexibleTarget, flexibleCompleted,
-            instances);
+            instances,
+            ComputeSearchMatches(h, search, lookup));
+    }
+
+    private static List<SearchMatchField>? ComputeSearchMatches(
+        Habit h, string? search, ILookup<Guid?, Habit> lookup)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return null;
+        var matches = new List<SearchMatchField>();
+        if (FuzzyMatcher.FuzzyContains(h.Title, search))
+            matches.Add(new SearchMatchField("title", null));
+        if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, search))
+            matches.Add(new SearchMatchField("description", null));
+        foreach (var tag in h.Tags)
+        {
+            if (FuzzyMatcher.FuzzyContains(tag.Name, search))
+                matches.Add(new SearchMatchField("tag", tag.Name));
+        }
+        foreach (var child in lookup[h.Id])
+        {
+            if (FuzzyMatcher.FuzzyContains(child.Title, search))
+                matches.Add(new SearchMatchField("child", child.Title));
+        }
+        return matches.Count > 0 ? matches : null;
     }
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
@@ -326,7 +367,8 @@ public class GetHabitScheduleQueryHandler(
     private static List<HabitScheduleChildItem> MapChildren(
         Guid parentId, ILookup<Guid?, Habit> lookup,
         bool includeAll = false, DateOnly? dateFrom = null, DateOnly? dateTo = null,
-        DateOnly? referenceDate = null, DateOnly? userToday = null)
+        DateOnly? referenceDate = null, DateOnly? userToday = null,
+        string? search = null)
     {
         var children = lookup[parentId];
 
@@ -366,9 +408,10 @@ public class GetHabitScheduleQueryHandler(
                     c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
                     c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
                     c.Position, c.ChecklistItems, MapTags(c),
-                    MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate, userToday),
+                    MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate, userToday, search),
                     lookup[c.Id].Any(), ft, fc, isLoggedInRange,
-                    instances);
+                    instances,
+                    ComputeSearchMatches(c, search, lookup));
             })
             .ToList();
     }
