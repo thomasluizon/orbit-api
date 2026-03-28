@@ -93,9 +93,7 @@ if (!string.IsNullOrEmpty(firebaseCredJson))
 {
     FirebaseAdmin.FirebaseApp.Create(new FirebaseAdmin.AppOptions
     {
-        Credential = Google.Apis.Auth.OAuth2.CredentialFactory
-            .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(firebaseCredJson)
-            .ToGoogleCredential()
+        Credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromJson(firebaseCredJson)
     });
 }
 else
@@ -105,9 +103,7 @@ else
     {
         FirebaseAdmin.FirebaseApp.Create(new FirebaseAdmin.AppOptions
         {
-            Credential = Google.Apis.Auth.OAuth2.CredentialFactory
-                .FromFile<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(firebaseCredPath)
-                .ToGoogleCredential()
+            Credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromFile(firebaseCredPath)
         });
     }
 }
