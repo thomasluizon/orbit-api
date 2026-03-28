@@ -148,6 +148,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(s => s.UserId);
             entity.HasIndex(s => s.Endpoint).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SentReminder>(entity =>

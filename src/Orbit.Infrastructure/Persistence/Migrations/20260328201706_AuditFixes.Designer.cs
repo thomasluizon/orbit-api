@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260328190253_AddPushSubscriptionUserFk")]
-    partial class AddPushSubscriptionUserFk
+    [Migration("20260328201706_AuditFixes")]
+    partial class AuditFixes
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -705,6 +705,15 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
                         .WithMany("Logs")
                         .HasForeignKey("HabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.PushSubscription", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
