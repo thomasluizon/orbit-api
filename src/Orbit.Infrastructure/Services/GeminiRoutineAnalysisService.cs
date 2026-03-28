@@ -75,6 +75,8 @@ public sealed class GeminiRoutineAnalysisService(
         var habitIds = userHabits.Select(h => h.Id).ToList();
 
         // 3. Load recent habit logs (last 60 days) for user's habits
+        // Note: Using UTC cutoff. Logs near day boundaries may shift by 1 day relative to
+        // user local time, but this is acceptable for a 60-day pattern analysis window.
         var cutoffDate = DateTime.UtcNow.AddDays(-AnalysisWindowDays);
         var allLogs = await habitLogRepository.FindAsync(
             l => l.CreatedAtUtc >= cutoffDate,

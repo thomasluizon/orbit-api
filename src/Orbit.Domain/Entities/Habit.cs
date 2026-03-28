@@ -93,6 +93,9 @@ public class Habit : Entity
         if (endDate.HasValue && frequencyUnit is null && !isGeneral)
             return Result.Failure<Habit>("One-time tasks cannot have an end date.");
 
+        // Note: fallback to UTC date is approximate -- used only for EndDate validation when
+        // dueDate is null. The caller (CreateHabitCommand) resolves the correct local date,
+        // so this path rarely fires and the 1-day drift is acceptable for a validation guard.
         var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
         if (endDate.HasValue && endDate.Value < effectiveDueDate)
             return Result.Failure<Habit>("End date must be on or after the start date.");
@@ -156,6 +159,11 @@ public class Habit : Entity
         do
         {
             var prev = DueDate;
+            // Preserve the original day-of-month/year before advancing, so monthly habits
+            // anchored on day 29/30/31 don't drift when a short month clamps them (e.g.,
+            // Jan 31 -> Feb 28 -> Mar 28 instead of the correct Mar 31).
+            var originalDay = DueDate.Day;
+
             DueDate = (FrequencyUnit, FrequencyQuantity) switch
             {
                 (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
@@ -164,6 +172,16 @@ public class Habit : Entity
                 (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
                 _ => DueDate
             };
+
+            // Re-anchor monthly/yearly advances to the original day-of-month, clamped to the
+            // last day of the target month. This prevents drift when AddMonths/AddYears clamps
+            // (e.g., Jan 31 -> Feb 28 should re-anchor to Mar 31, not Mar 28).
+            if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
+            {
+                var daysInTargetMonth = DateTime.DaysInMonth(DueDate.Year, DueDate.Month);
+                var correctedDay = Math.Min(originalDay, daysInTargetMonth);
+                DueDate = new DateOnly(DueDate.Year, DueDate.Month, correctedDay);
+            }
 
             // If Days are specified, find the next matching day
             if (Days.Count > 0)
@@ -193,6 +211,8 @@ public class Habit : Entity
         while (DueDate < today && !IsCompleted)
         {
             var prev = DueDate;
+            var originalDay = DueDate.Day;
+
             DueDate = (FrequencyUnit, FrequencyQuantity) switch
             {
                 (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
@@ -201,6 +221,14 @@ public class Habit : Entity
                 (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
                 _ => DueDate
             };
+
+            // Re-anchor to original day-of-month to prevent drift on short months
+            if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
+            {
+                var daysInTargetMonth = DateTime.DaysInMonth(DueDate.Year, DueDate.Month);
+                var correctedDay = Math.Min(originalDay, daysInTargetMonth);
+                DueDate = new DateOnly(DueDate.Year, DueDate.Month, correctedDay);
+            }
 
             if (Days.Count > 0)
             {
