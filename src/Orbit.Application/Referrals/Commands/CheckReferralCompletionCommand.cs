@@ -70,51 +70,65 @@ public class CheckReferralCompletionCommandHandler(
         // Mark referral as completed
         trackedReferral.MarkCompleted();
 
-        // Grant discount coupon to referrer
+        // Grant discount coupon to both referrer and referred user
         var referrer = await userRepository.FindOneTrackedAsync(
             u => u.Id == trackedReferral.ReferrerId,
             cancellationToken: cancellationToken);
 
         if (referrer is not null)
         {
-            // Create a 10% discount coupon for the referrer (service handles Stripe customer creation)
-            var promoCodeId = await referralRewardService.CreateReferralCouponAsync(
+            var referrerPromoId = await referralRewardService.CreateReferralCouponAsync(
                 referrer.Id, cancellationToken);
-            referrer.SetReferralCoupon(promoCodeId);
+            referrer.SetReferralCoupon(referrerPromoId);
         }
+
+        // Referred user also gets a coupon
+        var referredPromoId = await referralRewardService.CreateReferralCouponAsync(
+            referredUser.Id, cancellationToken);
+        referredUser.SetReferralCoupon(referredPromoId);
 
         trackedReferral.MarkRewarded();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Send notifications to referrer (fire and forget)
+        // Send notifications to both users
         if (referrer is not null)
         {
-            var notification = Notification.Create(
-                referrer.Id,
-                "Referral Completed!",
-                "Your friend joined Orbit and you earned a 10% discount coupon for Pro!",
-                "/profile");
-            await notificationRepository.AddAsync(notification, cancellationToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            var isPtReferrer = referrer.Language?.StartsWith("pt") == true;
+            var referrerTitle = isPtReferrer ? "Indicacao Concluida!" : "Referral Completed!";
+            var referrerBody = isPtReferrer
+                ? "Seu amigo comecou a usar o Orbit e voce ganhou um cupom de 10% de desconto no Pro!"
+                : "Your friend joined Orbit and you earned a 10% discount coupon for Pro!";
+
+            await notificationRepository.AddAsync(
+                Notification.Create(referrer.Id, referrerTitle, referrerBody, "/profile"), cancellationToken);
 
             _ = Task.Run(async () =>
             {
-                try
-                {
-                    await pushNotificationService.SendToUserAsync(
-                        referrer.Id,
-                        "Referral Completed!",
-                        "You earned a 10% discount coupon for Pro!",
-                        "/profile",
-                        CancellationToken.None);
-                }
-                catch
-                {
-                    // Silently ignore push notification failures
-                }
+                try { await pushNotificationService.SendToUserAsync(referrer.Id, referrerTitle, referrerBody, "/profile", CancellationToken.None); }
+                catch { }
             }, CancellationToken.None);
         }
 
+        // Notify referred user they earned a coupon too
+        if (referredUser is not null)
+        {
+            var isPtReferred = referredUser.Language?.StartsWith("pt") == true;
+            var referredTitle = isPtReferred ? "Voce ganhou um cupom!" : "You earned a coupon!";
+            var referredBody = isPtReferred
+                ? "Bem-vindo ao Orbit! Voce ganhou um cupom de 10% de desconto no Pro!"
+                : "Welcome to Orbit! You earned a 10% discount coupon for Pro!";
+
+            await notificationRepository.AddAsync(
+                Notification.Create(referredUser.Id, referredTitle, referredBody, "/profile"), cancellationToken);
+
+            _ = Task.Run(async () =>
+            {
+                try { await pushNotificationService.SendToUserAsync(referredUser.Id, referredTitle, referredBody, "/profile", CancellationToken.None); }
+                catch { }
+            }, CancellationToken.None);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 }
