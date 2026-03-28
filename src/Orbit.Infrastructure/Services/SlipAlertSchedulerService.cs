@@ -41,10 +41,13 @@ public class SlipAlertSchedulerService(
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var messageService = scope.ServiceProvider.GetRequiredService<ISlipAlertMessageService>();
 
-        // Load active bad habits with slip alerts enabled
+        // Load active bad habits with slip alerts enabled.
+        // Subtract 1 day from UTC date to include users west of UTC whose local "today" lags behind UTC.
+        // The per-user timezone check (userToday) below is the authoritative active/ended guard.
+        var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var habits = await dbContext.Habits
             .Where(h => !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled
-                && (!h.EndDate.HasValue || h.EndDate.Value >= DateOnly.FromDateTime(DateTime.UtcNow)))
+                && (!h.EndDate.HasValue || h.EndDate.Value >= utcDate.AddDays(-1)))
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;
@@ -54,6 +57,23 @@ public class SlipAlertSchedulerService(
         var users = await dbContext.Users
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
+
+        // Batch-load all relevant habit logs upfront (avoid per-habit query in loop)
+        var habitIds = habits.Select(h => h.Id).ToList();
+        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60));
+        var allLogs = await dbContext.HabitLogs
+            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= cutoff)
+            .ToListAsync(ct);
+        var logsByHabit = allLogs.GroupBy(l => l.HabitId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Batch-load sent slip alerts for this week
+        var daysToMondayUtc = ((int)DateTime.UtcNow.DayOfWeek - 1 + 7) % 7;
+        var currentWeekStart = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-daysToMondayUtc));
+        var sentAlertHabitIds = (await dbContext.SentSlipAlerts
+            .Where(a => habitIds.Contains(a.HabitId) && a.WeekStart == currentWeekStart)
+            .Select(a => a.HabitId)
+            .ToListAsync(ct)).ToHashSet();
 
         foreach (var habit in habits)
         {
@@ -66,11 +86,8 @@ public class SlipAlertSchedulerService(
             var userToday = DateOnly.FromDateTime(userNow);
             var userTimeNow = TimeOnly.FromDateTime(userNow);
 
-            // Load habit logs for pattern detection
-            var logs = await dbContext.HabitLogs
-                .Where(l => l.HabitId == habit.Id)
-                .ToListAsync(ct);
-
+            // Use pre-loaded logs for pattern detection
+            var logs = logsByHabit.GetValueOrDefault(habit.Id) ?? [];
             var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, tz);
             if (pattern is null) continue;
 
@@ -89,13 +106,8 @@ public class SlipAlertSchedulerService(
             var diffMinutes = (userTimeNow - alertTime).TotalMinutes;
             if (diffMinutes < 0 || diffMinutes >= 5) continue;
 
-            // Check weekly idempotency (Monday of current week)
-            var daysToMonday = ((int)userToday.DayOfWeek - 1 + 7) % 7;
-            var weekStart = userToday.AddDays(-daysToMonday);
-
-            var alreadySent = await dbContext.SentSlipAlerts
-                .AnyAsync(a => a.HabitId == habit.Id && a.WeekStart == weekStart, ct);
-            if (alreadySent) continue;
+            // Check weekly idempotency using pre-loaded set
+            if (sentAlertHabitIds.Contains(habit.Id)) continue;
 
             // Generate AI message
             var lang = user.Language ?? "en";
@@ -113,11 +125,16 @@ public class SlipAlertSchedulerService(
             await pushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
 
             // Record sent alert + create in-app notification
+            var daysToMonday = ((int)userToday.DayOfWeek - 1 + 7) % 7;
+            var weekStart = userToday.AddDays(-daysToMonday);
             var sentAlert = SentSlipAlert.Create(habit.Id, weekStart);
             await dbContext.SentSlipAlerts.AddAsync(sentAlert, ct);
 
             var notification = Notification.Create(habit.UserId, title, body, "/", habit.Id);
             await dbContext.Notifications.AddAsync(notification, ct);
+
+            // Track in memory to prevent duplicate sends within the same scheduler tick
+            sentAlertHabitIds.Add(habit.Id);
 
             await dbContext.SaveChangesAsync(ct);
 

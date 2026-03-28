@@ -37,15 +37,22 @@ public class GamificationService(
         if (habit is null) return;
 
         // Calculate XP: 10 base + streak bonus
-        var metrics = HabitMetricsCalculator.Calculate(habit, today);
+        var userTz = user.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
+        var metrics = HabitMetricsCalculator.Calculate(habit, today, userTz);
         var xp = 10 + metrics.CurrentStreak;
         user.AddXp(xp);
 
+        // --- Batch load all user habits with logs once (reused for Liftoff + Volume checks) ---
+        IReadOnlyList<Habit>? allUserHabits = null;
+        if (!earned.Contains(AchievementDefinitions.Liftoff) || !earned.Contains(AchievementDefinitions.LegendaryVolume))
+            allUserHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
+
         // --- Liftoff (first completion) ---
-        if (!earned.Contains(AchievementDefinitions.Liftoff))
+        if (!earned.Contains(AchievementDefinitions.Liftoff) && allUserHabits is not null)
         {
-            var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
-            var totalLogs = userHabits.Sum(h => h.Logs.Count);
+            var totalLogs = allUserHabits.Sum(h => h.Logs.Count);
             if (totalLogs == 1)
                 TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
         }
@@ -54,10 +61,9 @@ public class GamificationService(
         CheckConsistencyAchievements(metrics.CurrentStreak, earned, user, newAchievements);
 
         // --- Volume achievements ---
-        if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
+        if (!earned.Contains(AchievementDefinitions.LegendaryVolume) && allUserHabits is not null)
         {
-            var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
-            var totalCompletions = userHabits.Sum(h => h.Logs.Count);
+            var totalCompletions = allUserHabits.Sum(h => h.Logs.Count);
             CheckVolumeAchievements(totalCompletions, earned, user, newAchievements);
         }
 

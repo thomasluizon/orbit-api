@@ -51,6 +51,27 @@ public class ReminderSchedulerService(
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
+        // Batch-load today's log habit IDs and sent reminders to avoid per-habit AnyAsync calls
+        var habitIds = habits.Select(h => h.Id).ToList();
+
+        // Pre-load all habit IDs that have a log today (UTC date as approximation; per-user check below)
+        var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var loggedHabitIds = (await dbContext.HabitLogs
+            .Where(l => habitIds.Contains(l.HabitId) && l.Date == utcToday)
+            .Select(l => l.HabitId)
+            .ToListAsync(ct)).ToHashSet();
+
+        // Pre-load sent reminders for today
+        var sentReminderKeys = await dbContext.SentReminders
+            .Where(r => habitIds.Contains(r.HabitId) && r.Date == utcToday)
+            .Select(r => new { r.HabitId, r.MinutesBefore })
+            .ToListAsync(ct);
+        var sentReminderSet = sentReminderKeys
+            .Select(r => (r.HabitId, r.MinutesBefore))
+            .ToHashSet();
+
+        var anyChanges = false;
+
         foreach (var habit in habits)
         {
             if (!users.TryGetValue(habit.UserId, out var user)) continue;
@@ -66,10 +87,8 @@ public class ReminderSchedulerService(
             if (!HabitScheduleService.IsHabitDueOnDate(habit, userToday))
                 continue;
 
-            // Check if already logged today
-            var alreadyLogged = await dbContext.HabitLogs
-                .AnyAsync(l => l.HabitId == habit.Id && l.Date == userToday, ct);
-            if (alreadyLogged) continue;
+            // Check if already logged today (use pre-loaded set; UTC date approximation is acceptable here)
+            if (loggedHabitIds.Contains(habit.Id)) continue;
 
             foreach (var minutesBefore in habit.ReminderTimes)
             {
@@ -78,9 +97,7 @@ public class ReminderSchedulerService(
                 var diffMinutes = (userTimeNow - reminderTime).TotalMinutes;
                 if (diffMinutes < 0 || diffMinutes >= 1) continue;
 
-                var alreadySent = await dbContext.SentReminders
-                    .AnyAsync(r => r.HabitId == habit.Id && r.Date == userToday && r.MinutesBefore == minutesBefore, ct);
-                if (alreadySent) continue;
+                if (sentReminderSet.Contains((habit.Id, minutesBefore))) continue;
 
                 var lang = user.Language ?? "en";
                 var minutesText = FormatReminderText(minutesBefore, lang);
@@ -93,11 +110,16 @@ public class ReminderSchedulerService(
                 var notification = Notification.Create(habit.UserId, habit.Title, minutesText, "/", habit.Id);
                 await dbContext.Notifications.AddAsync(notification, ct);
 
-                await dbContext.SaveChangesAsync(ct);
+                // Track in memory to prevent duplicate sends within the same scheduler tick
+                sentReminderSet.Add((habit.Id, minutesBefore));
+                anyChanges = true;
 
                 logger.LogInformation("Sent reminder ({Minutes}min) for habit {HabitId} to user {UserId}", minutesBefore, habit.Id, habit.UserId);
             }
         }
+
+        if (anyChanges)
+            await dbContext.SaveChangesAsync(ct);
     }
 
     private static string FormatReminderText(int minutesBefore, string lang)

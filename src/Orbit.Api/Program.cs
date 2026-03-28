@@ -47,6 +47,7 @@ builder.Services.AddHttpClient("Supabase", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
     client.DefaultRequestHeaders.Add("apikey", builder.Configuration["Supabase:AnonKey"]!);
+    client.Timeout = TimeSpan.FromSeconds(30);
 });
 
 // --- Resend (Email) ---
@@ -57,6 +58,7 @@ builder.Services.AddHttpClient("Resend", client =>
 {
     client.BaseAddress = new Uri("https://api.resend.com");
     client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["Resend:ApiKey"]}");
+    client.Timeout = TimeSpan.FromSeconds(30);
 });
 
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
@@ -73,7 +75,8 @@ if (!string.IsNullOrEmpty(stripeKey))
 // --- Push Notifications (VAPID + FCM) ---
 builder.Services.Configure<VapidSettings>(
     builder.Configuration.GetSection(VapidSettings.SectionName));
-builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
 builder.Services.AddHostedService<ReminderSchedulerService>();
 builder.Services.AddHostedService<GoalDeadlineNotificationService>();
@@ -81,7 +84,8 @@ builder.Services.AddHostedService<SlipAlertSchedulerService>();
 builder.Services.AddHostedService<AccountDeletionService>();
 builder.Services.AddHostedService<HabitDueDateAdvancementService>();
 builder.Services.AddHostedService<DataEncryptionMigrationService>();
-builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>();
+builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // Initialize Firebase Admin SDK for FCM
 var firebaseCredJson = builder.Configuration["Firebase:CredentialsJson"];
@@ -108,7 +112,8 @@ else
 builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
 
 // --- Geo Location ---
-builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>();
+builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // --- JWT Settings ---
 builder.Services.Configure<JwtSettings>(
@@ -150,7 +155,8 @@ var aiProvider = builder.Configuration.GetValue<string>("AiProvider") ?? "Ollama
 if (aiProvider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
 {
     // Gemini (Google) API
-    builder.Services.AddHttpClient<IAiIntentService, GeminiIntentService>();
+    builder.Services.AddHttpClient<IAiIntentService, GeminiIntentService>()
+        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 }
 else
 {
@@ -163,23 +169,29 @@ else
         var settings = builder.Configuration.GetSection(OllamaSettings.SectionName).Get<OllamaSettings>()
                        ?? new OllamaSettings();
         client.BaseAddress = new Uri(settings.BaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(30);
     });
 }
 
 // Fact extraction always uses Gemini (structured output reliability)
-builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionService>();
+builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // Routine analysis always uses Gemini (structured output reliability)
-builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisService>();
+builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // Daily summary always uses Gemini (free-text generation)
-builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>();
+builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // Retrospective always uses Gemini (free-text generation)
-builder.Services.AddHttpClient<IRetrospectiveService, GeminiRetrospectiveService>();
+builder.Services.AddHttpClient<IRetrospectiveService, GeminiRetrospectiveService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // Goal review always uses Gemini (free-text generation)
-builder.Services.AddHttpClient<IGoalReviewService, GeminiGoalReviewService>();
+builder.Services.AddHttpClient<IGoalReviewService, GeminiGoalReviewService>()
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
 
 // --- AI Tool Registration ---
 builder.Services.AddScoped<IAiTool, LogHabitTool>();

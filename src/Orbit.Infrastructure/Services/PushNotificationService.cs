@@ -14,7 +14,8 @@ namespace Orbit.Infrastructure.Services;
 public class PushNotificationService(
     OrbitDbContext dbContext,
     IOptions<VapidSettings> vapidSettings,
-    ILogger<PushNotificationService> logger) : IPushNotificationService
+    ILogger<PushNotificationService> logger,
+    HttpClient httpClient) : IPushNotificationService
 {
     private readonly VapidSettings _settings = vapidSettings.Value;
 
@@ -88,7 +89,8 @@ public class PushNotificationService(
         List<Domain.Entities.PushSubscription> staleSubscriptions,
         CancellationToken ct)
     {
-        var client = new PushServiceClient();
+        // Reuse the injected HttpClient instead of creating a new PushServiceClient per call
+        var client = new PushServiceClient(httpClient);
         client.DefaultAuthentication = new VapidAuthentication(
             _settings.PublicKey, _settings.PrivateKey)
         {

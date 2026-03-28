@@ -31,7 +31,7 @@ public class UpdateGoalProgressTool(
         if (!args.TryGetProperty("current_value", out var valueEl) || valueEl.ValueKind != JsonValueKind.Number)
             return new ToolResult(false, Error: "current_value is required and must be a number.");
 
-        var goalName = nameEl.GetString()!;
+        var goalName = nameEl.GetString() ?? string.Empty;
         string? note = args.TryGetProperty("note", out var noteEl) && noteEl.ValueKind == JsonValueKind.String ? noteEl.GetString() : null;
 
         var goals = await goalRepository.FindTrackedAsync(g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Active, ct);

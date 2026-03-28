@@ -43,7 +43,7 @@ public class ProcessReferralCodeCommandHandler(
             r => r.ReferrerId == referrer.Id && r.Status != ReferralStatus.Pending,
             cancellationToken: cancellationToken);
 
-        var maxReferrals = await appConfigService.GetAsync("MaxReferrals", AppConstants.DefaultMaxReferrals, cancellationToken);
+        var maxReferrals = await appConfigService.GetAsync(AppConfigKeys.MaxReferrals, AppConstants.DefaultMaxReferrals, cancellationToken);
         if (successfulReferrals.Count >= maxReferrals)
             return Result.Failure(ErrorMessages.ReferralCapReached);
 

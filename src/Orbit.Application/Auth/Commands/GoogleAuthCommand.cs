@@ -35,7 +35,7 @@ public class GoogleAuthCommandHandler(
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        var email = root.GetProperty("email").GetString();
+        var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
         if (string.IsNullOrEmpty(email))
             return Result.Failure<LoginResponse>("Could not retrieve email from Google account");
 

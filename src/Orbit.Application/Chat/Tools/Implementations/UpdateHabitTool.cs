@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -235,7 +236,7 @@ public class UpdateHabitTool(
     {
         var str = GetString(el, prop);
         if (str is null) return null;
-        return DateOnly.TryParse(str, out var date) ? date : null;
+        return DateOnly.TryParseExact(str, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
     }
 
     private static TimeOnly? ParseTimeOnly(string str) =>

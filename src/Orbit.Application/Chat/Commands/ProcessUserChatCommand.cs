@@ -276,7 +276,7 @@ public class ProcessUserChatCommandHandler(
 
                         if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
                         {
-                            var maxFacts = await bgAppConfig.GetAsync("MaxUserFacts", AppConstants.MaxUserFacts, CancellationToken.None);
+                            var maxFacts = await bgAppConfig.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, CancellationToken.None);
                             if (existingFactCount < maxFacts)
                             {
                                 var remaining = maxFacts - existingFactCount;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -36,10 +37,10 @@ public class CreateGoalTool(
 
         string? description = args.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String ? descEl.GetString() : null;
         DateOnly? deadline = null;
-        if (args.TryGetProperty("deadline", out var dlEl) && dlEl.ValueKind == JsonValueKind.String && DateOnly.TryParse(dlEl.GetString(), out var parsed))
+        if (args.TryGetProperty("deadline", out var dlEl) && dlEl.ValueKind == JsonValueKind.String && DateOnly.TryParseExact(dlEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
             deadline = parsed;
 
-        var goalResult = Goal.Create(userId, titleEl.GetString()!, targetEl.GetDecimal(), unitEl.GetString()!, description, deadline);
+        var goalResult = Goal.Create(userId, titleEl.GetString() ?? string.Empty, targetEl.GetDecimal(), unitEl.GetString() ?? string.Empty, description, deadline);
         if (goalResult.IsFailure) return new ToolResult(false, Error: goalResult.Error);
 
         await goalRepository.AddAsync(goalResult.Value, ct);

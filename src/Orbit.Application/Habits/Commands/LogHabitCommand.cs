@@ -173,13 +173,14 @@ public class LogHabitCommandHandler(
     {
         if (habit.Goals.Count == 0) return;
 
-        foreach (var goal in habit.Goals)
+        var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
+
+        // Load all linked goals in a single query instead of one per goal
+        var trackedGoals = await goalRepository.FindTrackedAsync(
+            g => goalIds.Contains(g.Id), ct);
+
+        foreach (var trackedGoal in trackedGoals)
         {
-            var trackedGoal = await goalRepository.FindOneTrackedAsync(
-                g => g.Id == goal.Id, cancellationToken: ct);
-
-            if (trackedGoal is null) continue;
-
             var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
             trackedGoal.UpdateProgress(newValue);
         }

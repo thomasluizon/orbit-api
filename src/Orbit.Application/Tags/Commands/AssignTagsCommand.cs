@@ -38,7 +38,7 @@ public class AssignTagsCommandHandler(
 {
     public async Task<Result> Handle(AssignTagsCommand request, CancellationToken cancellationToken)
     {
-        var maxTags = await appConfigService.GetAsync("MaxTagsPerHabit", AppConstants.MaxTagsPerHabit, cancellationToken);
+        var maxTags = await appConfigService.GetAsync(AppConfigKeys.MaxTagsPerHabit, AppConstants.MaxTagsPerHabit, cancellationToken);
 
         if (request.TagIds.Count > maxTags)
             return Result.Failure($"A habit can have at most {maxTags} tags.");
