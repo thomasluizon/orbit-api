@@ -201,7 +201,7 @@ public static class HabitScheduleService
             }
             else if (date < userToday)
             {
-                status = InstanceStatus.Overdue;
+                status = habit.FrequencyUnit is null ? InstanceStatus.Overdue : InstanceStatus.Pending;
             }
             else
             {

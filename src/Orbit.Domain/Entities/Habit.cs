@@ -185,6 +185,40 @@ public class Habit : Entity
     }
 
     /// <summary>
+    /// Advances DueDate to the nearest scheduled date on or after today, without going past it.
+    /// Used by background service to keep DueDate current for recurring habits.
+    /// </summary>
+    public void CatchUpDueDate(DateOnly today)
+    {
+        while (DueDate < today && !IsCompleted)
+        {
+            var prev = DueDate;
+            DueDate = (FrequencyUnit, FrequencyQuantity) switch
+            {
+                (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
+                (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
+                (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
+                (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
+                _ => DueDate
+            };
+
+            if (Days.Count > 0)
+            {
+                while (!Days.Contains(DueDate.DayOfWeek))
+                    DueDate = DueDate.AddDays(1);
+            }
+
+            if (DueDate == prev) break;
+
+            if (EndDate.HasValue && DueDate > EndDate.Value)
+            {
+                IsCompleted = true;
+                break;
+            }
+        }
+    }
+
+    /// <summary>
     /// Advances DueDate past the current flexible window.
     /// Day=next day, Week=next Monday, Month=next 1st, Year=next Jan 1.
     /// </summary>

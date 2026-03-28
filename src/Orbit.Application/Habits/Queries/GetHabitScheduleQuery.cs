@@ -202,7 +202,7 @@ public class GetHabitScheduleQueryHandler(
             var isOverdue = false;
 
             // Flexible habits should NOT appear as overdue
-            if (!habit.IsFlexible && request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && habit.DueDate < dateFrom
+            if (!habit.IsFlexible && habit.FrequencyUnit == null && request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && habit.DueDate < dateFrom
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom))
             {
                 isOverdue = true;
