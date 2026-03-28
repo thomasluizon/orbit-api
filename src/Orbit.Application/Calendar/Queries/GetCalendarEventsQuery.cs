@@ -1,6 +1,7 @@
 using Google.Apis.Calendar.v3;
 using Google.Apis.Services;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -25,7 +26,8 @@ public class GetCalendarEventsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGoogleTokenService googleTokenService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetCalendarEventsQuery, Result<List<CalendarEventItem>>>
+    IUnitOfWork unitOfWork,
+    ILogger<GetCalendarEventsQueryHandler> logger) : IRequestHandler<GetCalendarEventsQuery, Result<List<CalendarEventItem>>>
 {
     public async Task<Result<List<CalendarEventItem>>> Handle(GetCalendarEventsQuery request, CancellationToken cancellationToken)
     {
@@ -118,7 +120,7 @@ public class GetCalendarEventsQueryHandler(
                             var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
                             rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
                         }
-                        catch { rrule = null; }
+                        catch (Exception ex) { logger.LogWarning(ex, "Failed to fetch master event RRULE for recurring event {EventId}", ev.RecurringEventId); rrule = null; }
                         masterRRuleCache[ev.RecurringEventId] = rrule;
                     }
                 }

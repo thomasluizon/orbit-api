@@ -30,8 +30,11 @@ public class GetHabitMetricsQueryHandler(
         if (user is null)
             return Result.Failure<HabitMetrics>(ErrorMessages.UserNotFound);
 
+        var userTimeZone = user.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
         var today = HabitMetricsCalculator.GetUserToday(user);
-        return Result.Success(HabitMetricsCalculator.Calculate(habit, today));
+        return Result.Success(HabitMetricsCalculator.Calculate(habit, today, userTimeZone));
 
     }
 }

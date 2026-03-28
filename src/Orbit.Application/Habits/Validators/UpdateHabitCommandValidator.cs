@@ -15,6 +15,10 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
 
         SharedHabitRules.AddTitleRules(RuleFor(x => x.Title));
 
+        SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
+
+        SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.ChecklistItems));
+
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
             .When(x => x.FrequencyQuantity is not null);

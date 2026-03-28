@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Habits.Services;
@@ -52,7 +53,7 @@ public class SkipHabitTool(
         DateOnly targetDate = today;
         if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
         {
-            if (DateOnly.TryParse(dateEl.GetString(), out var parsed))
+            if (DateOnly.TryParseExact(dateEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
                 targetDate = parsed;
             else
                 return new ToolResult(false, Error: "Invalid date format. Use YYYY-MM-DD.");

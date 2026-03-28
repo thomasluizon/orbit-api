@@ -6,8 +6,8 @@ namespace Orbit.Application.Habits.Services;
 public static class SlipPatternDetectionService
 {
     private const int LookbackDays = 60;
-    private const int MinOccurrencesPerDay = 3;
-    private const int MinBucketCountForTimePeak = 2;
+    private const int MinTotalLogs = 3;
+    private const int MinBucketCountForTimePeak = 3;
 
     public static SlipPattern? DetectPattern(
         IReadOnlyList<HabitLog> logs,
@@ -17,7 +17,7 @@ public static class SlipPatternDetectionService
         var cutoff = DateTime.UtcNow.AddDays(-LookbackDays);
         var recentLogs = logs.Where(l => l.CreatedAtUtc >= cutoff).ToList();
 
-        if (recentLogs.Count < MinOccurrencesPerDay)
+        if (recentLogs.Count < MinTotalLogs)
             return null;
 
         // Convert to user local time and extract (DayOfWeek, Hour)
@@ -30,7 +30,7 @@ public static class SlipPatternDetectionService
         // Group by DayOfWeek, filter to days with 3+ occurrences
         var dayGroups = localEntries
             .GroupBy(e => e.DayOfWeek)
-            .Where(g => g.Count() >= MinOccurrencesPerDay)
+            .Where(g => g.Count() >= MinTotalLogs)
             .ToList();
 
         if (dayGroups.Count == 0)

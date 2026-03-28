@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
@@ -110,7 +111,7 @@ public class CreateHabitTool(
         if (!args.TryGetProperty("title", out var titleEl) || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return new ToolResult(false, Error: "title is required.");
 
-        var title = titleEl.GetString()!;
+        var title = titleEl.GetString() ?? string.Empty;
 
         // Check habit limit
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
@@ -316,7 +317,7 @@ public class CreateHabitTool(
     {
         var str = GetOptionalString(el, prop);
         if (str is null) return null;
-        return DateOnly.TryParse(str, out var date) ? date : null;
+        return DateOnly.TryParseExact(str, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
     }
 
     private static TimeOnly? ParseTimeOnly(JsonElement el, string prop)

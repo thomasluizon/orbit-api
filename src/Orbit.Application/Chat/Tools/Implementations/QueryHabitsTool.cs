@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -46,101 +47,106 @@ public class QueryHabitsTool(
 
         var today = HabitMetricsCalculator.GetUserToday(user);
 
-        // Determine if we need logs (for metrics or completion status)
         var includeMetrics = args.TryGetProperty("include_metrics", out var metricsEl) && metricsEl.ValueKind == JsonValueKind.True;
         var includeSubs = !args.TryGetProperty("include_sub_habits", out var subsEl) || subsEl.ValueKind != JsonValueKind.False;
         var limit = 50;
         if (args.TryGetProperty("limit", out var limitEl) && limitEl.ValueKind == JsonValueKind.Number)
             limit = Math.Clamp(limitEl.GetInt32(), 1, 200);
 
-        // Load habits with appropriate includes
+        // Parse filters up-front so we can push them to the DB predicate
+        bool? isCompletedFilter = null;
+        if (args.TryGetProperty("is_completed", out var completedEl) && completedEl.ValueKind != JsonValueKind.Null)
+            isCompletedFilter = completedEl.ValueKind == JsonValueKind.True;
+
+        bool? isGeneralFilter = null;
+        if (args.TryGetProperty("is_general", out var generalEl) && generalEl.ValueKind != JsonValueKind.Null)
+            isGeneralFilter = generalEl.ValueKind == JsonValueKind.True;
+
+        bool? isBadHabitFilter = null;
+        if (args.TryGetProperty("is_bad_habit", out var badEl) && badEl.ValueKind != JsonValueKind.Null)
+            isBadHabitFilter = badEl.ValueKind == JsonValueKind.True;
+
+        FrequencyUnit? frequencyFilter = null;
+        var frequencyOneTime = false;
+        if (args.TryGetProperty("frequency", out var freqEl) && freqEl.ValueKind == JsonValueKind.String)
+        {
+            var freqStr = freqEl.GetString() ?? string.Empty;
+            if (freqStr.Equals("OneTime", StringComparison.OrdinalIgnoreCase))
+                frequencyOneTime = true;
+            else if (Enum.TryParse<FrequencyUnit>(freqStr, true, out var parsedFreq))
+                frequencyFilter = parsedFreq;
+        }
+
+        DateOnly? dateFilter = null;
+        var includeOverdue = false;
+        if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
+        {
+            var dateStr = dateEl.GetString() ?? string.Empty;
+            dateFilter = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase) ? today
+                : DateOnly.TryParseExact(dateStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate) ? parsedDate : today;
+            includeOverdue = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase);
+            if (args.TryGetProperty("include_overdue", out var overdueEl))
+                includeOverdue = overdueEl.ValueKind == JsonValueKind.True;
+        }
+
+        string? searchText = null;
+        if (args.TryGetProperty("search", out var searchEl) && searchEl.ValueKind == JsonValueKind.String)
+            searchText = searchEl.GetString();
+
+        string? tagFilter = null;
+        if (args.TryGetProperty("tag", out var tagEl) && tagEl.ValueKind == JsonValueKind.String)
+            tagFilter = tagEl.GetString();
+
+        // Capture loop variables for use in lambda (avoid closure over mutable vars)
+        var capturedDate = dateFilter;
+        var capturedIncludeOverdue = includeOverdue;
+        var capturedSearch = searchText;
+        var capturedTag = tagFilter;
+        var capturedIsCompleted = isCompletedFilter;
+        var capturedIsGeneral = isGeneralFilter;
+        var capturedIsBad = isBadHabitFilter;
+        var capturedFreqOneTime = frequencyOneTime;
+        var capturedFreq = frequencyFilter;
+
+        // Apply DB-level filtering to avoid loading all user habits into memory
         IReadOnlyList<Habit> allHabits;
         if (includeMetrics)
         {
             allHabits = await habitRepository.FindAsync(
-                h => h.UserId == userId,
+                h => h.UserId == userId
+                    && (capturedIsCompleted == null ? !h.IsCompleted : h.IsCompleted == capturedIsCompleted.Value)
+                    && (capturedIsGeneral == null || h.IsGeneral == capturedIsGeneral.Value)
+                    && (capturedIsBad == null || h.IsBadHabit == capturedIsBad.Value)
+                    && (!capturedFreqOneTime || h.FrequencyUnit == null)
+                    && (capturedFreq == null || h.FrequencyUnit == capturedFreq.Value)
+                    && (!capturedDate.HasValue || (!h.IsGeneral && (capturedIncludeOverdue ? h.DueDate <= capturedDate.Value : h.DueDate == capturedDate.Value)))
+                    && (capturedSearch == null || h.Title.ToLower().Contains(capturedSearch.ToLower()))
+                    && (capturedTag == null || h.Tags.Any(t => t.Name.ToLower().Contains(capturedTag.ToLower()))),
                 q => q.Include(h => h.Tags).Include(h => h.Logs),
                 ct);
         }
         else
         {
             allHabits = await habitRepository.FindAsync(
-                h => h.UserId == userId,
+                h => h.UserId == userId
+                    && (capturedIsCompleted == null ? !h.IsCompleted : h.IsCompleted == capturedIsCompleted.Value)
+                    && (capturedIsGeneral == null || h.IsGeneral == capturedIsGeneral.Value)
+                    && (capturedIsBad == null || h.IsBadHabit == capturedIsBad.Value)
+                    && (!capturedFreqOneTime || h.FrequencyUnit == null)
+                    && (capturedFreq == null || h.FrequencyUnit == capturedFreq.Value)
+                    && (!capturedDate.HasValue || (!h.IsGeneral && (capturedIncludeOverdue ? h.DueDate <= capturedDate.Value : h.DueDate == capturedDate.Value)))
+                    && (capturedSearch == null || h.Title.ToLower().Contains(capturedSearch.ToLower()))
+                    && (capturedTag == null || h.Tags.Any(t => t.Name.ToLower().Contains(capturedTag.ToLower()))),
                 q => q.Include(h => h.Tags),
                 ct);
         }
 
         // Start with parent habits only
-        var query = allHabits.Where(h => h.ParentHabitId is null).AsEnumerable();
-
-        // Apply filters
-        if (args.TryGetProperty("search", out var searchEl) && searchEl.ValueKind == JsonValueKind.String)
-        {
-            var searchText = searchEl.GetString()!;
-            // Search all habits (any depth), then walk up to root parent for display
-            var matchingRootIds = allHabits
-                .Where(h => h.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase))
-                .Select(h => GetRootParentId(allHabits, h))
-                .ToHashSet();
-            query = query.Where(h => matchingRootIds.Contains(h.Id));
-        }
-
-        // Date filter
-        if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
-        {
-            var dateStr = dateEl.GetString()!;
-            var targetDate = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase) ? today : DateOnly.Parse(dateStr);
-
-            var includeOverdue = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase);
-            if (args.TryGetProperty("include_overdue", out var overdueEl))
-                includeOverdue = overdueEl.ValueKind == JsonValueKind.True;
-
-            query = query.Where(h => !h.IsGeneral && (includeOverdue ? h.DueDate <= targetDate : h.DueDate == targetDate));
-        }
-
-        // General filter
-        if (args.TryGetProperty("is_general", out var generalEl) && generalEl.ValueKind != JsonValueKind.Null)
-        {
-            var isGeneral = generalEl.ValueKind == JsonValueKind.True;
-            query = query.Where(h => h.IsGeneral == isGeneral);
-        }
-
-        // Completion filter (default: active only)
-        if (args.TryGetProperty("is_completed", out var completedEl) && completedEl.ValueKind != JsonValueKind.Null)
-        {
-            var isCompleted = completedEl.ValueKind == JsonValueKind.True;
-            query = query.Where(h => h.IsCompleted == isCompleted);
-        }
-        else
-        {
-            query = query.Where(h => !h.IsCompleted);
-        }
-
-        // Bad habit filter
-        if (args.TryGetProperty("is_bad_habit", out var badEl) && badEl.ValueKind != JsonValueKind.Null)
-        {
-            var isBad = badEl.ValueKind == JsonValueKind.True;
-            query = query.Where(h => h.IsBadHabit == isBad);
-        }
-
-        // Frequency filter
-        if (args.TryGetProperty("frequency", out var freqEl) && freqEl.ValueKind == JsonValueKind.String)
-        {
-            var freqStr = freqEl.GetString()!;
-            if (freqStr.Equals("OneTime", StringComparison.OrdinalIgnoreCase))
-                query = query.Where(h => h.FrequencyUnit is null);
-            else if (Enum.TryParse<FrequencyUnit>(freqStr, true, out var unit))
-                query = query.Where(h => h.FrequencyUnit == unit);
-        }
-
-        // Tag filter
-        if (args.TryGetProperty("tag", out var tagEl) && tagEl.ValueKind == JsonValueKind.String)
-        {
-            var tagName = tagEl.GetString()!;
-            query = query.Where(h => h.Tags.Any(t => t.Name.Contains(tagName, StringComparison.OrdinalIgnoreCase)));
-        }
-
-        var results = query.OrderBy(h => h.Position).Take(limit).ToList();
+        var results = allHabits
+            .Where(h => h.ParentHabitId is null)
+            .OrderBy(h => h.Position)
+            .Take(limit)
+            .ToList();
 
         if (results.Count == 0)
             return new ToolResult(true, EntityName: "No habits found matching the given filters.");
@@ -192,18 +198,6 @@ public class QueryHabitsTool(
         }
 
         return new ToolResult(true, EntityName: sb.ToString());
-    }
-
-    private static Guid GetRootParentId(IReadOnlyList<Habit> allHabits, Habit habit)
-    {
-        var current = habit;
-        for (var i = 0; i < 10 && current.ParentHabitId is not null; i++)
-        {
-            var parent = allHabits.FirstOrDefault(h => h.Id == current.ParentHabitId);
-            if (parent is null) break;
-            current = parent;
-        }
-        return current.Id;
     }
 
     private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, bool includeMetrics, int depth)

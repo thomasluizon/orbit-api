@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -96,7 +97,8 @@ public class CreateHabitCommandHandler(
     IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<CreateHabitCommand, Result<Guid>>
+    IMemoryCache cache,
+    ILogger<CreateHabitCommandHandler> logger) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
@@ -189,7 +191,10 @@ public class CreateHabitCommandHandler(
         {
             await gamificationService.ProcessHabitCreated(request.UserId, cancellationToken);
         }
-        catch { /* gamification failure should not block habit creation */ }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Gamification processing failed for habit creation by user {UserId}", request.UserId);
+        }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 

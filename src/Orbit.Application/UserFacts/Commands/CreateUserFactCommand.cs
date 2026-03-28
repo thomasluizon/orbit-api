@@ -15,7 +15,7 @@ public class CreateUserFactCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateUserFactCommand request, CancellationToken cancellationToken)
     {
-        var maxFacts = await appConfigService.GetAsync("MaxUserFacts", AppConstants.MaxUserFacts, cancellationToken);
+        var maxFacts = await appConfigService.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, cancellationToken);
 
         // Check for duplicate/similar facts
         var existingFacts = await userFactRepository.FindAsync(

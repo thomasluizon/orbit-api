@@ -1,5 +1,6 @@
 using FluentValidation;
 using Orbit.Application.Common;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Validators;
 
@@ -8,6 +9,17 @@ public static class SharedHabitRules
     public static void AddTitleRules<T>(IRuleBuilder<T, string> rule)
     {
         rule.NotEmpty().MaximumLength(AppConstants.MaxHabitTitleLength);
+    }
+
+    public static void AddDescriptionRules<T>(IRuleBuilder<T, string?> rule)
+    {
+        rule.MaximumLength(AppConstants.MaxHabitDescriptionLength);
+    }
+
+    public static void AddChecklistItemRules<T>(IRuleBuilder<T, IReadOnlyList<ChecklistItem>?> rule)
+    {
+        rule.Must(items => items is null || items.All(i => i.Text.Length <= AppConstants.MaxChecklistItemTextLength))
+            .WithMessage($"Checklist item text must not exceed {AppConstants.MaxChecklistItemTextLength} characters");
     }
 
     public static void AddFrequencyQuantityRules<T>(IRuleBuilderOptions<T, int?> rule)

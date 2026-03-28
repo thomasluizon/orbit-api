@@ -15,7 +15,7 @@ public interface IPayGateService
     Task<Result> CanCreateSubHabits(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can send AI messages (free: 50/month, Pro: 500/month).
+    /// Checks if the user can send AI messages (free: 20/month, Pro: 500/month).
     /// </summary>
     Task<Result> CanSendAiMessage(Guid userId, CancellationToken ct = default);
 
@@ -28,6 +28,11 @@ public interface IPayGateService
     /// Checks if the user can use AI retrospectives (Pro-only feature).
     /// </summary>
     Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Checks if the user can create goals (Pro-only feature).
+    /// </summary>
+    Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the AI message limit for the given user.

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -15,7 +16,8 @@ public record UpdateGoalStatusCommand(
 public class UpdateGoalStatusCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGamificationService gamificationService,
-    IUnitOfWork unitOfWork) : IRequestHandler<UpdateGoalStatusCommand, Result>
+    IUnitOfWork unitOfWork,
+    ILogger<UpdateGoalStatusCommandHandler> logger) : IRequestHandler<UpdateGoalStatusCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalStatusCommand request, CancellationToken cancellationToken)
     {
@@ -44,7 +46,10 @@ public class UpdateGoalStatusCommandHandler(
             {
                 await gamificationService.ProcessGoalCompleted(request.UserId, cancellationToken);
             }
-            catch { /* gamification failure should not block goal status update */ }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Gamification processing failed for goal completion by user {UserId}", request.UserId);
+            }
         }
 
         return Result.Success();

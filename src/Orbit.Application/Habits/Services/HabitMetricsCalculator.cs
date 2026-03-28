@@ -6,10 +6,10 @@ namespace Orbit.Application.Habits.Services;
 
 public static class HabitMetricsCalculator
 {
-    public static HabitMetrics Calculate(Habit habit, DateOnly today)
+    public static HabitMetrics Calculate(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
     {
         var logDates = habit.Logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
-        var expectedDates = GenerateExpectedDates(habit, today).ToList();
+        var expectedDates = GenerateExpectedDates(habit, today, userTimeZone).ToList();
 
         var currentStreak = CalculateCurrentStreak(habit, expectedDates, logDates, today);
         var longestStreak = CalculateLongestStreak(habit, expectedDates, logDates);
@@ -37,9 +37,11 @@ public static class HabitMetricsCalculator
         return DateOnly.FromDateTime(userNow);
     }
 
-    private static IEnumerable<DateOnly> GenerateExpectedDates(Habit habit, DateOnly today)
+    private static IEnumerable<DateOnly> GenerateExpectedDates(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
     {
-        var habitStartDate = DateOnly.FromDateTime(habit.CreatedAtUtc);
+        // Convert habit creation timestamp to user local date to avoid UTC-vs-local day boundary errors
+        var tz = userTimeZone ?? TimeZoneInfo.Utc;
+        var habitStartDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
         var expectedDates = new List<DateOnly>();
 
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)

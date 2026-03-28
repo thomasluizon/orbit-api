@@ -54,8 +54,8 @@ public static class HabitScheduleService
         {
             FrequencyUnit.Day => qty == 1 || TrueMod(target.DayNumber - anchor.DayNumber, qty) == 0,
             FrequencyUnit.Week => target.DayOfWeek == anchor.DayOfWeek && TrueMod(WeekDiff(target, anchor), qty) == 0,
-            FrequencyUnit.Month => target.Day == anchor.Day && TrueMod(MonthDiff(target, anchor), qty) == 0,
-            FrequencyUnit.Year => target.Month == anchor.Month && target.Day == anchor.Day && TrueMod(target.Year - anchor.Year, qty) == 0,
+            FrequencyUnit.Month => IsMonthlyMatch(target, anchor, qty),
+            FrequencyUnit.Year => IsYearlyMatch(target, anchor, qty),
             _ => false
         };
     }
@@ -226,6 +226,41 @@ public static class HabitScheduleService
         }
 
         return instances;
+    }
+
+    /// <summary>
+    /// Monthly match: target day must equal anchor day (clamped to last day of month),
+    /// and the month interval must align. This prevents anchor drift after short months
+    /// (e.g., Jan 31 anchor still fires on Mar 31, not Mar 28).
+    /// </summary>
+    private static bool IsMonthlyMatch(DateOnly target, DateOnly anchor, int qty)
+    {
+        var expectedDay = Math.Min(anchor.Day, DateTime.DaysInMonth(target.Year, target.Month));
+        return target.Day == expectedDay && TrueMod(MonthDiff(target, anchor), qty) == 0;
+    }
+
+    /// <summary>
+    /// Yearly match: same month and day with interval alignment.
+    /// For Feb 29 anchors in non-leap years, Feb 28 is used as the fallback firing date.
+    /// </summary>
+    private static bool IsYearlyMatch(DateOnly target, DateOnly anchor, int qty)
+    {
+        if (TrueMod(target.Year - anchor.Year, qty) != 0)
+            return false;
+
+        // Normal case: same month and day
+        if (target.Month == anchor.Month && target.Day == anchor.Day)
+            return true;
+
+        // Leap-day fallback: anchor is Feb 29, target year is not a leap year, fire on Feb 28
+        if (anchor.Month == 2 && anchor.Day == 29
+            && target.Month == 2 && target.Day == 28
+            && !DateTime.IsLeapYear(target.Year))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static int TrueMod(int n, int m)

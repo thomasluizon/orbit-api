@@ -17,24 +17,33 @@ public record HabitLogResponse(
 public record GetHabitLogsQuery(Guid UserId, Guid HabitId) : IRequest<Result<IReadOnlyList<HabitLogResponse>>>;
 
 public class GetHabitLogsQueryHandler(
-    IGenericRepository<Habit> habitRepository) : IRequestHandler<GetHabitLogsQuery, Result<IReadOnlyList<HabitLogResponse>>>
+    IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository) : IRequestHandler<GetHabitLogsQuery, Result<IReadOnlyList<HabitLogResponse>>>
 {
+    private const int DefaultLookbackDays = 365;
+
     public async Task<Result<IReadOnlyList<HabitLogResponse>>> Handle(GetHabitLogsQuery request, CancellationToken cancellationToken)
     {
-        var habit = await habitRepository.FindAsync(
+        // Verify ownership without loading logs
+        var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Logs),
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
-        var found = habit.FirstOrDefault();
-        if (found is null)
+        if (habit is null)
             return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound);
 
-        var logs = found.Logs
+        // Cap log history to last 365 days to prevent unbounded queries
+        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-DefaultLookbackDays);
+
+        var logs = await habitLogRepository.FindAsync(
+            l => l.HabitId == request.HabitId && l.Date >= cutoff,
+            cancellationToken);
+
+        var result = logs
             .OrderByDescending(l => l.Date)
             .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.Note, l.CreatedAtUtc))
             .ToList();
 
-        return Result.Success<IReadOnlyList<HabitLogResponse>>(logs);
+        return Result.Success<IReadOnlyList<HabitLogResponse>>(result);
     }
 }

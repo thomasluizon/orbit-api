@@ -12,7 +12,7 @@ public class AssignTagsTool(
     public string Name => "assign_tags";
 
     public string Description =>
-        "Assign tags to a habit by name. Existing tags with matching names will be reused. New tag names will be auto-created. Only use when the user explicitly asks to tag a habit.";
+        "Assign tags to a habit by name. Existing tags with matching names will be reused. New tag names will be auto-created. Only use when the user explicitly asks to tag a habit. WARNING: This REPLACES all existing tags. To add tags, include the existing tags in the list.";
 
     public object GetParameterSchema() => new
     {

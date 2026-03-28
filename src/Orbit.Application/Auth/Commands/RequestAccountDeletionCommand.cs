@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
@@ -30,7 +31,7 @@ public class RequestAccountDeletionCommandHandler(
                 return Result.Failure("Please wait before requesting a new code");
         }
 
-        var code = Random.Shared.Next(100000, 999999).ToString();
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
         var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
         cache.Set(cacheKey, entry, new MemoryCacheEntryOptions

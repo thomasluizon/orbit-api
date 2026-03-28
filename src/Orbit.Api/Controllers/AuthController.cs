@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Orbit.Api.Extensions;
 using Orbit.Application.Auth.Commands;
 
@@ -16,6 +17,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
     public record ConfirmDeletionRequest(string Code);
 
     [HttpPost("send-code")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> SendCode(
         [FromBody] SendCodeRequest request,
         CancellationToken cancellationToken)
@@ -34,6 +36,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
     }
 
     [HttpPost("verify-code")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> VerifyCode(
         [FromBody] VerifyCodeRequest request,
         CancellationToken cancellationToken)

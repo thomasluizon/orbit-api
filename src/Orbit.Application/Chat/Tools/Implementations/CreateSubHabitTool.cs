@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using MediatR;
 using Orbit.Domain.Enums;
@@ -54,7 +55,7 @@ public class CreateSubHabitTool(
         if (!args.TryGetProperty("title", out var titleEl) || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return new ToolResult(false, Error: "title is required.");
 
-        var title = titleEl.GetString()!;
+        var title = titleEl.GetString() ?? string.Empty;
 
         FrequencyUnit? frequencyUnit = null;
         if (args.TryGetProperty("frequency_unit", out var fuEl) && fuEl.ValueKind == JsonValueKind.String)
@@ -119,7 +120,7 @@ public class CreateSubHabitTool(
         DateOnly? dueDate = null;
         if (args.TryGetProperty("due_date", out var ddEl) && ddEl.ValueKind == JsonValueKind.String)
         {
-            if (DateOnly.TryParse(ddEl.GetString(), out var dd))
+            if (DateOnly.TryParseExact(ddEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dd))
                 dueDate = dd;
         }
 

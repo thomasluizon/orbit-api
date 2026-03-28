@@ -1,4 +1,6 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -16,11 +18,17 @@ public record CreateGoalCommand(
 
 public class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IGamificationService gamificationService,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateGoalCommand, Result<Guid>>
+    IUnitOfWork unitOfWork,
+    ILogger<CreateGoalCommandHandler> logger) : IRequestHandler<CreateGoalCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanCreateGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<Guid>();
+
         var goalResult = Goal.Create(
             request.UserId,
             request.Title,
@@ -42,7 +50,10 @@ public class CreateGoalCommandHandler(
         {
             await gamificationService.ProcessGoalCreated(request.UserId, cancellationToken);
         }
-        catch { /* gamification failure should not block goal creation */ }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Gamification processing failed for goal creation by user {UserId}", request.UserId);
+        }
 
         return Result.Success(goal.Id);
     }

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Domain.Common;
@@ -47,8 +48,8 @@ public class SendCodeCommandHandler(
                 return Result.Failure("Please wait before requesting a new code");
         }
 
-        // Generate 6-digit code
-        var code = Random.Shared.Next(100000, 999999).ToString();
+        // Generate 6-digit code using cryptographic PRNG
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
         // Store in cache with 5-minute expiration
         var entry = new VerificationEntry(code, 0, DateTime.UtcNow);

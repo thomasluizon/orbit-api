@@ -35,7 +35,7 @@ public class GoogleTokenService(
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-                    var newToken = json.GetProperty("access_token").GetString();
+                    var newToken = json.TryGetProperty("access_token", out var tokenProp) ? tokenProp.GetString() : null;
                     if (newToken is not null)
                     {
                         user.SetGoogleTokens(newToken, null);

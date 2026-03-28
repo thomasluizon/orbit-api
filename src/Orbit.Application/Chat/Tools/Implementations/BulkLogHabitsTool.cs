@@ -58,14 +58,11 @@ public class BulkLogHabitsTool(
         foreach (var habitId in habitIds)
         {
             var habit = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habitId,
+                h => h.Id == habitId && h.UserId == userId,
                 q => q.Include(h => h.Logs),
                 ct);
 
             if (habit is null)
-                continue;
-
-            if (habit.UserId != userId)
                 continue;
 
             // Skip if already logged today

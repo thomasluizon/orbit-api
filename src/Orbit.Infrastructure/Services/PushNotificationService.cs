@@ -14,7 +14,8 @@ namespace Orbit.Infrastructure.Services;
 public class PushNotificationService(
     OrbitDbContext dbContext,
     IOptions<VapidSettings> vapidSettings,
-    ILogger<PushNotificationService> logger) : IPushNotificationService
+    ILogger<PushNotificationService> logger,
+    HttpClient httpClient) : IPushNotificationService
 {
     private readonly VapidSettings _settings = vapidSettings.Value;
 
@@ -55,6 +56,12 @@ public class PushNotificationService(
         List<Domain.Entities.PushSubscription> staleSubscriptions,
         CancellationToken ct)
     {
+        if (FirebaseMessaging.DefaultInstance is null)
+        {
+            logger.LogWarning("FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).", subs.Count);
+            return;
+        }
+
         foreach (var sub in subs)
         {
             try
@@ -70,7 +77,8 @@ public class PushNotificationService(
             }
             catch (FirebaseMessagingException ex) when (
                 ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
-                ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument)
+                ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
+                ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
             {
                 logger.LogInformation("FCM token {Token} is stale, removing", sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
                 staleSubscriptions.Add(sub);
@@ -88,7 +96,8 @@ public class PushNotificationService(
         List<Domain.Entities.PushSubscription> staleSubscriptions,
         CancellationToken ct)
     {
-        var client = new PushServiceClient();
+        // Reuse the injected HttpClient instead of creating a new PushServiceClient per call
+        var client = new PushServiceClient(httpClient);
         client.DefaultAuthentication = new VapidAuthentication(
             _settings.PublicKey, _settings.PrivateKey)
         {

@@ -16,13 +16,17 @@ namespace Orbit.Api.Controllers;
 public class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
 {
     [HttpPost]
-    [RequestFormLimits(MultipartBodyLengthLimit = 20_971_520)] // 20MB
+    [RequestSizeLimit(10_485_760)] // 10MB
+    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)] // 10MB
     public async Task<IActionResult> ProcessChat(
         [FromForm] string message,
         [FromForm] string? history,
         IFormFile? image,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(message) || message.Length > 4000)
+            return BadRequest(new { error = "Message must be between 1 and 4000 characters" });
+
         byte[]? imageData = null;
         string? imageMimeType = null;
 

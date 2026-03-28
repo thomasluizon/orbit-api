@@ -18,7 +18,7 @@ public class HabitDueDateAdvancementService(
             {
                 await AdvanceStaleDueDates(stoppingToken);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Error in habit due date advancement");
             }

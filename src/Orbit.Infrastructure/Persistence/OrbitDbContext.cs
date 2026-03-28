@@ -58,6 +58,8 @@ public class OrbitDbContext : DbContext
 
         modelBuilder.Entity<Habit>(entity =>
         {
+            entity.HasIndex(h => h.UserId);
+
             entity.HasMany(h => h.Logs)
                 .WithOne()
                 .HasForeignKey(l => l.HabitId)
@@ -138,8 +140,8 @@ public class OrbitDbContext : DbContext
             entity.HasMany(t => t.Habits)
                 .WithMany(h => h.Tags)
                 .UsingEntity("HabitTags",
-                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey("HabitId").OnDelete(DeleteBehavior.Cascade),
-                    r => r.HasOne(typeof(Tag)).WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade));
+                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey(nameof(Habit) + nameof(Habit.Id)).OnDelete(DeleteBehavior.Cascade),
+                    r => r.HasOne(typeof(Tag)).WithMany().HasForeignKey(nameof(Tag) + nameof(Tag.Id)).OnDelete(DeleteBehavior.Cascade));
         });
 
         modelBuilder.Entity<PushSubscription>(entity =>
@@ -175,8 +177,8 @@ public class OrbitDbContext : DbContext
             entity.HasMany(g => g.Habits)
                 .WithMany(h => h.Goals)
                 .UsingEntity("HabitGoals",
-                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey("HabitId").OnDelete(DeleteBehavior.Cascade),
-                    r => r.HasOne(typeof(Goal)).WithMany().HasForeignKey("GoalId").OnDelete(DeleteBehavior.Cascade));
+                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey(nameof(Habit) + nameof(Habit.Id)).OnDelete(DeleteBehavior.Cascade),
+                    r => r.HasOne(typeof(Goal)).WithMany().HasForeignKey(nameof(Goal) + nameof(Goal.Id)).OnDelete(DeleteBehavior.Cascade));
 
             if (encConverter is not null && nullableEncConverter is not null)
             {

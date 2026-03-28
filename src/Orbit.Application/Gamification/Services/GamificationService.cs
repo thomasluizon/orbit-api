@@ -37,15 +37,22 @@ public class GamificationService(
         if (habit is null) return;
 
         // Calculate XP: 10 base + streak bonus
-        var metrics = HabitMetricsCalculator.Calculate(habit, today);
+        var userTz = user.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
+        var metrics = HabitMetricsCalculator.Calculate(habit, today, userTz);
         var xp = 10 + metrics.CurrentStreak;
         user.AddXp(xp);
 
+        // --- Batch load all user habits with logs once (reused for Liftoff + Volume checks) ---
+        IReadOnlyList<Habit>? allUserHabits = null;
+        if (!earned.Contains(AchievementDefinitions.Liftoff) || !earned.Contains(AchievementDefinitions.LegendaryVolume))
+            allUserHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
+
         // --- Liftoff (first completion) ---
-        if (!earned.Contains(AchievementDefinitions.Liftoff))
+        if (!earned.Contains(AchievementDefinitions.Liftoff) && allUserHabits is not null)
         {
-            var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
-            var totalLogs = userHabits.Sum(h => h.Logs.Count);
+            var totalLogs = allUserHabits.Sum(h => h.Logs.Count);
             if (totalLogs == 1)
                 TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
         }
@@ -54,10 +61,9 @@ public class GamificationService(
         CheckConsistencyAchievements(metrics.CurrentStreak, earned, user, newAchievements);
 
         // --- Volume achievements ---
-        if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
+        if (!earned.Contains(AchievementDefinitions.LegendaryVolume) && allUserHabits is not null)
         {
-            var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
-            var totalCompletions = userHabits.Sum(h => h.Logs.Count);
+            var totalCompletions = allUserHabits.Sum(h => h.Logs.Count);
             CheckVolumeAchievements(totalCompletions, earned, user, newAchievements);
         }
 
@@ -428,6 +434,10 @@ public class GamificationService(
             user.SetLevel(newLevel.Level);
     }
 
+    // TODO (Issue 52): These hardcoded Portuguese translations should be moved to a proper
+    // localization resource file (e.g., .resx or a JSON-backed IStringLocalizer) once a
+    // backend i18n strategy is established. Currently only pt-BR is supported; adding more
+    // languages would require duplicating this pattern, which is not maintainable.
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
     {
         ["first_orbit"] = ("Primeira Orbita", "Crie seu primeiro habito"),
@@ -514,33 +524,9 @@ public class GamificationService(
         }
     }
 
+    // Delegates to HabitScheduleService.IsHabitDueOnDate -- the single source of truth
+    // for schedule calculation. The previous local copy was diverged and skipped modular
+    // arithmetic for Weekly/Monthly/Yearly frequencies.
     private static bool IsScheduledForDate(Habit habit, DateOnly date)
-    {
-        // One-time task: scheduled for its due date
-        if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
-            return habit.DueDate == date;
-
-        // General habits are never "scheduled" for a specific date
-        if (habit.IsGeneral) return false;
-
-        // Habit hasn't started yet
-        if (date < habit.DueDate) return false;
-
-        // Habit has ended
-        if (habit.EndDate.HasValue && date > habit.EndDate.Value) return false;
-
-        // Day-specific: check if the day of week matches
-        if (habit.Days.Count > 0 && habit.FrequencyQuantity == 1)
-            return habit.Days.Contains(date.DayOfWeek);
-
-        // Daily: every N days
-        if (habit.FrequencyUnit == Domain.Enums.FrequencyUnit.Day)
-        {
-            var daysSinceStart = date.DayNumber - habit.DueDate.DayNumber;
-            return daysSinceStart % habit.FrequencyQuantity.Value == 0;
-        }
-
-        // Weekly/Monthly/Yearly: simplified check (due date alignment)
-        return true;
-    }
+        => HabitScheduleService.IsHabitDueOnDate(habit, date);
 }

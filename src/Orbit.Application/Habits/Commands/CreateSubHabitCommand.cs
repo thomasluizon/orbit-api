@@ -70,7 +70,7 @@ public class CreateSubHabitCommandHandler(
             return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound);
 
         // Enforce max nesting depth from config
-        var maxDepth = await appConfigService.GetAsync("MaxHabitDepth", 5, cancellationToken);
+        var maxDepth = await appConfigService.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
         var depth = await GetDepthAsync(parent, habitRepository, cancellationToken);
         if (depth >= maxDepth - 1)
             return Result.Failure<Guid>($"Maximum nesting depth reached ({maxDepth} levels).");

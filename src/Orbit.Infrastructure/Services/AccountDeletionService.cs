@@ -19,13 +19,14 @@ public class AccountDeletionService(
             try
             {
                 await ProcessScheduledDeletions(stoppingToken);
+                await CleanupStaleSentRecords(stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Error in account deletion service");
             }
 
-            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
+            await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
         }
     }
 
@@ -56,5 +57,27 @@ public class AccountDeletionService(
                 logger.LogError(ex, "Failed to delete account {UserId}", user.Id);
             }
         }
+    }
+
+    private async Task CleanupStaleSentRecords(CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+
+        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+
+        var deletedReminders = await dbContext.SentReminders
+            .Where(r => r.Date < cutoff)
+            .ExecuteDeleteAsync(ct);
+
+        var cutoffWeek = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
+        var deletedSlipAlerts = await dbContext.SentSlipAlerts
+            .Where(a => a.WeekStart < cutoffWeek)
+            .ExecuteDeleteAsync(ct);
+
+        if (deletedReminders > 0 || deletedSlipAlerts > 0)
+            logger.LogInformation(
+                "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days",
+                deletedReminders, deletedSlipAlerts);
     }
 }

@@ -6,8 +6,8 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Enums;
 using Orbit.Application.Common;
-using Orbit.Infrastructure.Configuration;
-using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Configuration; // TODO (Issue 51): StripeSettings is an infrastructure concern; consider moving to Application layer config or abstracting behind an interface
+using Orbit.Infrastructure.Services; // TODO (Issue 51): IGeoLocationService is defined in Infrastructure; consider moving its interface to Domain/Application to remove the layer violation
 using Stripe;
 using Stripe.Checkout;
 
@@ -152,6 +152,13 @@ public class SubscriptionController(
             user.SubscriptionInterval?.ToString().ToLowerInvariant()));
     }
 
+    // TODO (Issue 50): The business logic in HandleWebhook (subscription activation, renewal,
+    // cancellation) should be extracted into dedicated MediatR commands:
+    //   - ActivateSubscriptionCommand (checkout.session.completed)
+    //   - RenewSubscriptionCommand    (invoice.paid)
+    //   - CancelSubscriptionCommand   (customer.subscription.deleted / updated)
+    // This would make each event handler independently testable and remove direct
+    // repository access from the controller. Defer until a dedicated billing refactor.
     [AllowAnonymous]
     [HttpPost("webhook")]
     public async Task<IActionResult> HandleWebhook(CancellationToken ct)
@@ -306,7 +313,8 @@ public class SubscriptionController(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error processing Stripe webhook event {Type}", stripeEvent.Type);
-            // Still return 200 to prevent Stripe from retrying
+            // Return 500 so Stripe retries the webhook on business logic failures
+            return StatusCode(500);
         }
 
         return Ok();

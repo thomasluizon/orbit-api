@@ -18,13 +18,18 @@ public class ReorderHabitsCommandHandler(
 {
     public async Task<Result> Handle(ReorderHabitsCommand request, CancellationToken cancellationToken)
     {
+        var ids = request.Positions.Select(p => p.HabitId).ToHashSet();
+
+        // Load all habits in a single query instead of one per position update
+        var habits = await habitRepository.FindTrackedAsync(
+            h => ids.Contains(h.Id) && h.UserId == request.UserId,
+            cancellationToken);
+
+        var habitMap = habits.ToDictionary(h => h.Id);
+
         foreach (var update in request.Positions)
         {
-            var habit = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == update.HabitId && h.UserId == request.UserId,
-                cancellationToken: cancellationToken);
-
-            if (habit is null)
+            if (!habitMap.TryGetValue(update.HabitId, out var habit))
                 return Result.Failure(ErrorMessages.HabitNotFound);
 
             habit.SetPosition(update.Position);
