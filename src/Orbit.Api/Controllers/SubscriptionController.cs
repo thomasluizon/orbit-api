@@ -95,11 +95,15 @@ public class SubscriptionController(
             Metadata = new Dictionary<string, string> { { "userId", userId.ToString() } }
         };
 
-        // Apply referral discount coupon if user has one
+        // Apply referral discount coupon if user has one, otherwise allow manual promo codes
         if (!string.IsNullOrEmpty(user.ReferralCouponId))
         {
             sessionOptions.Discounts = [new SessionDiscountOptions { PromotionCode = user.ReferralCouponId }];
             logger.LogInformation("Applying referral coupon {CouponId} to checkout for user {UserId}", user.ReferralCouponId, userId);
+        }
+        else
+        {
+            sessionOptions.AllowPromotionCodes = true;
         }
 
         var sessionService = new SessionService();
