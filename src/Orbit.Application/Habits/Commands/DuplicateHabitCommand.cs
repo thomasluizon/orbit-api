@@ -44,7 +44,7 @@ public class DuplicateHabitCommandHandler(
         var childLookup = allHabits.ToLookup(h => h.ParentHabitId);
 
         // Duplicate the root habit
-        var rootCopy = CloneHabit(original, original.ParentHabitId, appendCopy: true);
+        var rootCopy = CloneHabit(original, original.ParentHabitId);
         if (rootCopy.IsFailure)
             return Result.Failure<Guid>(rootCopy.Error);
 
@@ -69,7 +69,7 @@ public class DuplicateHabitCommandHandler(
     {
         foreach (var child in childLookup[originalParentId])
         {
-            var childCopy = CloneHabit(child, newParentId, appendCopy: false);
+            var childCopy = CloneHabit(child, newParentId);
             if (childCopy.IsFailure) continue;
 
             await repository.AddAsync(childCopy.Value, cancellationToken);
@@ -78,13 +78,11 @@ public class DuplicateHabitCommandHandler(
         }
     }
 
-    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId, bool appendCopy)
+    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId)
     {
-        var title = appendCopy ? $"{source.Title} (copy)" : source.Title;
-
         return Habit.Create(
             source.UserId,
-            title,
+            source.Title,
             source.FrequencyUnit,
             source.FrequencyQuantity,
             source.Description,
