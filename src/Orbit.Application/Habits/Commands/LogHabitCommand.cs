@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
@@ -39,7 +40,8 @@ public class LogHabitCommandHandler(
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
-    IMediator mediator) : IRequestHandler<LogHabitCommand, Result<Guid>>
+    IMediator mediator,
+    ILogger<LogHabitCommandHandler> logger) : IRequestHandler<LogHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
     {
@@ -124,9 +126,9 @@ public class LogHabitCommandHandler(
         {
             await mediator.Send(new CheckReferralCompletionCommand(request.UserId), cancellationToken);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently ignore -- referral is secondary to habit logging
+            logger.LogError(ex, "Referral completion check failed for user {UserId}", request.UserId);
         }
 
         return Result.Success(logResult.Value.Id);
