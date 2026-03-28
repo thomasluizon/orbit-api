@@ -5,11 +5,16 @@
 namespace Orbit.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddPushSubscriptionUserFk : Migration
+    public partial class AuditFixes : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateIndex(
+                name: "IX_Habits_UserId",
+                table: "Habits",
+                column: "UserId");
+
             migrationBuilder.AddForeignKey(
                 name: "FK_PushSubscriptions_Users_UserId",
                 table: "PushSubscriptions",
@@ -25,6 +30,10 @@ namespace Orbit.Infrastructure.Persistence.Migrations
             migrationBuilder.DropForeignKey(
                 name: "FK_PushSubscriptions_Users_UserId",
                 table: "PushSubscriptions");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Habits_UserId",
+                table: "Habits");
         }
     }
 }
