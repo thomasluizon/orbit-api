@@ -22,20 +22,6 @@ public class StripeCouponRewardService(
         if (user is null)
             throw new InvalidOperationException($"User {userId} not found for coupon creation");
 
-        // Ensure user has a Stripe customer
-        if (string.IsNullOrEmpty(user.StripeCustomerId))
-        {
-            var customerService = new CustomerService();
-            var customer = await customerService.CreateAsync(new CustomerCreateOptions
-            {
-                Email = user.Email,
-                Name = user.Name,
-                Metadata = new Dictionary<string, string> { { "userId", userId.ToString() } }
-            }, cancellationToken: cancellationToken);
-            user.SetStripeCustomerId(customer.Id);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
         var couponService = new CouponService();
         var coupon = await couponService.CreateAsync(new CouponCreateOptions
         {
@@ -49,19 +35,11 @@ public class StripeCouponRewardService(
             }
         }, cancellationToken: cancellationToken);
 
-        var promoCodeService = new PromotionCodeService();
-        var promoCode = await promoCodeService.CreateAsync(new PromotionCodeCreateOptions
-        {
-            Promotion = new PromotionCodePromotionOptions { Coupon = coupon.Id },
-            Customer = user.StripeCustomerId,
-            MaxRedemptions = 1
-        }, cancellationToken: cancellationToken);
-
         logger.LogInformation(
-            "Created referral coupon for user {UserId}: coupon={CouponId}, promoCode={PromoCodeId}",
-            userId, coupon.Id, promoCode.Id);
+            "Created referral coupon for user {UserId}: couponId={CouponId}",
+            userId, coupon.Id);
 
-        return promoCode.Id;
+        return coupon.Id;
     }
 
     public async Task<string?> GetUserPromotionCodeAsync(Guid userId, CancellationToken cancellationToken = default)
