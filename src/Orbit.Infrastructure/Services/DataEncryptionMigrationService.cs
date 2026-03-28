@@ -3,13 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// One-time startup service that encrypts all existing plaintext data and computes EmailHash.
+/// One-time startup service that encrypts all existing plaintext data.
 /// Uses an AppConfig flag ("EncryptionMigrationComplete") to only run once.
 /// Processes entities in small batches to avoid overwhelming the database.
 /// Safe to run multiple times (idempotent).
@@ -35,17 +34,22 @@ public sealed class DataEncryptionMigrationService(
 
             logger.LogInformation("Starting full data encryption migration");
 
-            await MigrateEmailHashes(stoppingToken);
-            await MigrateEntities<User>("Users", stoppingToken);
-            await MigrateEntities<Habit>("Habits", stoppingToken);
-            await MigrateEntities<HabitLog>("HabitLogs", stoppingToken);
-            await MigrateUserFacts(stoppingToken);
-            await MigrateEntities<PushSubscription>("PushSubscriptions", stoppingToken);
-            await MigrateEntities<Goal>("Goals", stoppingToken);
-            await MigrateEntities<GoalProgressLog>("GoalProgressLogs", stoppingToken);
+            var success = true;
+            success &= await MigrateEntities<Habit>("Habits", stoppingToken);
+            success &= await MigrateEntities<HabitLog>("HabitLogs", stoppingToken);
+            success &= await MigrateUserFacts(stoppingToken);
+            success &= await MigrateEntities<Goal>("Goals", stoppingToken);
+            success &= await MigrateEntities<GoalProgressLog>("GoalProgressLogs", stoppingToken);
 
-            await SetMigrationComplete(stoppingToken);
-            logger.LogInformation("Full data encryption migration completed successfully");
+            if (success)
+            {
+                await SetMigrationComplete(stoppingToken);
+                logger.LogInformation("Full data encryption migration completed successfully");
+            }
+            else
+            {
+                logger.LogWarning("Encryption migration had errors -- will retry on next startup");
+            }
         }
         catch (Exception ex)
         {
@@ -68,40 +72,16 @@ public sealed class DataEncryptionMigrationService(
         await db.SaveChangesAsync(stoppingToken);
     }
 
-    private async Task MigrateEmailHashes(CancellationToken stoppingToken)
-    {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var encryptionService = scope.ServiceProvider.GetRequiredService<IEncryptionService>();
-
-        var usersToMigrate = await db.Users
-            .Where(u => u.EmailHash == null! || u.EmailHash == "")
-            .ToListAsync(stoppingToken);
-
-        if (usersToMigrate.Count == 0)
-            return;
-
-        logger.LogInformation("Migrating EmailHash for {Count} users", usersToMigrate.Count);
-
-        foreach (var user in usersToMigrate)
-        {
-            var emailHash = encryptionService.ComputeHmac(user.Email);
-            user.SetEmailHash(emailHash);
-        }
-
-        await db.SaveChangesAsync(stoppingToken);
-        logger.LogInformation("EmailHash migration complete");
-    }
-
     /// <summary>
     /// Loads all entities of a type in batches, marks them as Modified, and saves.
     /// The ValueConverter encrypts on write -- so loading (decrypt/passthrough) then saving
     /// (encrypt) converts all plaintext to ciphertext.
-    /// Already-encrypted data is decrypted then re-encrypted (harmless, new nonce).
+    /// Returns false if any batch failed.
     /// </summary>
-    private async Task MigrateEntities<T>(string entityName, CancellationToken stoppingToken) where T : class
+    private async Task<bool> MigrateEntities<T>(string entityName, CancellationToken stoppingToken) where T : class
     {
         var totalProcessed = 0;
+        var hadErrors = false;
         var offset = 0;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -130,21 +110,25 @@ public sealed class DataEncryptionMigrationService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Batch failed for {Entity} at offset {Offset} -- skipping batch", entityName, offset);
+                hadErrors = true;
                 offset += BatchSize;
             }
         }
 
         if (totalProcessed > 0)
             logger.LogInformation("Encrypted {Count} {Entity}", totalProcessed, entityName);
+
+        return !hadErrors;
     }
 
     /// <summary>
     /// UserFact has a global query filter (IsDeleted), so we need IgnoreQueryFilters
     /// to encrypt soft-deleted facts too.
     /// </summary>
-    private async Task MigrateUserFacts(CancellationToken stoppingToken)
+    private async Task<bool> MigrateUserFacts(CancellationToken stoppingToken)
     {
         var totalProcessed = 0;
+        var hadErrors = false;
         var offset = 0;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -174,11 +158,14 @@ public sealed class DataEncryptionMigrationService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Batch failed for UserFacts at offset {Offset} -- skipping batch", offset);
+                hadErrors = true;
                 offset += BatchSize;
             }
         }
 
         if (totalProcessed > 0)
             logger.LogInformation("Encrypted {Count} UserFacts", totalProcessed);
+
+        return !hadErrors;
     }
 }

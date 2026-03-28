@@ -46,18 +46,13 @@ public class OrbitDbContext : DbContext
 
         modelBuilder.Entity<User>(entity =>
         {
-            // EmailHash replaces Email for unique lookups
-            entity.HasIndex(u => u.EmailHash).IsUnique();
+            entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
 
-            if (encConverter is not null && nullableEncConverter is not null)
+            if (nullableEncConverter is not null)
             {
-                entity.Property(u => u.Email).HasConversion(encConverter).HasColumnType("text");
-                entity.Property(u => u.Name).HasConversion(encConverter).HasColumnType("text");
                 entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
                 entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
-                entity.Property(u => u.StripeCustomerId).HasConversion(nullableEncConverter).HasColumnType("text");
-                entity.Property(u => u.StripeSubscriptionId).HasConversion(nullableEncConverter).HasColumnType("text");
             }
         });
 
@@ -150,19 +145,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<PushSubscription>(entity =>
         {
             entity.HasIndex(s => s.UserId);
-            // Remove unique index on Endpoint since it will be encrypted (non-deterministic)
-            // Keep UserId index for lookups
-
-            if (encConverter is not null && nullableEncConverter is not null)
-            {
-                entity.Property(s => s.Endpoint).HasConversion(encConverter).HasColumnType("text");
-                entity.Property(s => s.P256dh).HasConversion(encConverter).HasColumnType("text");
-                entity.Property(s => s.Auth).HasConversion(encConverter).HasColumnType("text");
-            }
-            else
-            {
-                entity.HasIndex(s => s.Endpoint).IsUnique();
-            }
+            entity.HasIndex(s => s.Endpoint).IsUnique();
         });
 
         modelBuilder.Entity<SentReminder>(entity =>

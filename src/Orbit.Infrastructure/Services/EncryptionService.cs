@@ -14,7 +14,6 @@ public sealed class EncryptionService : IEncryptionService
     private const string EncPrefix = "enc:"; // Deterministic prefix for encrypted values
 
     private readonly byte[]? _key;
-    private readonly byte[]? _hmacKey;
     private readonly bool _isConfigured;
 
     public EncryptionService(IOptions<EncryptionSettings> settings, ILogger<EncryptionService> logger)
@@ -22,30 +21,24 @@ public sealed class EncryptionService : IEncryptionService
         try
         {
             var keyString = settings.Value.Key;
-            var hmacKeyString = settings.Value.HmacKey;
 
-            if (string.IsNullOrEmpty(keyString) || keyString.Contains("REPLACE")
-                || string.IsNullOrEmpty(hmacKeyString) || hmacKeyString.Contains("REPLACE"))
+            if (string.IsNullOrEmpty(keyString) || keyString.Contains("REPLACE"))
             {
-                logger.LogWarning("Encryption keys not configured -- encryption is disabled (passthrough mode)");
+                logger.LogWarning("Encryption key not configured -- encryption is disabled (passthrough mode)");
                 _isConfigured = false;
                 return;
             }
 
             _key = Convert.FromBase64String(keyString);
-            _hmacKey = Convert.FromBase64String(hmacKeyString);
 
             if (_key.Length != 32)
                 throw new ArgumentException("Encryption key must be 256 bits (32 bytes) when decoded from Base64.");
-
-            if (_hmacKey.Length < 16)
-                throw new ArgumentException("HMAC key must be at least 128 bits (16 bytes) when decoded from Base64.");
 
             _isConfigured = true;
         }
         catch (FormatException)
         {
-            logger.LogWarning("Encryption keys are not valid Base64 -- encryption is disabled (passthrough mode)");
+            logger.LogWarning("Encryption key is not valid Base64 -- encryption is disabled (passthrough mode)");
             _isConfigured = false;
         }
     }
@@ -115,22 +108,4 @@ public sealed class EncryptionService : IEncryptionService
     {
         return ciphertext is null ? null : Decrypt(ciphertext);
     }
-
-    public string ComputeHmac(string input)
-    {
-        if (!_isConfigured)
-        {
-            // Fallback: return normalized email for lookups (no HMAC without key)
-            return input.Trim().ToLowerInvariant();
-        }
-
-        var normalizedInput = input.Trim().ToLowerInvariant();
-        var inputBytes = Encoding.UTF8.GetBytes(normalizedInput);
-
-        using var hmac = new HMACSHA256(_hmacKey!);
-        var hash = hmac.ComputeHash(inputBytes);
-
-        return Convert.ToHexStringLower(hash);
-    }
-
 }

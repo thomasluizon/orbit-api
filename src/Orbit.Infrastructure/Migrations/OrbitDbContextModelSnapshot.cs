@@ -354,6 +354,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Endpoint")
+                        .IsUnique();
+
                     b.HasIndex("UserId");
 
                     b.ToTable("PushSubscriptions");
@@ -501,10 +504,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("EmailHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("GoogleAccessToken")
                         .HasColumnType("text");
 
@@ -577,7 +576,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EmailHash")
+                    b.HasIndex("Email")
                         .IsUnique();
 
                     b.HasIndex("ReferralCode")

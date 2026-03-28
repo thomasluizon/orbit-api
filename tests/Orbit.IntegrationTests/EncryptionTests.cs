@@ -16,8 +16,7 @@ public class EncryptionTests
     {
         var settings = Options.Create(new EncryptionSettings
         {
-            Key = "DdyUCjjdK326cB9lY00tyUvRDpCQcYJOJIpu21I1D8c=",
-            HmacKey = "bpHAcSwafewwDacpGLrBr4uaqwNJpRDWvgGNmL+TWIc="
+            Key = "DdyUCjjdK326cB9lY00tyUvRDpCQcYJOJIpu21I1D8c="
         });
         _encryptionService = new EncryptionService(settings, NullLogger<EncryptionService>.Instance);
     }
@@ -88,7 +87,6 @@ public class EncryptionTests
     [Fact]
     public void Decrypt_PlaintextPassthrough_ReturnsAsIs()
     {
-        // Pre-encryption data should pass through without error
         var plaintext = "not-encrypted@email.com";
 
         var result = _encryptionService.Decrypt(plaintext);
@@ -99,7 +97,6 @@ public class EncryptionTests
     [Fact]
     public void Decrypt_LongBase64Plaintext_ReturnsAsIs()
     {
-        // Values that look like Base64 but aren't encrypted should pass through
         var url = "https://fcm.googleapis.com/fcm/send/cY2M7GEaPK0:APA91bHxyz";
 
         var result = _encryptionService.Decrypt(url);
@@ -136,51 +133,11 @@ public class EncryptionTests
     }
 
     [Fact]
-    public void ComputeHmac_IsDeterministic()
-    {
-        var input = "test@example.com";
-
-        var hash1 = _encryptionService.ComputeHmac(input);
-        var hash2 = _encryptionService.ComputeHmac(input);
-
-        hash1.Should().Be(hash2);
-    }
-
-    [Fact]
-    public void ComputeHmac_NormalizesInput()
-    {
-        var hash1 = _encryptionService.ComputeHmac("Test@Example.COM");
-        var hash2 = _encryptionService.ComputeHmac("test@example.com");
-        var hash3 = _encryptionService.ComputeHmac("  test@example.com  ");
-
-        hash1.Should().Be(hash2);
-        hash2.Should().Be(hash3);
-    }
-
-    [Fact]
-    public void ComputeHmac_DifferentInputs_DifferentHashes()
-    {
-        var hash1 = _encryptionService.ComputeHmac("user1@example.com");
-        var hash2 = _encryptionService.ComputeHmac("user2@example.com");
-
-        hash1.Should().NotBe(hash2);
-    }
-
-    [Fact]
-    public void ComputeHmac_ReturnsHexString()
-    {
-        var hash = _encryptionService.ComputeHmac("test@example.com");
-
-        hash.Should().MatchRegex("^[0-9a-f]{64}$", "HMAC-SHA256 produces 64 hex characters");
-    }
-
-    [Fact]
     public void Constructor_InvalidKeyLength_ThrowsArgumentException()
     {
         var badSettings = Options.Create(new EncryptionSettings
         {
-            Key = Convert.ToBase64String(new byte[16]), // 16 bytes instead of 32
-            HmacKey = "bpHAcSwafewwDacpGLrBr4uaqwNJpRDWvgGNmL+TWIc="
+            Key = Convert.ToBase64String(new byte[16]) // 16 bytes instead of 32
         });
 
         var act = () => new EncryptionService(badSettings, NullLogger<EncryptionService>.Instance);
@@ -193,15 +150,12 @@ public class EncryptionTests
     {
         var placeholderSettings = Options.Create(new EncryptionSettings
         {
-            Key = "REPLACE-IN-DEVELOPMENT-JSON",
-            HmacKey = "REPLACE-IN-DEVELOPMENT-JSON"
+            Key = "REPLACE-IN-DEVELOPMENT-JSON"
         });
 
         var service = new EncryptionService(placeholderSettings, NullLogger<EncryptionService>.Instance);
 
-        // In passthrough mode, encrypt returns input unchanged
         service.Encrypt("hello").Should().Be("hello");
         service.Decrypt("hello").Should().Be("hello");
-        service.ComputeHmac("Test@Example.COM").Should().Be("test@example.com");
     }
 }

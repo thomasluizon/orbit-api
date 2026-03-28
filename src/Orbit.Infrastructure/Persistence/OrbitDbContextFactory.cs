@@ -21,8 +21,7 @@ public class OrbitDbContextFactory : IDesignTimeDbContextFactory<OrbitDbContext>
         var optionsBuilder = new DbContextOptionsBuilder<OrbitDbContext>();
         optionsBuilder.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
 
-        // No encryption service at design time -- converters won't be applied to the model,
-        // but the migration will still pick up the new EmailHash column and index changes
+        // No encryption service at design time -- converters won't be applied
         return new OrbitDbContext(optionsBuilder.Options);
     }
 }

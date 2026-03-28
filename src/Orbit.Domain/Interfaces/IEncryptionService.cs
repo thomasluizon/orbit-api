@@ -6,5 +6,4 @@ public interface IEncryptionService
     string Decrypt(string ciphertext);
     string? EncryptNullable(string? plaintext);
     string? DecryptNullable(string? ciphertext);
-    string ComputeHmac(string input);
 }
