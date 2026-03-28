@@ -246,6 +246,15 @@ public class GetHabitScheduleQueryHandler(
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();
+            var df = request.DateFrom;
+            var dt = request.DateTo;
+            bool IsChildRelevant(Habit child)
+            {
+                if (child.IsCompleted) return false;
+                if (!df.HasValue || !dt.HasValue) return true;
+                return HabitScheduleService.GetScheduledDates(child, df.Value, dt.Value).Count > 0
+                    || (!child.IsBadHabit && !child.IsFlexible && child.FrequencyUnit == null && child.DueDate >= df.Value && child.DueDate <= dt.Value);
+            }
             bool MatchesSearch(Habit h)
             {
                 if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
@@ -257,7 +266,7 @@ public class GetHabitScheduleQueryHandler(
             {
                 foreach (var child in lkp[parentId])
                 {
-                    if (child.IsCompleted) continue;
+                    if (!IsChildRelevant(child)) continue;
                     if (FuzzyMatcher.FuzzyContains(child.Title, t)) return true;
                     if (HasDescendantMatchingSearch(child.Id, lkp, t)) return true;
                 }
@@ -324,11 +333,12 @@ public class GetHabitScheduleQueryHandler(
             lookup[h.Id].Any(),
             flexibleTarget, flexibleCompleted,
             instances,
-            ComputeSearchMatches(h, search, lookup));
+            ComputeSearchMatches(h, search, lookup, dateFrom, dateTo));
     }
 
     private static List<SearchMatchField>? ComputeSearchMatches(
-        Habit h, string? search, ILookup<Guid?, Habit> lookup)
+        Habit h, string? search, ILookup<Guid?, Habit> lookup,
+        DateOnly? dateFrom = null, DateOnly? dateTo = null)
     {
         if (string.IsNullOrWhiteSpace(search)) return null;
         var matches = new List<SearchMatchField>();
@@ -344,6 +354,10 @@ public class GetHabitScheduleQueryHandler(
         foreach (var child in lookup[h.Id])
         {
             if (child.IsCompleted) continue;
+            if (dateFrom.HasValue && dateTo.HasValue
+                && HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value).Count == 0
+                && (child.IsBadHabit || child.IsFlexible || child.FrequencyUnit != null || child.DueDate < dateFrom.Value || child.DueDate > dateTo.Value))
+                continue;
             if (FuzzyMatcher.FuzzyContains(child.Title, search))
                 matches.Add(new SearchMatchField("child", child.Title));
         }
@@ -413,7 +427,7 @@ public class GetHabitScheduleQueryHandler(
                     MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate, userToday, search),
                     lookup[c.Id].Any(), ft, fc, isLoggedInRange,
                     instances,
-                    ComputeSearchMatches(c, search, lookup));
+                    ComputeSearchMatches(c, search, lookup, dateFrom, dateTo));
             })
             .ToList();
     }
