@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -17,12 +18,17 @@ public record CreateGoalCommand(
 
 public class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     ILogger<CreateGoalCommandHandler> logger) : IRequestHandler<CreateGoalCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanCreateGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<Guid>();
+
         var goalResult = Goal.Create(
             request.UserId,
             request.Title,

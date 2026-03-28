@@ -1,16 +1,19 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Stripe;
 
 namespace Orbit.Infrastructure.Services;
 
 public class StripeCouponRewardService(
     IGenericRepository<User> userRepository,
+    IOptions<StripeSettings> stripeSettings,
     ILogger<StripeCouponRewardService> logger) : IReferralRewardService
 {
-    private const string ProductId = "prod_UBUPrTlZg8chuk";
+    private readonly StripeSettings _settings = stripeSettings.Value;
 
     public async Task<string> CreateReferralCouponAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -31,10 +34,9 @@ public class StripeCouponRewardService(
             Duration = "once",
             MaxRedemptions = 1,
             Name = "Referral Discount",
-            AppliesTo = new CouponAppliesToOptions
-            {
-                Products = [ProductId]
-            }
+            AppliesTo = !string.IsNullOrEmpty(_settings.ProProductId)
+                ? new CouponAppliesToOptions { Products = [_settings.ProProductId] }
+                : null
         }, cancellationToken: cancellationToken);
 
         logger.LogInformation(

@@ -13,4 +13,5 @@ public static class AppConfigKeys
     public const string ProAiMessagesPerMonth = "ProAiMessagesPerMonth";
     public const string DailySummaryProOnly = "DailySummaryProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
+    public const string GoalsProOnly = "GoalsProOnly";
 }

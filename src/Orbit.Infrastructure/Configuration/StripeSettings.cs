@@ -12,4 +12,5 @@ public class StripeSettings
     public string YearlyPriceIdBrl { get; set; } = "";
     public string SuccessUrl { get; set; } = "";
     public string CancelUrl { get; set; } = "";
+    public string ProProductId { get; set; } = "";
 }
