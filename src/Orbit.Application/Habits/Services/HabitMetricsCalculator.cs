@@ -8,7 +8,7 @@ public static class HabitMetricsCalculator
 {
     public static HabitMetrics Calculate(Habit habit, DateOnly today)
     {
-        var logDates = habit.Logs.Select(l => l.Date).Distinct().ToHashSet();
+        var logDates = habit.Logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
         var expectedDates = GenerateExpectedDates(habit, today).ToList();
 
         var currentStreak = CalculateCurrentStreak(habit, expectedDates, logDates, today);

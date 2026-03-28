@@ -132,7 +132,7 @@ public sealed class GeminiRetrospectiveService(
         {
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
             var scheduledCount = scheduledDates.Count;
-            var logs = habit.Logs.Where(l => l.Date >= dateFrom && l.Date <= dateTo).ToList();
+            var logs = habit.Logs.Where(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0).ToList();
             var completedCount = logs.Count;
 
             if (scheduledCount == 0 && completedCount == 0)
@@ -157,7 +157,7 @@ public sealed class GeminiRetrospectiveService(
             var children = habits.Where(h => h.ParentHabitId == habit.Id).ToList();
             foreach (var child in children)
             {
-                var childLogs = child.Logs.Where(l => l.Date >= dateFrom && l.Date <= dateTo).ToList();
+                var childLogs = child.Logs.Where(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0).ToList();
                 var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count;
                 var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childLogs.Count / childScheduled) : 0;
                 habitLines.Add($"  - {child.Title}: {childLogs.Count}/{childScheduled} ({childRate}%)");

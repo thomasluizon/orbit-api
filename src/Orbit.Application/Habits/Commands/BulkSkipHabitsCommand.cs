@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -24,6 +25,7 @@ public record BulkSkipItemResult(
 
 public class BulkSkipHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<BulkSkipHabitsCommand, Result<BulkSkipResult>>
@@ -53,7 +55,8 @@ public class BulkSkipHabitsCommandHandler(
 
                 var habit = await habitRepository.FindOneTrackedAsync(
                     h => h.Id == habitId,
-                    cancellationToken: cancellationToken);
+                    q => q.Include(h => h.Logs),
+                    cancellationToken);
 
                 if (habit is null)
                 {
@@ -116,9 +119,35 @@ public class BulkSkipHabitsCommandHandler(
                 }
 
                 if (habit.IsFlexible)
-                    habit.AdvanceDueDatePastWindow(today);
+                {
+                    var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+                    if (remaining <= 0)
+                    {
+                        results.Add(new BulkSkipItemResult(
+                            Index: i,
+                            Status: BulkItemStatus.Failed,
+                            HabitId: habitId,
+                            Error: "All instances for this period have already been completed or skipped."));
+                        continue;
+                    }
+
+                    var skipResult = habit.SkipFlexible(targetDate);
+                    if (skipResult.IsFailure)
+                    {
+                        results.Add(new BulkSkipItemResult(
+                            Index: i,
+                            Status: BulkItemStatus.Failed,
+                            HabitId: habitId,
+                            Error: skipResult.Error));
+                        continue;
+                    }
+
+                    await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
+                }
                 else
+                {
                     habit.AdvanceDueDate(targetDate);
+                }
 
                 results.Add(new BulkSkipItemResult(
                     Index: i,

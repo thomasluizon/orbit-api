@@ -123,23 +123,37 @@ public static class HabitScheduleService
     }
 
     /// <summary>
-    /// Count of logs within the window containing target.
+    /// Count of completion logs (Value > 0) within the window containing target.
+    /// Skip logs (Value == 0) are excluded.
     /// </summary>
     public static int GetCompletedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
     {
         var start = GetWindowStart(habit, target);
         var end = GetWindowEnd(habit, target);
-        return logs.Count(l => l.Date >= start && l.Date <= end);
+        return logs.Count(l => l.Date >= start && l.Date <= end && l.Value > 0);
+    }
+
+    /// <summary>
+    /// Count of skip logs (Value == 0) within the window containing target.
+    /// </summary>
+    public static int GetSkippedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    {
+        var start = GetWindowStart(habit, target);
+        var end = GetWindowEnd(habit, target);
+        return logs.Count(l => l.Date >= start && l.Date <= end && l.Value == 0);
     }
 
     /// <summary>
     /// How many more completions are needed in the window containing target.
+    /// Skips reduce the target count for the period.
     /// </summary>
     public static int GetRemainingCompletions(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
     {
         var targetCount = habit.FrequencyQuantity ?? 1;
+        var skipped = GetSkippedInWindow(habit, target, logs);
+        var adjustedTarget = Math.Max(0, targetCount - skipped);
         var completed = GetCompletedInWindow(habit, target, logs);
-        return Math.Max(0, targetCount - completed);
+        return Math.Max(0, adjustedTarget - completed);
     }
 
 

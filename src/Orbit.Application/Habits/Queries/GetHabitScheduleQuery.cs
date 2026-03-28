@@ -313,7 +313,9 @@ public class GetHabitScheduleQueryHandler(
         int? flexibleCompleted = null;
         if (h.IsFlexible && referenceDate.HasValue)
         {
-            flexibleTarget = h.FrequencyQuantity ?? 1;
+            var totalTarget = h.FrequencyQuantity ?? 1;
+            var skipped = HabitScheduleService.GetSkippedInWindow(h, referenceDate.Value, h.Logs);
+            flexibleTarget = Math.Max(0, totalTarget - skipped);
             flexibleCompleted = HabitScheduleService.GetCompletedInWindow(h, referenceDate.Value, h.Logs);
         }
 
@@ -409,11 +411,13 @@ public class GetHabitScheduleQueryHandler(
                 int? fc = null;
                 if (c.IsFlexible && referenceDate.HasValue)
                 {
-                    ft = c.FrequencyQuantity ?? 1;
+                    var childTotalTarget = c.FrequencyQuantity ?? 1;
+                    var childSkipped = HabitScheduleService.GetSkippedInWindow(c, referenceDate.Value, c.Logs);
+                    ft = Math.Max(0, childTotalTarget - childSkipped);
                     fc = HabitScheduleService.GetCompletedInWindow(c, referenceDate.Value, c.Logs);
                 }
                 var isLoggedInRange = dateFrom.HasValue && dateTo.HasValue
-                    && c.Logs.Any(l => l.Date >= dateFrom.Value && l.Date <= dateTo.Value);
+                    && c.Logs.Any(l => l.Date >= dateFrom.Value && l.Date <= dateTo.Value && l.Value > 0);
 
                 var instances = dateFrom.HasValue && dateTo.HasValue && userToday.HasValue
                     ? HabitScheduleService.GetInstances(c, dateFrom.Value, dateTo.Value, userToday.Value)

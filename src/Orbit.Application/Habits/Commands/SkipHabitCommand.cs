@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Common.Attributes;
@@ -37,6 +38,7 @@ public record SkipHabitCommand(
 
 public class SkipHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<SkipHabitCommand, Result>
@@ -45,7 +47,8 @@ public class SkipHabitCommandHandler(
     {
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            cancellationToken: cancellationToken);
+            q => q.Include(h => h.Logs),
+            cancellationToken);
 
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
@@ -66,7 +69,7 @@ public class SkipHabitCommandHandler(
         if (targetDate > today)
             return Result.Failure("Cannot skip a future date.");
 
-        // For flexible habits, skip means advance past current window
+        // For flexible habits, skip means record a skip log (Value=0) to reduce the period target
         // For regular habits, they must be due on or before the target date
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return Result.Failure("Cannot skip a habit that is not yet due.");
@@ -76,9 +79,21 @@ public class SkipHabitCommandHandler(
             return Result.Failure("Habit is not scheduled on this date.");
 
         if (habit.IsFlexible)
-            habit.AdvanceDueDatePastWindow(today);
+        {
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+            if (remaining <= 0)
+                return Result.Failure("All instances for this period have already been completed or skipped.");
+
+            var skipResult = habit.SkipFlexible(targetDate);
+            if (skipResult.IsFailure)
+                return Result.Failure(skipResult.Error);
+
+            await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
+        }
         else
+        {
             habit.AdvanceDueDate(targetDate);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -235,9 +235,24 @@ public class Habit : Entity
         DueDate = windowEnd.AddDays(1);
     }
 
+    public Result<HabitLog> SkipFlexible(DateOnly date)
+    {
+        if (!IsFlexible)
+            return Result.Failure<HabitLog>("Only flexible habits can be skipped this way.");
+
+        if (FrequencyUnit is null)
+            return Result.Failure<HabitLog>("Cannot skip a one-time task.");
+
+        // Create a skip log (Value = 0 distinguishes from completion logs which use Value = 1)
+        var log = HabitLog.Create(Id, date, 0, null);
+        _logs.Add(log);
+        return Result.Success(log);
+    }
+
     public Result<HabitLog> Unlog(DateOnly date)
     {
-        var log = _logs.Find(l => l.Date == date);
+        // Only match completion logs (Value > 0), not skip logs (Value == 0)
+        var log = _logs.Find(l => l.Date == date && l.Value > 0);
         if (log is null)
             return Result.Failure<HabitLog>("No log found for this date.");
 
