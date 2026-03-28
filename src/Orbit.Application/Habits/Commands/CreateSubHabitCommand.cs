@@ -7,6 +7,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 using Orbit.Application.Common.Attributes;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -34,10 +35,20 @@ public record CreateSubHabitCommand(
     [property: AiField("integer", "Override parent frequency quantity")] int? FrequencyQuantity = null,
     [property: AiField("string[]", "Specific weekdays, only when frequencyQuantity is 1")] IReadOnlyList<System.DayOfWeek>? Days = null,
     [property: AiField("string", "HH:mm 24h format")] TimeOnly? DueTime = null,
-    [property: AiField("string", "HH:mm 24h format end time")] TimeOnly? DueEndTime = null) : IRequest<Result<Guid>>;
+    [property: AiField("string", "HH:mm 24h format end time")] TimeOnly? DueEndTime = null,
+    [property: AiField("boolean", "True for habits the user wants to AVOID")] bool IsBadHabit = false,
+    [property: AiField("boolean", "Set true when user asks for a reminder")] bool ReminderEnabled = false,
+    [property: AiField("integer[]", "Minutes before dueTime to send reminders")] IReadOnlyList<int>? ReminderTimes = null,
+    [property: AiField("boolean", "Enable slip alert notifications")] bool SlipAlertEnabled = false,
+    [property: AiField("object[]", "Array of {text, isChecked} for inline checklists")] IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    IReadOnlyList<Guid>? TagIds = null,
+    DateOnly? EndDate = null,
+    [property: AiField("boolean", "True for flexible frequency")] bool IsFlexible = false,
+    [property: AiField("string", "YYYY-MM-DD override for due date")] DateOnly? DueDate = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<Tag> tagRepository,
     IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
@@ -64,9 +75,10 @@ public class CreateSubHabitCommandHandler(
         if (depth >= maxDepth - 1)
             return Result.Failure<Guid>($"Maximum nesting depth reached ({maxDepth} levels).");
 
-        // Use today as dueDate if parent's dueDate has already advanced past today
+        // Use explicit DueDate if provided, otherwise derive from parent
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var childDueDate = parent.DueDate > userToday ? parent.DueDate : userToday;
+        var childDueDate = request.DueDate
+            ?? (parent.DueDate > userToday ? parent.DueDate : userToday);
 
         var childResult = Habit.Create(
             request.UserId,
@@ -75,16 +87,34 @@ public class CreateSubHabitCommandHandler(
             request.FrequencyQuantity ?? parent.FrequencyQuantity,
             request.Description,
             days: request.Days,
+            isBadHabit: request.IsBadHabit,
             dueDate: childDueDate,
             dueTime: request.DueTime,
             dueEndTime: request.DueEndTime,
             parentHabitId: parent.Id,
-            isGeneral: parent.IsGeneral);
+            reminderEnabled: request.ReminderEnabled,
+            reminderTimes: request.ReminderTimes,
+            slipAlertEnabled: request.SlipAlertEnabled,
+            checklistItems: request.ChecklistItems,
+            isGeneral: parent.IsGeneral,
+            isFlexible: request.IsFlexible,
+            endDate: request.EndDate);
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);
 
-        await habitRepository.AddAsync(childResult.Value, cancellationToken);
+        var child = childResult.Value;
+
+        if (request.TagIds is { Count: > 0 })
+        {
+            var tags = await tagRepository.FindTrackedAsync(
+                t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,
+                cancellationToken);
+            foreach (var tag in tags)
+                child.AddTag(tag);
+        }
+
+        await habitRepository.AddAsync(child, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);

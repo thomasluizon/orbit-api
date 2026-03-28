@@ -33,7 +33,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
         bool IsGeneral = false,
         DateOnly? EndDate = null,
-        bool IsFlexible = false);
+        bool IsFlexible = false,
+        IReadOnlyList<Guid>? GoalIds = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -52,7 +53,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         bool? IsGeneral = null,
         DateOnly? EndDate = null,
         bool? ClearEndDate = null,
-        bool? IsFlexible = null);
+        bool? IsFlexible = null,
+        IReadOnlyList<Guid>? GoalIds = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -93,7 +95,23 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
     public record MoveHabitParentRequest(Guid? ParentId);
 
-    public record CreateSubHabitRequest(string Title, string? Description);
+    public record CreateSubHabitRequest(
+        string Title,
+        string? Description = null,
+        FrequencyUnit? FrequencyUnit = null,
+        int? FrequencyQuantity = null,
+        IReadOnlyList<System.DayOfWeek>? Days = null,
+        bool IsBadHabit = false,
+        DateOnly? DueDate = null,
+        TimeOnly? DueTime = null,
+        TimeOnly? DueEndTime = null,
+        bool ReminderEnabled = false,
+        IReadOnlyList<int>? ReminderTimes = null,
+        bool SlipAlertEnabled = false,
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+        IReadOnlyList<Guid>? TagIds = null,
+        DateOnly? EndDate = null,
+        bool IsFlexible = false);
     public record LinkGoalsRequest(List<Guid> GoalIds);
 
     [HttpGet]
@@ -206,17 +224,18 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ChecklistItems,
             request.IsGeneral,
             EndDate: request.EndDate,
-            IsFlexible: request.IsFlexible);
+            IsFlexible: request.IsFlexible,
+            GoalIds: request.GoalIds);
 
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
         {
             logger.LogInformation("Habit created {HabitId} by user {UserId}", result.Value, HttpContext.GetUserId());
-            return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, result.Value);
+            return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, new { id = result.Value });
         }
 
-        return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, v));
+        return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
     }
 
     [HttpPost("{id:guid}/log")]
@@ -277,7 +296,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.IsGeneral,
             EndDate: request.EndDate,
             ClearEndDate: request.ClearEndDate,
-            IsFlexible: request.IsFlexible);
+            IsFlexible: request.IsFlexible,
+            GoalIds: request.GoalIds);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -481,7 +501,21 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             HttpContext.GetUserId(),
             parentId,
             request.Title,
-            request.Description);
+            request.Description,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
+            request.Days,
+            request.DueTime,
+            request.DueEndTime,
+            request.IsBadHabit,
+            request.ReminderEnabled,
+            request.ReminderTimes,
+            request.SlipAlertEnabled,
+            request.ChecklistItems,
+            request.TagIds,
+            request.EndDate,
+            request.IsFlexible,
+            request.DueDate);
 
         var result = await mediator.Send(command, cancellationToken);
 

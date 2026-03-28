@@ -86,18 +86,13 @@ public class GetGoalsQueryHandler(
         if (!goal.Deadline.HasValue) return "no_deadline";
 
         var daysToDeadline = goal.Deadline.Value.DayNumber - userToday.DayNumber;
-        if (daysToDeadline < 0) return "behind"; // overdue
+        if (daysToDeadline < 0) return "behind";
 
-        var creationDate = DateOnly.FromDateTime(goal.CreatedAtUtc);
-        var totalDays = Math.Max(1, goal.Deadline.Value.DayNumber - creationDate.DayNumber);
-        var elapsedDays = Math.Max(1, userToday.DayNumber - creationDate.DayNumber);
-        var expectedProgress = (decimal)elapsedDays / totalDays * 100;
-        var actualProgress = goal.TargetValue > 0
+        var progress = goal.TargetValue > 0
             ? goal.CurrentValue / goal.TargetValue * 100
             : 0;
+        if (daysToDeadline <= 7 && progress < 50) return "at_risk";
 
-        if (actualProgress >= expectedProgress) return "on_track";
-        if (actualProgress >= expectedProgress * 0.8m) return "at_risk";
-        return "behind";
+        return "on_track";
     }
 }

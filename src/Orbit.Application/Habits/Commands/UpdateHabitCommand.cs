@@ -6,6 +6,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
+using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
 using Orbit.Application.Common.Attributes;
@@ -49,20 +50,27 @@ public record UpdateHabitCommand(
     [property: AiField("boolean", "Set to true to make a general habit (no schedule)")] bool? IsGeneral = null,
     [property: AiField("string", "YYYY-MM-DD, optional end date. Set to null to clear. Habit stops appearing after this date")] DateOnly? EndDate = null,
     [property: AiField("boolean", "Set to true to remove the end date")] bool? ClearEndDate = null,
-    [property: AiField("boolean", "Set to true for flexible frequency (X times per period without fixed days)")] bool? IsFlexible = null) : IRequest<Result>;
+    [property: AiField("boolean", "Set to true for flexible frequency (X times per period without fixed days)")] bool? IsFlexible = null,
+    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<SentReminder> sentReminderRepository,
+    IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>
 {
     public async Task<Result> Handle(UpdateHabitCommand request, CancellationToken cancellationToken)
     {
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == request.HabitId && h.UserId == request.UserId,
-            cancellationToken: cancellationToken);
+        var habit = request.GoalIds is not null
+            ? await habitRepository.FindOneTrackedAsync(
+                h => h.Id == request.HabitId && h.UserId == request.UserId,
+                q => q.Include(h => h.Goals),
+                cancellationToken)
+            : await habitRepository.FindOneTrackedAsync(
+                h => h.Id == request.HabitId && h.UserId == request.UserId,
+                cancellationToken: cancellationToken);
 
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
@@ -96,6 +104,25 @@ public class UpdateHabitCommandHandler(
                 cancellationToken);
             foreach (var r in existing)
                 sentReminderRepository.Remove(r);
+        }
+
+        // Sync goal links if GoalIds was provided
+        if (request.GoalIds is not null)
+        {
+            if (request.GoalIds.Count > AppConstants.MaxGoalsPerHabit)
+                return Result.Failure($"A habit can have at most {AppConstants.MaxGoalsPerHabit} linked goals.");
+
+            foreach (var existingGoal in habit.Goals.ToList())
+                habit.RemoveGoal(existingGoal);
+
+            if (request.GoalIds.Count > 0)
+            {
+                var goals = await goalRepository.FindTrackedAsync(
+                    g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,
+                    cancellationToken);
+                foreach (var goal in goals)
+                    habit.AddGoal(goal);
+            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -44,13 +45,25 @@ public class DuplicateHabitCommandHandler(
         var childLookup = allHabits.ToLookup(h => h.ParentHabitId);
 
         // Duplicate the root habit
-        var rootCopy = CloneHabit(original, original.ParentHabitId, appendCopy: true);
+        var rootCopy = CloneHabit(original, original.ParentHabitId);
         if (rootCopy.IsFailure)
             return Result.Failure<Guid>(rootCopy.Error);
 
         await habitRepository.AddAsync(rootCopy.Value, cancellationToken);
 
-        // Recursively duplicate children
+        // Load original with tags (tracked so EF handles join table correctly)
+        var originalTracked = await habitRepository.FindOneTrackedAsync(
+            h => h.Id == request.HabitId && h.UserId == request.UserId,
+            q => q.Include(h => h.Tags),
+            cancellationToken);
+
+        if (originalTracked is not null)
+        {
+            foreach (var tag in originalTracked.Tags)
+                rootCopy.Value.AddTag(tag);
+        }
+
+        // Recursively duplicate children (with tag copying)
         await DuplicateChildrenAsync(original.Id, rootCopy.Value.Id, childLookup, habitRepository, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -69,22 +82,32 @@ public class DuplicateHabitCommandHandler(
     {
         foreach (var child in childLookup[originalParentId])
         {
-            var childCopy = CloneHabit(child, newParentId, appendCopy: false);
+            var childCopy = CloneHabit(child, newParentId);
             if (childCopy.IsFailure) continue;
 
             await repository.AddAsync(childCopy.Value, cancellationToken);
+
+            // Load child with tags (tracked) and copy them to the clone
+            var childTracked = await repository.FindOneTrackedAsync(
+                h => h.Id == child.Id,
+                q => q.Include(h => h.Tags),
+                cancellationToken);
+
+            if (childTracked is not null)
+            {
+                foreach (var tag in childTracked.Tags)
+                    childCopy.Value.AddTag(tag);
+            }
 
             await DuplicateChildrenAsync(child.Id, childCopy.Value.Id, childLookup, repository, cancellationToken);
         }
     }
 
-    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId, bool appendCopy)
+    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId)
     {
-        var title = appendCopy ? $"{source.Title} (copy)" : source.Title;
-
         return Habit.Create(
             source.UserId,
-            title,
+            source.Title,
             source.FrequencyUnit,
             source.FrequencyQuantity,
             source.Description,

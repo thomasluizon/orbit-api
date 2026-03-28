@@ -56,13 +56,13 @@ public static class GoalMetricsCalculator
     {
         if (goal.Status == GoalStatus.Completed) return "completed";
         if (!goal.Deadline.HasValue) return "no_deadline";
-        if (projected is null) return "behind"; // no velocity
-        if (projected <= goal.Deadline) return "on_track";
+        if (daysToDeadline < 0) return "behind";
 
-        // How far past deadline is the projection?
-        var deadlineDays = Math.Max(1, daysToDeadline!.Value);
-        var projectedOvershoot = projected.Value.DayNumber - goal.Deadline.Value.DayNumber;
-        var overshootRatio = (decimal)projectedOvershoot / Math.Abs(deadlineDays);
-        return overshootRatio <= 0.2m ? "at_risk" : "behind";
+        var progress = goal.TargetValue > 0
+            ? goal.CurrentValue / goal.TargetValue * 100
+            : 0;
+        if (daysToDeadline <= 7 && progress < 50) return "at_risk";
+
+        return "on_track";
     }
 }

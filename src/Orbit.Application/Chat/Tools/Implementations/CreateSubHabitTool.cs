@@ -33,7 +33,14 @@ public class CreateSubHabitTool(
                 description = "Specific weekdays, only when frequency_quantity is 1",
                 items = new { type = "STRING" }
             },
-            due_time = new { type = "STRING", description = "HH:mm 24h format" }
+            due_time = new { type = "STRING", description = "HH:mm 24h format" },
+            due_end_time = new { type = "STRING", description = "HH:mm 24h format end time" },
+            is_bad_habit = new { type = "BOOLEAN", description = "True for habits the user wants to AVOID" },
+            reminder_enabled = new { type = "BOOLEAN", description = "Set true for reminder notifications" },
+            reminder_times = new { type = "ARRAY", description = "Minutes before dueTime to send reminders", items = new { type = "INTEGER" } },
+            slip_alert_enabled = new { type = "BOOLEAN", description = "Enable slip alert notifications" },
+            is_flexible = new { type = "BOOLEAN", description = "True for flexible frequency" },
+            due_date = new { type = "STRING", description = "YYYY-MM-DD override for due date" }
         },
         required = new[] { "parent_habit_id", "title" }
     };
@@ -81,9 +88,40 @@ public class CreateSubHabitTool(
                 dueTime = time;
         }
 
+        TimeOnly? dueEndTime = null;
+        if (args.TryGetProperty("due_end_time", out var detEl) && detEl.ValueKind == JsonValueKind.String)
+        {
+            if (TimeOnly.TryParse(detEl.GetString(), out var endTime))
+                dueEndTime = endTime;
+        }
+
         string? description = null;
         if (args.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String)
             description = descEl.GetString();
+
+        bool isBadHabit = args.TryGetProperty("is_bad_habit", out var ibhEl) && ibhEl.ValueKind == JsonValueKind.True;
+        bool reminderEnabled = args.TryGetProperty("reminder_enabled", out var reEl) && reEl.ValueKind == JsonValueKind.True;
+        bool slipAlertEnabled = args.TryGetProperty("slip_alert_enabled", out var saEl) && saEl.ValueKind == JsonValueKind.True;
+        bool isFlexible = args.TryGetProperty("is_flexible", out var ifEl) && ifEl.ValueKind == JsonValueKind.True;
+
+        IReadOnlyList<int>? reminderTimes = null;
+        if (args.TryGetProperty("reminder_times", out var rtEl) && rtEl.ValueKind == JsonValueKind.Array)
+        {
+            var parsed = new List<int>();
+            foreach (var r in rtEl.EnumerateArray())
+            {
+                if (r.ValueKind == JsonValueKind.Number)
+                    parsed.Add(r.GetInt32());
+            }
+            if (parsed.Count > 0) reminderTimes = parsed;
+        }
+
+        DateOnly? dueDate = null;
+        if (args.TryGetProperty("due_date", out var ddEl) && ddEl.ValueKind == JsonValueKind.String)
+        {
+            if (DateOnly.TryParse(ddEl.GetString(), out var dd))
+                dueDate = dd;
+        }
 
         var result = await mediator.Send(
             new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
@@ -94,7 +132,14 @@ public class CreateSubHabitTool(
                 frequencyUnit,
                 frequencyQuantity,
                 days,
-                dueTime), ct);
+                dueTime,
+                dueEndTime,
+                isBadHabit,
+                reminderEnabled,
+                reminderTimes,
+                slipAlertEnabled,
+                DueDate: dueDate,
+                IsFlexible: isFlexible), ct);
 
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);
