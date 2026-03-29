@@ -127,9 +127,6 @@ public class BulkLogHabitsCommandHandler(
 
                 await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
-                // Auto-complete parent when all children are done (recursive up the tree)
-                await TryAutoCompleteParent(habit, today, cancellationToken);
-
                 results.Add(new BulkLogItemResult(
                     Index: i,
                     Status: BulkItemStatus.Success,
@@ -164,38 +161,4 @@ public class BulkLogHabitsCommandHandler(
         return Result.Success(new BulkLogResult(results));
     }
 
-    private async Task TryAutoCompleteParent(Habit child, DateOnly today, CancellationToken ct)
-    {
-        if (child.ParentHabitId is null) return;
-
-        var parent = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == child.ParentHabitId.Value,
-            q => q.Include(h => h.Logs)
-                  .Include(h => h.Children).ThenInclude(c => c.Logs),
-            ct);
-
-        if (parent is null || parent.IsCompleted) return;
-
-        // Only auto-log if the parent is actually due today (or overdue)
-        if (parent.DueDate > today) return;
-
-        // Check if ALL children are done for today (logged today or permanently completed)
-        if (!parent.Children.Any()) return;
-
-        var allChildrenDone = parent.Children.All(c =>
-            c.IsCompleted || c.Logs.Any(l => l.Date == today));
-        if (!allChildrenDone) return;
-
-        // Auto-log the parent
-        var alreadyLogged = parent.Logs.Any(l => l.Date == today);
-        if (!alreadyLogged)
-        {
-            var logResult = parent.Log(today);
-            if (logResult.IsSuccess)
-                await habitLogRepository.AddAsync(logResult.Value, ct);
-        }
-
-        // Recurse up the tree
-        await TryAutoCompleteParent(parent, today, ct);
-    }
 }

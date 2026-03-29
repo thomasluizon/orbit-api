@@ -75,9 +75,6 @@ public class BulkLogHabitsTool(
 
             await habitLogRepository.AddAsync(logResult.Value, ct);
 
-            // Auto-complete parent when all children are done
-            await TryAutoCompleteParent(habit, today, ct);
-
             loggedCount++;
             loggedNames.Add(habit.Title);
         }
@@ -88,32 +85,4 @@ public class BulkLogHabitsTool(
         return new ToolResult(true, EntityName: string.Join(", ", loggedNames));
     }
 
-    private async Task TryAutoCompleteParent(Habit child, DateOnly today, CancellationToken ct)
-    {
-        if (child.ParentHabitId is null) return;
-
-        var parent = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == child.ParentHabitId.Value,
-            q => q.Include(h => h.Logs)
-                  .Include(h => h.Children).ThenInclude(c => c.Logs),
-            ct);
-
-        if (parent is null || parent.IsCompleted) return;
-        if (parent.DueDate > today) return;
-        if (!parent.Children.Any()) return;
-
-        var allChildrenDone = parent.Children.All(c =>
-            c.IsCompleted || c.Logs.Any(l => l.Date == today));
-        if (!allChildrenDone) return;
-
-        var alreadyLogged = parent.Logs.Any(l => l.Date == today);
-        if (!alreadyLogged)
-        {
-            var logResult = parent.Log(today);
-            if (logResult.IsSuccess)
-                await habitLogRepository.AddAsync(logResult.Value, ct);
-        }
-
-        await TryAutoCompleteParent(parent, today, ct);
-    }
 }
