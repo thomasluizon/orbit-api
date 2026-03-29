@@ -97,7 +97,22 @@ public class CreateHabitTool(
                         frequency_quantity = new { type = "INTEGER" },
                         days = new { type = "ARRAY", items = new { type = "STRING" } },
                         due_date = new { type = "STRING", description = "YYYY-MM-DD" },
-                        is_bad_habit = new { type = "BOOLEAN" }
+                        is_bad_habit = new { type = "BOOLEAN" },
+                        checklist_items = new
+                        {
+                            type = "ARRAY",
+                            description = "Inline checklist items",
+                            items = new
+                            {
+                                type = "OBJECT",
+                                properties = new
+                                {
+                                    text = new { type = "STRING", description = "Checklist item text" },
+                                    is_checked = new { type = "BOOLEAN", description = "Whether checked. Defaults to false." }
+                                },
+                                required = new[] { "text" }
+                            }
+                        }
                     },
                     required = new[] { "title" }
                 }
@@ -174,6 +189,7 @@ public class CreateHabitTool(
                     subDays = days;
                 var subDueDate = ParseDateOnly(sub, "due_date") ?? dueDate;
                 bool subIsBadHabit = GetOptionalBool(sub, "is_bad_habit") ?? false;
+                var subChecklistItems = ParseChecklistItems(sub);
 
                 var childResult = Habit.Create(
                     userId,
@@ -184,7 +200,8 @@ public class CreateHabitTool(
                     days: subDays,
                     isBadHabit: subIsBadHabit,
                     dueDate: subDueDate,
-                    parentHabitId: habit.Id);
+                    parentHabitId: habit.Id,
+                    checklistItems: subChecklistItems);
 
                 if (childResult.IsFailure)
                     return new ToolResult(false, Error: childResult.Error);
