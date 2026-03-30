@@ -43,13 +43,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         if (items.Count == 0)
             return "No habits found for the given date range.";
 
-        var lines = items.Select(h =>
-            $"- [{(h.IsCompleted ? "x" : " ")}] {h.Title} (id: {h.Id})" +
-            (h.FrequencyUnit is not null ? $" | {h.FrequencyQuantity}x/{h.FrequencyUnit}" : " | one-time") +
-            (h.DueTime is not null ? $" | at {h.DueTime:HH:mm}" : "") +
-            (h.IsOverdue ? " | OVERDUE" : "") +
-            (h.IsBadHabit ? " | bad habit" : "") +
-            (h.ChecklistItems.Count > 0 ? $" | checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count}" : ""));
+        var lines = new List<string>();
+        foreach (var h in items)
+        {
+            lines.Add(FormatHabitLine(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
+                h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.IsGeneral, h.IsFlexible,
+                h.ChecklistItems, h.Tags, indent: 0));
+            AppendChildren(lines, h.Children, indent: 1);
+        }
 
         return $"Habits (page {result.Value.Page}/{result.Value.TotalPages}, total: {result.Value.TotalCount}):\n" +
                string.Join("\n", lines);
@@ -578,6 +579,36 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         bool IsGeneral = false,
         bool IsFlexible = false,
         List<BulkHabitItemDto>? SubHabits = null);
+
+    private static string FormatHabitLine(Guid id, string title, FrequencyUnit? freqUnit, int? freqQty,
+        TimeOnly? dueTime, bool isCompleted, bool isOverdue, bool isBadHabit, bool isGeneral, bool isFlexible,
+        IReadOnlyList<ChecklistItem> checklist, IReadOnlyList<HabitTagItem> tags, int indent)
+    {
+        var prefix = new string(' ', indent * 2) + "- ";
+        var line = $"{prefix}[{(isCompleted ? "x" : " ")}] {title} (id: {id})";
+        if (freqUnit is not null) line += $" | {freqQty}x/{freqUnit}";
+        else if (!isGeneral) line += " | one-time";
+        if (isGeneral) line += " | general";
+        if (isFlexible) line += " | flexible";
+        if (dueTime is not null) line += $" | at {dueTime:HH:mm}";
+        if (isOverdue) line += " | OVERDUE";
+        if (isBadHabit) line += " | bad habit";
+        if (checklist.Count > 0) line += $" | checklist: {checklist.Count(i => i.IsChecked)}/{checklist.Count}";
+        if (tags.Count > 0) line += $" | tags: {string.Join(", ", tags.Select(t => t.Name))}";
+        return line;
+    }
+
+    private static void AppendChildren(List<string> lines, IReadOnlyList<HabitScheduleChildItem> children, int indent)
+    {
+        foreach (var c in children)
+        {
+            lines.Add(FormatHabitLine(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
+                c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.IsGeneral, c.IsFlexible,
+                c.ChecklistItems, c.Tags, indent));
+            if (c.Children.Count > 0)
+                AppendChildren(lines, c.Children, indent + 1);
+        }
+    }
 
     private record HabitPositionDto(string HabitId, int Position);
 
