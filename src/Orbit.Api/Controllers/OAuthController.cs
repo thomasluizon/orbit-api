@@ -33,10 +33,29 @@ public class OAuthController(
             issuer = baseUrl,
             authorization_endpoint = $"{baseUrl}/oauth/authorize",
             token_endpoint = $"{baseUrl}/oauth/token",
+            registration_endpoint = $"{baseUrl}/oauth/register",
             response_types_supported = new[] { "code" },
             grant_types_supported = new[] { "authorization_code" },
             code_challenge_methods_supported = new[] { "S256" },
             token_endpoint_auth_methods_supported = new[] { "none" }
+        });
+    }
+
+    [HttpPost("/oauth/register")]
+    public IActionResult Register([FromBody] JsonElement body)
+    {
+        var clientName = body.TryGetProperty("client_name", out var name) ? name.GetString() : "MCP Client";
+
+        var redirectUris = Array.Empty<string>();
+        if (body.TryGetProperty("redirect_uris", out var uris) && uris.ValueKind == JsonValueKind.Array)
+            redirectUris = uris.EnumerateArray().Select(u => u.GetString()!).ToArray();
+
+        return StatusCode(201, new
+        {
+            client_id = Guid.NewGuid().ToString(),
+            client_name = clientName,
+            redirect_uris = redirectUris,
+            token_endpoint_auth_method = "none"
         });
     }
 
