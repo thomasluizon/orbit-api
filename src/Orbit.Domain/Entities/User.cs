@@ -148,6 +148,7 @@ public class User : Entity
         if (!AiMessagesResetAt.HasValue || AiMessagesResetAt.Value <= DateTime.UtcNow)
         {
             AiMessagesUsedThisMonth = 0;
+            AdRewardBonusMessages = 0;
             AiMessagesResetAt = DateTime.UtcNow.AddDays(30);
         }
         AiMessagesUsedThisMonth++;
