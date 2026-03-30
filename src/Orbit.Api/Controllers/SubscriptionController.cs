@@ -47,6 +47,25 @@ public class SubscriptionController(
         int SavingsPercent,
         int? CouponPercentOff,
         string Currency);
+    public record PaymentMethodDto(string Brand, string Last4, int ExpMonth, int ExpYear);
+    public record InvoiceDto(
+        string Id,
+        DateTime Date,
+        long AmountPaid,
+        string Currency,
+        string Status,
+        string? HostedInvoiceUrl,
+        string? InvoicePdf,
+        string BillingReason);
+    public record BillingDetailsResponse(
+        string Status,
+        DateTime CurrentPeriodEnd,
+        bool CancelAtPeriodEnd,
+        string Interval,
+        long AmountPerPeriod,
+        string Currency,
+        PaymentMethodDto? PaymentMethod,
+        IReadOnlyList<InvoiceDto> RecentInvoices);
 
     [HttpPost("checkout")]
     public async Task<IActionResult> CreateCheckout(
@@ -158,6 +177,70 @@ public class SubscriptionController(
             await payGate.GetAiMessageLimit(user.Id, ct),
             user.IsLifetimePro,
             user.SubscriptionInterval?.ToString().ToLowerInvariant()));
+    }
+
+    [HttpGet("billing")]
+    public async Task<IActionResult> GetBillingDetails(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
+
+        if (string.IsNullOrEmpty(user.StripeSubscriptionId) || string.IsNullOrEmpty(user.StripeCustomerId))
+            return NotFound(new { error = "No active subscription found" });
+
+        try
+        {
+            var subService = new SubscriptionService();
+            var subOptions = new SubscriptionGetOptions();
+            subOptions.AddExpand("default_payment_method");
+            var subscription = await subService.GetAsync(user.StripeSubscriptionId, subOptions, cancellationToken: ct);
+
+            PaymentMethodDto? paymentMethod = null;
+            if (subscription.DefaultPaymentMethod?.Card is not null)
+            {
+                var card = subscription.DefaultPaymentMethod.Card;
+                paymentMethod = new PaymentMethodDto(
+                    card.Brand ?? "unknown",
+                    card.Last4 ?? "****",
+                    (int)card.ExpMonth,
+                    (int)card.ExpYear);
+            }
+
+            var invoiceService = new InvoiceService();
+            var invoices = await invoiceService.ListAsync(new InvoiceListOptions
+            {
+                Customer = user.StripeCustomerId,
+                Limit = 12
+            }, cancellationToken: ct);
+
+            var item = subscription.Items?.Data?.FirstOrDefault();
+            var interval = GetSubscriptionInterval(subscription);
+
+            return Ok(new BillingDetailsResponse(
+                subscription.Status,
+                item?.CurrentPeriodEnd ?? DateTime.UtcNow,
+                subscription.CancelAtPeriodEnd,
+                interval.ToString().ToLowerInvariant(),
+                item?.Price?.UnitAmount ?? 0,
+                subscription.Currency ?? "usd",
+                paymentMethod,
+                invoices.Data.Select(inv => new InvoiceDto(
+                    inv.Id,
+                    inv.Created,
+                    inv.AmountPaid,
+                    inv.Currency ?? "usd",
+                    inv.Status ?? "unknown",
+                    inv.HostedInvoiceUrl,
+                    inv.InvoicePdf,
+                    inv.BillingReason ?? "unknown"
+                )).ToList()));
+        }
+        catch (StripeException ex)
+        {
+            logger.LogError(ex, "Failed to fetch billing details from Stripe for user {UserId}", userId);
+            return StatusCode(502, new { error = "Failed to load billing details from payment provider" });
+        }
     }
 
     [HttpGet("plans")]
