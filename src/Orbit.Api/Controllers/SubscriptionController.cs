@@ -40,6 +40,13 @@ public class SubscriptionController(
         bool IsLifetimePro,
         string? SubscriptionInterval);
     public record AdRewardResponse(int BonusMessagesGranted, int TotalBonusMessages, int NewLimit);
+    public record PlanPriceDto(long UnitAmount, string Currency);
+    public record PlansResponse(
+        PlanPriceDto Monthly,
+        PlanPriceDto Yearly,
+        int SavingsPercent,
+        int? CouponPercentOff,
+        string Currency);
 
     [HttpPost("checkout")]
     public async Task<IActionResult> CreateCheckout(
@@ -151,6 +158,57 @@ public class SubscriptionController(
             await payGate.GetAiMessageLimit(user.Id, ct),
             user.IsLifetimePro,
             user.SubscriptionInterval?.ToString().ToLowerInvariant()));
+    }
+
+    [HttpGet("plans")]
+    public async Task<IActionResult> GetPlans(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
+
+        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        var ip = forwardedFor?.Split(',')[0].Trim()
+                 ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+        var countryCode = await geoLocationService.GetCountryCodeAsync(ip, ct);
+        var isBrazil = countryCode == "BR";
+
+        var monthlyPriceId = isBrazil ? _settings.MonthlyPriceIdBrl : _settings.MonthlyPriceIdUsd;
+        var yearlyPriceId = isBrazil ? _settings.YearlyPriceIdBrl : _settings.YearlyPriceIdUsd;
+        var currency = isBrazil ? "brl" : "usd";
+
+        var priceService = new PriceService();
+        var monthlyPrice = await priceService.GetAsync(monthlyPriceId, cancellationToken: ct);
+        var yearlyPrice = await priceService.GetAsync(yearlyPriceId, cancellationToken: ct);
+
+        var monthlyAmount = monthlyPrice.UnitAmount ?? 0;
+        var yearlyAmount = yearlyPrice.UnitAmount ?? 0;
+
+        var savingsPercent = monthlyAmount > 0
+            ? (int)Math.Round((1 - (double)yearlyAmount / (monthlyAmount * 12)) * 100)
+            : 0;
+
+        int? couponPercentOff = null;
+        if (!string.IsNullOrEmpty(user.ReferralCouponId))
+        {
+            try
+            {
+                var couponService = new CouponService();
+                var coupon = await couponService.GetAsync(user.ReferralCouponId, cancellationToken: ct);
+                couponPercentOff = (int)(coupon.PercentOff ?? 0);
+            }
+            catch (StripeException ex)
+            {
+                logger.LogWarning(ex, "Failed to fetch referral coupon {CouponId} for user {UserId}", user.ReferralCouponId, userId);
+            }
+        }
+
+        return Ok(new PlansResponse(
+            new PlanPriceDto(monthlyAmount, currency),
+            new PlanPriceDto(yearlyAmount, currency),
+            savingsPercent,
+            couponPercentOff,
+            currency));
     }
 
     [HttpPost("ad-reward")]
