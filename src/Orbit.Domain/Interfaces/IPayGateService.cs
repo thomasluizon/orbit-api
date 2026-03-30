@@ -38,4 +38,9 @@ public interface IPayGateService
     /// Returns the AI message limit for the given user.
     /// </summary>
     Task<int> GetAiMessageLimit(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Checks if the user can create API keys (Pro-only feature).
+    /// </summary>
+    Task<Result> CanCreateApiKeys(Guid userId, CancellationToken ct = default);
 }

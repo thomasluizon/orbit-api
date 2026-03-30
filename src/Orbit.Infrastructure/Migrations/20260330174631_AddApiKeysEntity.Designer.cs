@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260330174631_AddApiKeysEntity")]
+    partial class AddApiKeysEntity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -288,12 +291,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[15]'::jsonb");
 
-                    b.Property<string>("ScheduledReminders")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasDefaultValueSql("'[]'::jsonb");
-
                     b.Property<bool>("SlipAlertEnabled")
                         .HasColumnType("boolean");
 
@@ -460,9 +457,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int>("MinutesBefore")
                         .HasColumnType("integer");
 
-                    b.Property<TimeOnly?>("ReminderTimeUtc")
-                        .HasColumnType("time without time zone");
-
                     b.Property<DateTime>("SentAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -495,29 +489,6 @@ namespace Orbit.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("SentSlipAlerts");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.StreakFreeze", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("UsedOnDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "UsedOnDate")
-                        .IsUnique();
-
-                    b.ToTable("StreakFreezes");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.Tag", b =>
@@ -578,9 +549,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("CurrentStreak")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("DeactivatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -612,16 +580,10 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("Language")
                         .HasColumnType("text");
 
-                    b.Property<DateOnly?>("LastActiveDate")
-                        .HasColumnType("date");
-
                     b.Property<DateTime?>("LastAdRewardAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Level")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LongestStreak")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
@@ -807,15 +769,6 @@ namespace Orbit.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.PushSubscription", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.StreakFreeze", b =>
                 {
                     b.HasOne("Orbit.Domain.Entities.User", null)
                         .WithMany()
