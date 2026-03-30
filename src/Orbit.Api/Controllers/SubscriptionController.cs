@@ -39,6 +39,7 @@ public class SubscriptionController(
         int AiMessagesLimit,
         bool IsLifetimePro,
         string? SubscriptionInterval);
+    public record AdRewardResponse(int BonusMessagesGranted, int TotalBonusMessages, int NewLimit);
 
     [HttpPost("checkout")]
     public async Task<IActionResult> CreateCheckout(
@@ -150,6 +151,23 @@ public class SubscriptionController(
             await payGate.GetAiMessageLimit(user.Id, ct),
             user.IsLifetimePro,
             user.SubscriptionInterval?.ToString().ToLowerInvariant()));
+    }
+
+    [HttpPost("ad-reward")]
+    public async Task<IActionResult> ClaimAdReward(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
+
+        var result = user.GrantAdReward();
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        var newLimit = await payGate.GetAiMessageLimit(userId, ct);
+        return Ok(new AdRewardResponse(5, user.AdRewardBonusMessages, newLimit));
     }
 
     // TODO (Issue 50): The business logic in HandleWebhook (subscription activation, renewal,

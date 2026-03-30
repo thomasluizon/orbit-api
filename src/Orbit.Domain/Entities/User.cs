@@ -42,6 +42,9 @@ public class User : Entity
     public int TotalXp { get; private set; } = 0;
     public int Level { get; private set; } = 1;
     public string? ReferralCouponId { get; private set; }
+    public int AdRewardBonusMessages { get; private set; } = 0;
+    public DateTime? LastAdRewardAt { get; private set; }
+    public int AdRewardsClaimedToday { get; private set; } = 0;
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -148,6 +151,23 @@ public class User : Entity
             AiMessagesResetAt = DateTime.UtcNow.AddDays(30);
         }
         AiMessagesUsedThisMonth++;
+    }
+
+    public Result GrantAdReward(int bonusMessages = 5, int dailyCap = 3)
+    {
+        if (HasProAccess)
+            return Result.Failure("Pro users do not see ads");
+
+        if (!LastAdRewardAt.HasValue || LastAdRewardAt.Value.Date < DateTime.UtcNow.Date)
+            AdRewardsClaimedToday = 0;
+
+        if (AdRewardsClaimedToday >= dailyCap)
+            return Result.Failure("Daily ad reward limit reached");
+
+        AdRewardBonusMessages += bonusMessages;
+        AdRewardsClaimedToday++;
+        LastAdRewardAt = DateTime.UtcNow;
+        return Result.Success();
     }
 
     public void SetGoogleTokens(string accessToken, string? refreshToken)

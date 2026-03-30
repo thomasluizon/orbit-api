@@ -49,7 +49,8 @@ public class PayGateService(
 
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
-        var messageLimit = user.HasProAccess ? proLimit : freeLimit;
+        var baseLimit = user.HasProAccess ? proLimit : freeLimit;
+        var messageLimit = baseLimit + user.AdRewardBonusMessages;
 
         if (user.AiMessagesUsedThisMonth >= messageLimit)
             return Result.PayGateFailure($"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.");
@@ -106,6 +107,7 @@ public class PayGateService(
 
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
-        return user.HasProAccess ? proLimit : freeLimit;
+        var baseLimit = user.HasProAccess ? proLimit : freeLimit;
+        return baseLimit + user.AdRewardBonusMessages;
     }
 }
