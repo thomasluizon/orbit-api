@@ -34,7 +34,8 @@ public record ProfileResponse(
     string LevelTitle,
     int AdRewardsClaimedToday,
     int CurrentStreak,
-    int StreakFreezesAvailable);
+    int StreakFreezesAvailable,
+    string? ThemePreference);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -94,6 +95,7 @@ public class GetProfileQueryHandler(
                 ? user.AdRewardsClaimedToday
                 : 0,
             user.CurrentStreak,
-            freezesAvailable));
+            freezesAvailable,
+            user.ThemePreference));
     }
 }

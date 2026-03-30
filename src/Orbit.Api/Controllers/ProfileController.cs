@@ -17,6 +17,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     public record SetAiSummaryRequest(bool Enabled);
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest(int WeekStartDay);
+    public record SetThemePreferenceRequest(string? ThemePreference);
 
     [HttpGet]
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
@@ -100,6 +101,22 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
 
         if (result.IsSuccess)
             logger.LogInformation("Week start day changed to {WeekStartDay} for user {UserId}", request.WeekStartDay, HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("theme-preference")]
+    public async Task<IActionResult> SetThemePreference(
+        [FromBody] SetThemePreferenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetThemePreferenceCommand(HttpContext.GetUserId(), request.ThemePreference);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Theme preference changed to {ThemePreference} for user {UserId}", request.ThemePreference, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()

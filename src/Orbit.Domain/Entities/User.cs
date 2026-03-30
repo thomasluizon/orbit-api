@@ -48,6 +48,7 @@ public class User : Entity
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;
     public DateOnly? LastActiveDate { get; private set; }
+    public string? ThemePreference { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -111,6 +112,14 @@ public class User : Entity
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 
     public void SetLanguage(string? language) => Language = language;
+
+    public Result SetThemePreference(string? preference)
+    {
+        if (preference is not null && preference is not ("dark" or "light"))
+            return Result.Failure("Invalid theme preference. Must be 'dark' or 'light'.");
+        ThemePreference = preference;
+        return Result.Success();
+    }
 
     public void CompleteOnboarding() => HasCompletedOnboarding = true;
 
