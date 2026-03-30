@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authentication;
 using Orbit.Api.Authentication;
 using Orbit.Api.Mcp.Tools;
+using Orbit.Api.OAuth;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
 using Orbit.Application.Behaviors;
@@ -65,6 +66,13 @@ builder.Services.AddHttpClient("Resend", client =>
 });
 
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
+
+// --- Google ---
+builder.Services.Configure<GoogleSettings>(
+    builder.Configuration.GetSection(GoogleSettings.SectionName));
+
+// --- OAuth ---
+builder.Services.AddSingleton<OAuthAuthorizationStore>();
 
 // --- Stripe ---
 builder.Services.Configure<StripeSettings>(
