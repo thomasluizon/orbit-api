@@ -31,7 +31,8 @@ public record ProfileResponse(
     int WeekStartDay,
     int TotalXp,
     int Level,
-    string LevelTitle);
+    string LevelTitle,
+    int AdRewardsClaimedToday);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -74,6 +75,9 @@ public class GetProfileQueryHandler(
             user.WeekStartDay,
             user.TotalXp,
             user.Level,
-            levelTitle));
+            levelTitle,
+            user.LastAdRewardAt.HasValue && user.LastAdRewardAt.Value.Date == DateTime.UtcNow.Date
+                ? user.AdRewardsClaimedToday
+                : 0));
     }
 }
