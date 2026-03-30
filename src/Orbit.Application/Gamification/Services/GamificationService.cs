@@ -44,6 +44,9 @@ public class GamificationService(
         var xp = 10 + metrics.CurrentStreak;
         user.AddXp(xp);
 
+        // Update global user streak (idempotent per day via LastActiveDate guard)
+        user.UpdateStreak(today);
+
         // --- Batch load all user habits with logs once (reused for Liftoff + Volume checks) ---
         IReadOnlyList<Habit>? allUserHabits = null;
         if (!earned.Contains(AchievementDefinitions.Liftoff) || !earned.Contains(AchievementDefinitions.LegendaryVolume))

@@ -31,6 +31,7 @@ public class OrbitDbContext : DbContext
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
+    public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -221,6 +222,12 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(ua => new { ua.UserId, ua.AchievementId }).IsUnique();
             entity.HasIndex(ua => ua.UserId);
             entity.Property(ua => ua.AchievementId).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<StreakFreeze>(entity =>
+        {
+            entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AppConfig>(entity =>

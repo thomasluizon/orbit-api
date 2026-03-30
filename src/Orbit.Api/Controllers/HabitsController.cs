@@ -258,7 +258,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
-            ? Ok(new { logId = result.Value })
+            ? Ok(result.Value)
             : BadRequest(new { error = result.Error });
     }
 

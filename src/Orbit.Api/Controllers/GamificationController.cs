@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 
 namespace Orbit.Api.Controllers;
@@ -31,5 +32,27 @@ public class GamificationController(IMediator mediator) : ControllerBase
         if (result.IsSuccess) return Ok(result.Value);
         if (result.ErrorCode == "PAY_GATE") return StatusCode(403, new { error = result.Error, code = "PAY_GATE" });
         return BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("streak")]
+    public async Task<IActionResult> GetStreakInfo(CancellationToken ct)
+    {
+        var query = new GetStreakInfoQuery(HttpContext.GetUserId());
+        var result = await mediator.Send(query, ct);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("streak/freeze")]
+    public async Task<IActionResult> ActivateStreakFreeze(CancellationToken ct)
+    {
+        var command = new ActivateStreakFreezeCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, ct);
+
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
     }
 }

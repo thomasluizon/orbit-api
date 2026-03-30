@@ -45,6 +45,9 @@ public class User : Entity
     public int AdRewardBonusMessages { get; private set; } = 0;
     public DateTime? LastAdRewardAt { get; private set; }
     public int AdRewardsClaimedToday { get; private set; } = 0;
+    public int CurrentStreak { get; private set; } = 0;
+    public int LongestStreak { get; private set; } = 0;
+    public DateOnly? LastActiveDate { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -233,5 +236,34 @@ public class User : Entity
     {
         if (level < 1 || level > 10) return;
         Level = level;
+    }
+
+    public void UpdateStreak(DateOnly today)
+    {
+        if (LastActiveDate == today)
+            return; // Already active today, no change
+
+        if (LastActiveDate == today.AddDays(-1))
+        {
+            // Consecutive day (or freeze covered yesterday) - increment streak
+            CurrentStreak++;
+        }
+        else
+        {
+            // Streak broken or first activity - reset to 1
+            CurrentStreak = 1;
+        }
+
+        LastActiveDate = today;
+
+        if (CurrentStreak > LongestStreak)
+            LongestStreak = CurrentStreak;
+    }
+
+    public void ApplyStreakFreeze(DateOnly today)
+    {
+        // Bridge the gap - set LastActiveDate so tomorrow's completion continues the streak.
+        // Do NOT increment CurrentStreak; freeze preserves, it does not extend.
+        LastActiveDate = today;
     }
 }

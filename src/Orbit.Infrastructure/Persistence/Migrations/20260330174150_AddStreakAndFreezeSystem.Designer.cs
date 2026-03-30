@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Migrations
+namespace Orbit.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260330174150_AddStreakAndFreezeSystem")]
+    partial class AddStreakAndFreezeSystem
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -247,12 +250,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[15]'::jsonb");
 
-                    b.Property<string>("ScheduledReminders")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("jsonb")
-                        .HasDefaultValueSql("'[]'::jsonb");
-
                     b.Property<bool>("SlipAlertEnabled")
                         .HasColumnType("boolean");
 
@@ -418,9 +415,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<int>("MinutesBefore")
                         .HasColumnType("integer");
-
-                    b.Property<TimeOnly?>("ReminderTimeUtc")
-                        .HasColumnType("time without time zone");
 
                     b.Property<DateTime>("SentAtUtc")
                         .HasColumnType("timestamp with time zone");

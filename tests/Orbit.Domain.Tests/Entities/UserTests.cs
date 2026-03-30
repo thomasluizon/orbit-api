@@ -438,4 +438,160 @@ public class UserTests
         user.TotalXp.Should().Be(0);
         user.Level.Should().Be(1);
     }
+
+    // --- Streak tests ---
+
+    [Fact]
+    public void Create_DefaultStreakFields()
+    {
+        var user = CreateValidUser();
+
+        user.CurrentStreak.Should().Be(0);
+        user.LongestStreak.Should().Be(0);
+        user.LastActiveDate.Should().BeNull();
+    }
+
+    [Fact]
+    public void UpdateStreak_FirstActivity_SetsStreakToOne()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 30);
+
+        user.UpdateStreak(today);
+
+        user.CurrentStreak.Should().Be(1);
+        user.LongestStreak.Should().Be(1);
+        user.LastActiveDate.Should().Be(today);
+    }
+
+    [Fact]
+    public void UpdateStreak_ConsecutiveDays_IncrementsStreak()
+    {
+        var user = CreateValidUser();
+        var day1 = new DateOnly(2026, 3, 28);
+        var day2 = new DateOnly(2026, 3, 29);
+        var day3 = new DateOnly(2026, 3, 30);
+
+        user.UpdateStreak(day1);
+        user.UpdateStreak(day2);
+        user.UpdateStreak(day3);
+
+        user.CurrentStreak.Should().Be(3);
+        user.LongestStreak.Should().Be(3);
+        user.LastActiveDate.Should().Be(day3);
+    }
+
+    [Fact]
+    public void UpdateStreak_GapInDays_ResetsToOne()
+    {
+        var user = CreateValidUser();
+        var day1 = new DateOnly(2026, 3, 28);
+        var day3 = new DateOnly(2026, 3, 30); // Skipped March 29
+
+        user.UpdateStreak(day1);
+        user.UpdateStreak(day3);
+
+        user.CurrentStreak.Should().Be(1);
+        user.LongestStreak.Should().Be(1);
+        user.LastActiveDate.Should().Be(day3);
+    }
+
+    [Fact]
+    public void UpdateStreak_SameDay_IsIdempotent()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 30);
+
+        user.UpdateStreak(today);
+        user.UpdateStreak(today);
+        user.UpdateStreak(today);
+
+        user.CurrentStreak.Should().Be(1);
+        user.LongestStreak.Should().Be(1);
+    }
+
+    [Fact]
+    public void UpdateStreak_TracksLongestStreak()
+    {
+        var user = CreateValidUser();
+
+        // Build a 5-day streak
+        for (int i = 0; i < 5; i++)
+            user.UpdateStreak(new DateOnly(2026, 3, 1).AddDays(i));
+
+        user.CurrentStreak.Should().Be(5);
+        user.LongestStreak.Should().Be(5);
+
+        // Gap breaks the streak
+        user.UpdateStreak(new DateOnly(2026, 3, 10));
+        user.CurrentStreak.Should().Be(1);
+        user.LongestStreak.Should().Be(5); // Longest is preserved
+
+        // Build a 3-day streak (less than longest)
+        user.UpdateStreak(new DateOnly(2026, 3, 11));
+        user.UpdateStreak(new DateOnly(2026, 3, 12));
+        user.CurrentStreak.Should().Be(3);
+        user.LongestStreak.Should().Be(5); // Still 5
+    }
+
+    [Fact]
+    public void UpdateStreak_FreezeBridge_ContinuesStreak()
+    {
+        var user = CreateValidUser();
+        var day1 = new DateOnly(2026, 3, 28);
+        var freezeDay = new DateOnly(2026, 3, 29);
+        var day3 = new DateOnly(2026, 3, 30);
+
+        // Day 1: normal activity
+        user.UpdateStreak(day1);
+        user.CurrentStreak.Should().Be(1);
+
+        // Day 2: freeze (no real activity, just bridges the gap)
+        user.ApplyStreakFreeze(freezeDay);
+        user.CurrentStreak.Should().Be(1); // Freeze does NOT increment
+        user.LastActiveDate.Should().Be(freezeDay);
+
+        // Day 3: real activity - streak continues because LastActiveDate == yesterday
+        user.UpdateStreak(day3);
+        user.CurrentStreak.Should().Be(2);
+        user.LongestStreak.Should().Be(2);
+    }
+
+    [Fact]
+    public void ApplyStreakFreeze_SetsLastActiveDate_DoesNotChangeStreak()
+    {
+        var user = CreateValidUser();
+        var day1 = new DateOnly(2026, 3, 28);
+        var freezeDay = new DateOnly(2026, 3, 29);
+
+        user.UpdateStreak(day1);
+        var streakBefore = user.CurrentStreak;
+        var longestBefore = user.LongestStreak;
+
+        user.ApplyStreakFreeze(freezeDay);
+
+        user.CurrentStreak.Should().Be(streakBefore);
+        user.LongestStreak.Should().Be(longestBefore);
+        user.LastActiveDate.Should().Be(freezeDay);
+    }
+
+    [Fact]
+    public void UpdateStreak_LongerStreakUpdatesLongest()
+    {
+        var user = CreateValidUser();
+
+        // Build initial 2-day streak
+        user.UpdateStreak(new DateOnly(2026, 1, 1));
+        user.UpdateStreak(new DateOnly(2026, 1, 2));
+        user.LongestStreak.Should().Be(2);
+
+        // Gap
+        user.UpdateStreak(new DateOnly(2026, 2, 1));
+
+        // Build new 3-day streak (exceeds longest)
+        user.UpdateStreak(new DateOnly(2026, 2, 2));
+        user.UpdateStreak(new DateOnly(2026, 2, 3));
+        user.CurrentStreak.Should().Be(3);
+        user.LongestStreak.Should().Be(3);
+    }
 }
