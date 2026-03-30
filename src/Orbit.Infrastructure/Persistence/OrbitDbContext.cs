@@ -31,6 +31,8 @@ public class OrbitDbContext : DbContext
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
+    public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,6 +106,18 @@ public class OrbitDbContext : DbContext
                         (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<int>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
+
+            entity.Property(h => h.ScheduledReminders)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(v, (JsonSerializerOptions?)null) ?? new List<ScheduledReminderTime>())
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(
+                    new ValueComparer<IReadOnlyList<ScheduledReminderTime>>(
+                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
+                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
+                        c => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
             if (encConverter is not null && nullableEncConverter is not null)
             {
@@ -209,6 +223,21 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(ua => new { ua.UserId, ua.AchievementId }).IsUnique();
             entity.HasIndex(ua => ua.UserId);
             entity.Property(ua => ua.AchievementId).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<StreakFreeze>(entity =>
+        {
+            entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ApiKey>(entity =>
+        {
+            entity.HasIndex(k => k.KeyPrefix);
+            entity.HasIndex(k => k.UserId);
+            entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(k => k.Name).HasMaxLength(50);
+            entity.Property(k => k.KeyPrefix).HasMaxLength(12);
         });
 
         modelBuilder.Entity<AppConfig>(entity =>

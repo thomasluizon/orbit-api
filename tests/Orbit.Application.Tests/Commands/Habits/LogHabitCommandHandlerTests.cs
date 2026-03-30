@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
@@ -14,11 +15,13 @@ public class LogHabitCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly MediatR.IMediator _mediator = Substitute.For<MediatR.IMediator>();
+    private readonly ILogger<LogHabitCommandHandler> _logger = Substitute.For<ILogger<LogHabitCommandHandler>>();
     private readonly LogHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -27,10 +30,18 @@ public class LogHabitCommandHandlerTests
     public LogHabitCommandHandlerTests()
     {
         _handler = new LogHabitCommandHandler(
-            _habitRepo, _habitLogRepo, _goalRepo, _userDateService, _gamificationService, _unitOfWork, _cache, _mediator);
+            _habitRepo, _habitLogRepo, _goalRepo, _userRepo, _userDateService, _gamificationService, _unitOfWork, _cache, _mediator, _logger);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+
+        // Return a valid user by default for streak tracking
+        var user = User.Create("Test", "test@test.com").Value;
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
     }
 
     private static Habit CreateTestHabit(Guid? userId = null)
@@ -55,7 +66,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().NotBeEmpty();
+        result.Value.LogId.Should().NotBeEmpty();
         await _habitLogRepo.Received(1).AddAsync(
             Arg.Is<HabitLog>(l => l.HabitId == habit.Id),
             Arg.Any<CancellationToken>());

@@ -76,6 +76,21 @@ public class CreateHabitTool(
                     required = new[] { "text" }
                 }
             },
+            scheduled_reminders = new
+            {
+                type = "ARRAY",
+                description = "Absolute-time reminders for habits WITHOUT a due_time. Use INSTEAD of reminder_times when no due_time is set.",
+                items = new
+                {
+                    type = "OBJECT",
+                    properties = new
+                    {
+                        when = new { type = "STRING", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
+                        time = new { type = "STRING", description = "HH:mm 24h format, e.g. '09:00'" }
+                    },
+                    required = new[] { "when", "time" }
+                }
+            },
             goal_ids = new
             {
                 type = "ARRAY",
@@ -148,6 +163,7 @@ public class CreateHabitTool(
         var reminderTimes = ParseIntArray(args, "reminder_times");
         var days = ParseDays(args);
         var checklistItems = ParseChecklistItems(args);
+        var scheduledReminders = ParseScheduledReminders(args);
         DateOnly? endDate = ParseDateOnly(args, "end_date");
 
         var habitResult = Habit.Create(
@@ -165,7 +181,8 @@ public class CreateHabitTool(
             slipAlertEnabled: slipAlertEnabled,
             checklistItems: checklistItems,
             isFlexible: isFlexible,
-            endDate: endDate);
+            endDate: endDate,
+            scheduledReminders: scheduledReminders);
 
         if (habitResult.IsFailure)
             return new ToolResult(false, Error: habitResult.Error);
@@ -354,6 +371,24 @@ public class CreateHabitTool(
         {
             if (item.ValueKind == JsonValueKind.Number)
                 items.Add(item.GetInt32());
+        }
+        return items.Count > 0 ? items : null;
+    }
+
+    private static IReadOnlyList<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
+    {
+        if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var items = new List<ScheduledReminderTime>();
+        foreach (var item in arrEl.EnumerateArray())
+        {
+            var when = GetOptionalString(item, "when");
+            var timeStr = GetOptionalString(item, "time");
+            if (when is null || timeStr is null) continue;
+            if (when is not ("day_before" or "same_day")) continue;
+            if (!TimeOnly.TryParse(timeStr, out var time)) continue;
+            items.Add(new ScheduledReminderTime(when, time));
         }
         return items.Count > 0 ? items : null;
     }

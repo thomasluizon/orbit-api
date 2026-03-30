@@ -32,14 +32,20 @@ public record ProfileResponse(
     int TotalXp,
     int Level,
     string LevelTitle,
-    int AdRewardsClaimedToday);
+    int AdRewardsClaimedToday,
+    int CurrentStreak,
+    int StreakFreezesAvailable);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
 public class GetProfileQueryHandler(
     IGenericRepository<User> userRepository,
+    IGenericRepository<StreakFreeze> streakFreezeRepository,
+    IUserDateService userDateService,
     IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
+    private const int MaxFreezesPerMonth = 2;
+
     public async Task<Result<ProfileResponse>> Handle(GetProfileQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
@@ -50,6 +56,14 @@ public class GetProfileQueryHandler(
         var aiMessageLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
 
         var levelTitle = LevelDefinitions.GetLevelForXp(user.TotalXp).Title;
+
+        // Compute streak freezes available
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var windowStart = today.AddDays(-29);
+        var recentFreezes = await streakFreezeRepository.FindAsync(
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
+            cancellationToken);
+        var freezesAvailable = Math.Max(0, MaxFreezesPerMonth - recentFreezes.Count);
 
         return Result.Success(new ProfileResponse(
             user.Name,
@@ -78,6 +92,8 @@ public class GetProfileQueryHandler(
             levelTitle,
             user.LastAdRewardAt.HasValue && user.LastAdRewardAt.Value.Date == DateTime.UtcNow.Date
                 ? user.AdRewardsClaimedToday
-                : 0));
+                : 0,
+            user.CurrentStreak,
+            freezesAvailable));
     }
 }

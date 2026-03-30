@@ -24,6 +24,9 @@ public record HabitDetailResponse(
     DateOnly? EndDate,
     IReadOnlyList<DayOfWeek> Days,
     int? Position,
+    bool ReminderEnabled,
+    IReadOnlyList<int> ReminderTimes,
+    IReadOnlyList<ScheduledReminderTime> ScheduledReminders,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
     IReadOnlyList<HabitChildResponse> Children);
@@ -67,6 +70,9 @@ public class GetHabitByIdQueryHandler(
             habit.EndDate,
             habit.Days.ToList(),
             habit.Position,
+            habit.ReminderEnabled,
+            habit.ReminderTimes,
+            habit.ScheduledReminders,
             habit.ChecklistItems,
             habit.CreatedAtUtc,
             children));

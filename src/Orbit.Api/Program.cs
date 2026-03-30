@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authentication;
+using Orbit.Api.Authentication;
+using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
 using Orbit.Application.Behaviors;
@@ -124,10 +127,10 @@ var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = "MultiScheme";
+    options.DefaultChallengeScheme = "MultiScheme";
 })
-.AddJwtBearer(options =>
+.AddJwtBearer("JwtBearer", options =>
 {
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -140,6 +143,17 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
         ClockSkew = TimeSpan.Zero
+    };
+})
+.AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", null)
+.AddPolicyScheme("MultiScheme", "JWT or API Key", options =>
+{
+    options.ForwardDefaultSelector = context =>
+    {
+        var auth = context.Request.Headers.Authorization.FirstOrDefault();
+        if (auth?.StartsWith("Bearer orb_", StringComparison.OrdinalIgnoreCase) == true)
+            return "ApiKey";
+        return "JwtBearer";
     };
 });
 
@@ -262,6 +276,19 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10MB global default
 });
 
+// --- MCP Server ---
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<HabitTools>()
+    .WithTools<TagTools>()
+    .WithTools<GoalTools>()
+    .WithTools<ProfileTools>()
+    .WithTools<GamificationTools>()
+    .WithTools<NotificationTools>()
+    .WithTools<SubscriptionTools>()
+    .WithTools<UserFactTools>()
+    .WithTools<CalendarTools>();
+
 // --- Controllers ---
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -315,6 +342,7 @@ if (app.Environment.IsProduction())
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapMcp("/mcp").RequireAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
 

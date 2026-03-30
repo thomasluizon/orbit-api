@@ -120,6 +120,7 @@ public class DuplicateHabitCommandHandler(
             checklistItems: source.ChecklistItems,
             isGeneral: source.IsGeneral,
             isFlexible: source.IsFlexible,
-            endDate: source.EndDate);
+            endDate: source.EndDate,
+            scheduledReminders: source.ScheduledReminders);
     }
 }

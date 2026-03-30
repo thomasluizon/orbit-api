@@ -3,6 +3,7 @@ using FluentValidation.TestHelper;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -180,5 +181,77 @@ public class CreateHabitCommandValidatorTests
 
         // Assert
         result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Sub-habit title must not exceed 200 characters"));
+    }
+
+    // --- Scheduled Reminders ---
+
+    [Fact]
+    public void Validate_ValidScheduledReminders_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            ScheduledReminders = new List<ScheduledReminderTime>
+            {
+                new("day_before", new TimeOnly(20, 0)),
+                new("same_day", new TimeOnly(9, 0))
+            }
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveValidationErrorFor(x => x.ScheduledReminders);
+    }
+
+    [Fact]
+    public void Validate_ScheduledReminders_Over5_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            ScheduledReminders = Enumerable.Range(0, 6)
+                .Select(i => new ScheduledReminderTime("same_day", new TimeOnly(8 + i, 0)))
+                .ToList()
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.ScheduledReminders);
+    }
+
+    [Fact]
+    public void Validate_ScheduledReminders_InvalidWhen_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            ScheduledReminders = new List<ScheduledReminderTime>
+            {
+                new("next_week", new TimeOnly(9, 0))
+            }
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.ScheduledReminders);
+    }
+
+    [Fact]
+    public void Validate_ScheduledReminders_Duplicates_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            ScheduledReminders = new List<ScheduledReminderTime>
+            {
+                new("same_day", new TimeOnly(9, 0)),
+                new("same_day", new TimeOnly(9, 0))
+            }
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.ScheduledReminders);
+    }
+
+    [Fact]
+    public void Validate_NullScheduledReminders_NoError()
+    {
+        var command = ValidCommand() with { ScheduledReminders = null };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveValidationErrorFor(x => x.ScheduledReminders);
     }
 }

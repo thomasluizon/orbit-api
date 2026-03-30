@@ -26,7 +26,7 @@ public class ResendEmailService(
     {
         var isPtBr = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
         var subject = isPtBr ? "Seu código de verificação do Orbit" : "Your Orbit verification code";
-        var html = BuildVerificationCodeEmailHtml(code, isPtBr);
+        var html = BuildVerificationCodeEmailHtml(code, toEmail, isPtBr);
         await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
 
@@ -156,7 +156,7 @@ public class ResendEmailService(
         }
     }
 
-    private static string BuildVerificationCodeEmailHtml(string code, bool isPtBr)
+    private static string BuildVerificationCodeEmailHtml(string code, string email, bool isPtBr)
     {
         var heading = isPtBr ? "Seu código de verificação" : "Your verification code";
         var intro = isPtBr
@@ -166,9 +166,10 @@ public class ResendEmailService(
             ? "Se você não solicitou este código, pode ignorar este e-mail."
             : "If you didn't request this code, you can safely ignore this email.";
         var footer = isPtBr ? "Equipe Orbit" : "The Orbit Team";
+        var signInButtonText = isPtBr ? "Entrar no Orbit" : "Sign in to Orbit";
 
-        // Format code with spaces between digits for readability
-        var formattedCode = string.Join(" ", code.ToCharArray());
+        var encodedEmail = System.Net.WebUtility.UrlEncode(email);
+        var signInUrl = $"https://app.useorbit.org/login?email={encodedEmail}&code={code}";
 
         return $@"
 <!DOCTYPE html>
@@ -193,7 +194,10 @@ public class ResendEmailService(
                             <h1 style=""margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #ffffff; text-align: center;"">{heading}</h1>
                             <p style=""margin: 0 0 32px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6; text-align: center;"">{intro}</p>
                             <div style=""text-align: center; padding: 24px 0; background-color: #0a0a0a; border-radius: 16px; margin: 0 0 24px 0;"">
-                                <span style=""font-size: 36px; font-weight: 800; color: #8b5cf6; letter-spacing: 12px; font-family: monospace;"">{formattedCode}</span>
+                                <span style=""font-size: 32px; font-weight: 800; color: #8b5cf6; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace; white-space: nowrap;"">{code}</span>
+                            </div>
+                            <div style=""text-align: center; padding-top: 8px; margin: 0 0 24px 0;"">
+                                <a href=""{signInUrl}"" style=""display: inline-block; background-color: #8b5cf6; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 40px; border-radius: 100px; box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.3);"">{signInButtonText}</a>
                             </div>
                             <p style=""margin: 0; font-size: 13px; color: #525252; text-align: center;"">{warning}</p>
                         </td>
@@ -223,8 +227,6 @@ public class ResendEmailService(
             : "If you didn't request this, ignore this email. Your account will remain safe.";
         var footer = isPtBr ? "Equipe Orbit" : "The Orbit Team";
 
-        var formattedCode = string.Join(" ", code.ToCharArray());
-
         return $@"
 <!DOCTYPE html>
 <html>
@@ -249,7 +251,7 @@ public class ResendEmailService(
                             <p style=""margin: 0 0 16px 0; font-size: 15px; color: #a3a3a3; line-height: 1.6; text-align: center;"">{intro}</p>
                             <p style=""margin: 0 0 16px 0; font-size: 15px; color: #ffffff; text-align: center; font-weight: 600;"">{codeLabel}</p>
                             <div style=""text-align: center; padding: 24px 0; background-color: #0a0a0a; border-radius: 16px; margin: 0 0 24px 0;"">
-                                <span style=""font-size: 36px; font-weight: 800; color: #dc2626; letter-spacing: 12px; font-family: monospace;"">{formattedCode}</span>
+                                <span style=""font-size: 32px; font-weight: 800; color: #dc2626; letter-spacing: 8px; font-family: 'Courier New', Courier, monospace; white-space: nowrap;"">{code}</span>
                             </div>
                             <p style=""margin: 0; font-size: 13px; color: #525252; text-align: center;"">{warning}</p>
                         </td>

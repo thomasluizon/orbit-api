@@ -97,6 +97,18 @@ public class PayGateService(
         return Result.Success();
     }
 
+    public async Task<Result> CanCreateApiKeys(Guid userId, CancellationToken ct = default)
+    {
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+            return Result.Failure(ErrorMessages.UserNotFound);
+
+        if (!user.HasProAccess)
+            return Result.PayGateFailure("API keys are a Pro feature. Upgrade to unlock!");
+
+        return Result.Success();
+    }
+
     /// <summary>
     /// Returns the AI message limit for the given user (used by profile/subscription endpoints).
     /// </summary>

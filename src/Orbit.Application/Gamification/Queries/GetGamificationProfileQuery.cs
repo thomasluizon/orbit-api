@@ -16,7 +16,10 @@ public record GamificationProfileResponse(
     int AchievementsEarned,
     int AchievementsTotal,
     IReadOnlyList<AchievementDto> Achievements,
-    IReadOnlyList<UserAchievementDto> UserAchievements);
+    IReadOnlyList<UserAchievementDto> UserAchievements,
+    int CurrentStreak,
+    int LongestStreak,
+    DateOnly? LastActiveDate);
 
 public record UserAchievementDto(string AchievementId, DateTime EarnedAtUtc);
 
@@ -65,6 +68,9 @@ public class GetGamificationProfileQueryHandler(
             earned.Count,
             AchievementDefinitions.All.Count,
             achievements,
-            userAchievements));
+            userAchievements,
+            user.CurrentStreak,
+            user.LongestStreak,
+            user.LastActiveDate));
     }
 }

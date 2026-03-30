@@ -5,6 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -27,7 +28,8 @@ public record BulkHabitItem(
     IReadOnlyList<BulkHabitItem>? SubHabits = null,
     bool IsGeneral = false,
     DateOnly? EndDate = null,
-    bool IsFlexible = false);
+    bool IsFlexible = false,
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -94,7 +96,8 @@ public class BulkCreateHabitsCommandHandler(
                         reminderEnabled: item.ReminderEnabled,
                         reminderTimes: item.ReminderTimes,
                         isGeneral: item.IsGeneral,
-                        isFlexible: item.IsFlexible);
+                        isFlexible: item.IsFlexible,
+                        scheduledReminders: item.ScheduledReminders);
 
                     if (habitResult.IsFailure)
                     {
