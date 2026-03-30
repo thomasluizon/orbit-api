@@ -229,6 +229,8 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ApiKey>(entity =>
         {
             entity.HasIndex(k => k.KeyPrefix);
