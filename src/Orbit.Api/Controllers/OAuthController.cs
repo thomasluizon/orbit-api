@@ -26,7 +26,8 @@ public class OAuthController(
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
     {
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        var baseUrl = $"{scheme}://{Request.Host}";
         return Ok(new
         {
             issuer = baseUrl,
