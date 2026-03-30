@@ -29,26 +29,31 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine("Examples: query_habits(date: 'today'), query_habits(is_general: true), query_habits(tag: 'health'), query_habits(search: 'water')");
         sb.AppendLine();
 
-        if (todayHabits.Count > 0)
+        // Full habit index so the AI always knows what habits exist
+        sb.AppendLine("### All Habits:");
+        foreach (var habit in parents.OrderBy(h => h.Position))
         {
-            sb.AppendLine("### Quick Reference (today + overdue, excludes general):");
-            foreach (var habit in todayHabits)
+            var labels = new List<string>();
+            if (habit.IsGeneral) labels.Add("GENERAL");
+            else if (!habit.IsCompleted && context.UserToday.HasValue && habit.DueDate < context.UserToday.Value) labels.Add("OVERDUE");
+            else if (!habit.IsCompleted && context.UserToday.HasValue && habit.DueDate == context.UserToday.Value) labels.Add("TODAY");
+            if (habit.IsBadHabit) labels.Add("BAD");
+            if (habit.IsCompleted) labels.Add("COMPLETED");
+            var labelStr = labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "";
+
+            sb.AppendLine($"- \"{SanitizeTitle(habit.Title)}\" | {habit.Id}{labelStr}");
+
+            if (habit.Goals.Count > 0)
             {
-                var label = habit.DueDate < context.UserToday!.Value ? "OVERDUE" : "TODAY";
-                sb.AppendLine($"- \"{SanitizeTitle(habit.Title)}\" | {habit.Id} | {label}");
-
-                if (habit.Goals.Count > 0)
-                {
-                    var goalNames = string.Join(", ", habit.Goals.Select(g => SanitizeTitle(g.Title)));
-                    sb.AppendLine($"  Goals: {goalNames}");
-                }
-
-                AppendChildren(sb, context.ActiveHabits, habit.Id, 1);
+                var goalNames = string.Join(", ", habit.Goals.Select(g => SanitizeTitle(g.Title)));
+                sb.AppendLine($"  Goals: {goalNames}");
             }
-            sb.AppendLine();
-        }
 
-        sb.AppendLine("When user mentions an existing habit -> use the ID from Quick Reference or call query_habits(search: 'name') first");
+            AppendChildren(sb, context.ActiveHabits, habit.Id, 1);
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("When user mentions an existing habit -> find its ID from the list above. Call query_habits for detailed info (metrics, dates, etc.).");
         sb.AppendLine("When user mentions a NEW activity -> use create_habit");
 
         return sb.ToString();
