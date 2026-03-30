@@ -252,13 +252,16 @@ builder.Services.AddMediatR(cfg =>
 // --- CORS ---
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:3000"];
+var allOrigins = allowedOrigins
+    .Concat(["https://claude.ai", "https://claude.com"])
+    .ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(allowedOrigins)
-              .WithHeaders("Authorization", "Content-Type")
-              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH")
+        policy.WithOrigins(allOrigins)
+              .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+              .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
               .AllowCredentials();
     });
 });
@@ -347,22 +350,44 @@ if (app.Environment.IsProduction())
     app.UseHttpsRedirection();
 }
 
-// Add WWW-Authenticate header for MCP 401 responses (OAuth discovery)
+// MCP selective auth: initialize works without auth, tools require auth
 app.Use(async (context, next) =>
 {
-    await next();
-    if (context.Response.StatusCode == 401 && context.Request.Path.StartsWithSegments("/mcp"))
+    if (context.Request.Path.StartsWithSegments("/mcp") && context.Request.Method == "POST")
     {
-        var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
-        var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
-        context.Response.Headers["WWW-Authenticate"] = $"Bearer resource_metadata=\"{resourceUrl}\"";
+        context.Request.EnableBuffering();
+        using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
+        var body = await reader.ReadToEndAsync();
+        context.Request.Body.Position = 0;
+
+        // Allow initialize and notifications without auth
+        if (body.Contains("\"method\":\"initialize\"") ||
+            body.Contains("\"method\":\"notifications/") ||
+            body.Contains("\"method\":\"ping\""))
+        {
+            await next();
+            return;
+        }
+
+        // For tool calls, require auth
+        var authResult = await context.AuthenticateAsync();
+        if (!authResult.Succeeded)
+        {
+            var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
+            var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
+            context.Response.StatusCode = 401;
+            context.Response.Headers["WWW-Authenticate"] = $"Bearer resource_metadata=\"{resourceUrl}\"";
+            return;
+        }
+        context.User = authResult.Principal!;
     }
+    await next();
 });
 
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapMcp("/mcp").RequireAuthorization();
+app.MapMcp("/mcp");
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
 
