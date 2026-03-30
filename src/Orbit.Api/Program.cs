@@ -282,7 +282,12 @@ builder.Services.AddMcpServer()
     .WithTools<HabitTools>()
     .WithTools<TagTools>()
     .WithTools<GoalTools>()
-    .WithTools<ProfileTools>();
+    .WithTools<ProfileTools>()
+    .WithTools<GamificationTools>()
+    .WithTools<NotificationTools>()
+    .WithTools<SubscriptionTools>()
+    .WithTools<UserFactTools>()
+    .WithTools<CalendarTools>();
 
 // --- Controllers ---
 builder.Services.AddControllers()

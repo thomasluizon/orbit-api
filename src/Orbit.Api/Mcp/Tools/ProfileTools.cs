@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
+using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
@@ -31,6 +32,76 @@ public class ProfileTools(IMediator mediator)
                $"AI Messages: {p.AiMessagesUsed}/{p.AiMessagesLimit}\n" +
                $"Level: {p.Level} ({p.LevelTitle}) - {p.TotalXp} XP\n" +
                $"Week starts on: {(p.WeekStartDay == 0 ? "Sunday" : "Monday")}";
+    }
+
+    [McpServerTool(Name = "set_timezone"), Description("Set the user's timezone.")]
+    public async Task<string> SetTimezone(
+        ClaimsPrincipal user,
+        [Description("IANA timezone identifier (e.g., America/New_York, Europe/London)")] string timezone,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new SetTimezoneCommand(userId, timezone);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"Timezone set to {timezone}"
+            : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "set_language"), Description("Set the user's preferred language.")]
+    public async Task<string> SetLanguage(
+        ClaimsPrincipal user,
+        [Description("Language code (e.g., en, pt-BR)")] string language,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new SetLanguageCommand(userId, language);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"Language set to {language}"
+            : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "set_ai_memory"), Description("Enable or disable AI memory (remembering user facts from conversations).")]
+    public async Task<string> SetAiMemory(
+        ClaimsPrincipal user,
+        [Description("True to enable, false to disable")] bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new SetAiMemoryCommand(userId, enabled);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"AI memory {(enabled ? "enabled" : "disabled")}"
+            : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "set_ai_summary"), Description("Enable or disable AI daily summary on the Today page.")]
+    public async Task<string> SetAiSummary(
+        ClaimsPrincipal user,
+        [Description("True to enable, false to disable")] bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new SetAiSummaryCommand(userId, enabled);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"AI summary {(enabled ? "enabled" : "disabled")}"
+            : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "set_week_start_day"), Description("Set which day the week starts on.")]
+    public async Task<string> SetWeekStartDay(
+        ClaimsPrincipal user,
+        [Description("0 for Sunday, 1 for Monday")] int weekStartDay,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new SetWeekStartDayCommand(userId, weekStartDay);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"Week start day set to {(weekStartDay == 0 ? "Sunday" : "Monday")}"
+            : $"Error: {result.Error}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

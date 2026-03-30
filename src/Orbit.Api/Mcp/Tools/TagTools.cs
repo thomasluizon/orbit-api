@@ -46,6 +46,58 @@ public class TagTools(IMediator mediator)
             : $"Error: {result.Error}";
     }
 
+    [McpServerTool(Name = "update_tag"), Description("Update a tag's name and/or color.")]
+    public async Task<string> UpdateTag(
+        ClaimsPrincipal user,
+        [Description("The tag ID (GUID)")] string tagId,
+        [Description("New tag name")] string name,
+        [Description("New hex color code, e.g. #FF5733")] string color,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new UpdateTagCommand(userId, Guid.Parse(tagId), name, color);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"Updated tag {tagId}"
+            : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "delete_tag"), Description("Delete a tag by ID.")]
+    public async Task<string> DeleteTag(
+        ClaimsPrincipal user,
+        [Description("The tag ID (GUID)")] string tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var command = new DeleteTagCommand(userId, Guid.Parse(tagId));
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? $"Deleted tag {tagId}"
+            : $"Error: {result.Error}";
+    }
+
+    [McpServerTool(Name = "assign_tags"), Description("Assign tags to a habit. Pass the full list of tag IDs (replaces existing tags on the habit).")]
+    public async Task<string> AssignTags(
+        ClaimsPrincipal user,
+        [Description("The habit ID (GUID)")] string habitId,
+        [Description("Comma-separated tag IDs (GUIDs). Pass empty string to remove all tags.")] string tagIds,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetUserId(user);
+        var ids = string.IsNullOrWhiteSpace(tagIds)
+            ? new List<Guid>()
+            : tagIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Guid.Parse).ToList();
+
+        var command = new AssignTagsCommand(userId, Guid.Parse(habitId), ids);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess
+            ? ids.Count > 0
+                ? $"Assigned {ids.Count} tags to habit {habitId}"
+                : $"Removed all tags from habit {habitId}"
+            : $"Error: {result.Error}";
+    }
+
     private static Guid GetUserId(ClaimsPrincipal user)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
