@@ -51,7 +51,8 @@ public record UpdateHabitCommand(
     [property: AiField("string", "YYYY-MM-DD, optional end date. Set to null to clear. Habit stops appearing after this date")] DateOnly? EndDate = null,
     [property: AiField("boolean", "Set to true to remove the end date")] bool? ClearEndDate = null,
     [property: AiField("boolean", "Set to true for flexible frequency (X times per period without fixed days)")] bool? IsFlexible = null,
-    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result>;
+    IReadOnlyList<Guid>? GoalIds = null,
+    [property: AiField("object[]", "Absolute-time reminders for habits WITHOUT a due time. Array of {when: 'day_before'|'same_day', time: 'HH:mm'}")] IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -90,7 +91,8 @@ public class UpdateHabitCommandHandler(
             slipAlertEnabled: request.SlipAlertEnabled,
             checklistItems: request.ChecklistItems,
             isGeneral: request.IsGeneral,
-            isFlexible: request.IsFlexible);
+            isFlexible: request.IsFlexible,
+            scheduledReminders: request.ScheduledReminders);
 
         if (result.IsFailure)
             return result;

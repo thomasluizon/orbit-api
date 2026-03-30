@@ -44,7 +44,8 @@ public record CreateSubHabitCommand(
     IReadOnlyList<Guid>? TagIds = null,
     DateOnly? EndDate = null,
     [property: AiField("boolean", "True for flexible frequency")] bool IsFlexible = false,
-    [property: AiField("string", "YYYY-MM-DD override for due date")] DateOnly? DueDate = null) : IRequest<Result<Guid>>;
+    [property: AiField("string", "YYYY-MM-DD override for due date")] DateOnly? DueDate = null,
+    [property: AiField("object[]", "Absolute-time reminders for habits WITHOUT a due time")] IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -98,7 +99,8 @@ public class CreateSubHabitCommandHandler(
             checklistItems: request.ChecklistItems,
             isGeneral: parent.IsGeneral,
             isFlexible: request.IsFlexible,
-            endDate: request.EndDate);
+            endDate: request.EndDate,
+            scheduledReminders: request.ScheduledReminders);
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);

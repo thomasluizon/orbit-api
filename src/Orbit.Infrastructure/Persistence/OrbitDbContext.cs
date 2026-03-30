@@ -105,6 +105,18 @@ public class OrbitDbContext : DbContext
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<int>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
 
+            entity.Property(h => h.ScheduledReminders)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(v, (JsonSerializerOptions?)null) ?? new List<ScheduledReminderTime>())
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(
+                    new ValueComparer<IReadOnlyList<ScheduledReminderTime>>(
+                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
+                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
+                        c => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
+
             if (encConverter is not null && nullableEncConverter is not null)
             {
                 entity.Property(h => h.Title).HasConversion(encConverter).HasColumnType("text");

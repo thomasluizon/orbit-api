@@ -22,6 +22,7 @@ public class Habit : Entity
     public bool IsFlexible { get; private set; }
     public bool SlipAlertEnabled { get; private set; }
     public IReadOnlyList<ChecklistItem> ChecklistItems { get; private set; } = [];
+    public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; private set; } = [];
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
@@ -61,7 +62,8 @@ public class Habit : Entity
         IReadOnlyList<ChecklistItem>? checklistItems = null,
         bool isGeneral = false,
         bool isFlexible = false,
-        DateOnly? endDate = null)
+        DateOnly? endDate = null,
+        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
@@ -100,6 +102,24 @@ public class Habit : Entity
         if (endDate.HasValue && endDate.Value < effectiveDueDate)
             return Result.Failure<Habit>("End date must be on or after the start date.");
 
+        if (scheduledReminders is { Count: > 5 })
+            return Result.Failure<Habit>("A habit can have at most 5 scheduled reminders.");
+
+        if (scheduledReminders is not null)
+        {
+            foreach (var sr in scheduledReminders)
+            {
+                if (sr.When is not ("day_before" or "same_day"))
+                    return Result.Failure<Habit>("Scheduled reminder 'when' must be 'day_before' or 'same_day'.");
+            }
+
+            var hasDuplicates = scheduledReminders
+                .GroupBy(sr => (sr.When, sr.Time))
+                .Any(g => g.Count() > 1);
+            if (hasDuplicates)
+                return Result.Failure<Habit>("Scheduled reminders must not contain duplicate entries.");
+        }
+
         return Result.Success(new Habit
         {
             UserId = userId,
@@ -119,6 +139,7 @@ public class Habit : Entity
             ReminderTimes = reminderTimes ?? [15],
             SlipAlertEnabled = slipAlertEnabled,
             ChecklistItems = checklistItems ?? [],
+            ScheduledReminders = scheduledReminders ?? [],
             EndDate = endDate,
             CreatedAtUtc = DateTime.UtcNow
         });
@@ -315,7 +336,8 @@ public class Habit : Entity
         bool? isGeneral = null,
         bool? isFlexible = null,
         DateOnly? endDate = null,
-        bool? clearEndDate = null)
+        bool? clearEndDate = null,
+        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             return Result.Failure("Title is required.");
@@ -380,6 +402,26 @@ public class Habit : Entity
             SlipAlertEnabled = slipAlertEnabled.Value;
         if (checklistItems is not null)
             ChecklistItems = checklistItems;
+
+        if (scheduledReminders is { Count: > 5 })
+            return Result.Failure("A habit can have at most 5 scheduled reminders.");
+
+        if (scheduledReminders is not null)
+        {
+            foreach (var sr in scheduledReminders)
+            {
+                if (sr.When is not ("day_before" or "same_day"))
+                    return Result.Failure("Scheduled reminder 'when' must be 'day_before' or 'same_day'.");
+            }
+
+            var hasDuplicates = scheduledReminders
+                .GroupBy(sr => (sr.When, sr.Time))
+                .Any(g => g.Count() > 1);
+            if (hasDuplicates)
+                return Result.Failure("Scheduled reminders must not contain duplicate entries.");
+
+            ScheduledReminders = scheduledReminders;
+        }
 
         if (clearEndDate == true)
             EndDate = null;

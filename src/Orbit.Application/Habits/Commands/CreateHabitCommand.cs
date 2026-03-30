@@ -67,6 +67,11 @@ namespace Orbit.Application.Habits.Commands;
     "I want to drink more water",
     """{ "actions": [{ "type": "CreateHabit", "title": "Drink More Water", "isGeneral": true }], "aiMessage": "Created a general habit to drink more water!" }""",
     Note = "general habit, no schedule")]
+[AiExample(
+    "Remind me about gym tomorrow at 9am and the night before at 8pm",
+    """{ "actions": [{ "type": "CreateHabit", "title": "Gym", "frequencyUnit": "Day", "frequencyQuantity": 1, "dueDate": "{TOMORROW}", "reminderEnabled": true, "scheduledReminders": [{"when": "day_before", "time": "20:00"}, {"when": "same_day", "time": "09:00"}] }], "aiMessage": "Created Gym with reminders the night before at 8pm and on the day at 9am!" }""",
+    Note = "scheduled reminders without dueTime")]
+[AiRule("Use scheduledReminders (array of {when, time}) for habits WITHOUT a dueTime. Use reminderTimes (minutes-before array) for habits WITH a dueTime. Never use both together.")]
 public record CreateHabitCommand(
     Guid UserId,
     [property: AiField("string", "Name of the habit", Required = true)] string Title,
@@ -87,7 +92,8 @@ public record CreateHabitCommand(
     [property: AiField("boolean", "True for general habits with no schedule or due date (open-ended goals)")] bool IsGeneral = false,
     [property: AiField("string", "YYYY-MM-DD, optional end date. Habit stops appearing after this date. Only for recurring habits, not one-time tasks")] DateOnly? EndDate = null,
     [property: AiField("boolean", "True for flexible frequency habits. When user says 'X times per week' without specifying days, set isFlexible=true, frequencyUnit to the period, frequencyQuantity to X")] bool IsFlexible = false,
-    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<Guid>? GoalIds = null,
+    [property: AiField("object[]", "Absolute-time reminders for habits WITHOUT a due time. Array of {when: 'day_before'|'same_day', time: 'HH:mm'}. Use INSTEAD of reminderTimes when no dueTime is set")] IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result<Guid>>;
 
 public class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -133,7 +139,8 @@ public class CreateHabitCommandHandler(
             slipAlertEnabled: request.SlipAlertEnabled,
             checklistItems: request.ChecklistItems,
             isGeneral: request.IsGeneral,
-            isFlexible: request.IsFlexible);
+            isFlexible: request.IsFlexible,
+            scheduledReminders: request.ScheduledReminders);
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

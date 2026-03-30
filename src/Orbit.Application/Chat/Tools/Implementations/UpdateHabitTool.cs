@@ -5,6 +5,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
+
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateHabitTool(
@@ -62,6 +63,21 @@ public class UpdateHabitTool(
                         is_checked = new { type = "BOOLEAN", description = "Whether checked" }
                     },
                     required = new[] { "text" }
+                }
+            },
+            scheduled_reminders = new
+            {
+                type = "ARRAY",
+                description = "Absolute-time reminders for habits WITHOUT a due_time. Use INSTEAD of reminder_times when no due_time is set.",
+                items = new
+                {
+                    type = "OBJECT",
+                    properties = new
+                    {
+                        when = new { type = "STRING", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
+                        time = new { type = "STRING", description = "HH:mm 24h format" }
+                    },
+                    required = new[] { "when", "time" }
                 }
             }
         },
@@ -149,6 +165,10 @@ public class UpdateHabitTool(
             ? ParseChecklistItems(args)
             : null;
 
+        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = PropertyExists(args, "scheduled_reminders")
+            ? ParseScheduledReminders(args)
+            : null;
+
         bool? isFlexible = PropertyExists(args, "is_flexible")
             ? GetBool(args, "is_flexible")
             : null;
@@ -179,7 +199,8 @@ public class UpdateHabitTool(
             checklistItems: checklistItems,
             isFlexible: isFlexible,
             endDate: endDate,
-            clearEndDate: clearEndDate);
+            clearEndDate: clearEndDate,
+            scheduledReminders: scheduledReminders);
 
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);
@@ -252,6 +273,24 @@ public class UpdateHabitTool(
         {
             if (item.ValueKind == JsonValueKind.Number)
                 items.Add(item.GetInt32());
+        }
+        return items.Count > 0 ? items : null;
+    }
+
+    private static IReadOnlyList<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
+    {
+        if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var items = new List<ScheduledReminderTime>();
+        foreach (var item in arrEl.EnumerateArray())
+        {
+            var when = GetString(item, "when");
+            var timeStr = GetString(item, "time");
+            if (when is null || timeStr is null) continue;
+            if (when is not ("day_before" or "same_day")) continue;
+            if (!TimeOnly.TryParse(timeStr, out var time)) continue;
+            items.Add(new ScheduledReminderTime(when, time));
         }
         return items.Count > 0 ? items : null;
     }

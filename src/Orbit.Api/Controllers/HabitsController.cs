@@ -28,6 +28,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         TimeOnly? DueEndTime = null,
         bool ReminderEnabled = false,
         IReadOnlyList<int>? ReminderTimes = null,
+        IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
         bool SlipAlertEnabled = false,
         IReadOnlyList<Guid>? TagIds = null,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
@@ -48,6 +49,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         TimeOnly? DueEndTime = null,
         bool? ReminderEnabled = null,
         IReadOnlyList<int>? ReminderTimes = null,
+        IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
         bool? SlipAlertEnabled = null,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
         bool? IsGeneral = null,
@@ -76,6 +78,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         TimeOnly? DueEndTime = null,
         bool ReminderEnabled = false,
         IReadOnlyList<int>? ReminderTimes = null,
+        IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
         IReadOnlyList<BulkHabitItemRequest>? SubHabits = null,
         bool IsGeneral = false,
         DateOnly? EndDate = null,
@@ -107,6 +110,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         TimeOnly? DueEndTime = null,
         bool ReminderEnabled = false,
         IReadOnlyList<int>? ReminderTimes = null,
+        IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
         bool SlipAlertEnabled = false,
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
         IReadOnlyList<Guid>? TagIds = null,
@@ -225,7 +229,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.IsGeneral,
             EndDate: request.EndDate,
             IsFlexible: request.IsFlexible,
-            GoalIds: request.GoalIds);
+            GoalIds: request.GoalIds,
+            ScheduledReminders: request.ScheduledReminders);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -297,7 +302,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             EndDate: request.EndDate,
             ClearEndDate: request.ClearEndDate,
             IsFlexible: request.IsFlexible,
-            GoalIds: request.GoalIds);
+            GoalIds: request.GoalIds,
+            ScheduledReminders: request.ScheduledReminders);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -515,7 +521,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.TagIds,
             request.EndDate,
             request.IsFlexible,
-            request.DueDate);
+            request.DueDate,
+            request.ScheduledReminders);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -558,7 +565,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.SubHabits?.Select(MapToBulkHabitItem).ToList(),
             request.IsGeneral,
             request.EndDate,
-            request.IsFlexible);
+            request.IsFlexible,
+            request.ScheduledReminders);
     }
 
 }

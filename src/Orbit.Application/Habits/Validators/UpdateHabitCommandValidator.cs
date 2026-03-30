@@ -40,5 +40,7 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
             .Equal(false)
             .When(x => x.IsGeneral == true)
             .WithMessage("General habits cannot be bad habits");
+
+        SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.ScheduledReminders));
     }
 }

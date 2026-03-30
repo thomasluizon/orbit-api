@@ -64,6 +64,23 @@ public static class SharedHabitRules
         AddGeneralHabitRulesCore(validator, x => isGeneralFunc(x) == true, freqUnitExpr, freqQtyExpr, daysExpr);
     }
 
+    public static void AddScheduledReminderRules<T>(IRuleBuilder<T, IReadOnlyList<ScheduledReminderTime>?> rule)
+    {
+        rule.Must(items => items is null || items.Count <= AppConstants.MaxScheduledReminders)
+            .WithMessage($"A habit can have at most {AppConstants.MaxScheduledReminders} scheduled reminders");
+
+        rule.Must(items => items is null || items.All(sr => sr.When is "day_before" or "same_day"))
+            .WithMessage("Scheduled reminder 'when' must be 'day_before' or 'same_day'");
+
+        rule.Must(items =>
+            {
+                if (items is null) return true;
+                var grouped = items.GroupBy(sr => (sr.When, sr.Time));
+                return grouped.All(g => g.Count() == 1);
+            })
+            .WithMessage("Scheduled reminders must not contain duplicate entries");
+    }
+
     private static void AddGeneralHabitRulesCore<T>(
         AbstractValidator<T> validator,
         Func<T, bool> isGeneralPredicate,

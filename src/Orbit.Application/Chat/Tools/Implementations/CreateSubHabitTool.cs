@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using MediatR;
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -41,7 +42,22 @@ public class CreateSubHabitTool(
             reminder_times = new { type = "ARRAY", description = "Minutes before dueTime to send reminders", items = new { type = "INTEGER" } },
             slip_alert_enabled = new { type = "BOOLEAN", description = "Enable slip alert notifications" },
             is_flexible = new { type = "BOOLEAN", description = "True for flexible frequency" },
-            due_date = new { type = "STRING", description = "YYYY-MM-DD override for due date" }
+            due_date = new { type = "STRING", description = "YYYY-MM-DD override for due date" },
+            scheduled_reminders = new
+            {
+                type = "ARRAY",
+                description = "Absolute-time reminders for habits WITHOUT a due_time",
+                items = new
+                {
+                    type = "OBJECT",
+                    properties = new
+                    {
+                        when = new { type = "STRING", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
+                        time = new { type = "STRING", description = "HH:mm 24h format" }
+                    },
+                    required = new[] { "when", "time" }
+                }
+            }
         },
         required = new[] { "parent_habit_id", "title" }
     };
@@ -124,6 +140,25 @@ public class CreateSubHabitTool(
                 dueDate = dd;
         }
 
+        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = null;
+        if (args.TryGetProperty("scheduled_reminders", out var srEl) && srEl.ValueKind == JsonValueKind.Array)
+        {
+            var parsed = new List<ScheduledReminderTime>();
+            foreach (var item in srEl.EnumerateArray())
+            {
+                string? when = null;
+                string? timeStr = null;
+                if (item.TryGetProperty("when", out var wEl) && wEl.ValueKind == JsonValueKind.String)
+                    when = wEl.GetString();
+                if (item.TryGetProperty("time", out var tEl) && tEl.ValueKind == JsonValueKind.String)
+                    timeStr = tEl.GetString();
+                if (when is not ("day_before" or "same_day") || timeStr is null) continue;
+                if (!TimeOnly.TryParse(timeStr, out var time)) continue;
+                parsed.Add(new ScheduledReminderTime(when, time));
+            }
+            if (parsed.Count > 0) scheduledReminders = parsed;
+        }
+
         var result = await mediator.Send(
             new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
                 userId,
@@ -140,7 +175,8 @@ public class CreateSubHabitTool(
                 reminderTimes,
                 slipAlertEnabled,
                 DueDate: dueDate,
-                IsFlexible: isFlexible), ct);
+                IsFlexible: isFlexible,
+                ScheduledReminders: scheduledReminders), ct);
 
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);

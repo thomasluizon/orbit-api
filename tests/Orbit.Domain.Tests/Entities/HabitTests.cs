@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Tests.Entities;
 
@@ -626,5 +627,142 @@ public class HabitTests
 
         updateResult.IsFailure.Should().BeTrue();
         updateResult.Error.Should().Contain("Flexible habits must have a frequency unit");
+    }
+
+    // --- Scheduled Reminders ---
+
+    [Fact]
+    public void Create_WithValidScheduledReminders_ReturnsSuccess()
+    {
+        var reminders = new List<ScheduledReminderTime>
+        {
+            new("day_before", new TimeOnly(20, 0)),
+            new("same_day", new TimeOnly(9, 0))
+        };
+
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            scheduledReminders: reminders);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ScheduledReminders.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Create_WithEmptyScheduledReminders_DefaultsToEmpty()
+    {
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ScheduledReminders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Create_ScheduledReminders_OverLimit_ReturnsFailure()
+    {
+        var reminders = Enumerable.Range(0, 6)
+            .Select(i => new ScheduledReminderTime("same_day", new TimeOnly(8 + i, 0)))
+            .ToList();
+
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            scheduledReminders: reminders);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("at most 5 scheduled reminders");
+    }
+
+    [Fact]
+    public void Create_ScheduledReminders_InvalidWhen_ReturnsFailure()
+    {
+        var reminders = new List<ScheduledReminderTime>
+        {
+            new("invalid_value", new TimeOnly(9, 0))
+        };
+
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            scheduledReminders: reminders);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("'day_before' or 'same_day'");
+    }
+
+    [Fact]
+    public void Create_ScheduledReminders_Duplicates_ReturnsFailure()
+    {
+        var reminders = new List<ScheduledReminderTime>
+        {
+            new("same_day", new TimeOnly(9, 0)),
+            new("same_day", new TimeOnly(9, 0))
+        };
+
+        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            scheduledReminders: reminders);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("duplicate entries");
+    }
+
+    [Fact]
+    public void Update_WithScheduledReminders_SetsReminders()
+    {
+        var habit = CreateValidHabit();
+        var reminders = new List<ScheduledReminderTime>
+        {
+            new("day_before", new TimeOnly(20, 0))
+        };
+
+        var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+            scheduledReminders: reminders);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ScheduledReminders.Should().HaveCount(1);
+        habit.ScheduledReminders[0].When.Should().Be("day_before");
+    }
+
+    [Fact]
+    public void Update_ScheduledReminders_OverLimit_ReturnsFailure()
+    {
+        var habit = CreateValidHabit();
+        var reminders = Enumerable.Range(0, 6)
+            .Select(i => new ScheduledReminderTime("same_day", new TimeOnly(8 + i, 0)))
+            .ToList();
+
+        var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+            scheduledReminders: reminders);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("at most 5 scheduled reminders");
+    }
+
+    [Fact]
+    public void Update_ScheduledReminders_InvalidWhen_ReturnsFailure()
+    {
+        var habit = CreateValidHabit();
+        var reminders = new List<ScheduledReminderTime>
+        {
+            new("next_week", new TimeOnly(9, 0))
+        };
+
+        var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+            scheduledReminders: reminders);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("'day_before' or 'same_day'");
+    }
+
+    [Fact]
+    public void Update_ScheduledReminders_Null_KeepsExisting()
+    {
+        var reminders = new List<ScheduledReminderTime>
+        {
+            new("same_day", new TimeOnly(9, 0))
+        };
+        var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            scheduledReminders: reminders).Value;
+
+        var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+            scheduledReminders: null);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ScheduledReminders.Should().HaveCount(1);
     }
 }
