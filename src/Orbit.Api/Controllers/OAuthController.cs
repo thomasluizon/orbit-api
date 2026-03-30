@@ -137,12 +137,11 @@ public class OAuthController(
     [HttpPost("/oauth/google")]
     public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthRequest request, CancellationToken ct)
     {
-        // Validate Google credential via Supabase (same pattern as GoogleAuthCommand)
-        var client = httpClientFactory.CreateClient("Supabase");
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/v1/user");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.Credential);
+        // Validate Google ID token directly (GIS returns a JWT, not a Supabase token)
+        var client = httpClientFactory.CreateClient();
+        var response = await client.GetAsync(
+            $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(request.Credential)}", ct);
 
-        var response = await client.SendAsync(httpRequest, ct);
         if (!response.IsSuccessStatusCode)
             return BadRequest(new { error = "Invalid or expired Google sign-in token" });
 
@@ -154,18 +153,18 @@ public class OAuthController(
         if (string.IsNullOrEmpty(email))
             return BadRequest(new { error = "Could not retrieve email from Google account" });
 
+        // Verify the token was issued for our client ID
+        var tokenAud = root.TryGetProperty("aud", out var audProp) ? audProp.GetString() : null;
+        var expectedClientId = googleSettings.Value.ClientId;
+        if (!string.IsNullOrEmpty(expectedClientId) && tokenAud != expectedClientId)
+            return BadRequest(new { error = "Google token was not issued for this application" });
+
         // Find or create user
         var user = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
         if (user is null)
         {
-            var name = "User";
-            if (root.TryGetProperty("user_metadata", out var metadata))
-            {
-                if (metadata.TryGetProperty("full_name", out var fullName) && fullName.GetString() is string fn)
-                    name = fn;
-                else if (metadata.TryGetProperty("name", out var nameProperty) && nameProperty.GetString() is string n)
-                    name = n;
-            }
+            var name = root.TryGetProperty("name", out var nameProp) && nameProp.GetString() is string n
+                ? n : email.Split('@')[0];
 
             var createResult = Domain.Entities.User.Create(name, email);
             if (createResult.IsFailure)
