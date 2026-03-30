@@ -347,6 +347,18 @@ if (app.Environment.IsProduction())
     app.UseHttpsRedirection();
 }
 
+// Add WWW-Authenticate header for MCP 401 responses (OAuth discovery)
+app.Use(async (context, next) =>
+{
+    await next();
+    if (context.Response.StatusCode == 401 && context.Request.Path.StartsWithSegments("/mcp"))
+    {
+        var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
+        var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
+        context.Response.Headers["WWW-Authenticate"] = $"Bearer resource_metadata=\"{resourceUrl}\"";
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

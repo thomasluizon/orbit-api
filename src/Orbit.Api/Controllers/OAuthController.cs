@@ -40,6 +40,19 @@ public class OAuthController(
         });
     }
 
+    [HttpGet("/.well-known/oauth-protected-resource")]
+    public IActionResult GetProtectedResourceMetadata()
+    {
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        var baseUrl = $"{scheme}://{Request.Host}";
+        return Ok(new
+        {
+            resource = $"{baseUrl}/mcp",
+            authorization_servers = new[] { baseUrl },
+            bearer_methods_supported = new[] { "header" }
+        });
+    }
+
     [HttpGet("/oauth/authorize")]
     public IActionResult Authorize(
         [FromQuery] string client_id,
