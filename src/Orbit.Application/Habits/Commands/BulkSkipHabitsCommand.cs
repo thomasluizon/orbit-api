@@ -91,7 +91,7 @@ public class BulkSkipHabitsCommandHandler(
                 if (habit.FrequencyUnit is null)
                 {
                     // One-time task: postpone to tomorrow
-                    habit.DueDate = today.AddDays(1);
+                    habit.PostponeTo(today.AddDays(1));
                     results.Add(new BulkSkipItemResult(Index: i, Status: BulkItemStatus.Success, HabitId: habitId));
                     continue;
                 }
