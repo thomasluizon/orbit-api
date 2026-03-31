@@ -49,6 +49,7 @@ public class User : Entity
     public int LongestStreak { get; private set; } = 0;
     public DateOnly? LastActiveDate { get; private set; }
     public string? ThemePreference { get; private set; }
+    public string? ColorScheme { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -118,6 +119,15 @@ public class User : Entity
         if (preference is not null && preference is not ("dark" or "light"))
             return Result.Failure("Invalid theme preference. Must be 'dark' or 'light'.");
         ThemePreference = preference;
+        return Result.Success();
+    }
+
+    public Result SetColorScheme(string? colorScheme)
+    {
+        string[] valid = ["purple", "blue", "green", "rose", "orange", "cyan"];
+        if (colorScheme is not null && !valid.Contains(colorScheme))
+            return Result.Failure("Invalid color scheme.");
+        ColorScheme = colorScheme;
         return Result.Success();
     }
 

@@ -18,6 +18,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest(int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);
+    public record SetColorSchemeRequest(string? ColorScheme);
 
     [HttpGet]
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
@@ -117,6 +118,22 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
 
         if (result.IsSuccess)
             logger.LogInformation("Theme preference changed to {ThemePreference} for user {UserId}", request.ThemePreference, HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("color-scheme")]
+    public async Task<IActionResult> SetColorScheme(
+        [FromBody] SetColorSchemeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetColorSchemeCommand(HttpContext.GetUserId(), request.ColorScheme);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Color scheme changed to {ColorScheme} for user {UserId}", request.ColorScheme, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()
