@@ -66,7 +66,7 @@ public class BulkSkipHabitsTool(
             if (habit.FrequencyUnit is null)
             {
                 // One-time task: postpone to tomorrow
-                habit.DueDate = today.AddDays(1);
+                habit.PostponeTo(today.AddDays(1));
                 skippedCount++;
                 skippedNames.Add(habit.Title);
                 continue;

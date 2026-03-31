@@ -284,6 +284,14 @@ public class Habit : Entity
         DueDate = windowEnd.AddDays(1);
     }
 
+    /// <summary>
+    /// Postpones a one-time task to the given date.
+    /// </summary>
+    public void PostponeTo(DateOnly date)
+    {
+        DueDate = date;
+    }
+
     public Result<HabitLog> SkipFlexible(DateOnly date)
     {
         if (!IsFlexible)

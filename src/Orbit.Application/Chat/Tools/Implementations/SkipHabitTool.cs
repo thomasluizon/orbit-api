@@ -50,7 +50,7 @@ public class SkipHabitTool(
         if (habit.FrequencyUnit is null)
         {
             // One-time task: postpone to tomorrow
-            habit.DueDate = today.AddDays(1);
+            habit.PostponeTo(today.AddDays(1));
             return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
         }
 
