@@ -55,6 +55,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
     }
 
     [HttpPost("google")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> GoogleAuth(
         [FromBody] GoogleAuthRequest request,
         CancellationToken cancellationToken)

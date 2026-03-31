@@ -76,10 +76,7 @@ public class SubscriptionController(
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
 
-        // Prefer X-Forwarded-For (set by BFF/reverse proxy) over direct connection IP
-        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        var ip = forwardedFor?.Split(',')[0].Trim()
-                 ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var countryCode = await geoLocationService.GetCountryCodeAsync(ip, ct);
         var isBrazil = countryCode == "BR";
 
@@ -250,9 +247,7 @@ public class SubscriptionController(
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null) return NotFound(new { error = ErrorMessages.UserNotFound });
 
-        var forwardedFor = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        var ip = forwardedFor?.Split(',')[0].Trim()
-                 ?? HttpContext.Connection.RemoteIpAddress?.ToString();
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var countryCode = await geoLocationService.GetCountryCodeAsync(ip, ct);
         var isBrazil = countryCode == "BR";
 

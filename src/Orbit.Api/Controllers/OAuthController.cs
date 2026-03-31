@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Orbit.Api.OAuth;
 using Orbit.Application.Auth.Commands;
@@ -23,6 +24,12 @@ public class OAuthController(
     IOptions<GoogleSettings> googleSettings,
     ILogger<OAuthController> logger) : ControllerBase
 {
+    private static readonly HashSet<string> AllowedRedirectHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "claude.ai",
+        "claude.com"
+    };
+
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
     {
@@ -87,6 +94,10 @@ public class OAuthController(
         if (string.IsNullOrEmpty(code_challenge) || code_challenge_method != "S256")
             return BadRequest(new { error = "PKCE with S256 is required" });
 
+        if (!Uri.TryCreate(redirect_uri, UriKind.Absolute, out var redirectParsed) ||
+            !AllowedRedirectHosts.Contains(redirectParsed.Host))
+            return BadRequest(new { error = "invalid_redirect_uri" });
+
         var googleClientId = googleSettings.Value.ClientId ?? "";
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
@@ -98,6 +109,7 @@ public class OAuthController(
     public record SendCodeRequest(string Email, string? Language = "en");
 
     [HttpPost("/oauth/send-code")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> SendCode([FromBody] SendCodeRequest request, CancellationToken ct)
     {
         var result = await mediator.Send(new SendCodeCommand(request.Email, request.Language ?? "en"), ct);
@@ -112,6 +124,7 @@ public class OAuthController(
         string State, string CodeChallenge, string RedirectUri, string ClientId);
 
     [HttpPost("/oauth/verify-code")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeRequest request, CancellationToken ct)
     {
         var result = await mediator.Send(
