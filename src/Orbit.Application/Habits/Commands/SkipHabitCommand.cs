@@ -65,7 +65,7 @@ public class SkipHabitCommandHandler(
         if (habit.FrequencyUnit is null)
         {
             // One-time task: postpone to tomorrow
-            habit.DueDate = today.AddDays(1);
+            habit.PostponeTo(today.AddDays(1));
             await unitOfWork.SaveChangesAsync(cancellationToken);
             CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
             return Result.Success();
