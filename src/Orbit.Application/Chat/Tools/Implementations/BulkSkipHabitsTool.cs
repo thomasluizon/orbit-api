@@ -14,7 +14,7 @@ public class BulkSkipHabitsTool(
     public string Name => "bulk_skip_habits";
 
     public string Description =>
-        "Skip multiple recurring habits for today in a single operation. Advances each habit's due date to the next scheduled occurrence without logging completion. Only works on recurring habits that are due today or overdue.";
+        "Skip multiple habits for today in a single operation. For recurring habits, advances due date to next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are due today or overdue.";
 
     public object GetParameterSchema() => new
     {
@@ -64,7 +64,13 @@ public class BulkSkipHabitsTool(
                 continue;
 
             if (habit.FrequencyUnit is null)
+            {
+                // One-time task: postpone to tomorrow
+                habit.DueDate = today.AddDays(1);
+                skippedCount++;
+                skippedNames.Add(habit.Title);
                 continue;
+            }
 
             if (!habit.IsFlexible && habit.DueDate > today)
                 continue;
@@ -91,7 +97,7 @@ public class BulkSkipHabitsTool(
         }
 
         if (skippedCount == 0)
-            return new ToolResult(false, Error: "No habits were skipped. They may be completed, one-time tasks, not yet due, or not found.");
+            return new ToolResult(false, Error: "No habits were skipped. They may be completed, not yet due, or not found.");
 
         return new ToolResult(true, EntityName: string.Join(", ", skippedNames));
     }
