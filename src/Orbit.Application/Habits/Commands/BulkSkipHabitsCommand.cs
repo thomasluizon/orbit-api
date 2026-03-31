@@ -90,11 +90,9 @@ public class BulkSkipHabitsCommandHandler(
 
                 if (habit.FrequencyUnit is null)
                 {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Cannot skip a one-time task."));
+                    // One-time task: postpone to tomorrow
+                    habit.DueDate = today.AddDays(1);
+                    results.Add(new BulkSkipItemResult(Index: i, Status: BulkItemStatus.Success, HabitId: habitId));
                     continue;
                 }
 

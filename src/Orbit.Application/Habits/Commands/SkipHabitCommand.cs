@@ -12,11 +12,12 @@ namespace Orbit.Application.Habits.Commands;
 
 [AiAction(
     "SkipHabit",
-    """**Skip habits** - advance to next scheduled date without logging completion (e.g., "skip my morning run today", "skip all my habits")""",
+    """**Skip/postpone habits** - advance to next scheduled date (recurring) or postpone to tomorrow (one-time tasks) without logging completion (e.g., "skip my morning run today", "postpone my task", "skip all my habits")""",
     """
-    - User says "skip", "pass on", "not today", "dismiss" for a habit
-    - Moves the habit's due date to the next occurrence WITHOUT marking it as completed
-    - Only works on RECURRING habits (not one-time tasks) that are DUE TODAY or OVERDUE
+    - User says "skip", "pass on", "not today", "dismiss", "postpone", "defer" for a habit
+    - For RECURRING habits: moves the due date to the next scheduled occurrence WITHOUT marking it as completed
+    - For ONE-TIME tasks: postpones the due date to tomorrow
+    - Works on habits that are DUE TODAY or OVERDUE and not COMPLETED
     - For "skip all" or "skip everything today", return SkipHabit for EVERY habit marked DUE TODAY or OVERDUE that is not COMPLETED
     - For specific habits, use their exact ID
     - Do NOT confuse with LogHabit: skip = didn't do it, just move on; log = actually completed it
@@ -59,10 +60,16 @@ public class SkipHabitCommandHandler(
         if (habit.IsCompleted)
             return Result.Failure("Cannot skip a completed habit.");
 
-        if (habit.FrequencyUnit is null)
-            return Result.Failure("Cannot skip a one-time task.");
-
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
+        if (habit.FrequencyUnit is null)
+        {
+            // One-time task: postpone to tomorrow
+            habit.DueDate = today.AddDays(1);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+            return Result.Success();
+        }
         var targetDate = request.Date ?? today;
 
         // Validate target date

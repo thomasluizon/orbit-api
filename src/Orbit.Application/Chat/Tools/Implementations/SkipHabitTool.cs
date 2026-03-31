@@ -15,7 +15,7 @@ public class SkipHabitTool(
     public string Name => "skip_habit";
 
     public string Description =>
-        "Skip a recurring habit for a specific date (defaults to today) - advances the due date to the next scheduled occurrence without logging it as completed. Only works on recurring habits (not one-time tasks) that are DUE or OVERDUE. Use when the user says 'skip', 'pass on', 'not today', or 'dismiss' for a habit. Use the date parameter to skip overdue instances.";
+        "Skip a habit for a specific date (defaults to today). For recurring habits, advances the due date to the next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are DUE or OVERDUE. Use when the user says 'skip', 'pass on', 'not today', 'postpone', or 'dismiss' for a habit.";
 
     public object GetParameterSchema() => new
     {
@@ -45,10 +45,14 @@ public class SkipHabitTool(
         if (habit.IsCompleted)
             return new ToolResult(false, Error: "Cannot skip a completed habit.");
 
-        if (habit.FrequencyUnit is null)
-            return new ToolResult(false, Error: "Cannot skip a one-time task.");
-
         var today = await userDateService.GetUserTodayAsync(userId, ct);
+
+        if (habit.FrequencyUnit is null)
+        {
+            // One-time task: postpone to tomorrow
+            habit.DueDate = today.AddDays(1);
+            return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
+        }
 
         DateOnly targetDate = today;
         if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
