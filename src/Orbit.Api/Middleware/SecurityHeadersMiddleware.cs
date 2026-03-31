@@ -10,6 +10,7 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
         headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
         headers["X-XSS-Protection"] = "0";
         headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+        headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
 
         return next(context);
     }

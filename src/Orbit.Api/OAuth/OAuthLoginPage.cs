@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace Orbit.Api.OAuth;
 
 public static class OAuthLoginPage
@@ -5,6 +7,13 @@ public static class OAuthLoginPage
     public static string Render(string clientId, string redirectUri, string state,
         string codeChallenge, string codeChallengeMethod, string googleClientId)
     {
+        clientId = WebUtility.HtmlEncode(clientId);
+        redirectUri = WebUtility.HtmlEncode(redirectUri);
+        state = WebUtility.HtmlEncode(state);
+        codeChallenge = WebUtility.HtmlEncode(codeChallenge);
+        codeChallengeMethod = WebUtility.HtmlEncode(codeChallengeMethod);
+        googleClientId = WebUtility.HtmlEncode(googleClientId);
+
         return $$"""
 <!DOCTYPE html>
 <html lang="en">
