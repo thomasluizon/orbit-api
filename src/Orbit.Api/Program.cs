@@ -20,6 +20,7 @@ using Orbit.Infrastructure.Persistence;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Gamification.Services;
+using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
 using Scalar.AspNetCore;
 
@@ -95,8 +96,7 @@ builder.Services.AddHostedService<SlipAlertSchedulerService>();
 builder.Services.AddHostedService<AccountDeletionService>();
 builder.Services.AddHostedService<HabitDueDateAdvancementService>();
 builder.Services.AddHostedService<DataEncryptionMigrationService>();
-builder.Services.AddHttpClient<ISlipAlertMessageService, GeminiSlipAlertMessageService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
 
 // Initialize Firebase Admin SDK for FCM
 var firebaseCredJson = builder.Configuration["Firebase:CredentialsJson"];
@@ -168,52 +168,15 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // --- AI Provider Configuration ---
-// Always configure Gemini settings (used for fact extraction even with Ollama)
-builder.Services.Configure<GeminiSettings>(
-    builder.Configuration.GetSection(GeminiSettings.SectionName));
-
-var aiProvider = builder.Configuration.GetValue<string>("AiProvider") ?? "Ollama";
-
-if (aiProvider.Equals("Gemini", StringComparison.OrdinalIgnoreCase))
-{
-    // Gemini (Google) API
-    builder.Services.AddHttpClient<IAiIntentService, GeminiIntentService>()
-        .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
-}
-else
-{
-    // Ollama (Local LLM) - Default
-    builder.Services.Configure<OllamaSettings>(
-        builder.Configuration.GetSection(OllamaSettings.SectionName));
-
-    builder.Services.AddHttpClient<IAiIntentService, OllamaIntentService>((sp, client) =>
-    {
-        var settings = builder.Configuration.GetSection(OllamaSettings.SectionName).Get<OllamaSettings>()
-                       ?? new OllamaSettings();
-        client.BaseAddress = new Uri(settings.BaseUrl);
-        client.Timeout = TimeSpan.FromSeconds(30);
-    });
-}
-
-// Fact extraction always uses Gemini (structured output reliability)
-builder.Services.AddHttpClient<IFactExtractionService, GeminiFactExtractionService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
-
-// Routine analysis always uses Gemini (structured output reliability)
-builder.Services.AddHttpClient<IRoutineAnalysisService, GeminiRoutineAnalysisService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
-
-// Daily summary always uses Gemini (free-text generation)
-builder.Services.AddHttpClient<ISummaryService, GeminiSummaryService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
-
-// Retrospective always uses Gemini (free-text generation)
-builder.Services.AddHttpClient<IRetrospectiveService, GeminiRetrospectiveService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
-
-// Goal review always uses Gemini (free-text generation)
-builder.Services.AddHttpClient<IGoalReviewService, GeminiGoalReviewService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.Configure<AiSettings>(
+    builder.Configuration.GetSection(AiSettings.SectionName));
+builder.Services.AddSingleton<AiCompletionClient>();
+builder.Services.AddScoped<IAiIntentService, AiIntentService>();
+builder.Services.AddScoped<IFactExtractionService, AiFactExtractionService>();
+builder.Services.AddScoped<IRoutineAnalysisService, AiRoutineAnalysisService>();
+builder.Services.AddScoped<ISummaryService, AiSummaryService>();
+builder.Services.AddScoped<IRetrospectiveService, AiRetrospectiveService>();
+builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
 
 // --- AI Tool Registration ---
 builder.Services.AddScoped<IAiTool, LogHabitTool>();

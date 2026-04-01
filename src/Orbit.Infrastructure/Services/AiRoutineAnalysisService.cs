@@ -1,38 +1,27 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
-using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class GeminiRoutineAnalysisService(
-    HttpClient httpClient,
-    IOptions<GeminiSettings> options,
+public sealed class AiRoutineAnalysisService(
+    AiCompletionClient aiClient,
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IMemoryCache cache,
-    ILogger<GeminiRoutineAnalysisService> logger) : IRoutineAnalysisService
+    ILogger<AiRoutineAnalysisService> logger) : IRoutineAnalysisService
 {
-    private readonly GeminiSettings _settings = options.Value;
-
     private const int MinDaysForPatternDetection = 7;
     private const int AnalysisWindowDays = 60;
     private const int MinLogsPerHabit = 5;
-
-    private static readonly JsonSerializerOptions RoutineJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
 
     private static readonly TimeSpan RoutineCacheDuration = TimeSpan.FromHours(1);
 
@@ -50,7 +39,6 @@ public sealed class GeminiRoutineAnalysisService(
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // 1. Load user for timezone
         var users = await userRepository.FindAsync(u => u.Id == userId, cancellationToken);
         var user = users.FirstOrDefault();
         if (user is null)
@@ -64,7 +52,6 @@ public sealed class GeminiRoutineAnalysisService(
 
         var timezone = TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone);
 
-        // 2. Load user's habits first (HabitLog has no UserId, need to filter via habits)
         var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
         if (!userHabits.Any())
         {
@@ -74,9 +61,6 @@ public sealed class GeminiRoutineAnalysisService(
 
         var habitIds = userHabits.Select(h => h.Id).ToList();
 
-        // 3. Load recent habit logs (last 60 days) for user's habits
-        // Note: Using UTC cutoff. Logs near day boundaries may shift by 1 day relative to
-        // user local time, but this is acceptable for a 60-day pattern analysis window.
         var cutoffDate = DateTime.UtcNow.AddDays(-AnalysisWindowDays);
         var allLogs = await habitLogRepository.FindAsync(
             l => l.CreatedAtUtc >= cutoffDate,
@@ -90,7 +74,6 @@ public sealed class GeminiRoutineAnalysisService(
             return Result.Success(new RoutineAnalysis { Patterns = [] });
         }
 
-        // 4. Check minimum data requirement
         var daysSinceFirstLog = (DateTime.UtcNow - habitLogs.Min(l => l.CreatedAtUtc)).Days;
         if (daysSinceFirstLog < MinDaysForPatternDetection)
         {
@@ -99,7 +82,6 @@ public sealed class GeminiRoutineAnalysisService(
             return Result.Success(new RoutineAnalysis { Patterns = [] });
         }
 
-        // 5. Filter habits with fewer than MinLogsPerHabit logs
         var habitLogCounts = habitLogs.GroupBy(l => l.HabitId)
             .Where(g => g.Count() >= MinLogsPerHabit)
             .Select(g => g.Key)
@@ -114,7 +96,6 @@ public sealed class GeminiRoutineAnalysisService(
 
         var filteredLogs = habitLogs.Where(l => habitLogCounts.Contains(l.HabitId)).ToList();
 
-        // 6. Convert logs to local time and prepare for prompt
         var logsWithLocalTime = filteredLogs.Select(l => new
         {
             l.HabitId,
@@ -125,7 +106,6 @@ public sealed class GeminiRoutineAnalysisService(
             FrequencyQuantity = userHabits.FirstOrDefault(h => h.Id == l.HabitId)?.FrequencyQuantity
         }).ToList();
 
-        // 7. Build Gemini prompt
         var prompt = $$"""
         Analyze these habit log timestamps and detect recurring time-of-day patterns.
 
@@ -167,18 +147,18 @@ public sealed class GeminiRoutineAnalysisService(
         - If habit has <{{MinLogsPerHabit}} logs, exclude from patterns
         """;
 
-        // 8. Call Gemini API (with 5s timeout - routine analysis is non-critical)
-        logger.LogInformation("🔵 Calling Gemini API for routine analysis (user {UserId}, {LogCount} logs)...", userId, filteredLogs.Count);
+        logger.LogInformation("Calling AI API for routine analysis (user {UserId}, {LogCount} logs)...", userId, filteredLogs.Count);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
-        var result = await CallGeminiAsync<RoutineAnalysis>(prompt, timeoutCts.Token);
+
+        var result = await CallAiAsync<RoutineAnalysis>(prompt, timeoutCts.Token);
 
         stopwatch.Stop();
         if (result.IsSuccess)
         {
             cache.Set(cacheKey, result.Value, RoutineCacheDuration);
-            logger.LogInformation("✅ Routine analysis completed in {ElapsedMs}ms - detected {PatternCount} patterns (cached for {CacheMinutes}min)",
+            logger.LogInformation("Routine analysis completed in {ElapsedMs}ms - detected {PatternCount} patterns (cached for {CacheMinutes}min)",
                 stopwatch.ElapsedMilliseconds, result.Value.Patterns.Count, RoutineCacheDuration.TotalMinutes);
         }
 
@@ -194,7 +174,6 @@ public sealed class GeminiRoutineAnalysisService(
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // 1. Get current patterns
         var patternsResult = await AnalyzeRoutinesAsync(userId, cancellationToken);
         if (patternsResult.IsFailure)
             return Result.Failure<ConflictWarning?>(patternsResult.Error);
@@ -205,7 +184,6 @@ public sealed class GeminiRoutineAnalysisService(
             return Result.Success<ConflictWarning?>(null);
         }
 
-        // 2. Build conflict detection prompt
         var daysStr = days is not null && days.Count > 0
             ? string.Join(", ", days)
             : "not specified";
@@ -242,18 +220,17 @@ public sealed class GeminiRoutineAnalysisService(
         - Daily habits naturally overlap with weekly/monthly habits - only flag if time conflict exists
         """;
 
-        logger.LogInformation("🔵 Calling Gemini API for conflict detection (user {UserId})...", userId);
+        logger.LogInformation("Calling AI API for conflict detection (user {UserId})...", userId);
 
-        var result = await CallGeminiAsync<ConflictWarning>(prompt, cancellationToken);
+        var result = await CallAiAsync<ConflictWarning>(prompt, cancellationToken);
 
         stopwatch.Stop();
         if (result.IsSuccess)
         {
-            var hasConflict = result.Value.HasConflict;
-            logger.LogInformation("✅ Conflict detection completed in {ElapsedMs}ms - hasConflict: {HasConflict}",
-                stopwatch.ElapsedMilliseconds, hasConflict);
+            logger.LogInformation("Conflict detection completed in {ElapsedMs}ms - hasConflict: {HasConflict}",
+                stopwatch.ElapsedMilliseconds, result.Value.HasConflict);
 
-            if (!hasConflict)
+            if (!result.Value.HasConflict)
                 return Result.Success<ConflictWarning?>(null);
 
             return Result.Success<ConflictWarning?>(result.Value);
@@ -271,12 +248,10 @@ public sealed class GeminiRoutineAnalysisService(
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // 1. Get current patterns
         var patternsResult = await AnalyzeRoutinesAsync(userId, cancellationToken);
         if (patternsResult.IsFailure)
             return Result.Failure<IReadOnlyList<TimeSlotSuggestion>>(patternsResult.Error);
 
-        // 2. If no patterns, return generic fallback suggestions
         if (patternsResult.Value.Patterns.Count == 0)
         {
             logger.LogInformation("No patterns detected for user {UserId} - returning generic suggestions", userId);
@@ -330,7 +305,6 @@ public sealed class GeminiRoutineAnalysisService(
             return Result.Success<IReadOnlyList<TimeSlotSuggestion>>(fallbackSuggestions);
         }
 
-        // 3. Build time slot suggestion prompt
         var prompt = $$"""
         Suggest 3 optimal time slots for a new habit based on routine gaps.
 
@@ -377,25 +351,22 @@ public sealed class GeminiRoutineAnalysisService(
         - Ensure suggestions differ meaningfully (different days OR different times) - avoid 3 variations of same slot
         """;
 
-        logger.LogInformation("🔵 Calling Gemini API for time slot suggestions (user {UserId}, habit: {HabitTitle})...",
+        logger.LogInformation("Calling AI API for time slot suggestions (user {UserId}, habit: {HabitTitle})...",
             userId, habitTitle);
 
-        var result = await CallGeminiAsync<TimeSlotSuggestionsWrapper>(prompt, cancellationToken);
+        var result = await CallAiAsync<TimeSlotSuggestionsWrapper>(prompt, cancellationToken);
 
         stopwatch.Stop();
         if (result.IsSuccess)
         {
             var suggestions = result.Value.Suggestions;
 
-            // Ensure exactly 3 suggestions, sorted by score descending
             if (suggestions.Count != 3)
-            {
-                logger.LogWarning("Gemini returned {Count} suggestions instead of 3 - using as-is", suggestions.Count);
-            }
+                logger.LogWarning("AI returned {Count} suggestions instead of 3 - using as-is", suggestions.Count);
 
             var sortedSuggestions = suggestions.OrderByDescending(s => s.Score).ToList();
 
-            logger.LogInformation("✅ Time slot suggestions completed in {ElapsedMs}ms - {Count} suggestions",
+            logger.LogInformation("Time slot suggestions completed in {ElapsedMs}ms - {Count} suggestions",
                 stopwatch.ElapsedMilliseconds, sortedSuggestions.Count);
 
             return Result.Success<IReadOnlyList<TimeSlotSuggestion>>(sortedSuggestions);
@@ -404,86 +375,20 @@ public sealed class GeminiRoutineAnalysisService(
         return Result.Failure<IReadOnlyList<TimeSlotSuggestion>>(result.Error);
     }
 
-    private async Task<Result<T>> CallGeminiAsync<T>(string prompt, CancellationToken cancellationToken)
+    private async Task<Result<T>> CallAiAsync<T>(string prompt, CancellationToken cancellationToken)
     {
-        var request = new GeminiRequest
-        {
-            Contents = new[]
-            {
-                new GeminiContent
-                {
-                    Parts = new[]
-                    {
-                        new GeminiPart { Text = prompt }
-                    }
-                }
-            },
-            GenerationConfig = new GeminiGenerationConfig
-            {
-                Temperature = 0.1,
-                ResponseMimeType = "application/json"
-            }
-        };
-
         try
         {
-            var url = $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
+            var result = await aiClient.CompleteJsonAsync<T>(prompt, temperature: 0.1, cancellationToken);
 
-            // Retry logic for rate limiting (same as GeminiFactExtractionService)
-            HttpResponseMessage? response = null;
-            int retryCount = 0;
-            int maxRetries = 3;
+            if (result is null)
+                return Result.Failure<T>("AI returned empty response");
 
-            while (retryCount <= maxRetries)
-            {
-                response = await httpClient.PostAsJsonAsync(url, request, cancellationToken);
-
-                if (response.IsSuccessStatusCode || response.StatusCode != System.Net.HttpStatusCode.TooManyRequests)
-                {
-                    break;
-                }
-
-                retryCount++;
-                if (retryCount <= maxRetries)
-                {
-                    var delayMs = (int)Math.Pow(2, retryCount) * 1000; // Exponential backoff: 2s, 4s, 8s
-                    logger.LogWarning("⚠️  Rate limited. Retrying in {DelayMs}ms (attempt {Retry}/{Max})...",
-                        delayMs, retryCount, maxRetries);
-                    await Task.Delay(delayMs, cancellationToken);
-                }
-            }
-
-            if (!response!.IsSuccessStatusCode)
-            {
-                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("Gemini API returned {Status}: {Body}", response.StatusCode, errorBody);
-                return Result.Failure<T>($"Gemini API error: {response.StatusCode}");
-            }
-
-            var geminiResponse = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken);
-            var text = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
-
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                logger.LogWarning("Gemini returned empty response");
-                return Result.Failure<T>("Gemini returned empty response");
-            }
-
-            logger.LogInformation("📄 GEMINI ROUTINE ANALYSIS JSON: {Json}", text);
-
-            var deserialized = JsonSerializer.Deserialize<T>(text, RoutineJsonOptions);
-
-            if (deserialized is null)
-            {
-                logger.LogError("Failed to deserialize Gemini response as {Type}", typeof(T).Name);
-                return Result.Failure<T>($"Failed to deserialize response as {typeof(T).Name}");
-            }
-
-            return Result.Success(deserialized);
+            return Result.Success(result);
         }
         catch (JsonException ex)
         {
-            logger.LogError(ex, "Failed to deserialize Gemini response");
+            logger.LogError(ex, "Failed to deserialize AI response");
             return Result.Failure<T>($"JSON deserialization error: {ex.Message}");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -493,51 +398,7 @@ public sealed class GeminiRoutineAnalysisService(
         }
     }
 
-    // --- Gemini API DTOs ---
-
-    private record GeminiRequest
-    {
-        [JsonPropertyName("contents")]
-        public GeminiContent[] Contents { get; init; } = [];
-
-        [JsonPropertyName("generationConfig")]
-        public GeminiGenerationConfig? GenerationConfig { get; init; }
-    }
-
-    private record GeminiContent
-    {
-        [JsonPropertyName("parts")]
-        public GeminiPart[] Parts { get; init; } = [];
-    }
-
-    private record GeminiPart
-    {
-        [JsonPropertyName("text")]
-        public string Text { get; init; } = string.Empty;
-    }
-
-    private record GeminiGenerationConfig
-    {
-        [JsonPropertyName("temperature")]
-        public double Temperature { get; init; }
-
-        [JsonPropertyName("responseMimeType")]
-        public string ResponseMimeType { get; init; } = string.Empty;
-    }
-
-    private record GeminiResponse
-    {
-        [JsonPropertyName("candidates")]
-        public GeminiCandidate[]? Candidates { get; init; }
-    }
-
-    private record GeminiCandidate
-    {
-        [JsonPropertyName("content")]
-        public GeminiContent? Content { get; init; }
-    }
-
-    private record TimeSlotSuggestionsWrapper
+    private sealed record TimeSlotSuggestionsWrapper
     {
         [JsonPropertyName("suggestions")]
         public IReadOnlyList<TimeSlotSuggestion> Suggestions { get; init; } = [];

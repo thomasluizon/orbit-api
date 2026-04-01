@@ -14,12 +14,12 @@ public class UpdateGoalProgressTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            goal_name = new { type = "STRING", description = "Name or partial name of the goal to update" },
-            current_value = new { type = "NUMBER", description = "New current progress value" },
-            note = new { type = "STRING", description = "Optional note about this progress update" }
+            goal_name = new { type = "string", description = "Name or partial name of the goal to update" },
+            current_value = new { type = "number", description = "New current progress value" },
+            note = new { type = "string", description = "Optional note about this progress update" }
         },
         required = new[] { "goal_name", "current_value" }
     };

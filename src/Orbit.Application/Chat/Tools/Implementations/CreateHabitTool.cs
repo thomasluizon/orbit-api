@@ -23,107 +23,107 @@ public class CreateHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            title = new { type = "STRING", description = "Name of the habit" },
-            description = new { type = "STRING", description = "Optional description" },
+            title = new { type = "string", description = "Name of the habit" },
+            description = new { type = "string", description = "Optional description" },
             frequency_unit = new
             {
-                type = "STRING",
+                type = "string",
                 description = "Recurrence unit. Omit for one-time tasks.",
                 nullable = true,
                 @enum = new[] { "Day", "Week", "Month", "Year" }
             },
-            frequency_quantity = new { type = "INTEGER", description = "How often (e.g. every 2 days). Defaults to 1." },
+            frequency_quantity = new { type = "integer", description = "How often (e.g. every 2 days). Defaults to 1." },
             days = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Specific weekdays (e.g. ['Monday','Wednesday','Friday']). Only when frequency_quantity is 1.",
-                items = new { type = "STRING" }
+                items = new { type = "string" }
             },
-            due_date = new { type = "STRING", description = "YYYY-MM-DD. Defaults to today." },
-            end_date = new { type = "STRING", description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
-            due_time = new { type = "STRING", description = "HH:mm 24h format" },
-            is_bad_habit = new { type = "BOOLEAN", description = "Whether this is a bad habit to reduce. Defaults to false." },
-            is_flexible = new { type = "BOOLEAN", description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
-            slip_alert_enabled = new { type = "BOOLEAN", description = "Enable slip pattern alerts. Defaults to true for bad habits." },
-            reminder_enabled = new { type = "BOOLEAN", description = "Enable reminders" },
+            due_date = new { type = "string", description = "YYYY-MM-DD. Defaults to today." },
+            end_date = new { type = "string", description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
+            due_time = new { type = "string", description = "HH:mm 24h format" },
+            is_bad_habit = new { type = "boolean", description = "Whether this is a bad habit to reduce. Defaults to false." },
+            is_flexible = new { type = "boolean", description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
+            slip_alert_enabled = new { type = "boolean", description = "Enable slip pattern alerts. Defaults to true for bad habits." },
+            reminder_enabled = new { type = "boolean", description = "Enable reminders" },
             reminder_times = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Minutes before due time to remind (e.g. [15, 60])",
-                items = new { type = "INTEGER" }
+                items = new { type = "integer" }
             },
             tag_names = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Tag names to assign. Existing tags reused, new ones created.",
-                items = new { type = "STRING" }
+                items = new { type = "string" }
             },
             checklist_items = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Inline checklist items",
                 items = new
                 {
-                    type = "OBJECT",
+                    type = "object",
                     properties = new
                     {
-                        text = new { type = "STRING", description = "Checklist item text" },
-                        is_checked = new { type = "BOOLEAN", description = "Whether checked. Defaults to false." }
+                        text = new { type = "string", description = "Checklist item text" },
+                        is_checked = new { type = "boolean", description = "Whether checked. Defaults to false." }
                     },
                     required = new[] { "text" }
                 }
             },
             scheduled_reminders = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Absolute-time reminders for habits WITHOUT a due_time. Use INSTEAD of reminder_times when no due_time is set.",
                 items = new
                 {
-                    type = "OBJECT",
+                    type = "object",
                     properties = new
                     {
-                        when = new { type = "STRING", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
-                        time = new { type = "STRING", description = "HH:mm 24h format, e.g. '09:00'" }
+                        when = new { type = "string", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
+                        time = new { type = "string", description = "HH:mm 24h format, e.g. '09:00'" }
                     },
                     required = new[] { "when", "time" }
                 }
             },
             goal_ids = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "IDs of goals to link this habit to",
-                items = new { type = "STRING" }
+                items = new { type = "string" }
             },
             sub_habits = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Inline child habits to create under this parent",
                 items = new
                 {
-                    type = "OBJECT",
+                    type = "object",
                     properties = new
                     {
-                        title = new { type = "STRING", description = "Sub-habit name" },
-                        description = new { type = "STRING", description = "Optional description" },
-                        frequency_unit = new { type = "STRING", @enum = new[] { "Day", "Week", "Month", "Year" } },
-                        frequency_quantity = new { type = "INTEGER" },
-                        days = new { type = "ARRAY", items = new { type = "STRING" } },
-                        due_date = new { type = "STRING", description = "YYYY-MM-DD" },
-                        is_bad_habit = new { type = "BOOLEAN" },
+                        title = new { type = "string", description = "Sub-habit name" },
+                        description = new { type = "string", description = "Optional description" },
+                        frequency_unit = new { type = "string", @enum = new[] { "Day", "Week", "Month", "Year" } },
+                        frequency_quantity = new { type = "integer" },
+                        days = new { type = "array", items = new { type = "string" } },
+                        due_date = new { type = "string", description = "YYYY-MM-DD" },
+                        is_bad_habit = new { type = "boolean" },
                         checklist_items = new
                         {
-                            type = "ARRAY",
+                            type = "array",
                             description = "Inline checklist items",
                             items = new
                             {
-                                type = "OBJECT",
+                                type = "object",
                                 properties = new
                                 {
-                                    text = new { type = "STRING", description = "Checklist item text" },
-                                    is_checked = new { type = "BOOLEAN", description = "Whether checked. Defaults to false." }
+                                    text = new { type = "string", description = "Checklist item text" },
+                                    is_checked = new { type = "boolean", description = "Whether checked. Defaults to false." }
                                 },
                                 required = new[] { "text" }
                             }

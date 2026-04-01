@@ -16,15 +16,15 @@ public class AssignTagsTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            habit_id = new { type = "STRING", description = "ID of the habit to tag" },
+            habit_id = new { type = "string", description = "ID of the habit to tag" },
             tag_names = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Tag names to assign",
-                items = new { type = "STRING" }
+                items = new { type = "string" }
             }
         },
         required = new[] { "habit_id", "tag_names" }

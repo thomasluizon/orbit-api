@@ -18,13 +18,13 @@ public class BulkSkipHabitsTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
             habit_ids = new
             {
-                type = "ARRAY",
-                items = new { type = "STRING" },
+                type = "array",
+                items = new { type = "string" },
                 description = "Array of habit IDs to skip"
             }
         },

@@ -1,20 +1,14 @@
-using System.Net.Http.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class GeminiSlipAlertMessageService(
-    HttpClient httpClient,
-    IOptions<GeminiSettings> options,
-    ILogger<GeminiSlipAlertMessageService> logger) : ISlipAlertMessageService
+public sealed class AiSlipAlertMessageService(
+    AiCompletionClient aiClient,
+    ILogger<AiSlipAlertMessageService> logger) : ISlipAlertMessageService
 {
-    private readonly GeminiSettings _settings = options.Value;
-
     public async Task<Result<(string Title, string Body)>> GenerateMessageAsync(
         string habitTitle,
         DayOfWeek dayOfWeek,
@@ -33,8 +27,6 @@ public sealed class GeminiSlipAlertMessageService(
             : $"They tend to slip on {dayOfWeek}s (no specific time pattern).";
 
         var prompt = $"""
-            You are a supportive habit coach sending a push notification to help someone avoid a bad habit slip-up.
-
             Bad habit: "{habitTitle}"
             Pattern: {timeContext}
 
@@ -52,40 +44,17 @@ public sealed class GeminiSlipAlertMessageService(
             - No quotes or formatting, just plain text
             """;
 
-        var request = new GeminiRequest
-        {
-            Contents =
-            [
-                new GeminiContent
-                {
-                    Parts = [new GeminiPart { Text = prompt }]
-                }
-            ],
-            GenerationConfig = new GeminiGenerationConfig
-            {
-                Temperature = 0.9
-            }
-        };
-
         try
         {
-            var response = await httpClient.PostAsJsonAsync(
-                $"{_settings.BaseUrl}/models/{_settings.Model}:generateContent?key={_settings.ApiKey}",
-                request,
+            var text = await aiClient.CompleteTextAsync(
+                "You are a supportive habit coach sending a push notification to help someone avoid a bad habit slip-up.",
+                prompt,
+                temperature: 0.9,
                 cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                logger.LogWarning("Gemini API returned {Status} for slip alert message", response.StatusCode);
-                return GenerateFallback(habitTitle, language);
-            }
-
-            var geminiResponse = await response.Content.ReadFromJsonAsync<GeminiResponse>(cancellationToken);
-            var text = geminiResponse?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
 
             if (string.IsNullOrWhiteSpace(text))
             {
-                logger.LogWarning("Gemini returned empty response for slip alert message");
+                logger.LogWarning("AI returned empty response for slip alert message");
                 return GenerateFallback(habitTitle, language);
             }
 
@@ -93,7 +62,6 @@ public sealed class GeminiSlipAlertMessageService(
             if (lines.Length >= 2)
                 return Result.Success((lines[0], lines[1]));
 
-            // If only one line, use it as body with a generic title
             var fallbackTitle = language.StartsWith("pt") ? $"Fique atento: {habitTitle}" : $"Heads up: {habitTitle}";
             return Result.Success((fallbackTitle, lines[0]));
         }
@@ -111,44 +79,5 @@ public sealed class GeminiSlipAlertMessageService(
                 "Voce costuma deslizar por volta desse horario. Forca -- voce consegue!"))
             : Result.Success(($"Heads up: {habitTitle}",
                 "You tend to slip around this time. Stay strong -- you've got this!"));
-    }
-
-    private record GeminiRequest
-    {
-        [JsonPropertyName("contents")]
-        public GeminiContent[] Contents { get; init; } = [];
-
-        [JsonPropertyName("generationConfig")]
-        public GeminiGenerationConfig? GenerationConfig { get; init; }
-    }
-
-    private record GeminiContent
-    {
-        [JsonPropertyName("parts")]
-        public GeminiPart[] Parts { get; init; } = [];
-    }
-
-    private record GeminiPart
-    {
-        [JsonPropertyName("text")]
-        public string Text { get; init; } = string.Empty;
-    }
-
-    private record GeminiGenerationConfig
-    {
-        [JsonPropertyName("temperature")]
-        public double Temperature { get; init; }
-    }
-
-    private record GeminiResponse
-    {
-        [JsonPropertyName("candidates")]
-        public GeminiCandidate[]? Candidates { get; init; }
-    }
-
-    private record GeminiCandidate
-    {
-        [JsonPropertyName("content")]
-        public GeminiContent? Content { get; init; }
     }
 }

@@ -18,15 +18,15 @@ public class LinkHabitsToGoalTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            goal_id = new { type = "STRING", description = "ID of the goal to link habits to" },
+            goal_id = new { type = "string", description = "ID of the goal to link habits to" },
             habit_ids = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "IDs of habits to link to the goal. Replaces all existing links.",
-                items = new { type = "STRING" }
+                items = new { type = "string" }
             }
         },
         required = new[] { "goal_id", "habit_ids" }

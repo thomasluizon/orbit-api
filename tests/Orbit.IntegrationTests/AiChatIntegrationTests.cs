@@ -20,7 +20,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: Gemini free tier allows ~15 RPM
+    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
@@ -321,7 +321,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
             response.Should().NotBeNull();
             response!.AiMessage.Should().NotBeNullOrEmpty();
             // The AI should respond to the image -- it may return SuggestBreakdown or empty actions
-            // depending on what Gemini Vision interprets from the minimal 1x1 PNG.
+            // depending on what AI Vision interprets from the minimal 1x1 PNG.
             // The key verification is that the request succeeded (200 OK) and the pipeline works end-to-end.
         }
         finally
@@ -444,7 +444,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     private async Task<ChatResponse> SendChatMessage(string message)
     {
-        // Rate limiting: Wait 10 seconds between API calls to respect Gemini's rate limits
+        // Rate limiting: Wait 10 seconds between API calls to respect AI API rate limits
         await RateLimitSemaphore.WaitAsync();
         try
         {

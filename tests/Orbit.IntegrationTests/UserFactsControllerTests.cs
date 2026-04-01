@@ -16,7 +16,7 @@ public class UserFactsControllerTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: Gemini free tier allows ~15 RPM
+    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
@@ -171,7 +171,7 @@ public class UserFactsControllerTests : IAsyncLifetime
 
     private async Task<ChatResponse?> SendChatMessage(string message)
     {
-        // Rate limiting: Wait 10 seconds between API calls to respect Gemini's rate limits
+        // Rate limiting: Wait 10 seconds between API calls to respect AI API rate limits
         await RateLimitSemaphore.WaitAsync();
         try
         {
