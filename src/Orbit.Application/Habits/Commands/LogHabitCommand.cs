@@ -108,16 +108,12 @@ public class LogHabitCommandHandler(
         var isFirstCompletionToday = false;
         if (user is not null)
         {
-            // Check all habits for this user to see if any have a completion log for today
-            var userHabits = await habitRepository.FindAsync(
-                h => h.UserId == request.UserId,
-                q => q.Include(h => h.Logs),
+            // Targeted EXISTS query: only check if any habit has a completion log for today
+            var habitsWithTodayLogs = await habitRepository.FindAsync(
+                h => h.UserId == request.UserId && h.Logs.Any(l => l.Date == targetDate && l.Value > 0),
                 cancellationToken);
 
-            var hasAnyCompletionToday = userHabits.Any(h =>
-                h.Logs.Any(l => l.Date == targetDate && l.Value > 0));
-
-            isFirstCompletionToday = !hasAnyCompletionToday;
+            isFirstCompletionToday = !habitsWithTodayLogs.Any();
         }
 
         // Only advance DueDate when logging today or future-adjacent (not past overdue instances)
