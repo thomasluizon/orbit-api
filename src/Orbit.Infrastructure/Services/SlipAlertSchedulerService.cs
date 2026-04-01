@@ -75,6 +75,8 @@ public class SlipAlertSchedulerService(
             .Select(a => a.HabitId)
             .ToListAsync(ct)).ToHashSet();
 
+        var anyChanges = false;
+
         foreach (var habit in habits)
         {
             if (!users.TryGetValue(habit.UserId, out var user)) continue;
@@ -135,10 +137,12 @@ public class SlipAlertSchedulerService(
 
             // Track in memory to prevent duplicate sends within the same scheduler tick
             sentAlertHabitIds.Add(habit.Id);
-
-            await dbContext.SaveChangesAsync(ct);
+            anyChanges = true;
 
             logger.LogInformation("Sent slip alert for habit {HabitId} to user {UserId}", habit.Id, habit.UserId);
         }
+
+        if (anyChanges)
+            await dbContext.SaveChangesAsync(ct);
     }
 }
