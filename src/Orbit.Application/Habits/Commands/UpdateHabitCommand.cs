@@ -9,50 +9,30 @@ using Orbit.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
-using Orbit.Application.Common.Attributes;
-
 namespace Orbit.Application.Habits.Commands;
 
-[AiAction(
-    "UpdateHabit",
-    """**Update habits** -- change title, frequency, due date, or any property (e.g., "move my gym to tomorrow", "rename running to jogging")""",
-    """
-    - User asks to change a habit's date, frequency, name, or any property: "move my gym to tomorrow", "change running to weekly"
-    - User asks to reschedule: "push all my habits to tomorrow", "change the date of meditation to next Monday"
-    - User asks to rename: "rename my running habit to jogging"
-    - For BULK updates, return MULTIPLE UpdateHabit actions, one per habit
-    - ONLY update fields the user mentions. Omit unchanged fields.
-    - IMPORTANT: When user says "move ALL my habits to tomorrow" or "reschedule everything", they mean habits due TODAY and OVERDUE ones only. Do NOT move habits scheduled for future dates. Check each habit's Due date -- only include those where Due <= today's date.
-    - **CONFIRM BEFORE BULK CHANGES:** When a request affects 3+ habits (bulk reschedule, bulk delete, bulk update), do NOT execute immediately. Instead, return EMPTY actions and list the affected habits in aiMessage, asking the user to confirm. Only execute after they confirm.
-    """,
-    DisplayOrder = 30)]
-[AiRule("Only include fields that are changing in UpdateHabit actions")]
-[AiExample(
-    "Move my gym to tomorrow",
-    """{ "actions": [{ "type": "UpdateHabit", "habitId": "abc-123", "dueDate": "{TOMORROW}" }], "aiMessage": "Moved Gym to tomorrow!" }""",
-    Note = """Gym ID: "abc-123" """)]
 public record UpdateHabitCommand(
     Guid UserId,
-    [property: AiField("string", "ID of existing habit", Required = true)] Guid HabitId,
-    [property: AiField("string", "New title")] string Title,
-    [property: AiField("string", "New description")] string? Description,
-    [property: AiField("Day|Week|Month|Year", "New frequency unit")] FrequencyUnit? FrequencyUnit,
-    [property: AiField("integer", "New frequency quantity")] int? FrequencyQuantity,
-    [property: AiField("string[]", "New specific weekdays")] IReadOnlyList<System.DayOfWeek>? Days = null,
-    [property: AiField("boolean", "New bad habit status")] bool IsBadHabit = false,
-    [property: AiField("string", "New due date YYYY-MM-DD")] DateOnly? DueDate = null,
-    [property: AiField("string", "HH:mm 24h format to set or change time")] TimeOnly? DueTime = null,
-    [property: AiField("string", "HH:mm 24h format end time")] TimeOnly? DueEndTime = null,
-    [property: AiField("boolean", "Enable or disable reminders")] bool? ReminderEnabled = null,
-    [property: AiField("integer[]", "Array of minutes before dueTime for reminders")] IReadOnlyList<int>? ReminderTimes = null,
-    [property: AiField("boolean", "Enable or disable slip alerts")] bool? SlipAlertEnabled = null,
-    [property: AiField("object[]", "New checklist items")] IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    [property: AiField("boolean", "Set to true to make a general habit (no schedule)")] bool? IsGeneral = null,
-    [property: AiField("string", "YYYY-MM-DD, optional end date. Set to null to clear. Habit stops appearing after this date")] DateOnly? EndDate = null,
-    [property: AiField("boolean", "Set to true to remove the end date")] bool? ClearEndDate = null,
-    [property: AiField("boolean", "Set to true for flexible frequency (X times per period without fixed days)")] bool? IsFlexible = null,
+    Guid HabitId,
+    string Title,
+    string? Description,
+    FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    IReadOnlyList<System.DayOfWeek>? Days = null,
+    bool IsBadHabit = false,
+    DateOnly? DueDate = null,
+    TimeOnly? DueTime = null,
+    TimeOnly? DueEndTime = null,
+    bool? ReminderEnabled = null,
+    IReadOnlyList<int>? ReminderTimes = null,
+    bool? SlipAlertEnabled = null,
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    bool? IsGeneral = null,
+    DateOnly? EndDate = null,
+    bool? ClearEndDate = null,
+    bool? IsFlexible = null,
     IReadOnlyList<Guid>? GoalIds = null,
-    [property: AiField("object[]", "Absolute-time reminders for habits WITHOUT a due time. Array of {when: 'day_before'|'same_day', time: 'HH:mm'}")] IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result>;
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,

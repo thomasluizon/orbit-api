@@ -55,27 +55,4 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         return Build(context);
     }
 
-    private static SystemPromptBuilder? _instance;
-    private static readonly object _lock = new();
-
-    public static string BuildSystemPrompt(
-        IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<UserFact> userFacts,
-        bool hasImage = false,
-        IReadOnlyList<RoutinePattern>? routinePatterns = null,
-        IReadOnlyList<Tag>? userTags = null,
-        DateOnly? userToday = null,
-        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
-    {
-        if (_instance is null)
-        {
-            lock (_lock)
-            {
-                _instance ??= new SystemPromptBuilder();
-            }
-        }
-
-        var context = new PromptContext(activeHabits, userFacts, hasImage, routinePatterns, userTags, userToday, habitMetrics);
-        return _instance.Build(context);
-    }
 }

@@ -104,8 +104,6 @@ public class User : Entity
         }
     }
 
-    public void ClearTimeZone() => TimeZone = null;
-
     public void SetAiMemory(bool enabled) => AiMemoryEnabled = enabled;
 
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
@@ -185,12 +183,6 @@ public class User : Entity
         GoogleAccessToken = accessToken;
         if (refreshToken is not null)
             GoogleRefreshToken = refreshToken;
-    }
-
-    public void ClearGoogleTokens()
-    {
-        GoogleAccessToken = null;
-        GoogleRefreshToken = null;
     }
 
     public void MarkCalendarImported() => HasImportedCalendar = true;
