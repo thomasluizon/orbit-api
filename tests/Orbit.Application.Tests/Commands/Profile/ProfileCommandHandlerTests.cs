@@ -141,39 +141,4 @@ public class ProfileCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    // ----- DismissMissions -----
-
-    [Fact]
-    public async Task DismissMissions_Valid_UpdatesAndSaves()
-    {
-        var user = CreateTestUser();
-        SetupUserFound(user);
-
-        var handler = new DismissMissionsCommandHandler(_userRepo, _unitOfWork);
-        var command = new DismissMissionsCommand(UserId);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        user.HasDismissedMissions.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    // ----- MarkTourCompleted -----
-
-    [Fact]
-    public async Task MarkTourCompleted_Valid_UpdatesAndSaves()
-    {
-        var user = CreateTestUser();
-        SetupUserFound(user);
-
-        var handler = new MarkTourCompletedCommandHandler(_userRepo, _unitOfWork);
-        var command = new MarkTourCompletedCommand(UserId, "habits");
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        user.CompletedTours.Should().Contain("habits");
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
 }

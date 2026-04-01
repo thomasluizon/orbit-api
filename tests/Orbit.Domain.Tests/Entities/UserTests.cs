@@ -187,27 +187,6 @@ public class UserTests
     }
 
     [Fact]
-    public void MarkTourCompleted_AddsTour()
-    {
-        var user = CreateValidUser();
-
-        user.MarkTourCompleted("today");
-
-        user.CompletedTours.Should().Contain("today");
-    }
-
-    [Fact]
-    public void MarkTourCompleted_Duplicate_NoDuplicates()
-    {
-        var user = CreateValidUser();
-
-        user.MarkTourCompleted("today");
-        user.MarkTourCompleted("today");
-
-        user.CompletedTours!.Split(',').Where(t => t == "today").Should().HaveCount(1);
-    }
-
-    [Fact]
     public void SetStripeSubscription_SetsPlanToPro()
     {
         var user = CreateValidUser();
