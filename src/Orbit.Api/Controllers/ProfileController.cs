@@ -148,4 +148,18 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 
+    [HttpPost("reset")]
+    public async Task<IActionResult> ResetAccount(CancellationToken cancellationToken)
+    {
+        var command = new ResetAccountCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            logger.LogInformation("Account reset for user {UserId}", HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
 }
