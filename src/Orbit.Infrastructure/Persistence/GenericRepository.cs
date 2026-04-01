@@ -55,6 +55,13 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await _dbSet.Where(predicate).ToListAsync(cancellationToken);
     }
 
+    public async Task<int> CountAsync(
+        Expression<Func<T, bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.CountAsync(predicate, cancellationToken);
+    }
+
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
         await _dbSet.AddAsync(entity, cancellationToken);
@@ -68,5 +75,10 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
     public void Remove(T entity)
     {
         _dbSet.Remove(entity);
+    }
+
+    public void RemoveRange(IEnumerable<T> entities)
+    {
+        _dbSet.RemoveRange(entities);
     }
 }

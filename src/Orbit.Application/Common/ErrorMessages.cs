@@ -19,4 +19,6 @@ public static class ErrorMessages
     public const string AlreadyReferred = "This account was already referred.";
     public const string AchievementNotFound = "Achievement not found.";
     public const string ApiKeyNotFound = "API key not found.";
+    public const string NotificationNotFound = "Notification not found.";
+    public const string NoPushSubscriptions = "No push subscriptions found for this user.";
 }

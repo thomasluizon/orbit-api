@@ -23,4 +23,6 @@ public static class AppConstants
     public const int ReferralCompletionWindowDays = 7;
     public const int DefaultOverdueWindowDays = 7;
     public const int MaxScheduledReminders = 5;
+    public const int MaxPushSubscriptionsPerUser = 5;
+    public const int MaxNotificationsReturned = 50;
 }
