@@ -28,12 +28,14 @@ public class GamificationService(
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
-        // Load the logged habit with logs for streak calculation
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == habitId,
+        // --- Load all user habits with logs ONCE (reused across streak, volume, perfect-day, perfect-week checks) ---
+        var allUserHabits = await habitRepository.FindAsync(
+            h => h.UserId == userId,
             q => q.Include(h => h.Logs),
             ct);
 
+        // Find the specific logged habit from the already-loaded collection
+        var habit = allUserHabits.FirstOrDefault(h => h.Id == habitId);
         if (habit is null) return;
 
         // Calculate XP: 10 base + streak bonus
@@ -47,13 +49,8 @@ public class GamificationService(
         // Update global user streak (idempotent per day via LastActiveDate guard)
         user.UpdateStreak(today);
 
-        // --- Batch load all user habits with logs once (reused for Liftoff + Volume checks) ---
-        IReadOnlyList<Habit>? allUserHabits = null;
-        if (!earned.Contains(AchievementDefinitions.Liftoff) || !earned.Contains(AchievementDefinitions.LegendaryVolume))
-            allUserHabits = await habitRepository.FindAsync(h => h.UserId == userId, q => q.Include(h => h.Logs), ct);
-
         // --- Liftoff (first completion) ---
-        if (!earned.Contains(AchievementDefinitions.Liftoff) && allUserHabits is not null)
+        if (!earned.Contains(AchievementDefinitions.Liftoff))
         {
             var totalLogs = allUserHabits.Sum(h => h.Logs.Count);
             if (totalLogs == 1)
@@ -64,19 +61,19 @@ public class GamificationService(
         CheckConsistencyAchievements(metrics.CurrentStreak, earned, user, newAchievements);
 
         // --- Volume achievements ---
-        if (!earned.Contains(AchievementDefinitions.LegendaryVolume) && allUserHabits is not null)
+        if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
         {
             var totalCompletions = allUserHabits.Sum(h => h.Logs.Count);
             CheckVolumeAchievements(totalCompletions, earned, user, newAchievements);
         }
 
         // --- Perfect Day ---
-        await CheckPerfectDay(userId, today, earned, user, newAchievements, ct);
+        CheckPerfectDay(allUserHabits, today, earned, user, newAchievements);
 
         // --- Perfect Week / Perfect Month (only if PerfectDay is earned) ---
         if (earned.Contains(AchievementDefinitions.PerfectDay) || newAchievements.Any(a => a.Definition.Id == AchievementDefinitions.PerfectDay))
         {
-            await CheckPerfectWeekAndMonth(userId, today, earned, user, newAchievements, ct);
+            CheckPerfectWeekAndMonth(allUserHabits, today, earned, user, newAchievements);
         }
 
         // --- Early Bird / Night Owl ---
@@ -292,26 +289,24 @@ public class GamificationService(
             TryGrant(AchievementDefinitions.LegendaryVolume, user, earned, newAchievements);
     }
 
-    private async Task CheckPerfectDay(
-        Guid userId,
+    private static void CheckPerfectDay(
+        IReadOnlyList<Habit> allUserHabits,
         DateOnly today,
         HashSet<string> earned,
         User user,
-        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
-        CancellationToken ct)
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
     {
         if (earned.Contains(AchievementDefinitions.PerfectDay)) return;
 
-        // Load all active, non-general, top-level habits for this user
-        var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == userId && !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null,
-            q => q.Include(h => h.Logs),
-            ct);
+        // Filter to active, non-general, top-level habits
+        var eligibleHabits = allUserHabits
+            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
+            .ToList();
 
-        if (allHabits.Count == 0) return;
+        if (eligibleHabits.Count == 0) return;
 
         // Filter to habits scheduled for today
-        var scheduledToday = allHabits.Where(h => IsScheduledForDate(h, today)).ToList();
+        var scheduledToday = eligibleHabits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, today)).ToList();
         if (scheduledToday.Count == 0) return;
 
         // Check if all scheduled habits have a log for today
@@ -320,27 +315,25 @@ public class GamificationService(
             TryGrant(AchievementDefinitions.PerfectDay, user, earned, newAchievements);
     }
 
-    private async Task CheckPerfectWeekAndMonth(
-        Guid userId,
+    private static void CheckPerfectWeekAndMonth(
+        IReadOnlyList<Habit> allUserHabits,
         DateOnly today,
         HashSet<string> earned,
         User user,
-        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
-        CancellationToken ct)
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
     {
-        // Load all active, non-general, top-level habits with logs
-        var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == userId && !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null,
-            q => q.Include(h => h.Logs),
-            ct);
+        // Filter to active, non-general, top-level habits
+        var eligibleHabits = allUserHabits
+            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
+            .ToList();
 
-        if (allHabits.Count == 0) return;
+        if (eligibleHabits.Count == 0) return;
 
         // Check consecutive perfect days going back from today
         var consecutivePerfectDays = 0;
         for (var day = today; day >= today.AddDays(-30); day = day.AddDays(-1))
         {
-            var scheduledForDay = allHabits.Where(h => IsScheduledForDate(h, day)).ToList();
+            var scheduledForDay = eligibleHabits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, day)).ToList();
             if (scheduledForDay.Count == 0)
             {
                 // No habits scheduled this day, skip but don't break streak
@@ -379,8 +372,10 @@ public class GamificationService(
         var habitIds = userHabits.Select(h => h.Id).ToList();
         if (habitIds.Count == 0) return;
 
-        // Load all logs for user's habits
-        var allLogs = await habitLogRepository.FindAsync(l => habitIds.Contains(l.HabitId), ct);
+        // Load recent logs only -- 90 days is more than enough to detect 10 qualifying entries
+        var cutoff = DateTime.UtcNow.AddDays(-90);
+        var allLogs = await habitLogRepository.FindAsync(
+            l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= cutoff, ct);
 
         if (checkEarly)
         {
@@ -527,9 +522,4 @@ public class GamificationService(
         }
     }
 
-    // Delegates to HabitScheduleService.IsHabitDueOnDate -- the single source of truth
-    // for schedule calculation. The previous local copy was diverged and skipped modular
-    // arithmetic for Weekly/Monthly/Yearly frequencies.
-    private static bool IsScheduledForDate(Habit habit, DateOnly date)
-        => HabitScheduleService.IsHabitDueOnDate(habit, date);
 }
