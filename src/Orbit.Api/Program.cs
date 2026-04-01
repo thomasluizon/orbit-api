@@ -38,6 +38,7 @@ builder.Services.AddDbContext<OrbitDbContext>(options =>
 // --- Repositories & UoW ---
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
 builder.Services.AddScoped<IAppConfigService, AppConfigService>();
 builder.Services.AddScoped<IUserDateService, UserDateService>();
 builder.Services.AddScoped<IPayGateService, Orbit.Application.Common.PayGateService>();

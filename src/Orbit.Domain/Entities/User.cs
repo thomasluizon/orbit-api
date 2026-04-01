@@ -264,4 +264,26 @@ public class User : Entity
         // Do NOT increment CurrentStreak; freeze preserves, it does not extend.
         LastActiveDate = today;
     }
+
+    /// <summary>
+    /// Resets all user profile fields to their default state while preserving
+    /// identity, preferences, and subscription data.
+    /// </summary>
+    public void ResetAccount()
+    {
+        HasCompletedOnboarding = false;
+        TotalXp = 0;
+        Level = 1;
+        CurrentStreak = 0;
+        LongestStreak = 0;
+        LastActiveDate = null;
+        AiMessagesUsedThisMonth = 0;
+        AiMessagesResetAt = null;
+        AdRewardBonusMessages = 0;
+        AdRewardsClaimedToday = 0;
+        LastAdRewardAt = null;
+        HasImportedCalendar = false;
+        GoogleAccessToken = null;
+        GoogleRefreshToken = null;
+    }
 }
