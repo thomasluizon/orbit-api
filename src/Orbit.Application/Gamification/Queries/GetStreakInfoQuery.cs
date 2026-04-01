@@ -23,7 +23,7 @@ public class GetStreakInfoQueryHandler(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
 {
-    private const int MaxFreezesPerMonth = 2;
+    private const int MaxFreezesPerMonth = 3;
 
     public async Task<Result<StreakInfoResponse>> Handle(GetStreakInfoQuery request, CancellationToken cancellationToken)
     {

@@ -21,7 +21,7 @@ public class ActivateStreakFreezeCommandHandler(
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<ActivateStreakFreezeCommand, Result<StreakFreezeResponse>>
 {
-    private const int MaxFreezesPerMonth = 2;
+    private const int MaxFreezesPerMonth = 3;
 
     public async Task<Result<StreakFreezeResponse>> Handle(ActivateStreakFreezeCommand request, CancellationToken cancellationToken)
     {
