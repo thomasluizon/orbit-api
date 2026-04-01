@@ -9,8 +9,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
-using Orbit.Application.Common.Attributes;
-
 namespace Orbit.Application.Habits.Commands;
 
 public record LogHabitResponse(
@@ -18,24 +16,11 @@ public record LogHabitResponse(
     bool IsFirstCompletionToday,
     int CurrentStreak);
 
-[AiAction(
-    "LogHabit",
-    """**Log habit completions** with optional notes (e.g., "I ran today, felt great!")""",
-    """
-    - User mentions completing an activity that matches an EXISTING habit from the Active Habits list
-    - Use the exact habit ID from the list
-    - Include a note if the user shares context or feelings about the activity
-    """,
-    DisplayOrder = 20)]
-[AiExample(
-    "I ran today, felt great",
-    """{ "actions": [{ "type": "LogHabit", "habitId": "abc-123", "note": "felt great" }], "aiMessage": "Logged your run!" }""",
-    Note = """Running ID: "abc-123" """)]
 public record LogHabitCommand(
     Guid UserId,
-    [property: AiField("string", "ID of the habit to log", Required = true)] Guid HabitId,
-    [property: AiField("string", "Include if user shares context or feelings")] string? Note = null,
-    [property: AiField("string", "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today.")] DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>;
+    Guid HabitId,
+    string? Note = null,
+    DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>;
 
 public class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -108,16 +93,12 @@ public class LogHabitCommandHandler(
         var isFirstCompletionToday = false;
         if (user is not null)
         {
-            // Check all habits for this user to see if any have a completion log for today
-            var userHabits = await habitRepository.FindAsync(
-                h => h.UserId == request.UserId,
-                q => q.Include(h => h.Logs),
+            // Targeted EXISTS query: only check if any habit has a completion log for today
+            var habitsWithTodayLogs = await habitRepository.FindAsync(
+                h => h.UserId == request.UserId && h.Logs.Any(l => l.Date == targetDate && l.Value > 0),
                 cancellationToken);
 
-            var hasAnyCompletionToday = userHabits.Any(h =>
-                h.Logs.Any(l => l.Date == targetDate && l.Value > 0));
-
-            isFirstCompletionToday = !hasAnyCompletionToday;
+            isFirstCompletionToday = !habitsWithTodayLogs.Any();
         }
 
         // Only advance DueDate when logging today or future-adjacent (not past overdue instances)

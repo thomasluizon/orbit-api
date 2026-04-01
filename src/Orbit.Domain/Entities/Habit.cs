@@ -102,16 +102,11 @@ public class Habit : Entity
         if (endDate.HasValue && endDate.Value < effectiveDueDate)
             return Result.Failure<Habit>("End date must be on or after the start date.");
 
-        if (scheduledReminders is { Count: > 5 })
-            return Result.Failure<Habit>("A habit can have at most 5 scheduled reminders.");
+        if (scheduledReminders is not null && scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
+            return Result.Failure<Habit>($"A habit can have at most {DomainConstants.MaxScheduledReminders} scheduled reminders.");
 
         if (scheduledReminders is not null)
         {
-            foreach (var sr in scheduledReminders)
-            {
-                if (sr.When is not ("day_before" or "same_day"))
-                    return Result.Failure<Habit>("Scheduled reminder 'when' must be 'day_before' or 'same_day'.");
-            }
 
             var hasDuplicates = scheduledReminders
                 .GroupBy(sr => (sr.When, sr.Time))
@@ -411,16 +406,11 @@ public class Habit : Entity
         if (checklistItems is not null)
             ChecklistItems = checklistItems;
 
-        if (scheduledReminders is { Count: > 5 })
-            return Result.Failure("A habit can have at most 5 scheduled reminders.");
+        if (scheduledReminders is not null && scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
+            return Result.Failure($"A habit can have at most {DomainConstants.MaxScheduledReminders} scheduled reminders.");
 
         if (scheduledReminders is not null)
         {
-            foreach (var sr in scheduledReminders)
-            {
-                if (sr.When is not ("day_before" or "same_day"))
-                    return Result.Failure("Scheduled reminder 'when' must be 'day_before' or 'same_day'.");
-            }
 
             var hasDuplicates = scheduledReminders
                 .GroupBy(sr => (sr.When, sr.Time))

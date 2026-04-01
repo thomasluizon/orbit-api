@@ -12,8 +12,8 @@ public static class CacheInvalidationHelper
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (int i = -2; i <= 2; i++)
         {
-            cache.Remove($"summary:{userId}:{today.AddDays(i):yyyy-MM-dd}:en");
-            cache.Remove($"summary:{userId}:{today.AddDays(i):yyyy-MM-dd}:pt-BR");
+            foreach (var lang in AppConstants.SupportedLanguages)
+                cache.Remove($"summary:{userId}:{today.AddDays(i):yyyy-MM-dd}:{lang}");
         }
     }
 }

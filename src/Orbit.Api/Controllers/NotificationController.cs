@@ -1,89 +1,60 @@
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Api.Extensions;
-using Orbit.Domain.Entities;
-using Orbit.Infrastructure.Persistence;
+using Orbit.Application.Common;
+using Orbit.Application.Notifications.Commands;
+using Orbit.Application.Notifications.Queries;
 
 namespace Orbit.Api.Controllers;
 
-// TODO: This controller injects OrbitDbContext directly, bypassing the CQRS/MediatR pattern.
-// All read and write operations should be migrated to dedicated Query/Command handlers in
-// Orbit.Application. OrbitDbContext should be removed from this controller entirely.
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class NotificationController(
-    OrbitDbContext dbContext,
+    IMediator mediator,
     ILogger<NotificationController> logger) : ControllerBase
 {
     public record SubscribeRequest(string Endpoint, string P256dh, string Auth);
-    public record NotificationItem(Guid Id, string Title, string Body, string? Url, Guid? HabitId, bool IsRead, DateTime CreatedAtUtc);
 
     [HttpGet]
     public async Task<IActionResult> GetNotifications(CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
-        var notifications = await dbContext.Notifications
-            .Where(n => n.UserId == userId)
-            .OrderByDescending(n => n.CreatedAtUtc)
-            .Take(50)
-            .Select(n => new NotificationItem(n.Id, n.Title, n.Body, n.Url, n.HabitId, n.IsRead, n.CreatedAtUtc))
-            .ToListAsync(ct);
-
-        var unreadCount = await dbContext.Notifications
-            .CountAsync(n => n.UserId == userId && !n.IsRead, ct);
-
-        return Ok(new { items = notifications, unreadCount });
+        var query = new GetNotificationsQuery(HttpContext.GetUserId());
+        var result = await mediator.Send(query, ct);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("{id:guid}/read")]
     public async Task<IActionResult> MarkAsRead(Guid id, CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
-        var notification = await dbContext.Notifications
-            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, ct);
-
-        if (notification is null) return NotFound();
-
-        notification.MarkAsRead();
-        await dbContext.SaveChangesAsync(ct);
-        return Ok();
+        var command = new MarkNotificationReadCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess ? Ok() : NotFound();
     }
 
     [HttpPut("read-all")]
     public async Task<IActionResult> MarkAllAsRead(CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
-        await dbContext.Notifications
-            .Where(n => n.UserId == userId && !n.IsRead)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
-        return Ok();
+        var command = new MarkAllNotificationsReadCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
-        var notification = await dbContext.Notifications
-            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId, ct);
-
-        if (notification is not null)
-        {
-            dbContext.Notifications.Remove(notification);
-            await dbContext.SaveChangesAsync(ct);
-        }
-        return Ok();
+        var command = new DeleteNotificationCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("all")]
     public async Task<IActionResult> DeleteAll(CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
-        await dbContext.Notifications
-            .Where(n => n.UserId == userId)
-            .ExecuteDeleteAsync(ct);
-        return Ok();
+        var command = new DeleteAllNotificationsCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, ct);
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 
     [HttpPost("subscribe")]
@@ -91,66 +62,21 @@ public class NotificationController(
         [FromBody] SubscribeRequest request,
         CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
+        var command = new SubscribePushCommand(
+            HttpContext.GetUserId(),
+            request.Endpoint,
+            request.P256dh,
+            request.Auth);
 
-        var existing = await dbContext.PushSubscriptions
-            .FirstOrDefaultAsync(s => s.Endpoint == request.Endpoint, ct);
+        var result = await mediator.Send(command, ct);
 
-        if (existing is not null)
+        if (result.IsSuccess)
         {
-            if (existing.UserId == userId)
-                return Ok();
-
-            dbContext.PushSubscriptions.Remove(existing);
+            logger.LogInformation("Push subscription registered for user {UserId}", HttpContext.GetUserId());
+            return Ok();
         }
 
-        var result = Domain.Entities.PushSubscription.Create(userId, request.Endpoint, request.P256dh, request.Auth);
-        if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
-
-        await dbContext.PushSubscriptions.AddAsync(result.Value, ct);
-
-        // Enforce per-user subscription cap: keep only the 5 most recent subscriptions
-        const int maxSubscriptionsPerUser = 5;
-        var userSubs = await dbContext.PushSubscriptions
-            .Where(s => s.UserId == userId)
-            .OrderByDescending(s => s.CreatedAtUtc)
-            .ToListAsync(ct);
-
-        if (userSubs.Count >= maxSubscriptionsPerUser)
-        {
-            var toRemove = userSubs.Skip(maxSubscriptionsPerUser - 1);
-            dbContext.PushSubscriptions.RemoveRange(toRemove);
-        }
-
-        await dbContext.SaveChangesAsync(ct);
-
-        return Ok();
-    }
-
-    [HttpPost("test-push")]
-    public async Task<IActionResult> TestPush(
-        [FromServices] Domain.Interfaces.IPushNotificationService pushService,
-        CancellationToken ct)
-    {
-        var userId = HttpContext.GetUserId();
-
-        var subscriptionCount = await dbContext.PushSubscriptions
-            .CountAsync(s => s.UserId == userId, ct);
-
-        if (subscriptionCount == 0)
-            return BadRequest(new { error = "No push subscriptions found for this user" });
-
-        try
-        {
-            await pushService.SendToUserAsync(userId, "Orbit Test", "Push notifications are working!", "/", ct);
-            return Ok(new { subscriptionCount, status = "sent" });
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Test push failed for user {UserId}", userId);
-            return Ok(new { subscriptionCount, status = "failed", error = "Failed to send push notification" });
-        }
+        return BadRequest(new { error = result.Error });
     }
 
     [HttpPost("unsubscribe")]
@@ -158,17 +84,27 @@ public class NotificationController(
         [FromBody] SubscribeRequest request,
         CancellationToken ct)
     {
-        var userId = HttpContext.GetUserId();
+        var command = new UnsubscribePushCommand(HttpContext.GetUserId(), request.Endpoint);
+        var result = await mediator.Send(command, ct);
 
-        var subscription = await dbContext.PushSubscriptions
-            .FirstOrDefaultAsync(s => s.UserId == userId && s.Endpoint == request.Endpoint, ct);
+        if (result.IsSuccess)
+            logger.LogInformation("Push subscription removed for user {UserId}", HttpContext.GetUserId());
 
-        if (subscription is not null)
-        {
-            dbContext.PushSubscriptions.Remove(subscription);
-            await dbContext.SaveChangesAsync(ct);
-        }
+        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+    }
 
-        return Ok();
+    [HttpPost("test-push")]
+    public async Task<IActionResult> TestPush(CancellationToken ct)
+    {
+        var command = new TestPushNotificationCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, ct);
+
+        if (result.IsFailure)
+            return BadRequest(new { error = result.Error });
+
+        if (result.Value.Status == "failed")
+            logger.LogWarning("Test push failed for user {UserId}", HttpContext.GetUserId());
+
+        return Ok(result.Value);
     }
 }

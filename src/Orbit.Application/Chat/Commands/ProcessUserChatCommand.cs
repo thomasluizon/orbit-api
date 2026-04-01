@@ -31,8 +31,7 @@ public record ActionResult(
     string? EntityName = null,
     string? Error = null,
     string? Field = null,
-    IReadOnlyList<AiAction>? SuggestedSubHabits = null,
-    ConflictWarning? ConflictWarning = null);
+    IReadOnlyList<AiAction>? SuggestedSubHabits = null);
 
 public enum ActionStatus { Success, Failed, Suggestion }
 

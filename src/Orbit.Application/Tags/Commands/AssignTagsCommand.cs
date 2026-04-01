@@ -5,30 +5,12 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
-using Orbit.Application.Common.Attributes;
-
 namespace Orbit.Application.Tags.Commands;
 
-[AiAction(
-    "AssignTags",
-    """**Manage tags** on habits (assign, remove, create new tags when the user asks)""",
-    """
-    - User says "tag my running habit as health" -> AssignTags with habitId and tagNames: ["health"]
-    - User says "add health and fitness tags to my gym habit" -> AssignTags with tagNames: ["health", "fitness"]
-    - User says "remove all tags from my reading habit" -> AssignTags with tagNames: []
-    - User says "create a daily run habit tagged as health" -> CreateHabit with tagNames: ["health"]
-    - NEVER assign tags unless the user explicitly asks. Creating or logging habits without tag mention = no tagNames field
-    """,
-    DisplayOrder = 60)]
-[AiRule("AssignTags action requires habitId and tagNames array. An empty tagNames array removes all tags from the habit")]
-[AiExample(
-    "Tag my running habit as health",
-    """{ "actions": [{ "type": "AssignTags", "habitId": "abc-123", "tagNames": ["health"] }], "aiMessage": "Tagged Running as health!" }""",
-    Note = """Running ID: "abc-123" """)]
 public record AssignTagsCommand(
     Guid UserId,
-    [property: AiField("string", "ID of existing habit", Required = true)] Guid HabitId,
-    [property: AiField("string[]", "Array of tag name strings. Empty array [] removes all tags", Required = true, Name = "tagNames")] IReadOnlyList<Guid> TagIds) : IRequest<Result>;
+    Guid HabitId,
+    IReadOnlyList<Guid> TagIds) : IRequest<Result>;
 
 public class AssignTagsCommandHandler(
     IGenericRepository<Habit> habitRepository,

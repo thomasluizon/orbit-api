@@ -372,6 +372,9 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Url")
+                        .HasFilter("\"Url\" IS NOT NULL");
+
                     b.HasIndex("UserId", "IsRead");
 
                     b.ToTable("Notifications");

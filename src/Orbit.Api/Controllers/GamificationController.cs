@@ -18,9 +18,7 @@ public class GamificationController(IMediator mediator) : ControllerBase
         var query = new GetGamificationProfileQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, ct);
 
-        if (result.IsSuccess) return Ok(result.Value);
-        if (result.ErrorCode == "PAY_GATE") return StatusCode(403, new { error = result.Error, code = "PAY_GATE" });
-        return BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("achievements")]
@@ -29,9 +27,7 @@ public class GamificationController(IMediator mediator) : ControllerBase
         var query = new GetAchievementsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, ct);
 
-        if (result.IsSuccess) return Ok(result.Value);
-        if (result.ErrorCode == "PAY_GATE") return StatusCode(403, new { error = result.Error, code = "PAY_GATE" });
-        return BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("streak")]

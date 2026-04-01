@@ -146,13 +146,14 @@ public class CreateSubHabitTool(
             var parsed = new List<ScheduledReminderTime>();
             foreach (var item in srEl.EnumerateArray())
             {
-                string? when = null;
+                string? whenStr = null;
                 string? timeStr = null;
                 if (item.TryGetProperty("when", out var wEl) && wEl.ValueKind == JsonValueKind.String)
-                    when = wEl.GetString();
+                    whenStr = wEl.GetString();
                 if (item.TryGetProperty("time", out var tEl) && tEl.ValueKind == JsonValueKind.String)
                     timeStr = tEl.GetString();
-                if (when is not ("day_before" or "same_day") || timeStr is null) continue;
+                if (whenStr is null || timeStr is null) continue;
+                if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
                 if (!TimeOnly.TryParse(timeStr, out var time)) continue;
                 parsed.Add(new ScheduledReminderTime(when, time));
             }
@@ -182,5 +183,16 @@ public class CreateSubHabitTool(
             return new ToolResult(false, Error: result.Error);
 
         return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: title);
+    }
+
+    private static bool ParseScheduledReminderWhen(string value, out ScheduledReminderWhen result)
+    {
+        result = value switch
+        {
+            "same_day" => ScheduledReminderWhen.SameDay,
+            "day_before" => ScheduledReminderWhen.DayBefore,
+            _ => default
+        };
+        return value is "same_day" or "day_before";
     }
 }

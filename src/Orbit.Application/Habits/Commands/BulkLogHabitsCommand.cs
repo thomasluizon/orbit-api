@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
@@ -30,12 +31,21 @@ public class BulkLogHabitsCommandHandler(
     IUserDateService userDateService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
+    IMemoryCache cache,
+    ILogger<BulkLogHabitsCommandHandler> logger) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
 {
     public async Task<Result<BulkLogResult>> Handle(BulkLogHabitsCommand request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
+
+        // Batch-load all requested habits in a single query instead of one per item (N+1)
+        var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
+        var habits = await habitRepository.FindTrackedAsync(
+            h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
+            q => q.Include(h => h.Logs),
+            cancellationToken);
+        var habitMap = habits.ToDictionary(h => h.Id);
 
         for (int i = 0; i < request.Items.Count; i++)
         {
@@ -65,28 +75,13 @@ public class BulkLogHabitsCommandHandler(
                     continue;
                 }
 
-                var habit = await habitRepository.FindOneTrackedAsync(
-                    h => h.Id == habitId,
-                    q => q.Include(h => h.Logs),
-                    cancellationToken);
-
-                if (habit is null)
+                if (!habitMap.TryGetValue(habitId, out var habit))
                 {
                     results.Add(new BulkLogItemResult(
                         Index: i,
                         Status: BulkItemStatus.Failed,
                         HabitId: habitId,
                         Error: ErrorMessages.HabitNotFound));
-                    continue;
-                }
-
-                if (habit.UserId != request.UserId)
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: ErrorMessages.HabitNotOwned));
                     continue;
                 }
 
@@ -133,8 +128,9 @@ public class BulkLogHabitsCommandHandler(
                     HabitId: habitId,
                     LogId: logResult.Value.Id));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "Error processing bulk item {HabitId}", habitId);
                 results.Add(new BulkLogItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,

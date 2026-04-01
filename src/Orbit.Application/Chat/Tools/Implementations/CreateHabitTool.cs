@@ -383,14 +383,25 @@ public class CreateHabitTool(
         var items = new List<ScheduledReminderTime>();
         foreach (var item in arrEl.EnumerateArray())
         {
-            var when = GetOptionalString(item, "when");
+            var whenStr = GetOptionalString(item, "when");
             var timeStr = GetOptionalString(item, "time");
-            if (when is null || timeStr is null) continue;
-            if (when is not ("day_before" or "same_day")) continue;
+            if (whenStr is null || timeStr is null) continue;
+            if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
             if (!TimeOnly.TryParse(timeStr, out var time)) continue;
             items.Add(new ScheduledReminderTime(when, time));
         }
         return items.Count > 0 ? items : null;
+    }
+
+    private static bool ParseScheduledReminderWhen(string value, out ScheduledReminderWhen result)
+    {
+        result = value switch
+        {
+            "same_day" => ScheduledReminderWhen.SameDay,
+            "day_before" => ScheduledReminderWhen.DayBefore,
+            _ => default
+        };
+        return value is "same_day" or "day_before";
     }
 
     private static IReadOnlyList<ChecklistItem>? ParseChecklistItems(JsonElement el)

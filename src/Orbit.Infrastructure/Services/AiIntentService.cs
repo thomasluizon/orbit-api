@@ -4,7 +4,6 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
 using Orbit.Domain.Common;
-using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
@@ -15,12 +14,6 @@ public sealed class AiIntentService(
     AiCompletionClient aiClient,
     ILogger<AiIntentService> logger) : IAiIntentService
 {
-    private static readonly JsonSerializerOptions ActionPlanJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     private static readonly JsonSerializerOptions SerializeOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -32,134 +25,6 @@ public sealed class AiIntentService(
     /// </summary>
     private List<ChatMessage>? _conversationMessages;
     private ChatCompletionOptions? _conversationOptions;
-
-    // ───────────────────────────────────────────────────────────────
-    //  Legacy method -- kept for backward compatibility
-    // ───────────────────────────────────────────────────────────────
-
-    public async Task<Result<AiActionPlan>> InterpretAsync(
-        string userMessage,
-        IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<UserFact> userFacts,
-        byte[]? imageData = null,
-        string? imageMimeType = null,
-        IReadOnlyList<RoutinePattern>? routinePatterns = null,
-        IReadOnlyList<Tag>? userTags = null,
-        DateOnly? userToday = null,
-        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
-        IReadOnlyList<ChatHistoryMessage>? history = null,
-        CancellationToken cancellationToken = default)
-    {
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        logger.LogInformation("START: Building system prompt...");
-        var promptStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var systemPrompt = SystemPromptBuilder.BuildSystemPrompt(
-            activeHabits, userFacts,
-            hasImage: imageData != null,
-            routinePatterns: routinePatterns,
-            userTags: userTags,
-            userToday: userToday,
-            habitMetrics: habitMetrics);
-        promptStopwatch.Stop();
-        logger.LogInformation("System prompt built in {ElapsedMs}ms (length: {Length} chars)",
-            promptStopwatch.ElapsedMilliseconds, systemPrompt.Length);
-
-        var messages = new List<ChatMessage>
-        {
-            new SystemChatMessage(systemPrompt)
-        };
-
-        // Conversation history
-        if (history is { Count: > 0 })
-        {
-            foreach (var msg in history)
-            {
-                if (msg.Role == "user")
-                    messages.Add(new UserChatMessage(msg.Content));
-                else
-                    messages.Add(new AssistantChatMessage(msg.Content));
-            }
-        }
-
-        // Current user message with optional image
-        if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
-        {
-            messages.Add(new UserChatMessage(
-                ChatMessageContentPart.CreateTextPart(userMessage),
-                ChatMessageContentPart.CreateImagePart(
-                    BinaryData.FromBytes(imageData), imageMimeType)));
-        }
-        else
-        {
-            messages.Add(new UserChatMessage(userMessage));
-        }
-
-        var options = new ChatCompletionOptions
-        {
-            Temperature = 0.1f,
-            MaxOutputTokenCount = 8192,
-            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
-        };
-
-        try
-        {
-            logger.LogInformation("Calling AI API (legacy InterpretAsync)...");
-            var apiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            var completion = await aiClient.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
-
-            apiStopwatch.Stop();
-            logger.LogInformation("AI API responded in {ElapsedMs}ms", apiStopwatch.ElapsedMilliseconds);
-
-            var text = completion.Value.Content.FirstOrDefault()?.Text;
-
-            if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<AiActionPlan>("AI returned an empty response.");
-
-            logger.LogInformation("AI response (length: {Length} chars)", text.Length);
-            logger.LogInformation("AI RAW JSON: {Json}", text);
-
-            // Fix invalid JSON escape sequences that AI may generate
-            text = Regex.Replace(text, @"\\([^""\\\/bfnrtu])", "$1");
-
-            var deserializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var plan = JsonSerializer.Deserialize<AiActionPlan>(text, ActionPlanJsonOptions);
-            deserializeStopwatch.Stop();
-
-            if (plan is null)
-            {
-                logger.LogError("Deserialization returned null for text: {Text}", text);
-                return Result.Failure<AiActionPlan>("Failed to deserialize AI response.");
-            }
-
-            logger.LogInformation("Deserialized {ActionCount} actions: {ActionTypes}",
-                plan.Actions.Count,
-                string.Join(", ", plan.Actions.Select(a => a.Type.ToString())));
-
-            totalStopwatch.Stop();
-            logger.LogInformation("TOTAL InterpretAsync time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("   Prompt build: {PromptMs}ms", promptStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("   AI call: {AiMs}ms", apiStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("   Deserialize: {DeserializeMs}ms", deserializeStopwatch.ElapsedMilliseconds);
-
-            return Result.Success(plan);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogError(ex, "Failed to deserialize AI response");
-            return Result.Failure<AiActionPlan>($"Failed to parse AI response: {ex.Message}");
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "AI API call failed");
-            return Result.Failure<AiActionPlan>($"AI service error: {ex.Message}");
-        }
-    }
-
-    // ───────────────────────────────────────────────────────────────
-    //  New function-calling methods
-    // ───────────────────────────────────────────────────────────────
 
     public async Task<Result<AiResponse>> SendWithToolsAsync(
         string userMessage,
