@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -22,7 +23,8 @@ public record BulkDeleteItemResult(
 public class BulkDeleteHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<BulkDeleteHabitsCommand, Result<BulkDeleteResult>>
+    IMemoryCache cache,
+    ILogger<BulkDeleteHabitsCommandHandler> logger) : IRequestHandler<BulkDeleteHabitsCommand, Result<BulkDeleteResult>>
 {
     public async Task<Result<BulkDeleteResult>> Handle(BulkDeleteHabitsCommand request, CancellationToken cancellationToken)
     {
@@ -63,8 +65,9 @@ public class BulkDeleteHabitsCommandHandler(
                     Status: BulkItemStatus.Success,
                     HabitId: habitId));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "Error processing bulk item {HabitId}", habitId);
                 results.Add(new BulkDeleteItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,

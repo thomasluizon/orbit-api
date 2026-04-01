@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
@@ -30,7 +31,8 @@ public class BulkLogHabitsCommandHandler(
     IUserDateService userDateService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
+    IMemoryCache cache,
+    ILogger<BulkLogHabitsCommandHandler> logger) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
 {
     public async Task<Result<BulkLogResult>> Handle(BulkLogHabitsCommand request, CancellationToken cancellationToken)
     {
@@ -133,8 +135,9 @@ public class BulkLogHabitsCommandHandler(
                     HabitId: habitId,
                     LogId: logResult.Value.Id));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "Error processing bulk item {HabitId}", habitId);
                 results.Add(new BulkLogItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,

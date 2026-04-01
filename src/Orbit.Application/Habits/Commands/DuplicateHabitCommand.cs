@@ -14,7 +14,7 @@ public record DuplicateHabitCommand(
 
 public class DuplicateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<User> userRepository,
+    IPayGateService payGateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<DuplicateHabitCommand, Result<Guid>>
 {
@@ -30,19 +30,17 @@ public class DuplicateHabitCommandHandler(
             return Result.Failure<Guid>(ErrorMessages.HabitNotFound);
 
         // Check plan limits
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
-        if (user is not null && !user.HasProAccess)
-        {
-            if (allHabits.Count >= 10)
-                return Result.Failure<Guid>("You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
-
-            // Duplicating a habit with children = creating sub-habits
-            var childLookupCheck = allHabits.ToLookup(h => h.ParentHabitId);
-            if (childLookupCheck[original.Id].Any())
-                return Result.Failure<Guid>("Duplicating habits with sub-habits is a Pro feature. Upgrade to unlock!");
-        }
+        var canCreate = await payGateService.CanCreateHabits(request.UserId, 1, cancellationToken);
+        if (!canCreate.IsSuccess) return canCreate.PropagateError<Guid>();
 
         var childLookup = allHabits.ToLookup(h => h.ParentHabitId);
+
+        // If original has sub-habits, also check sub-habit gate
+        if (childLookup[original.Id].Any())
+        {
+            var canCreateSub = await payGateService.CanCreateSubHabits(request.UserId, cancellationToken);
+            if (!canCreateSub.IsSuccess) return canCreateSub.PropagateError<Guid>();
+        }
 
         // Duplicate the root habit
         var rootCopy = CloneHabit(original, original.ParentHabitId);

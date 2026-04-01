@@ -26,17 +26,9 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         [FromQuery] GoalStatus? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var query = new GetGoalsQuery(HttpContext.GetUserId(), status, page, pageSize);
-            var result = await mediator.Send(query, cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to get goals for user {UserId}", HttpContext.GetUserId());
-            return StatusCode(500, new { error = "An error occurred while retrieving goals." });
-        }
+        var query = new GetGoalsQuery(HttpContext.GetUserId(), status, page, pageSize);
+        var result = await mediator.Send(query, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

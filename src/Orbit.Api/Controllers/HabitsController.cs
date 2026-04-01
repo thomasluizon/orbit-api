@@ -235,10 +235,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-        {
             logger.LogInformation("Habit created {HabitId} by user {UserId}", result.Value, HttpContext.GetUserId());
-            return CreatedAtAction(nameof(GetHabits), new { id = result.Value }, new { id = result.Value });
-        }
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
     }
@@ -386,10 +383,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-        {
             logger.LogInformation("Bulk created {Count} habits for user {UserId}", request.Habits.Count, HttpContext.GetUserId());
-            return Ok(result.Value);
-        }
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -525,9 +519,6 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ScheduledReminders);
 
         var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
-            return Created($"/api/habits/{result.Value}", new { id = result.Value });
 
         return result.ToPayGateAwareResult(v => Created($"/api/habits/{v}", new { id = v }));
     }
