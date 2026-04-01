@@ -18,7 +18,8 @@ public record GetHabitLogsQuery(Guid UserId, Guid HabitId) : IRequest<Result<IRe
 
 public class GetHabitLogsQueryHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository) : IRequestHandler<GetHabitLogsQuery, Result<IReadOnlyList<HabitLogResponse>>>
+    IGenericRepository<HabitLog> habitLogRepository,
+    IUserDateService userDateService) : IRequestHandler<GetHabitLogsQuery, Result<IReadOnlyList<HabitLogResponse>>>
 {
     private const int DefaultLookbackDays = 365;
 
@@ -33,7 +34,8 @@ public class GetHabitLogsQueryHandler(
             return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound);
 
         // Cap log history to last 365 days to prevent unbounded queries
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-DefaultLookbackDays);
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var cutoff = userToday.AddDays(-DefaultLookbackDays);
 
         var logs = await habitLogRepository.FindAsync(
             l => l.HabitId == request.HabitId && l.Date >= cutoff,

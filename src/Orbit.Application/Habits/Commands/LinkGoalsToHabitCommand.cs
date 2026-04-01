@@ -19,9 +19,6 @@ public class LinkGoalsToHabitCommandHandler(
 {
     public async Task<Result> Handle(LinkGoalsToHabitCommand request, CancellationToken cancellationToken)
     {
-        if (request.GoalIds.Count > AppConstants.MaxGoalsPerHabit)
-            return Result.Failure($"A habit can have at most {AppConstants.MaxGoalsPerHabit} linked goals.");
-
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Goals),

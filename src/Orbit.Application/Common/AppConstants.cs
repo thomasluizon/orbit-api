@@ -1,3 +1,5 @@
+using Orbit.Domain.Common;
+
 namespace Orbit.Application.Common;
 
 public static class AppConstants
@@ -22,5 +24,7 @@ public static class AppConstants
     public const int ReferralCompletionThreshold = 3;
     public const int ReferralCompletionWindowDays = 7;
     public const int DefaultOverdueWindowDays = 7;
-    public const int MaxScheduledReminders = 5;
+    public const int MaxScheduledReminders = DomainConstants.MaxScheduledReminders;
+    public const int MaxPushSubscriptionsPerUser = 5;
+    public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

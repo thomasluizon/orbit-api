@@ -50,5 +50,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithMessage("General habits cannot be bad habits");
 
         SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.ScheduledReminders));
+
+        SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
     }
 }

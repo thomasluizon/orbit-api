@@ -69,7 +69,7 @@ public static class SharedHabitRules
         rule.Must(items => items is null || items.Count <= AppConstants.MaxScheduledReminders)
             .WithMessage($"A habit can have at most {AppConstants.MaxScheduledReminders} scheduled reminders");
 
-        rule.Must(items => items is null || items.All(sr => sr.When is "day_before" or "same_day"))
+        rule.Must(items => items is null || items.All(sr => Enum.IsDefined(sr.When)))
             .WithMessage("Scheduled reminder 'when' must be 'day_before' or 'same_day'");
 
         rule.Must(items =>
@@ -79,6 +79,15 @@ public static class SharedHabitRules
                 return grouped.All(g => g.Count() == 1);
             })
             .WithMessage("Scheduled reminders must not contain duplicate entries");
+    }
+
+    public static void AddGoalIdsRules<T>(
+        AbstractValidator<T> validator,
+        System.Linq.Expressions.Expression<Func<T, IReadOnlyList<Guid>?>> expression)
+    {
+        validator.RuleFor(expression)
+            .Must(ids => ids is null || ids.Count <= AppConstants.MaxGoalsPerHabit)
+            .WithMessage($"A habit can have at most {AppConstants.MaxGoalsPerHabit} linked goals.");
     }
 
     private static void AddGeneralHabitRulesCore<T>(

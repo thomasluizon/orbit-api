@@ -179,9 +179,6 @@ public class CreateHabitCommandHandler(
 
         if (request.GoalIds is { Count: > 0 })
         {
-            if (request.GoalIds.Count > AppConstants.MaxGoalsPerHabit)
-                return Result.Failure<Guid>($"A habit can have at most {AppConstants.MaxGoalsPerHabit} linked goals.");
-
             var goals = await goalRepository.FindTrackedAsync(
                 g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,
                 cancellationToken);

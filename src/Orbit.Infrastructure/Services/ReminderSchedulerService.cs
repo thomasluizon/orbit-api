@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
@@ -175,9 +176,9 @@ public class ReminderSchedulerService(
             foreach (var sr in habit.ScheduledReminders)
             {
                 DateOnly reminderForDate;
-                if (sr.When == "same_day" && isDueToday)
+                if (sr.When == ScheduledReminderWhen.SameDay && isDueToday)
                     reminderForDate = userToday;
-                else if (sr.When == "day_before" && isDueTomorrow)
+                else if (sr.When == ScheduledReminderWhen.DayBefore && isDueTomorrow)
                     reminderForDate = userToday;
                 else
                     continue;
@@ -187,7 +188,7 @@ public class ReminderSchedulerService(
                 if (diffMinutes < 0 || diffMinutes >= 1) continue;
 
                 // Dedup: use the date the habit is due for, plus the reminder time
-                var dueDate = sr.When == "same_day" ? userToday : userTomorrow;
+                var dueDate = sr.When == ScheduledReminderWhen.SameDay ? userToday : userTomorrow;
                 if (sentScheduledSet.Contains((habit.Id, dueDate, sr.Time))) continue;
 
                 var lang = user.Language ?? "en";
@@ -224,13 +225,13 @@ public class ReminderSchedulerService(
         };
     }
 
-    private static string FormatScheduledReminderText(string when, string lang)
+    private static string FormatScheduledReminderText(ScheduledReminderWhen when, string lang)
     {
         var isPt = lang.StartsWith("pt");
         return when switch
         {
-            "same_day" => isPt ? "Para hoje" : "Due today",
-            "day_before" => isPt ? "Para amanha" : "Due tomorrow",
+            ScheduledReminderWhen.SameDay => isPt ? "Para hoje" : "Due today",
+            ScheduledReminderWhen.DayBefore => isPt ? "Para amanha" : "Due tomorrow",
             _ => isPt ? "Lembrete" : "Reminder"
         };
     }

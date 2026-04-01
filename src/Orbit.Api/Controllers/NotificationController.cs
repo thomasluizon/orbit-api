@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
 
@@ -110,16 +111,15 @@ public class NotificationController(
 
         await dbContext.PushSubscriptions.AddAsync(result.Value, ct);
 
-        // Enforce per-user subscription cap: keep only the 5 most recent subscriptions
-        const int maxSubscriptionsPerUser = 5;
+        // Enforce per-user subscription cap: keep only the most recent subscriptions
         var userSubs = await dbContext.PushSubscriptions
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.CreatedAtUtc)
             .ToListAsync(ct);
 
-        if (userSubs.Count >= maxSubscriptionsPerUser)
+        if (userSubs.Count >= AppConstants.MaxPushSubscriptionsPerUser)
         {
-            var toRemove = userSubs.Skip(maxSubscriptionsPerUser - 1);
+            var toRemove = userSubs.Skip(AppConstants.MaxPushSubscriptionsPerUser - 1);
             dbContext.PushSubscriptions.RemoveRange(toRemove);
         }
 

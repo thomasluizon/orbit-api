@@ -1,3 +1,5 @@
+using Orbit.Domain.Enums;
+
 namespace Orbit.Domain.ValueObjects;
 
-public record ScheduledReminderTime(string When, TimeOnly Time);
+public record ScheduledReminderTime(ScheduledReminderWhen When, TimeOnly Time);
