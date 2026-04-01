@@ -91,9 +91,6 @@ public class UpdateHabitCommandHandler(
         // Sync goal links if GoalIds was provided
         if (request.GoalIds is not null)
         {
-            if (request.GoalIds.Count > AppConstants.MaxGoalsPerHabit)
-                return Result.Failure($"A habit can have at most {AppConstants.MaxGoalsPerHabit} linked goals.");
-
             foreach (var existingGoal in habit.Goals.ToList())
                 habit.RemoveGoal(existingGoal);
 
