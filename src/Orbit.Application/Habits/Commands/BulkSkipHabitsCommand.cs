@@ -35,6 +35,14 @@ public class BulkSkipHabitsCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
+        // Batch-load all requested habits in a single query instead of one per item (N+1)
+        var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
+        var habits = await habitRepository.FindTrackedAsync(
+            h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
+            q => q.Include(h => h.Logs),
+            cancellationToken);
+        var habitMap = habits.ToDictionary(h => h.Id);
+
         for (int i = 0; i < request.Items.Count; i++)
         {
             var item = request.Items[i];
@@ -53,28 +61,13 @@ public class BulkSkipHabitsCommandHandler(
                     continue;
                 }
 
-                var habit = await habitRepository.FindOneTrackedAsync(
-                    h => h.Id == habitId,
-                    q => q.Include(h => h.Logs),
-                    cancellationToken);
-
-                if (habit is null)
+                if (!habitMap.TryGetValue(habitId, out var habit))
                 {
                     results.Add(new BulkSkipItemResult(
                         Index: i,
                         Status: BulkItemStatus.Failed,
                         HabitId: habitId,
                         Error: ErrorMessages.HabitNotFound));
-                    continue;
-                }
-
-                if (habit.UserId != request.UserId)
-                {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: ErrorMessages.HabitNotOwned));
                     continue;
                 }
 

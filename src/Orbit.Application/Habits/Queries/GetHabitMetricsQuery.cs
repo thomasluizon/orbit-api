@@ -17,12 +17,10 @@ public class GetHabitMetricsQueryHandler(
 {
     public async Task<Result<HabitMetrics>> Handle(GetHabitMetricsQuery request, CancellationToken cancellationToken)
     {
-        var habits = await habitRepository.FindAsync(
+        var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Logs),
             cancellationToken);
-
-        var habit = habits.FirstOrDefault();
         if (habit is null)
             return Result.Failure<HabitMetrics>(ErrorMessages.HabitNotFound);
 

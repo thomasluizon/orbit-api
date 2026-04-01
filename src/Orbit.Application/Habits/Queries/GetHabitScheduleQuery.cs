@@ -104,7 +104,9 @@ public class GetHabitScheduleQueryHandler(
     {
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
-            q => q.Include(h => h.Tags).Include(h => h.Logs).Include(h => h.Goals),
+            q => q.Include(h => h.Tags)
+                  .Include(h => h.Logs)
+                  .Include(h => h.Goals),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -149,9 +151,14 @@ public class GetHabitScheduleQueryHandler(
         }
 
         // Include Logs for flexible habits so we can compute window progress
+        // Filter logs to the requested date range (extended by overdue window) to avoid loading all historical logs
+        var logFrom = (request.DateFrom ?? today).AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var logTo = request.DateTo ?? today;
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
-            q => q.Include(h => h.Tags).Include(h => h.Logs).Include(h => h.Goals),
+            q => q.Include(h => h.Tags)
+                  .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
+                  .Include(h => h.Goals),
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
