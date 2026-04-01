@@ -178,6 +178,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.HasIndex(n => new { n.UserId, n.IsRead });
+            entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
         });
 
         modelBuilder.Entity<Goal>(entity =>

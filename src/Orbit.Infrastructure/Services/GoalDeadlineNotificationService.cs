@@ -54,6 +54,19 @@ public class GoalDeadlineNotificationService(
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
+        // Batch-load all possible dedup keys upfront to avoid N+1 AnyAsync queries
+        var allKeys = goals
+            .Where(g => g.Deadline.HasValue)
+            .SelectMany(g => NotifyDaysBefore.Select(d => $"goal-deadline-{g.Id}-{d}d"))
+            .ToList();
+        var sentKeys = (await dbContext.Notifications
+            .Where(n => allKeys.Contains(n.Url!))
+            .Select(n => n.Url)
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        var anyChanges = false;
+
         foreach (var goal in goals)
         {
             if (!users.TryGetValue(goal.UserId, out var user)) continue;
@@ -79,10 +92,7 @@ public class GoalDeadlineNotificationService(
                 // entity (similar to SentReminder/SentSlipAlert) that tracks (GoalId, DaysBefore) with a unique
                 // constraint, eliminating the need to abuse the Url column for dedup.
                 var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
-                var alreadySent = await dbContext.Notifications
-                    .AnyAsync(n => n.UserId == goal.UserId && n.Url == notificationKey, ct);
-
-                if (alreadySent) continue;
+                if (sentKeys.Contains(notificationKey)) continue;
 
                 var lang = user.Language ?? "en";
                 var isPt = lang.StartsWith("pt");
@@ -102,12 +112,18 @@ public class GoalDeadlineNotificationService(
 
                 var notification = Notification.Create(goal.UserId, goal.Title, body, notificationKey);
                 await dbContext.Notifications.AddAsync(notification, ct);
-                await dbContext.SaveChangesAsync(ct);
+
+                // Track in memory to prevent duplicate sends within the same scheduler tick
+                sentKeys.Add(notificationKey);
+                anyChanges = true;
 
                 logger.LogInformation(
                     "Sent deadline notification ({Days}d before) for goal {GoalId} to user {UserId}",
                     daysBefore, goal.Id, goal.UserId);
             }
         }
+
+        if (anyChanges)
+            await dbContext.SaveChangesAsync(ct);
     }
 }
