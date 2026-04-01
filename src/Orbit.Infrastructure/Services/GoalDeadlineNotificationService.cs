@@ -101,10 +101,10 @@ public class GoalDeadlineNotificationService(
                 var body = daysBefore switch
                 {
                     1 => isPt
-                        ? $"Sua meta termina amanha - voce esta em {progressText}"
+                        ? $"Sua meta termina amanhã - você está em {progressText}"
                         : $"Your goal is due tomorrow - you're at {progressText}",
                     _ => isPt
-                        ? $"Sua meta termina em {daysBefore} dias - voce esta em {progressText}"
+                        ? $"Sua meta termina em {daysBefore} dias - você está em {progressText}"
                         : $"Your goal is due in {daysBefore} days - you're at {progressText}"
                 };
 

@@ -133,17 +133,17 @@ public class CheckReferralCompletionCommandHandler(
         var isPt = user.Language?.StartsWith("pt") == true;
 
         var (title, body) = isReferrer
-            ? (isPt ? "Indicacao Concluida!" : "Referral Completed!",
+            ? (isPt ? "Indicação Concluída!" : "Referral Completed!",
                isPt
                    ? user.IsPro
-                       ? "Seu amigo comecou a usar o Orbit! 10% de desconto aplicado na sua proxima fatura."
-                       : "Seu amigo comecou a usar o Orbit e voce ganhou um cupom de 10% de desconto no Pro!"
+                       ? "Seu amigo começou a usar o Orbit! 10% de desconto aplicado na sua próxima fatura."
+                       : "Seu amigo começou a usar o Orbit e você ganhou um cupom de 10% de desconto no Pro!"
                    : user.IsPro
                        ? "Your friend joined Orbit! 10% discount applied to your next invoice."
                        : "Your friend joined Orbit and you earned a 10% discount coupon for Pro!")
-            : (isPt ? "Voce ganhou um cupom!" : "You earned a coupon!",
+            : (isPt ? "Você ganhou um cupom!" : "You earned a coupon!",
                isPt
-                   ? "Bem-vindo ao Orbit! Voce ganhou um cupom de 10% de desconto no Pro!"
+                   ? "Bem-vindo ao Orbit! Você ganhou um cupom de 10% de desconto no Pro!"
                    : "Welcome to Orbit! You earned a 10% discount coupon for Pro!");
 
         await notificationRepository.AddAsync(

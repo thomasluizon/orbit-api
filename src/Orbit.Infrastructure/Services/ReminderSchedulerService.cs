@@ -231,7 +231,7 @@ public class ReminderSchedulerService(
         return when switch
         {
             ScheduledReminderWhen.SameDay => isPt ? "Para hoje" : "Due today",
-            ScheduledReminderWhen.DayBefore => isPt ? "Para amanha" : "Due tomorrow",
+            ScheduledReminderWhen.DayBefore => isPt ? "Para amanhã" : "Due tomorrow",
             _ => isPt ? "Lembrete" : "Reminder"
         };
     }

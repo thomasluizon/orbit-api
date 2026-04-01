@@ -76,7 +76,7 @@ public sealed class AiSlipAlertMessageService(
     {
         return language.StartsWith("pt")
             ? Result.Success(($"Fique atento: {habitTitle}",
-                "Voce costuma deslizar por volta desse horario. Forca -- voce consegue!"))
+                "Você costuma deslizar por volta desse horário. Força -- você consegue!"))
             : Result.Success(($"Heads up: {habitTitle}",
                 "You tend to slip around this time. Stay strong -- you've got this!"));
     }
