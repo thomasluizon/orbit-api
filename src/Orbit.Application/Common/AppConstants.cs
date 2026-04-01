@@ -27,5 +27,8 @@ public static class AppConstants
     public const int MaxScheduledReminders = DomainConstants.MaxScheduledReminders;
     public const int MaxPushSubscriptionsPerUser = 5;
     public const int MaxNotificationsReturned = 50;
+    public const int MaxChecklistItems = 50;
+    public const int MaxTagNameLength = 50;
+    public const int MaxLanguageLength = 10;
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }
