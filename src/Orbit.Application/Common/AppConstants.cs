@@ -23,4 +23,9 @@ public static class AppConstants
     public const int ReferralCompletionWindowDays = 7;
     public const int DefaultOverdueWindowDays = 7;
     public const int MaxScheduledReminders = 5;
+    public const int MaxChecklistItems = 50;
+    public const int MaxTagNameLength = 50;
+    public const int MaxLanguageLength = 10;
+
+    public static readonly IReadOnlyList<string> SupportedLanguages = ["en", "pt-BR"];
 }
