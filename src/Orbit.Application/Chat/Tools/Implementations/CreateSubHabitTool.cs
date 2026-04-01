@@ -16,44 +16,44 @@ public class CreateSubHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            parent_habit_id = new { type = "STRING", description = "ID of the existing parent habit" },
-            title = new { type = "STRING", description = "Name of the new sub-habit" },
-            description = new { type = "STRING", description = "Optional description" },
+            parent_habit_id = new { type = "string", description = "ID of the existing parent habit" },
+            title = new { type = "string", description = "Name of the new sub-habit" },
+            description = new { type = "string", description = "Optional description" },
             frequency_unit = new
             {
-                type = "STRING",
+                type = "string",
                 description = "Override parent frequency",
                 @enum = new[] { "Day", "Week", "Month", "Year" }
             },
-            frequency_quantity = new { type = "INTEGER", description = "Override parent frequency quantity" },
+            frequency_quantity = new { type = "integer", description = "Override parent frequency quantity" },
             days = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Specific weekdays, only when frequency_quantity is 1",
-                items = new { type = "STRING" }
+                items = new { type = "string" }
             },
-            due_time = new { type = "STRING", description = "HH:mm 24h format" },
-            due_end_time = new { type = "STRING", description = "HH:mm 24h format end time" },
-            is_bad_habit = new { type = "BOOLEAN", description = "True for habits the user wants to AVOID" },
-            reminder_enabled = new { type = "BOOLEAN", description = "Set true for reminder notifications" },
-            reminder_times = new { type = "ARRAY", description = "Minutes before dueTime to send reminders", items = new { type = "INTEGER" } },
-            slip_alert_enabled = new { type = "BOOLEAN", description = "Enable slip alert notifications" },
-            is_flexible = new { type = "BOOLEAN", description = "True for flexible frequency" },
-            due_date = new { type = "STRING", description = "YYYY-MM-DD override for due date" },
+            due_time = new { type = "string", description = "HH:mm 24h format" },
+            due_end_time = new { type = "string", description = "HH:mm 24h format end time" },
+            is_bad_habit = new { type = "boolean", description = "True for habits the user wants to AVOID" },
+            reminder_enabled = new { type = "boolean", description = "Set true for reminder notifications" },
+            reminder_times = new { type = "array", description = "Minutes before dueTime to send reminders", items = new { type = "integer" } },
+            slip_alert_enabled = new { type = "boolean", description = "Enable slip alert notifications" },
+            is_flexible = new { type = "boolean", description = "True for flexible frequency" },
+            due_date = new { type = "string", description = "YYYY-MM-DD override for due date" },
             scheduled_reminders = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Absolute-time reminders for habits WITHOUT a due_time",
                 items = new
                 {
-                    type = "OBJECT",
+                    type = "object",
                     properties = new
                     {
-                        when = new { type = "STRING", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
-                        time = new { type = "STRING", description = "HH:mm 24h format" }
+                        when = new { type = "string", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
+                        time = new { type = "string", description = "HH:mm 24h format" }
                     },
                     required = new[] { "when", "time" }
                 }

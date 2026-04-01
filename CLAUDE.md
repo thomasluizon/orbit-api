@@ -9,7 +9,7 @@
 - MediatR 14.0.0 (CQRS)
 - FluentValidation 12.1.1
 - JWT Bearer authentication
-- AI: Gemini 2.5 Flash (primary), Ollama phi3.5:3.8b (fallback)
+- AI: OpenAI GPT-4.1-mini via OpenAI .NET SDK 2.8.0
 - BCrypt for password hashing
 - Scalar for API docs (dev only)
 - Firebase Admin SDK 3.5.0 (FCM push notifications)
@@ -116,9 +116,11 @@ docker compose up -d --build                                # Docker deployment
 - Enter plan mode for any non-trivial task (3+ steps or architectural decisions).
 - If something goes sideways, STOP and re-plan immediately.
 
-### Simplicity & Root Causes
+### Best Approach Only -- No Workarounds
+- **ALWAYS use the best possible approach.** Never settle for workarounds, hacks, or "good enough" solutions. If the ideal approach exists, use it.
+- Find root causes. No temporary fixes. No band-aids. Senior developer standards.
 - Make every change as simple as possible. Impact minimal code.
-- Find root causes. No temporary fixes. Senior developer standards.
+- If a workaround is tempting, STOP and find the proper solution. Ask if unsure.
 
 ### Verification Before Done
 - Never mark a task complete without proving it works.

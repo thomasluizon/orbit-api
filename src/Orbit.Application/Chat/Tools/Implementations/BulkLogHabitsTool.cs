@@ -18,16 +18,16 @@ public class BulkLogHabitsTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
             habit_ids = new
             {
-                type = "ARRAY",
-                items = new { type = "STRING" },
+                type = "array",
+                items = new { type = "string" },
                 description = "Array of habit IDs to log as completed"
             },
-            note = new { type = "STRING", description = "Optional note about the completions" }
+            note = new { type = "string", description = "Optional note about the completions" }
         },
         required = new[] { "habit_ids" }
     };

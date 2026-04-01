@@ -11,28 +11,28 @@ public class SuggestBreakdownTool : IAiTool
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            title = new { type = "STRING", description = "The broad habit title to break down" },
+            title = new { type = "string", description = "The broad habit title to break down" },
             suggested_sub_habits = new
             {
-                type = "ARRAY",
+                type = "array",
                 description = "Suggested sub-habit breakdowns",
                 items = new
                 {
-                    type = "OBJECT",
+                    type = "object",
                     properties = new
                     {
-                        title = new { type = "STRING", description = "Sub-habit title" },
-                        description = new { type = "STRING", description = "Optional description" },
+                        title = new { type = "string", description = "Sub-habit title" },
+                        description = new { type = "string", description = "Optional description" },
                         frequency_unit = new
                         {
-                            type = "STRING",
+                            type = "string",
                             @enum = new[] { "Day", "Week", "Month", "Year" }
                         },
-                        frequency_quantity = new { type = "INTEGER" },
-                        days = new { type = "ARRAY", items = new { type = "STRING" } }
+                        frequency_quantity = new { type = "integer" },
+                        days = new { type = "array", items = new { type = "string" } }
                     },
                     required = new[] { "title" }
                 }

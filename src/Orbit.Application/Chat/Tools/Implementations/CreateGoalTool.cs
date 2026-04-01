@@ -14,14 +14,14 @@ public class CreateGoalTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            title = new { type = "STRING", description = "Name of the goal" },
-            description = new { type = "STRING", description = "Optional description" },
-            target_value = new { type = "NUMBER", description = "Target number to reach" },
-            unit = new { type = "STRING", description = "Unit of measurement (e.g., 'books', 'kg', 'dollars')" },
-            deadline = new { type = "STRING", description = "Optional deadline in YYYY-MM-DD format" }
+            title = new { type = "string", description = "Name of the goal" },
+            description = new { type = "string", description = "Optional description" },
+            target_value = new { type = "number", description = "Target number to reach" },
+            unit = new { type = "string", description = "Unit of measurement (e.g., 'books', 'kg', 'dollars')" },
+            deadline = new { type = "string", description = "Optional deadline in YYYY-MM-DD format" }
         },
         required = new[] { "title", "target_value", "unit" }
     };

@@ -11,7 +11,7 @@ namespace Orbit.IntegrationTests;
 /// Covers: QueryHabitsTool, CreateHabit extended, UpdateHabit extended, LogHabit edge cases,
 /// SkipHabit edge cases, BulkOperations, SubHabit/hierarchy, AssignTags extended,
 /// Multi-turn context, Boundary/error tests, DuplicateHabit extended.
-/// Requires: Gemini API key configured. Tests hit real AI and are rate-limited.
+/// Requires: AI API key configured. Tests hit real AI and are rate-limited.
 /// </summary>
 [Collection("Sequential")]
 public class AiToolEdgeCaseTests : IAsyncLifetime
@@ -23,7 +23,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: Gemini free tier allows ~15 RPM
+    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 

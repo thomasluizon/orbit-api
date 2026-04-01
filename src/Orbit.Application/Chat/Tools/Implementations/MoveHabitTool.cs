@@ -14,11 +14,11 @@ public class MoveHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            habit_id = new { type = "STRING", description = "ID of the habit to move" },
-            new_parent_id = new { type = "STRING", description = "ID of the new parent habit, or null to make top-level", nullable = true }
+            habit_id = new { type = "string", description = "ID of the habit to move" },
+            new_parent_id = new { type = "string", description = "ID of the new parent habit, or null to make top-level", nullable = true }
         },
         required = new[] { "habit_id" }
     };

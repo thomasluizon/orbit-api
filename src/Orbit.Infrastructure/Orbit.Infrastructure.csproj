@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.2" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.15.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="OpenAI" Version="2.8.0" />
     <PackageReference Include="Stripe.net" Version="50.4.1" />
     <PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
   </ItemGroup>

@@ -8,8 +8,8 @@ using Microsoft.Extensions.Configuration;
 namespace Orbit.IntegrationTests;
 
 /// <summary>
-/// Integration tests for AI tool calling via Ollama.
-/// Requires: ollama serve running on localhost:11434 with qwen3:8b pulled.
+/// Integration tests for AI tool calling.
+/// Requires: AI API key configured.
 /// Tests are fully repeatable - create test user, run tests, clean up everything.
 /// </summary>
 [Collection("Sequential")]
@@ -22,7 +22,7 @@ public class AiToolCallingTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: Gemini free tier allows ~15 RPM
+    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 

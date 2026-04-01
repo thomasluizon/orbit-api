@@ -14,10 +14,10 @@ public class DeleteHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            habit_id = new { type = "STRING", description = "ID of the habit to delete" }
+            habit_id = new { type = "string", description = "ID of the habit to delete" }
         },
         required = new[] { "habit_id" }
     };

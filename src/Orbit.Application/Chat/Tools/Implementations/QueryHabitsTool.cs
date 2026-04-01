@@ -21,20 +21,20 @@ public class QueryHabitsTool(
 
     public object GetParameterSchema() => new
     {
-        type = "OBJECT",
+        type = "object",
         properties = new
         {
-            search = new { type = "STRING", description = "Search habits by title (case-insensitive contains match)" },
-            date = new { type = "STRING", description = "Filter habits due on this date (YYYY-MM-DD). Use 'today' for current date." },
-            include_overdue = new { type = "BOOLEAN", description = "When filtering by date, also include habits overdue before that date. Default: true when date is 'today', false otherwise." },
-            is_general = new { type = "BOOLEAN", description = "Filter by general/timeless habits (true) or non-general habits (false). Omit to include both." },
-            is_completed = new { type = "BOOLEAN", description = "Filter by completion status. Default: only active (false)." },
-            is_bad_habit = new { type = "BOOLEAN", description = "Filter by bad habit status. Omit to include both." },
-            frequency = new { type = "STRING", description = "Filter by frequency: 'Day', 'Week', 'Month', 'Year', or 'OneTime'.", @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } },
-            tag = new { type = "STRING", description = "Filter by tag name (case-insensitive)" },
-            include_sub_habits = new { type = "BOOLEAN", description = "Include sub-habits in results. Default: true" },
-            include_metrics = new { type = "BOOLEAN", description = "Include streak and completion metrics. Default: false (set true for performance/progress questions)" },
-            limit = new { type = "INTEGER", description = "Maximum results to return. Default: 50" }
+            search = new { type = "string", description = "Search habits by title (case-insensitive contains match)" },
+            date = new { type = "string", description = "Filter habits due on this date (YYYY-MM-DD). Use 'today' for current date." },
+            include_overdue = new { type = "boolean", description = "When filtering by date, also include habits overdue before that date. Default: true when date is 'today', false otherwise." },
+            is_general = new { type = "boolean", description = "Filter by general/timeless habits (true) or non-general habits (false). Omit to include both." },
+            is_completed = new { type = "boolean", description = "Filter by completion status. Default: only active (false)." },
+            is_bad_habit = new { type = "boolean", description = "Filter by bad habit status. Omit to include both." },
+            frequency = new { type = "string", description = "Filter by frequency: 'Day', 'Week', 'Month', 'Year', or 'OneTime'.", @enum = new[] { "Day", "Week", "Month", "Year", "OneTime" } },
+            tag = new { type = "string", description = "Filter by tag name (case-insensitive)" },
+            include_sub_habits = new { type = "boolean", description = "Include sub-habits in results. Default: true" },
+            include_metrics = new { type = "boolean", description = "Include streak and completion metrics. Default: false (set true for performance/progress questions)" },
+            limit = new { type = "integer", description = "Maximum results to return. Default: 50" }
         },
         required = Array.Empty<string>()
     };
