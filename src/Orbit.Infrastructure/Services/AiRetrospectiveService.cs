@@ -66,7 +66,7 @@ public sealed class AiRetrospectiveService(
 
         var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = language.ToLowerInvariant() switch
         {
-            "pt-br" or "pt" => ("Destaques", "Oportunidades Perdidas", "Tendencias", "Sugestao"),
+            "pt-br" or "pt" => ("Destaques", "Oportunidades Perdidas", "Tendências", "Sugestão"),
             _ => ("Highlights", "Missed Opportunities", "Trends", "Suggestion")
         };
 

@@ -217,13 +217,13 @@ public class ResendEmailService(
 
     private static string BuildAccountDeletionEmailHtml(string code, bool isPtBr)
     {
-        var heading = isPtBr ? "Exclusao de conta" : "Account deletion";
+        var heading = isPtBr ? "Exclusão de conta" : "Account deletion";
         var intro = isPtBr
-            ? "Voce solicitou a exclusao da sua conta Orbit. Essa acao e irreversivel. Todos os seus dados serao permanentemente excluidos, incluindo habitos, historico, conversas e configuracoes."
+            ? "Você solicitou a exclusão da sua conta Orbit. Essa ação é irreversível. Todos os seus dados serão permanentemente excluídos, incluindo hábitos, histórico, conversas e configurações."
             : "You requested to delete your Orbit account. This action is irreversible. All your data will be permanently deleted, including habits, history, conversations, and settings.";
-        var codeLabel = isPtBr ? "Use o codigo abaixo para confirmar:" : "Use the code below to confirm:";
+        var codeLabel = isPtBr ? "Use o código abaixo para confirmar:" : "Use the code below to confirm:";
         var warning = isPtBr
-            ? "Se voce nao solicitou isso, ignore este e-mail. Sua conta permanecera segura."
+            ? "Se você não solicitou isso, ignore este e-mail. Sua conta permanecerá segura."
             : "If you didn't request this, ignore this email. Your account will remain safe.";
         var footer = isPtBr ? "Equipe Orbit" : "The Orbit Team";
 
