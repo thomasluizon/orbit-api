@@ -29,7 +29,7 @@ public class GetAchievementsQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, ct);
         if (user is null)
-            return Result.Failure<AchievementsResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<AchievementsResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (!user.HasProAccess)
             return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");

@@ -3,7 +3,6 @@ using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Configuration;
 using Stripe;
 
 namespace Orbit.Infrastructure.Services;

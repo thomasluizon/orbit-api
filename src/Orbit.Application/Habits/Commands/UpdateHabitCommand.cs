@@ -54,7 +54,7 @@ public class UpdateHabitCommandHandler(
                 cancellationToken: cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         var result = habit.Update(
             request.Title,

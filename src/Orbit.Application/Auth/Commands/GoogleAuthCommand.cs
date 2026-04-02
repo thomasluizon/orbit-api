@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
@@ -18,7 +19,8 @@ public class GoogleAuthCommandHandler(
     ITokenService tokenService,
     IHttpClientFactory httpClientFactory,
     IEmailService emailService,
-    IMediator mediator) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
+    IMediator mediator,
+    ILogger<GoogleAuthCommandHandler> logger) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
     {
@@ -74,9 +76,9 @@ public class GoogleAuthCommandHandler(
                 {
                     await emailService.SendWelcomeEmailAsync(user.Email, user.Name, request.Language, CancellationToken.None);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Silently ignore email failures - don't block authentication
+                    logger.LogWarning(ex, "Welcome email failed for user {Email}", user.Email);
                 }
             }, CancellationToken.None);
         }
@@ -88,9 +90,9 @@ public class GoogleAuthCommandHandler(
             {
                 await mediator.Send(new ProcessReferralCodeCommand(user.Id, request.ReferralCode), cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently ignore referral processing failures
+                logger.LogWarning(ex, "Referral processing failed for user {UserId}", user.Id);
             }
         }
 

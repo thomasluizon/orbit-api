@@ -26,17 +26,19 @@ public class GetNotificationsQueryHandler(
 {
     public async Task<Result<GetNotificationsResponse>> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
     {
+        // Server-side ordering and limiting instead of loading all notifications into memory
         var notifications = await notificationRepository.FindAsync(
             n => n.UserId == request.UserId,
+            q => q.OrderByDescending(n => n.CreatedAtUtc).Take(AppConstants.MaxNotificationsReturned),
             cancellationToken);
 
         var items = notifications
-            .OrderByDescending(n => n.CreatedAtUtc)
-            .Take(AppConstants.MaxNotificationsReturned)
             .Select(n => new NotificationItemDto(n.Id, n.Title, n.Body, n.Url, n.HabitId, n.IsRead, n.CreatedAtUtc))
             .ToList();
 
-        var unreadCount = notifications.Count(n => !n.IsRead);
+        var unreadCount = await notificationRepository.CountAsync(
+            n => n.UserId == request.UserId && !n.IsRead,
+            cancellationToken);
 
         return Result.Success(new GetNotificationsResponse(items, unreadCount));
     }

@@ -13,6 +13,7 @@ namespace Orbit.Application.Tests.Commands.Habits;
 public class CreateSubHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -26,7 +27,7 @@ public class CreateSubHabitCommandHandlerTests
     public CreateSubHabitCommandHandlerTests()
     {
         _handler = new CreateSubHabitCommandHandler(
-            _habitRepo, _payGate, _userDateService, _unitOfWork, _appConfigService, _cache);
+            _habitRepo, _tagRepo, _payGate, _userDateService, _unitOfWork, _appConfigService, _cache);
 
         _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -52,9 +53,11 @@ public class CreateSubHabitCommandHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(parent);
-        // GetByIdAsync returns null for depth check (parent has no parent = depth 0)
-        _habitRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns((Habit?)null);
+        // GetDepthAsync loads all user habits via FindAsync (parent has no parent = depth 0)
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
 
         var command = new CreateSubHabitCommand(UserId, parent.Id, "Child Task", "Do this");
 
@@ -117,9 +120,11 @@ public class CreateSubHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(parent);
 
-        // GetDepthAsync walks up: parent.ParentHabitId -> grandparent (no parent) -> depth = 1
-        _habitRepo.GetByIdAsync(grandparent.Id, Arg.Any<CancellationToken>())
-            .Returns(grandparent);
+        // GetDepthAsync now loads ALL user habits via FindAsync and walks in memory
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { grandparent, parent }.AsReadOnly());
 
         var command = new CreateSubHabitCommand(UserId, parent.Id, "Grandchild", null);
 

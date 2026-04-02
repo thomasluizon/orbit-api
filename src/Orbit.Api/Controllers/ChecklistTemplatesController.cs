@@ -15,6 +15,9 @@ public class ChecklistTemplatesController(IMediator mediator, ILogger<ChecklistT
     public record CreateTemplateRequest(string Name, IReadOnlyList<string> Items);
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetTemplates(CancellationToken cancellationToken)
     {
         var query = new GetChecklistTemplatesQuery(HttpContext.GetUserId());
@@ -23,6 +26,9 @@ public class ChecklistTemplatesController(IMediator mediator, ILogger<ChecklistT
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateTemplate(
         [FromBody] CreateTemplateRequest request,
         CancellationToken cancellationToken)
@@ -39,6 +45,9 @@ public class ChecklistTemplatesController(IMediator mediator, ILogger<ChecklistT
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteTemplate(Guid id, CancellationToken cancellationToken)
     {
         var command = new DeleteChecklistTemplateCommand(HttpContext.GetUserId(), id);

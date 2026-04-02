@@ -22,7 +22,7 @@ public class ResetAccountCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         await unitOfWork.BeginTransactionAsync(cancellationToken);
 

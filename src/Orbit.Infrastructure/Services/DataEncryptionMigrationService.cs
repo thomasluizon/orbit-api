@@ -51,7 +51,7 @@ public sealed class DataEncryptionMigrationService(
                 logger.LogWarning("Encryption migration had errors -- will retry on next startup");
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Data encryption migration failed -- will retry on next startup");
         }

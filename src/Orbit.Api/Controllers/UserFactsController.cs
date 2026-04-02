@@ -15,6 +15,9 @@ public class UserFactsController(IMediator mediator, ILogger<UserFactsController
     public record BulkDeleteUserFactsRequest(IReadOnlyList<Guid> FactIds);
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetUserFacts(CancellationToken cancellationToken)
     {
         var query = new GetUserFactsQuery(HttpContext.GetUserId());
@@ -23,6 +26,9 @@ public class UserFactsController(IMediator mediator, ILogger<UserFactsController
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteUserFact(Guid id, CancellationToken cancellationToken)
     {
         var command = new DeleteUserFactCommand(HttpContext.GetUserId(), id);
@@ -37,6 +43,9 @@ public class UserFactsController(IMediator mediator, ILogger<UserFactsController
     }
 
     [HttpDelete("bulk")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkDeleteUserFacts(
         [FromBody] BulkDeleteUserFactsRequest request,
         CancellationToken cancellationToken)

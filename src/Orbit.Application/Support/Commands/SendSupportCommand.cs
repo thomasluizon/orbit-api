@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -13,10 +14,10 @@ public class SendSupportCommandHandler(
     public async Task<Result> Handle(SendSupportCommand request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Subject))
-            return Result.Failure("Subject is required");
+            return Result.Failure(ErrorMessages.SubjectRequired);
 
         if (string.IsNullOrWhiteSpace(request.Message))
-            return Result.Failure("Message is required");
+            return Result.Failure(ErrorMessages.MessageRequired);
 
         await emailService.SendSupportEmailAsync(
             request.Name,

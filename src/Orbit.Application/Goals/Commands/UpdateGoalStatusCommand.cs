@@ -26,7 +26,7 @@ public class UpdateGoalStatusCommandHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
         var result = request.NewStatus switch
         {

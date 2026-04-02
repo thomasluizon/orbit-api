@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using System.Security.Cryptography;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
@@ -18,7 +19,7 @@ public class ConfirmAccountDeletionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DateTime>(ErrorMessages.UserNotFound);
+            return Result.Failure<DateTime>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var email = user.Email.ToLowerInvariant();
         var cacheKey = $"delete:{email}";
@@ -26,13 +27,15 @@ public class ConfirmAccountDeletionCommandHandler(
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
             return Result.Failure<DateTime>("Deletion code expired or not found");
 
-        if (entry.Attempts >= 3)
+        if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
-            return Result.Failure<DateTime>("Too many attempts. Please request a new code");
+            return Result.Failure<DateTime>("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
         }
 
-        if (entry.Code != request.Code)
+        if (!CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(entry.Code),
+            System.Text.Encoding.UTF8.GetBytes(request.Code)))
         {
             var updated = new VerificationEntry(entry.Code, entry.Attempts + 1, entry.CreatedAt);
             var remaining = TimeSpan.FromMinutes(10) - (DateTime.UtcNow - entry.CreatedAt);
@@ -43,7 +46,7 @@ public class ConfirmAccountDeletionCommandHandler(
                     AbsoluteExpirationRelativeToNow = remaining
                 });
             }
-            return Result.Failure<DateTime>("Invalid code");
+            return Result.Failure<DateTime>("Invalid code", ErrorCodes.InvalidVerificationCode);
         }
 
         cache.Remove(cacheKey);

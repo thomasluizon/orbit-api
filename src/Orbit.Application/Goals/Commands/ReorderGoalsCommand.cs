@@ -25,7 +25,7 @@ public class ReorderGoalsCommandHandler(
                 cancellationToken: cancellationToken);
 
             if (goal is null)
-                return Result.Failure(ErrorMessages.GoalNotFound);
+                return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
             goal.UpdatePosition(update.Position);
         }

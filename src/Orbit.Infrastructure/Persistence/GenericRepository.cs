@@ -73,6 +73,13 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await _dbSet.CountAsync(predicate, cancellationToken);
     }
 
+    public async Task<bool> AnyAsync(
+        Expression<Func<T, bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.AnyAsync(predicate, cancellationToken);
+    }
+
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
     {
         await _dbSet.AddAsync(entity, cancellationToken);

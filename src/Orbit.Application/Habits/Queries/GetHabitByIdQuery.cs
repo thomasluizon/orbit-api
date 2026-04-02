@@ -46,7 +46,7 @@ public class GetHabitByIdQueryHandler(
 
         var habit = habits.FirstOrDefault();
         if (habit is null)
-            return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound);
+            return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         var children = habit.Children
             .OrderBy(c => c.Position ?? int.MaxValue)

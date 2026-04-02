@@ -19,7 +19,7 @@ public class UpdateUserFactCommandHandler(
             cancellationToken: cancellationToken);
 
         if (fact is null)
-            return Result.Failure(ErrorMessages.FactNotFound);
+            return Result.Failure(ErrorMessages.FactNotFound, ErrorCodes.FactNotFound);
 
         fact.Update(request.FactText, request.Category);
         await unitOfWork.SaveChangesAsync(cancellationToken);

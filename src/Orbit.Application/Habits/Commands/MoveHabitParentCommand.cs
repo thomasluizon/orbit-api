@@ -24,7 +24,7 @@ public class MoveHabitParentCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         // Promote to top-level
         if (request.ParentId is null)
@@ -43,7 +43,7 @@ public class MoveHabitParentCommandHandler(
             cancellationToken: cancellationToken);
 
         if (parent is null)
-            return Result.Failure(ErrorMessages.TargetParentNotFound);
+            return Result.Failure(ErrorMessages.TargetParentNotFound, ErrorCodes.TargetParentNotFound);
 
         // Prevent circular references: walk up from the target parent to ensure
         // we don't encounter the habit being moved
@@ -57,22 +57,17 @@ public class MoveHabitParentCommandHandler(
 
     private async Task<bool> WouldCreateCycle(Guid habitId, Guid targetParentId, Guid userId, CancellationToken cancellationToken)
     {
+        // Load all user habits once and walk in memory instead of N+1 queries
+        var allHabits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
+        var habitDict = allHabits.ToDictionary(h => h.Id);
+
         var currentId = targetParentId;
-
-        // Walk up the parent chain from the target parent
-        while (true)
+        while (habitDict.TryGetValue(currentId, out var current))
         {
-            var current = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == currentId && h.UserId == userId,
-                cancellationToken: cancellationToken);
-
-            if (current?.ParentHabitId is null)
-                return false;
-
-            if (current.ParentHabitId == habitId)
-                return true;
-
+            if (current.ParentHabitId is null) return false;
+            if (current.ParentHabitId == habitId) return true;
             currentId = current.ParentHabitId.Value;
         }
+        return false;
     }
 }

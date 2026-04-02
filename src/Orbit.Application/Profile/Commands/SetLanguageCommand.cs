@@ -19,7 +19,7 @@ public class SetLanguageCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         user.SetLanguage(request.Language);
         await unitOfWork.SaveChangesAsync(cancellationToken);

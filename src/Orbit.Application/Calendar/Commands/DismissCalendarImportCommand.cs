@@ -19,7 +19,7 @@ public class DismissCalendarImportCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         user.MarkCalendarImported();
 

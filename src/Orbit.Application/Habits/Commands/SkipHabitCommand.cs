@@ -29,10 +29,10 @@ public class SkipHabitCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.HabitNotOwned);
+            return Result.Failure(ErrorMessages.HabitNotOwned, ErrorCodes.HabitNotOwned);
 
         if (habit.IsCompleted)
             return Result.Failure("Cannot skip a completed habit.");

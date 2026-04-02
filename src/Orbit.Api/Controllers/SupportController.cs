@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Microsoft.AspNetCore.RateLimiting;
 using Orbit.Application.Support.Commands;
 
 namespace Orbit.Api.Controllers;
@@ -14,6 +15,10 @@ public class SupportController(IMediator mediator, ILogger<SupportController> lo
     public record SupportRequest(string Name, string Email, string Subject, string Message);
 
     [HttpPost]
+    [EnableRateLimiting("support")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SendSupport(
         [FromBody] SupportRequest request,
         CancellationToken cancellationToken)

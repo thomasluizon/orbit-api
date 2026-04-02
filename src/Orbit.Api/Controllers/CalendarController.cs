@@ -13,6 +13,9 @@ namespace Orbit.Api.Controllers;
 public class CalendarController(IMediator mediator, ILogger<CalendarController> logger) : ControllerBase
 {
     [HttpGet("events")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetEvents(CancellationToken cancellationToken)
     {
         var query = new GetCalendarEventsQuery(HttpContext.GetUserId());
@@ -26,10 +29,13 @@ public class CalendarController(IMediator mediator, ILogger<CalendarController> 
     }
 
     [HttpPut("dismiss")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DismissImport(CancellationToken cancellationToken)
     {
         var command = new DismissCalendarImportCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 }

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 
@@ -10,14 +11,16 @@ namespace Orbit.Infrastructure.Services;
 public class ResendEmailService(
     IHttpClientFactory httpClientFactory,
     IOptions<ResendSettings> options,
+    IOptions<FrontendSettings> frontendSettings,
     ILogger<ResendEmailService> logger) : IEmailService
 {
     private readonly ResendSettings _settings = options.Value;
+    private readonly string _frontendBaseUrl = frontendSettings.Value.BaseUrl;
 
     public async Task SendWelcomeEmailAsync(string toEmail, string userName, string language = "en", CancellationToken cancellationToken = default)
     {
         var isPtBr = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
-        var subject = isPtBr ? "Bem-vindo ao Orbit!" : "Welcome to Orbit!";
+        var subject = isPtBr ? "Boas-vindas ao Orbit!" : "Welcome to Orbit!";
         var html = BuildWelcomeEmailHtml(userName, isPtBr);
         await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
@@ -33,7 +36,7 @@ public class ResendEmailService(
     public async Task SendAccountDeletionCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
     {
         var isPtBr = language.StartsWith("pt", StringComparison.OrdinalIgnoreCase);
-        var subject = isPtBr ? "Confirme a exclusao da sua conta Orbit" : "Confirm your Orbit account deletion";
+        var subject = isPtBr ? "Confirme a exclusão da sua conta Orbit" : "Confirm your Orbit account deletion";
         var html = BuildAccountDeletionEmailHtml(code, isPtBr);
         await SendEmailAsync(toEmail, subject, html, cancellationToken);
     }
@@ -156,7 +159,7 @@ public class ResendEmailService(
         }
     }
 
-    private static string BuildVerificationCodeEmailHtml(string code, string email, bool isPtBr)
+    private string BuildVerificationCodeEmailHtml(string code, string email, bool isPtBr)
     {
         var heading = isPtBr ? "Seu código de verificação" : "Your verification code";
         var intro = isPtBr
@@ -169,7 +172,7 @@ public class ResendEmailService(
         var signInButtonText = isPtBr ? "Entrar no Orbit" : "Sign in to Orbit";
 
         var encodedEmail = System.Net.WebUtility.UrlEncode(email);
-        var signInUrl = $"https://app.useorbit.org/login?email={encodedEmail}&code={code}";
+        var signInUrl = $"{_frontendBaseUrl}/login?email={encodedEmail}&code={code}";
 
         return $@"
 <!DOCTYPE html>
@@ -269,10 +272,10 @@ public class ResendEmailService(
 </html>";
     }
 
-    private static string BuildWelcomeEmailHtml(string userName, bool isPtBr)
+    private string BuildWelcomeEmailHtml(string userName, bool isPtBr)
     {
         var encodedName = System.Net.WebUtility.HtmlEncode(userName);
-        var heading = isPtBr ? $"Bem-vindo, {encodedName}!" : $"Welcome aboard, {encodedName}!";
+        var heading = isPtBr ? $"Boas-vindas, {encodedName}!" : $"Welcome aboard, {encodedName}!";
         var intro = isPtBr
             ? "Estamos animados em ter você no Orbit. Agora você pode construir hábitos melhores, acompanhar seu progresso e manter suas metas em dia."
             : "We're excited to have you on Orbit. You're now ready to build better habits, track your progress, and stay on top of your goals.";
@@ -327,7 +330,7 @@ public class ResendEmailService(
                                 </tr>
                             </table>
                             <div style=""text-align: center; padding-top: 32px;"">
-                                <a href=""https://app.useorbit.org"" style=""display: inline-block; background-color: #8b5cf6; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 40px; border-radius: 100px; box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.3);"">{cta}</a>
+                                <a href=""{_frontendBaseUrl}"" style=""display: inline-block; background-color: #8b5cf6; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 40px; border-radius: 100px; box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.3);"">{cta}</a>
                             </div>
                         </td>
                     </tr>

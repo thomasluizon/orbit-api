@@ -33,7 +33,7 @@ public class GetCalendarEventsQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound);
+            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var accessToken = await googleTokenService.GetValidAccessTokenAsync(user, cancellationToken);
         if (accessToken is null)
@@ -157,7 +157,8 @@ public class GetCalendarEventsQueryHandler(
         }
         catch (Google.GoogleApiException ex)
         {
-            return Result.Failure<List<CalendarEventItem>>($"Google Calendar API error: {ex.Message}");
+            logger.LogError(ex, "Google Calendar API error for user {UserId}", request.UserId);
+            return Result.Failure<List<CalendarEventItem>>("Failed to fetch calendar events. Please try again.");
         }
     }
 }

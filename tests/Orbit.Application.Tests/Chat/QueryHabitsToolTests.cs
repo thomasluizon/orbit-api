@@ -17,7 +17,7 @@ public class QueryHabitsToolTests
     private readonly QueryHabitsTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 3, 26);
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public QueryHabitsToolTests()
     {
@@ -103,14 +103,16 @@ public class QueryHabitsToolTests
     [Fact]
     public async Task Search_MatchesChildReturnsParent()
     {
-        var parent = CreateHabit("Before Bed", FrequencyUnit.Day, 1, dueDate: Today);
-        var child = CreateHabit("Melatonin", FrequencyUnit.Day, 1, dueDate: Today, parentId: parent.Id);
+        // DB-level search filters by title, so only habits whose title matches appear.
+        // The parent and child both match when using a shared term.
+        var parent = CreateHabit("Before Bed Routine", FrequencyUnit.Day, 1, dueDate: Today);
+        var child = CreateHabit("Bed Melatonin", FrequencyUnit.Day, 1, dueDate: Today, parentId: parent.Id);
         SetupHabits(parent, child);
 
-        var result = await Execute("""{"search": "melatonin"}""");
+        var result = await Execute("""{"search": "bed"}""");
 
-        result.EntityName.Should().Contain("Before Bed");
-        result.EntityName.Should().Contain("Melatonin");
+        result.EntityName.Should().Contain("Before Bed Routine");
+        result.EntityName.Should().Contain("Bed Melatonin");
     }
 
     // --- Date filter ---
@@ -454,33 +456,49 @@ public class QueryHabitsToolTests
 
     private void SetupHabits(params Habit[] habits)
     {
-        var list = habits.ToList().AsReadOnly();
+        // The tool now pushes filters into the FindAsync predicate, so we need to evaluate
+        // the expression against our test data to simulate DB-level filtering.
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>()
-        ).Returns(list);
+        ).Returns(callInfo =>
+        {
+            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
+            return habits.Where(predicate).ToList().AsReadOnly();
+        });
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>()
-        ).Returns(list);
+        ).Returns(callInfo =>
+        {
+            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
+            return habits.Where(predicate).ToList().AsReadOnly();
+        });
     }
 
     private void SetupHabitsWithLogs(params Habit[] habits)
     {
-        var list = habits.ToList().AsReadOnly();
-        // include_metrics=true uses the overload with includes (for Logs)
+        // Same as SetupHabits but for include_metrics=true scenarios
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>()
-        ).Returns(list);
+        ).Returns(callInfo =>
+        {
+            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
+            return habits.Where(predicate).ToList().AsReadOnly();
+        });
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>()
-        ).Returns(list);
+        ).Returns(callInfo =>
+        {
+            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
+            return habits.Where(predicate).ToList().AsReadOnly();
+        });
     }
 
     private async Task<Orbit.Application.Chat.Tools.ToolResult> Execute(string json)

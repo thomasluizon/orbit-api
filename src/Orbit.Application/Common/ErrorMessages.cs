@@ -20,4 +20,14 @@ public static class ErrorMessages
     public const string ApiKeyNotFound = "API key not found.";
     public const string NotificationNotFound = "Notification not found.";
     public const string NoPushSubscriptions = "No push subscriptions found for this user.";
+    public const string SubscriptionNotFound = "No subscription found.";
+    public const string InvalidBillingInterval = "Invalid billing interval.";
+    public const string ChatHistoryTooLarge = "Chat history too large.";
+    public const string MessageTooLong = "Message must be between 1 and 4000 characters.";
+    public const string StreakFreezeNotAvailable = "No streak freeze available.";
+    public const string AlreadyUsedStreakFreezeToday = "Streak freeze already used today.";
+    public const string NoActiveStreak = "No active streak to protect.";
+    public const string NotEnoughCoins = "Not enough coins.";
+    public const string SubjectRequired = "Subject is required";
+    public const string MessageRequired = "Message is required";
 }

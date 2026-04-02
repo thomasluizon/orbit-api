@@ -18,6 +18,8 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
     [HttpPost("send-code")]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendCode(
         [FromBody] SendCodeRequest request,
         CancellationToken cancellationToken)
@@ -37,6 +39,8 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
     [HttpPost("verify-code")]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> VerifyCode(
         [FromBody] VerifyCodeRequest request,
         CancellationToken cancellationToken)
@@ -56,6 +60,8 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
     [HttpPost("google")]
     [EnableRateLimiting("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GoogleAuth(
         [FromBody] GoogleAuthRequest request,
         CancellationToken cancellationToken)
@@ -75,6 +81,9 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
     [Authorize]
     [HttpPost("request-deletion")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RequestDeletion(CancellationToken cancellationToken)
     {
         var command = new RequestAccountDeletionCommand(HttpContext.GetUserId());
@@ -92,6 +101,9 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
     [Authorize]
     [HttpPost("confirm-deletion")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ConfirmDeletion(
         [FromBody] ConfirmDeletionRequest request,
         CancellationToken cancellationToken)

@@ -21,6 +21,9 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     public record SetColorSchemeRequest(string? ColorScheme);
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
     {
         var query = new GetProfileQuery(HttpContext.GetUserId());
@@ -29,6 +32,9 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
     }
 
     [HttpPut("timezone")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetTimezone(
         [FromBody] SetTimezoneRequest request,
         CancellationToken cancellationToken)
@@ -40,11 +46,14 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("Timezone changed to {Timezone} for user {UserId}", request.TimeZone, HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("ai-memory")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetAiMemory(
         [FromBody] SetAiMemoryRequest request,
         CancellationToken cancellationToken)
@@ -56,11 +65,14 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("AI memory {State} for user {UserId}", request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("ai-summary")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetAiSummary(
         [FromBody] SetAiSummaryRequest request,
         CancellationToken cancellationToken)
@@ -72,11 +84,14 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("AI summary {State} for user {UserId}", request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("language")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetLanguage(
         [FromBody] SetLanguageRequest request,
         CancellationToken cancellationToken)
@@ -88,11 +103,14 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("Language changed to {Language} for user {UserId}", request.Language, HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("week-start-day")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetWeekStartDay(
         [FromBody] SetWeekStartDayRequest request,
         CancellationToken cancellationToken)
@@ -104,11 +122,14 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("Week start day changed to {WeekStartDay} for user {UserId}", request.WeekStartDay, HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("theme-preference")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetThemePreference(
         [FromBody] SetThemePreferenceRequest request,
         CancellationToken cancellationToken)
@@ -120,11 +141,14 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("Theme preference changed to {ThemePreference} for user {UserId}", request.ThemePreference, HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("color-scheme")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetColorScheme(
         [FromBody] SetColorSchemeRequest request,
         CancellationToken cancellationToken)
@@ -136,19 +160,25 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
             logger.LogInformation("Color scheme changed to {ColorScheme} for user {UserId}", request.ColorScheme, HttpContext.GetUserId());
 
         return result.IsSuccess
-            ? Ok()
+            ? NoContent()
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("onboarding")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CompleteOnboarding(CancellationToken cancellationToken)
     {
         var command = new CompleteOnboardingCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
     [HttpPost("reset")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ResetAccount(CancellationToken cancellationToken)
     {
         var command = new ResetAccountCommand(HttpContext.GetUserId());

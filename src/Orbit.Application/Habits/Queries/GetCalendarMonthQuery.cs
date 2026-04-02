@@ -21,30 +21,19 @@ public record GetCalendarMonthQuery(
 
 public class GetCalendarMonthQueryHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> logRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<GetCalendarMonthQuery, Result<CalendarMonthResponse>>
 {
     public async Task<Result<CalendarMonthResponse>> Handle(GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
         // Validate date range (max 62 days to cover month + adjacent partial weeks)
-        if (request.DateTo.DayNumber - request.DateFrom.DayNumber > 62)
+        if (request.DateTo.DayNumber - request.DateFrom.DayNumber > AppConstants.MaxCalendarRangeDays)
             return Result.Failure<CalendarMonthResponse>("Date range must not exceed 62 days.");
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         // Advance stale bad habit DueDates (same as HandleScheduledHabits)
-        var staleBadHabits = await habitRepository.FindTrackedAsync(
-            h => h.UserId == request.UserId && h.IsBadHabit && h.FrequencyUnit != null && h.DueDate < today
-                && (!h.EndDate.HasValue || h.EndDate.Value >= today),
-            cancellationToken);
-
-        if (staleBadHabits.Count > 0)
-        {
-            foreach (var habit in staleBadHabits)
-                habit.AdvanceDueDate(today);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
 
         // Load ALL habits (no completion filter, no pagination) with logs for the range
         var logFrom = request.DateFrom.AddDays(-31); // lookback for overdue detection
@@ -84,14 +73,7 @@ public class GetCalendarMonthQueryHandler(
                 && !scheduledDates.Contains(request.DateFrom))
             {
                 var qty = habit.FrequencyQuantity ?? 1;
-                var lookbackDays = habit.FrequencyUnit switch
-                {
-                    FrequencyUnit.Day => qty,
-                    FrequencyUnit.Week => qty * 7,
-                    FrequencyUnit.Month => qty * 31,
-                    FrequencyUnit.Year => Math.Min(qty * 366, 366),
-                    _ => 7
-                };
+                var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
                 var lookbackStart = request.DateFrom.AddDays(-lookbackDays);
                 if (habit.DueDate > lookbackStart) lookbackStart = habit.DueDate;
                 var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, request.DateFrom.AddDays(-1));
@@ -109,18 +91,16 @@ public class GetCalendarMonthQueryHandler(
             }
         }
 
-        // Build logs dictionary: habitId -> logs in range
-        var habitIds = allHabits.Where(h => h.ParentHabitId == null).Select(h => h.Id).ToHashSet();
-        var rangedLogs = await logRepository.FindAsync(
-            l => habitIds.Contains(l.HabitId) && l.Date >= request.DateFrom && l.Date <= request.DateTo,
-            cancellationToken);
-
-        var logsDict = rangedLogs
-            .OrderByDescending(l => l.Date)
-            .GroupBy(l => l.HabitId)
+        // Build logs dictionary from already-loaded habit logs (no second query needed)
+        var logsDict = allHabits
+            .Where(h => h.ParentHabitId == null)
             .ToDictionary(
-                g => g.Key,
-                g => g.Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.Note, l.CreatedAtUtc)).ToList());
+                h => h.Id,
+                h => h.Logs
+                    .Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo)
+                    .OrderByDescending(l => l.Date)
+                    .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.Note, l.CreatedAtUtc))
+                    .ToList());
 
         return Result.Success(new CalendarMonthResponse(habitItems, logsDict));
     }

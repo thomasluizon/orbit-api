@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
 using Orbit.Domain.Entities;
@@ -68,7 +69,7 @@ public class AuthCommandHandlerTests
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
             .Returns("jwt-token");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -85,7 +86,7 @@ public class AuthCommandHandlerTests
     {
         SetupCacheWithCode("123456");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
         var command = new VerifyCodeCommand(TestEmail, "999999");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -105,7 +106,7 @@ public class AuthCommandHandlerTests
         _cache.Set($"verify:{TestEmail}", entry,
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -120,13 +121,11 @@ public class AuthCommandHandlerTests
     public async Task VerifyCode_NewUser_CreatesAccount()
     {
         SetupCacheWithCode("123456");
-        // No existing user
-        _userRepo.GetAllAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<User>());
+        // No existing user - FindOneTrackedAsync returns null by default with NSubstitute
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
             .Returns("jwt-token");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -145,7 +144,7 @@ public class AuthCommandHandlerTests
         _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
             .Returns("jwt-token");
 
-        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>());
+        var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _tokenService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -167,7 +166,10 @@ public class AuthCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.GetAllAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<User> { user });
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
     }
 }

@@ -23,7 +23,7 @@ public class UpdateTagCommandHandler(
             cancellationToken: cancellationToken);
 
         if (tag is null)
-            return Result.Failure(ErrorMessages.TagNotFound);
+            return Result.Failure(ErrorMessages.TagNotFound, ErrorCodes.TagNotFound);
 
         // Check for duplicate name (excluding self)
         var existing = await tagRepository.FindAsync(

@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -12,24 +14,36 @@ namespace Orbit.Infrastructure.Services;
 
 public class ReminderSchedulerService(
     IServiceScopeFactory scopeFactory,
-    ILogger<ReminderSchedulerService> logger) : BackgroundService
+    ILogger<ReminderSchedulerService> logger,
+    IConfiguration configuration) : BackgroundService
 {
+    private readonly TimeSpan _interval = TimeSpan.FromMinutes(
+        configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("ReminderSchedulerService started");
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await CheckAndSendReminders(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Error in reminder scheduler");
-            }
+                try
+                {
+                    await CheckAndSendReminders(stoppingToken);
+                    BackgroundServiceHealthCheck.RecordTick("ReminderScheduler");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Error in reminder scheduler");
+                }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        finally
+        {
+            logger.LogInformation("ReminderSchedulerService stopped");
         }
     }
 
@@ -85,9 +99,7 @@ public class ReminderSchedulerService(
         {
             if (!users.TryGetValue(habit.UserId, out var user)) continue;
 
-            var tz = user.TimeZone is not null
-                ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-                : TimeZoneInfo.Utc;
+            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
             var userToday = DateOnly.FromDateTime(userNow);
             var userTimeNow = TimeOnly.FromDateTime(userNow);
@@ -162,9 +174,7 @@ public class ReminderSchedulerService(
         {
             if (!users.TryGetValue(habit.UserId, out var user)) continue;
 
-            var tz = user.TimeZone is not null
-                ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-                : TimeZoneInfo.Utc;
+            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
             var userToday = DateOnly.FromDateTime(userNow);
             var userTomorrow = userToday.AddDays(1);
@@ -219,7 +229,7 @@ public class ReminderSchedulerService(
         return minutesBefore switch
         {
             0 => isPt ? "Agora" : "Due now",
-            < 60 => isPt ? $"Em {minutesBefore} minutos" : $"Due in {minutesBefore} minutes",
+            < 60 => isPt ? $"Em {minutesBefore} {(minutesBefore == 1 ? "minuto" : "minutos")}" : $"Due in {minutesBefore} minutes",
             < 1440 => isPt ? $"Em {minutesBefore / 60} hora{(minutesBefore / 60 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 60} hour{(minutesBefore / 60 > 1 ? "s" : "")}",
             _ => isPt ? $"Em {minutesBefore / 1440} dia{(minutesBefore / 1440 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 1440} day{(minutesBefore / 1440 > 1 ? "s" : "")}"
         };

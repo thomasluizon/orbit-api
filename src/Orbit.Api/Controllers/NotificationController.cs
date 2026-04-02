@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/notifications")]
 public class NotificationController(
     IMediator mediator,
     ILogger<NotificationController> logger) : ControllerBase
@@ -18,49 +18,67 @@ public class NotificationController(
     public record SubscribeRequest(string Endpoint, string P256dh, string Auth);
 
     [HttpGet]
-    public async Task<IActionResult> GetNotifications(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetNotifications(CancellationToken cancellationToken)
     {
         var query = new GetNotificationsQuery(HttpContext.GetUserId());
-        var result = await mediator.Send(query, ct);
+        var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
     [HttpPut("{id:guid}/read")]
-    public async Task<IActionResult> MarkAsRead(Guid id, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkAsRead(Guid id, CancellationToken cancellationToken)
     {
         var command = new MarkNotificationReadCommand(HttpContext.GetUserId(), id);
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess ? Ok() : NotFound();
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? NoContent() : NotFound(new { error = result.Error });
     }
 
     [HttpPut("read-all")]
-    public async Task<IActionResult> MarkAllAsRead(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> MarkAllAsRead(CancellationToken cancellationToken)
     {
         var command = new MarkAllNotificationsReadCommand(HttpContext.GetUserId());
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var command = new DeleteNotificationCommand(HttpContext.GetUserId(), id);
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
     [HttpDelete("all")]
-    public async Task<IActionResult> DeleteAll(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteAll(CancellationToken cancellationToken)
     {
         var command = new DeleteAllNotificationsCommand(HttpContext.GetUserId());
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
     [HttpPost("subscribe")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Subscribe(
         [FromBody] SubscribeRequest request,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var command = new SubscribePushCommand(
             HttpContext.GetUserId(),
@@ -68,7 +86,7 @@ public class NotificationController(
             request.P256dh,
             request.Auth);
 
-        var result = await mediator.Send(command, ct);
+        var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
         {
@@ -80,12 +98,15 @@ public class NotificationController(
     }
 
     [HttpPost("unsubscribe")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Unsubscribe(
         [FromBody] SubscribeRequest request,
-        CancellationToken ct)
+        CancellationToken cancellationToken)
     {
         var command = new UnsubscribePushCommand(HttpContext.GetUserId(), request.Endpoint);
-        var result = await mediator.Send(command, ct);
+        var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
             logger.LogInformation("Push subscription removed for user {UserId}", HttpContext.GetUserId());
@@ -94,10 +115,13 @@ public class NotificationController(
     }
 
     [HttpPost("test-push")]
-    public async Task<IActionResult> TestPush(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> TestPush(CancellationToken cancellationToken)
     {
         var command = new TestPushNotificationCommand(HttpContext.GetUserId());
-        var result = await mediator.Send(command, ct);
+        var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });

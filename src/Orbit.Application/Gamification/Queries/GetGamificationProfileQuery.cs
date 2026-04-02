@@ -33,7 +33,7 @@ public class GetGamificationProfileQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, ct);
         if (user is null)
-            return Result.Failure<GamificationProfileResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<GamificationProfileResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (!user.HasProAccess)
             return Result.PayGateFailure<GamificationProfileResponse>("Gamification is a Pro feature. Upgrade to unlock!");

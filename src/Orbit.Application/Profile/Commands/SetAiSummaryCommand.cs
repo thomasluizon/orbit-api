@@ -19,7 +19,7 @@ public class SetAiSummaryCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         user.SetAiSummary(request.Enabled);
 

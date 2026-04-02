@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
@@ -11,6 +12,7 @@ public class ProfileCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
 
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -45,7 +47,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _cache);
         var command = new SetTimezoneCommand(UserId, "America/New_York");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -60,7 +62,7 @@ public class ProfileCommandHandlerTests
     {
         SetupUserNotFound();
 
-        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _cache);
         var command = new SetTimezoneCommand(UserId, "America/New_York");
 
         var result = await handler.Handle(command, CancellationToken.None);

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Security.Claims;
 using MediatR;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
@@ -14,7 +15,8 @@ namespace Orbit.Api.Mcp.Tools;
 public class SubscriptionTools(
     IGenericRepository<User> userRepository,
     IPayGateService payGate,
-    IMediator mediator)
+    IMediator mediator,
+    IOptions<FrontendSettings> frontendSettings)
 {
     [McpServerTool(Name = "get_subscription_status"), Description("Get the user's subscription status, plan, trial info, and AI message usage.")]
     public async Task<string> GetSubscriptionStatus(
@@ -67,7 +69,7 @@ public class SubscriptionTools(
         if (result.IsFailure)
             return $"Error: {result.Error}";
 
-        return $"Referral Code: {result.Value}\nLink: https://app.useorbit.org/r/{result.Value}";
+        return $"Referral Code: {result.Value}\nLink: {frontendSettings.Value.BaseUrl}/r/{result.Value}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

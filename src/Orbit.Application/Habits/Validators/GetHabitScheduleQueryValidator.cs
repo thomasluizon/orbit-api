@@ -34,6 +34,6 @@ public class GetHabitScheduleQueryValidator : AbstractValidator<GetHabitSchedule
             .GreaterThanOrEqualTo(1);
 
         RuleFor(q => q.PageSize)
-            .InclusiveBetween(1, 100);
+            .InclusiveBetween(1, AppConstants.MaxPageSize);
     }
 }

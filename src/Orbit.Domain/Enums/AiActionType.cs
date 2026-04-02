@@ -3,5 +3,13 @@ namespace Orbit.Domain.Enums;
 public enum AiActionType
 {
     CreateHabit,
-    SuggestBreakdown
+    LogHabit,
+    UpdateHabit,
+    DeleteHabit,
+    SkipHabit,
+    CreateSubHabit,
+    SuggestBreakdown,
+    AssignTags,
+    DuplicateHabit,
+    MoveHabit
 }

@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -29,7 +30,8 @@ public record BulkHabitItem(
     bool IsGeneral = false,
     DateOnly? EndDate = null,
     bool IsFlexible = false,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -48,7 +50,8 @@ public class BulkCreateHabitsCommandHandler(
     IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
+    IMemoryCache cache,
+    ILogger<BulkCreateHabitsCommandHandler> logger) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
 {
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
@@ -97,7 +100,8 @@ public class BulkCreateHabitsCommandHandler(
                         reminderTimes: item.ReminderTimes,
                         isGeneral: item.IsGeneral,
                         isFlexible: item.IsFlexible,
-                        scheduledReminders: item.ScheduledReminders);
+                        scheduledReminders: item.ScheduledReminders,
+                        checklistItems: item.ChecklistItems);
 
                     if (habitResult.IsFailure)
                     {
@@ -165,11 +169,12 @@ public class BulkCreateHabitsCommandHandler(
                 }
                 catch (Exception ex)
                 {
+                    logger.LogWarning(ex, "BulkCreate item {Index} failed", i);
                     results.Add(new BulkCreateItemResult(
                         Index: i,
                         Status: BulkItemStatus.Failed,
                         Title: item.Title,
-                        Error: ex.Message));
+                        Error: "An error occurred processing this item"));
                 }
             }
 

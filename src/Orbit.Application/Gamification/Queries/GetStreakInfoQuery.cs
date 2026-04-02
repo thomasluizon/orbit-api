@@ -29,7 +29,7 @@ public class GetStreakInfoQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<StreakInfoResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<StreakInfoResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 

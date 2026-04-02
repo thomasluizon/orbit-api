@@ -23,20 +23,20 @@ public class ProcessReferralCodeCommandHandler(
             cancellationToken: cancellationToken);
 
         if (referrer is null)
-            return Result.Failure(ErrorMessages.InvalidReferralCode);
+            return Result.Failure(ErrorMessages.InvalidReferralCode, ErrorCodes.InvalidReferralCode);
 
         if (referrer.Id == request.NewUserId)
-            return Result.Failure(ErrorMessages.SelfReferral);
+            return Result.Failure(ErrorMessages.SelfReferral, ErrorCodes.SelfReferral);
 
         var newUser = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.NewUserId,
             cancellationToken: cancellationToken);
 
         if (newUser is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (newUser.ReferredByUserId is not null)
-            return Result.Failure(ErrorMessages.AlreadyReferred);
+            return Result.Failure(ErrorMessages.AlreadyReferred, ErrorCodes.AlreadyReferred);
 
         // Count referrer's successful referrals (Completed or Rewarded)
         var successfulReferrals = await referralRepository.FindAsync(
@@ -45,7 +45,7 @@ public class ProcessReferralCodeCommandHandler(
 
         var maxReferrals = await appConfigService.GetAsync(AppConfigKeys.MaxReferrals, AppConstants.DefaultMaxReferrals, cancellationToken);
         if (successfulReferrals.Count >= maxReferrals)
-            return Result.Failure(ErrorMessages.ReferralCapReached);
+            return Result.Failure(ErrorMessages.ReferralCapReached, ErrorCodes.ReferralCapReached);
 
         newUser.SetReferredBy(referrer.Id);
 

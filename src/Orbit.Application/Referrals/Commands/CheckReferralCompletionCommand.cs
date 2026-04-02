@@ -143,7 +143,7 @@ public class CheckReferralCompletionCommandHandler(
                        : "Your friend joined Orbit and you earned a 10% discount coupon for Pro!")
             : (isPt ? "Você ganhou um cupom!" : "You earned a coupon!",
                isPt
-                   ? "Bem-vindo ao Orbit! Você ganhou um cupom de 10% de desconto no Pro!"
+                   ? "Boas-vindas ao Orbit! Você ganhou um cupom de 10% de desconto no Pro!"
                    : "Welcome to Orbit! You earned a 10% discount coupon for Pro!");
 
         await notificationRepository.AddAsync(

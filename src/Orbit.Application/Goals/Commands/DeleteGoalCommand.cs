@@ -21,7 +21,7 @@ public class DeleteGoalCommandHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
         goalRepository.Remove(goal);
         await unitOfWork.SaveChangesAsync(cancellationToken);

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Queries;
@@ -20,7 +21,8 @@ public class GetReferralStatsQueryHandlerTests
 
     public GetReferralStatsQueryHandlerTests()
     {
-        _handler = new GetReferralStatsQueryHandler(_userRepo, _referralRepo, _appConfig);
+        _handler = new GetReferralStatsQueryHandler(_userRepo, _referralRepo, _appConfig,
+            Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" }));
 
         _appConfig.GetAsync("MaxReferrals", AppConstants.DefaultMaxReferrals, Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultMaxReferrals);

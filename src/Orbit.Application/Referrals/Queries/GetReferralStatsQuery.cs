@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,13 +22,14 @@ public record GetReferralStatsQuery(Guid UserId) : IRequest<Result<ReferralStats
 public class GetReferralStatsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Referral> referralRepository,
-    IAppConfigService appConfigService) : IRequestHandler<GetReferralStatsQuery, Result<ReferralStatsResponse>>
+    IAppConfigService appConfigService,
+    IOptions<FrontendSettings> frontendSettings) : IRequestHandler<GetReferralStatsQuery, Result<ReferralStatsResponse>>
 {
     public async Task<Result<ReferralStatsResponse>> Handle(GetReferralStatsQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<ReferralStatsResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<ReferralStatsResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var referrals = await referralRepository.FindAsync(
             r => r.ReferrerId == request.UserId,
@@ -40,7 +42,7 @@ public class GetReferralStatsQueryHandler(
             "MaxReferrals", AppConstants.DefaultMaxReferrals, cancellationToken);
 
         var referralLink = user.ReferralCode is not null
-            ? $"https://app.useorbit.org/r/{user.ReferralCode}"
+            ? $"{frontendSettings.Value.BaseUrl}/r/{user.ReferralCode}"
             : null;
 
         return Result.Success(new ReferralStatsResponse(

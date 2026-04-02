@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -18,9 +19,7 @@ public class UserDateService(
             cache.Set(cacheKey, tzId, TimeSpan.FromMinutes(15));
         }
 
-        var timeZone = tzId is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(tzId)
-            : TimeZoneInfo.Utc;
+        var timeZone = TimeZoneHelper.FindTimeZone(tzId);
         return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
     }
 }

@@ -1,29 +1,45 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
 public class HabitDueDateAdvancementService(
     IServiceScopeFactory scopeFactory,
-    ILogger<HabitDueDateAdvancementService> logger) : BackgroundService
+    ILogger<HabitDueDateAdvancementService> logger,
+    IConfiguration configuration) : BackgroundService
 {
+    private readonly TimeSpan _interval = TimeSpan.FromMinutes(
+        configuration.GetValue("BackgroundServices:DueDateAdvancementIntervalMinutes", 30));
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await AdvanceStaleDueDates(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Error in habit due date advancement");
-            }
+        logger.LogInformation("HabitDueDateAdvancementService started");
 
-            await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await AdvanceStaleDueDates(stoppingToken);
+                    BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Error in habit due date advancement");
+                }
+
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        finally
+        {
+            logger.LogInformation("HabitDueDateAdvancementService stopped");
         }
     }
 
@@ -37,6 +53,7 @@ public class HabitDueDateAdvancementService(
         var habits = await dbContext.Habits
             .Where(h => !h.IsCompleted
                 && h.FrequencyUnit != null
+                && h.FrequencyQuantity != null
                 && !h.IsFlexible
                 && h.DueDate < cutoff)
             .ToListAsync(ct);
@@ -53,9 +70,7 @@ public class HabitDueDateAdvancementService(
         {
             if (!users.TryGetValue(habit.UserId, out var user)) continue;
 
-            var tz = user.TimeZone is not null
-                ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-                : TimeZoneInfo.Utc;
+            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
             var userToday = DateOnly.FromDateTime(userNow);
 

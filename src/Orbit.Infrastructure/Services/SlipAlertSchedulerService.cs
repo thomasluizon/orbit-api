@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -11,26 +13,38 @@ namespace Orbit.Infrastructure.Services;
 
 public class SlipAlertSchedulerService(
     IServiceScopeFactory scopeFactory,
-    ILogger<SlipAlertSchedulerService> logger) : BackgroundService
+    ILogger<SlipAlertSchedulerService> logger,
+    IConfiguration configuration) : BackgroundService
 {
     private const int DefaultMorningHour = 8;
+
+    private readonly TimeSpan _interval = TimeSpan.FromMinutes(
+        configuration.GetValue("BackgroundServices:SlipAlertIntervalMinutes", 5));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("SlipAlertSchedulerService started");
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await CheckAndSendAlerts(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Error in slip alert scheduler");
-            }
+                try
+                {
+                    await CheckAndSendAlerts(stoppingToken);
+                    BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Error in slip alert scheduler");
+                }
 
-            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        finally
+        {
+            logger.LogInformation("SlipAlertSchedulerService stopped");
         }
     }
 
@@ -81,9 +95,7 @@ public class SlipAlertSchedulerService(
         {
             if (!users.TryGetValue(habit.UserId, out var user)) continue;
 
-            var tz = user.TimeZone is not null
-                ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-                : TimeZoneInfo.Utc;
+            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
             var userToday = DateOnly.FromDateTime(userNow);
             var userTimeNow = TimeOnly.FromDateTime(userNow);

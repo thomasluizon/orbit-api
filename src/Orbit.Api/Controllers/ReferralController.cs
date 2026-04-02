@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Application.Referrals.Queries;
 
@@ -9,26 +11,34 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/[controller]")]
-public class ReferralController(IMediator mediator) : ControllerBase
+[Route("api/referrals")]
+public class ReferralController(
+    IMediator mediator,
+    IOptions<FrontendSettings> frontendSettings) : ControllerBase
 {
-    [HttpGet("code")]
-    public async Task<IActionResult> GetOrCreateCode(CancellationToken ct)
+    [HttpPost("code")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetOrCreateCode(CancellationToken cancellationToken)
     {
         var userId = HttpContext.GetUserId();
-        var result = await mediator.Send(new GetOrCreateReferralCodeCommand(userId), ct);
+        var result = await mediator.Send(new GetOrCreateReferralCodeCommand(userId), cancellationToken);
 
         if (result.IsSuccess)
-            return Ok(new { code = result.Value, link = $"https://app.useorbit.org/r/{result.Value}" });
+            return Ok(new { code = result.Value, link = $"{frontendSettings.Value.BaseUrl}/r/{result.Value}" });
 
         return BadRequest(new { error = result.Error });
     }
 
     [HttpGet("stats")]
-    public async Task<IActionResult> GetStats(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetStats(CancellationToken cancellationToken)
     {
         var userId = HttpContext.GetUserId();
-        var result = await mediator.Send(new GetReferralStatsQuery(userId), ct);
+        var result = await mediator.Send(new GetReferralStatsQuery(userId), cancellationToken);
 
         if (result.IsSuccess)
             return Ok(result.Value);
@@ -37,10 +47,13 @@ public class ReferralController(IMediator mediator) : ControllerBase
     }
 
     [HttpGet("dashboard")]
-    public async Task<IActionResult> GetDashboard(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetDashboard(CancellationToken cancellationToken)
     {
         var userId = HttpContext.GetUserId();
-        var result = await mediator.Send(new GetReferralDashboardQuery(userId), ct);
+        var result = await mediator.Send(new GetReferralDashboardQuery(userId), cancellationToken);
 
         if (result.IsSuccess)
             return Ok(result.Value);

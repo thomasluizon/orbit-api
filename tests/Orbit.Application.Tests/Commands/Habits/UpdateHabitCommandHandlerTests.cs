@@ -14,6 +14,7 @@ public class UpdateHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<SentReminder> _sentReminderRepo = Substitute.For<IGenericRepository<SentReminder>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -25,7 +26,7 @@ public class UpdateHabitCommandHandlerTests
     public UpdateHabitCommandHandlerTests()
     {
         _handler = new UpdateHabitCommandHandler(
-            _habitRepo, _sentReminderRepo, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _sentReminderRepo, _goalRepo, _userDateService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -129,11 +130,11 @@ public class UpdateHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        _sentReminderRepo.FindOneTrackedAsync(
+        // Handler now uses FindAsync to load sent reminders for the date
+        _sentReminderRepo.FindAsync(
             Arg.Any<Expression<Func<SentReminder, bool>>>(),
-            Arg.Any<Func<IQueryable<SentReminder>, IQueryable<SentReminder>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(reminder);
+            .Returns(new List<SentReminder> { reminder }.AsReadOnly());
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
@@ -155,7 +156,9 @@ public class UpdateHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
+        // CacheInvalidationHelper uses DateOnly.FromDateTime(DateTime.UtcNow) internally
+        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new UpdateHabitCommand(

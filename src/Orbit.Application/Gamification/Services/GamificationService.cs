@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
@@ -15,7 +17,8 @@ public class GamificationService(
     IGenericRepository<Notification> notificationRepository,
     IPushNotificationService pushService,
     IUserDateService userDateService,
-    IUnitOfWork unitOfWork) : IGamificationService
+    IUnitOfWork unitOfWork,
+    ILogger<GamificationService> logger) : IGamificationService
 {
     public async Task<HabitLogGamificationResult?> ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default)
     {
@@ -39,9 +42,7 @@ public class GamificationService(
         if (habit is null) return null;
 
         // Calculate XP: 10 base + streak bonus
-        var userTz = user.TimeZone is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-            : TimeZoneInfo.Utc;
+        var userTz = TimeZoneHelper.FindTimeZone(user.TimeZone);
         var metrics = HabitMetricsCalculator.Calculate(habit, today, userTz);
         var xp = 10 + metrics.CurrentStreak;
         user.AddXp(xp);
@@ -77,12 +78,12 @@ public class GamificationService(
         }
 
         // --- Early Bird / Night Owl ---
-        await CheckTimeBasedAchievements(userId, user, earned, newAchievements, ct);
+        await CheckTimeBasedAchievements(userId, user, earned, newAchievements, allUserHabits, ct);
 
         // --- Comeback ---
         if (!earned.Contains(AchievementDefinitions.Comeback))
         {
-            await CheckComeback(userId, today, earned, user, newAchievements, ct);
+            await CheckComeback(userId, today, earned, user, newAchievements, allUserHabits, ct);
         }
 
         // --- Bad Habit Breaker ---
@@ -128,7 +129,7 @@ public class GamificationService(
         // First Orbit: first habit created
         if (!earned.Contains(AchievementDefinitions.FirstOrbit))
         {
-            var habitCount = (await habitRepository.FindAsync(h => h.UserId == userId && h.ParentHabitId == null, ct)).Count;
+            var habitCount = await habitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
             if (habitCount == 1)
                 TryGrant(AchievementDefinitions.FirstOrbit, user, earned, newAchievements);
         }
@@ -159,7 +160,7 @@ public class GamificationService(
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
         var previousLevel = user.Level;
 
-        var goalCount = (await goalRepository.FindAsync(g => g.UserId == userId, ct)).Count;
+        var goalCount = await goalRepository.CountAsync(g => g.UserId == userId, ct);
 
         // Mission Control: first goal
         if (!earned.Contains(AchievementDefinitions.MissionControl) && goalCount == 1)
@@ -198,8 +199,8 @@ public class GamificationService(
         // 100 XP for goal completion
         user.AddXp(100);
 
-        var completedGoals = (await goalRepository.FindAsync(
-            g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct)).Count;
+        var completedGoals = await goalRepository.CountAsync(
+            g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
 
         // Goal Crusher: first completed goal
         if (!earned.Contains(AchievementDefinitions.GoalCrusher) && completedGoals == 1)
@@ -363,17 +364,17 @@ public class GamificationService(
         User user,
         HashSet<string> earned,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
+        IReadOnlyList<Habit> allUserHabits,
         CancellationToken ct)
     {
         var checkEarly = !earned.Contains(AchievementDefinitions.EarlyBird);
         var checkNight = !earned.Contains(AchievementDefinitions.NightOwl);
         if (!checkEarly && !checkNight) return;
 
-        var userTz = TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone ?? "UTC");
+        var userTz = TimeZoneHelper.FindTimeZone(user.TimeZone);
 
-        // Load all habit IDs for this user
-        var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, ct);
-        var habitIds = userHabits.Select(h => h.Id).ToList();
+        // Use pre-loaded habits instead of re-querying
+        var habitIds = allUserHabits.Select(h => h.Id).ToList();
         if (habitIds.Count == 0) return;
 
         // Load recent logs only -- 90 days is more than enough to detect 10 qualifying entries
@@ -410,15 +411,15 @@ public class GamificationService(
         HashSet<string> earned,
         User user,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
+        IReadOnlyList<Habit> allUserHabits,
         CancellationToken ct)
     {
         if (earned.Contains(AchievementDefinitions.Comeback)) return;
 
         var sevenDaysAgo = today.AddDays(-7);
 
-        // Load all habit IDs for this user
-        var userHabits = await habitRepository.FindAsync(h => h.UserId == userId, ct);
-        var habitIds = userHabits.Select(h => h.Id).ToList();
+        // Use pre-loaded habits instead of re-querying
+        var habitIds = allUserHabits.Select(h => h.Id).ToList();
         if (habitIds.Count == 0) return;
 
         // Check for any logs in the 7 days before today (not including today)
@@ -458,7 +459,7 @@ public class GamificationService(
         ["legendary"] = ("Lendário", "Complete 1.000 hábitos no total"),
         ["goal_setter"] = ("Definidor de Metas", "Crie 3 metas"),
         ["goal_crusher"] = ("Destruidor de Metas", "Complete sua primeira meta"),
-        ["overachiever"] = ("Superador", "Complete 5 metas"),
+        ["overachiever"] = ("Acima das Expectativas", "Complete 5 metas"),
         ["dream_maker"] = ("Realizador de Sonhos", "Complete 10 metas"),
         ["perfect_day"] = ("Dia Perfeito", "Complete todos os hábitos em um dia"),
         ["perfect_week"] = ("Semana Perfeita", "Complete todos os hábitos por 7 dias consecutivos"),
@@ -466,7 +467,21 @@ public class GamificationService(
         ["early_bird"] = ("Madrugador", "Complete um hábito antes das 7h (10 vezes)"),
         ["night_owl"] = ("Coruja Noturna", "Complete um hábito após as 22h (10 vezes)"),
         ["comeback"] = ("Retorno", "Retome após 7+ dias de inatividade"),
-        ["bad_habit_breaker"] = ("Quebrador de Maus Hábitos", "Alcance 30 dias sem um mau hábito"),
+        ["bad_habit_breaker"] = ("Quebrador de Maus Hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
+    };
+
+    private static readonly Dictionary<int, string> LevelTranslationsPt = new()
+    {
+        [1] = "Iniciante",
+        [2] = "Explorador",
+        [3] = "Orbitador",
+        [4] = "Navegador",
+        [5] = "Piloto",
+        [6] = "Capitão",
+        [7] = "Comandante",
+        [8] = "Almirante",
+        [9] = "Elite",
+        [10] = "Lenda"
     };
 
     private async Task SendAchievementNotification(Guid userId, AchievementDefinition achievement, string? language, CancellationToken ct)
@@ -497,9 +512,9 @@ public class GamificationService(
         {
             await pushService.SendToUserAsync(userId, title, body, cancellationToken: ct);
         }
-        catch
+        catch (Exception ex)
         {
-            // Push failure should not block gamification
+            logger.LogWarning(ex, "Push notification failed for achievement {AchievementId} for user {UserId}", achievement.Id, userId);
         }
     }
 
@@ -507,10 +522,12 @@ public class GamificationService(
     {
         var isPt = language?.StartsWith("pt") == true;
         var title = isPt
-            ? $"Subiu de nível! Agora você é Nível {newLevel.Level}"
+            ? $"Subiu de nível! Agora você está no nível {newLevel.Level}"
             : $"Level Up! You're now Level {newLevel.Level}";
+        var levelTitle = isPt && LevelTranslationsPt.TryGetValue(newLevel.Level, out var ptTitle)
+            ? ptTitle : newLevel.Title;
         var body = isPt
-            ? $"Você alcançou {newLevel.Title}! Continue assim!"
+            ? $"Você alcançou {levelTitle}! Continue assim!"
             : $"You've reached {newLevel.Title}! Keep going!";
 
         var notification = Notification.Create(userId, title, body);
@@ -520,9 +537,9 @@ public class GamificationService(
         {
             await pushService.SendToUserAsync(userId, title, body, cancellationToken: ct);
         }
-        catch
+        catch (Exception ex)
         {
-            // Push failure should not block gamification
+            logger.LogWarning(ex, "Push notification failed for level up to level {Level} for user {UserId}", newLevel.Level, userId);
         }
     }
 

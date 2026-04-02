@@ -75,10 +75,10 @@ public class GetHabitScheduleQueryValidatorTests
     }
 
     [Fact]
-    public void Validate_PageSizeOver100_HasError()
+    public void Validate_PageSizeOver200_HasError()
     {
         // Arrange
-        var query = ValidQuery() with { PageSize = 101 };
+        var query = ValidQuery() with { PageSize = 201 };
 
         // Act
         var result = _validator.TestValidate(query);
