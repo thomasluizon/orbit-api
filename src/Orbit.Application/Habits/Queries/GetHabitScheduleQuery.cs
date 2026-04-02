@@ -152,7 +152,9 @@ public class GetHabitScheduleQueryHandler(
 
         // Include Logs for flexible habits so we can compute window progress
         // Filter logs to the requested date range (extended by overdue window) to avoid loading all historical logs
-        var logFrom = (request.DateFrom ?? today).AddDays(-AppConstants.DefaultOverdueWindowDays);
+        // Load logs with enough lookback for recurring overdue detection (monthly habits need ~31 days)
+        var overdueLookbackDays = request.IncludeOverdue ? 31 : AppConstants.DefaultOverdueWindowDays;
+        var logFrom = (request.DateFrom ?? today).AddDays(-overdueLookbackDays);
         var logTo = request.DateTo ?? today;
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
@@ -212,11 +214,39 @@ public class GetHabitScheduleQueryHandler(
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
             var isOverdue = false;
 
-            // Flexible habits should NOT appear as overdue
+            // One-time tasks: overdue if due date has passed
             if (!habit.IsFlexible && habit.FrequencyUnit == null && request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && habit.DueDate < dateFrom
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom))
             {
                 isOverdue = true;
+            }
+
+            // Recurring habits: overdue if a past occurrence was missed and habit is not due today
+            if (!isOverdue && !habit.IsFlexible && habit.FrequencyUnit != null
+                && request.IncludeOverdue && !habit.IsBadHabit
+                && !scheduledDates.Contains(dateFrom))
+            {
+                var qty = habit.FrequencyQuantity ?? 1;
+                var lookbackDays = habit.FrequencyUnit switch
+                {
+                    FrequencyUnit.Day => qty,
+                    FrequencyUnit.Week => qty * 7,
+                    FrequencyUnit.Month => qty * 31,
+                    FrequencyUnit.Year => Math.Min(qty * 366, 366),
+                    _ => 7
+                };
+
+                var lookbackStart = dateFrom.AddDays(-lookbackDays);
+                if (habit.DueDate > lookbackStart)
+                    lookbackStart = habit.DueDate;
+
+                var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, dateFrom.AddDays(-1));
+                var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
+
+                if (pastDates.Any(d => !logDates.Contains(d)))
+                {
+                    isOverdue = true;
+                }
             }
 
             var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo);
