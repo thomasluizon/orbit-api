@@ -21,7 +21,7 @@ public class TestPushNotificationCommandHandler(
             cancellationToken);
 
         if (subscriptionCount == 0)
-            return Result.Failure<TestPushNotificationResponse>(ErrorMessages.NoPushSubscriptions);
+            return Result.Failure<TestPushNotificationResponse>(ErrorMessages.NoPushSubscriptions, ErrorCodes.NoPushSubscriptions);
 
         try
         {

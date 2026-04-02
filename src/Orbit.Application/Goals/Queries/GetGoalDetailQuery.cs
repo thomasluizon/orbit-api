@@ -31,7 +31,7 @@ public class GetGoalDetailQueryHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);
+            return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
         // Build detail DTO (same as GetGoalByIdQueryHandler)
         var progressPercentage = goal.TargetValue > 0

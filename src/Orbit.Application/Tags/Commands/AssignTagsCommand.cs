@@ -31,7 +31,7 @@ public class AssignTagsCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         // Load requested tags (tracked so EF doesn't try to re-insert them)
         var tags = await tagRepository.FindTrackedAsync(

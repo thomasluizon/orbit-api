@@ -27,7 +27,7 @@ public class CreateCheckoutCommandHandler(
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
         if (user is null)
-            return Result.Failure<CheckoutResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<CheckoutResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var countryCode = await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
         var isBrazil = countryCode == "BR";
@@ -35,7 +35,7 @@ public class CreateCheckoutCommandHandler(
         var allowedIntervals = new[] { "monthly", "yearly" };
         var interval = request.Interval?.ToLower();
         if (string.IsNullOrEmpty(interval) || !allowedIntervals.Contains(interval))
-            return Result.Failure<CheckoutResponse>(ErrorMessages.InvalidBillingInterval);
+            return Result.Failure<CheckoutResponse>(ErrorMessages.InvalidBillingInterval, ErrorCodes.InvalidBillingInterval);
 
         var priceId = (interval, isBrazil) switch
         {

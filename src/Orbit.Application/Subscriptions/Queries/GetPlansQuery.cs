@@ -25,7 +25,7 @@ public class GetPlansQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<PlansResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<PlansResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var countryCode = await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
         var isBrazil = countryCode == "BR";

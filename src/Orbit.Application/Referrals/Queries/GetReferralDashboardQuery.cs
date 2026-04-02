@@ -36,7 +36,7 @@ public class GetReferralDashboardQueryHandler(
         // Build stats inline (same logic as GetReferralStatsQueryHandler)
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<ReferralDashboardResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<ReferralDashboardResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var referrals = await referralRepository.FindAsync(
             r => r.ReferrerId == request.UserId,

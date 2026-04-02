@@ -17,7 +17,7 @@ public class ClaimAdRewardCommandHandler(
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
         if (user is null)
-            return Result.Failure<AdRewardResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<AdRewardResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var result = user.GrantAdReward();
         if (result.IsFailure)

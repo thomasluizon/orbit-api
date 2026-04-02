@@ -21,7 +21,7 @@ public class SetTimezoneCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var result = user.SetTimeZone(request.TimeZone);
 

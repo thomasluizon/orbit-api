@@ -51,7 +51,7 @@ public class GetProfileQueryHandler(
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
 
         if (user is null)
-            return Result.Failure<ProfileResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<ProfileResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var aiMessageLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
 

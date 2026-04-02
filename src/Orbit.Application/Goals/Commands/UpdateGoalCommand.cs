@@ -26,7 +26,7 @@ public class UpdateGoalCommandHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
         var result = goal.Update(request.Title, request.Description, request.TargetValue, request.Unit, request.Deadline);
         if (result.IsFailure) return result;

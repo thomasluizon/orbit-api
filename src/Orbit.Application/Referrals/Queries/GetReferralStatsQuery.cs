@@ -29,7 +29,7 @@ public class GetReferralStatsQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<ReferralStatsResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<ReferralStatsResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var referrals = await referralRepository.FindAsync(
             r => r.ReferrerId == request.UserId,

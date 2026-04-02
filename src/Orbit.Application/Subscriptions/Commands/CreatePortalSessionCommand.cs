@@ -23,10 +23,10 @@ public class CreatePortalSessionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<PortalResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<PortalResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (string.IsNullOrEmpty(user.StripeCustomerId))
-            return Result.Failure<PortalResponse>(ErrorMessages.SubscriptionNotFound);
+            return Result.Failure<PortalResponse>(ErrorMessages.SubscriptionNotFound, ErrorCodes.SubscriptionNotFound);
 
         try
         {

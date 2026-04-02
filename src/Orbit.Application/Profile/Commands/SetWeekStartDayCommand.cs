@@ -19,7 +19,7 @@ public class SetWeekStartDayCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var result = user.SetWeekStartDay(request.WeekStartDay);
 

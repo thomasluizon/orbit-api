@@ -19,7 +19,7 @@ public class MarkNotificationReadCommandHandler(
             cancellationToken: cancellationToken);
 
         if (notification is null)
-            return Result.Failure(ErrorMessages.NotificationNotFound);
+            return Result.Failure(ErrorMessages.NotificationNotFound, ErrorCodes.NotificationNotFound);
 
         notification.MarkAsRead();
         await unitOfWork.SaveChangesAsync(cancellationToken);

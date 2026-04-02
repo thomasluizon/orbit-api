@@ -16,7 +16,7 @@ public class GetSubscriptionStatusQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<SubscriptionStatusResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<SubscriptionStatusResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         return Result.Success(new SubscriptionStatusResponse(
             user.HasProAccess ? "pro" : "free",

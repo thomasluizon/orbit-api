@@ -31,13 +31,13 @@ public class ActivateStreakFreezeCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         // Validate streak > 0
         if (user.CurrentStreak <= 0)
-            return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoActiveStreak);
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoActiveStreak, ErrorCodes.NoActiveStreak);
 
         // Check if user already logged a habit today
         var userHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
@@ -59,7 +59,7 @@ public class ActivateStreakFreezeCommandHandler(
             cancellationToken);
 
         if (existingFreeze.Count > 0)
-            return Result.Failure<StreakFreezeResponse>(ErrorMessages.AlreadyUsedStreakFreezeToday);
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.AlreadyUsedStreakFreezeToday, ErrorCodes.AlreadyUsedStreakFreezeToday);
 
         // Count freezes in rolling 30-day window
         var windowStart = today.AddDays(-29);
@@ -68,7 +68,7 @@ public class ActivateStreakFreezeCommandHandler(
             cancellationToken);
 
         if (recentFreezes.Count >= MaxFreezesPerMonth)
-            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable);
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable, ErrorCodes.StreakFreezeNotAvailable);
 
         // Create freeze
         var freeze = StreakFreeze.Create(request.UserId, today);

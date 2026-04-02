@@ -19,7 +19,7 @@ public class SetThemePreferenceCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var result = user.SetThemePreference(request.Preference);
         if (!result.IsSuccess)

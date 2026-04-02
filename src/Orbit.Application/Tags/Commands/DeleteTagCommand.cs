@@ -21,7 +21,7 @@ public class DeleteTagCommandHandler(
             cancellationToken: cancellationToken);
 
         if (tag is null)
-            return Result.Failure(ErrorMessages.TagNotFound);
+            return Result.Failure(ErrorMessages.TagNotFound, ErrorCodes.TagNotFound);
 
         tagRepository.Remove(tag);
         await unitOfWork.SaveChangesAsync(cancellationToken);

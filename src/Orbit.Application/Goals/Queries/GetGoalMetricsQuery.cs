@@ -24,7 +24,7 @@ public class GetGoalMetricsQueryHandler(
             cancellationToken);
 
         if (goal is null)
-            return Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound);
+            return Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var metrics = GoalMetricsCalculator.Calculate(goal, userToday);
