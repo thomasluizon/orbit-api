@@ -72,6 +72,8 @@ public class UpdateHabitCommandHandler(
             checklistItems: request.ChecklistItems,
             isGeneral: request.IsGeneral,
             isFlexible: request.IsFlexible,
+            endDate: request.EndDate,
+            clearEndDate: request.ClearEndDate,
             scheduledReminders: request.ScheduledReminders);
 
         if (result.IsFailure)

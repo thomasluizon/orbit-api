@@ -7,7 +7,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class AssignTagsTool(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<Tag> tagRepository) : IAiTool
+    IGenericRepository<Tag> tagRepository,
+    IUnitOfWork unitOfWork) : IAiTool
 {
     public string Name => "assign_tags";
 
@@ -65,6 +66,8 @@ public class AssignTagsTool(
             habit.RemoveTag(existing);
         foreach (var tag in resolvedTags)
             habit.AddTag(tag);
+
+        await unitOfWork.SaveChangesAsync(ct);
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }

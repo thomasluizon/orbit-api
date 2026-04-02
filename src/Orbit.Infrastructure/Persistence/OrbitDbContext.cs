@@ -33,6 +33,7 @@ public class OrbitDbContext : DbContext
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+    public DbSet<ChecklistTemplate> ChecklistTemplates => Set<ChecklistTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -254,6 +255,24 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"));
+        });
+
+        modelBuilder.Entity<ChecklistTemplate>(entity =>
+        {
+            entity.HasIndex(ct => ct.UserId);
+            entity.HasOne<User>().WithMany().HasForeignKey(ct => ct.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(ct => ct.Name).HasMaxLength(100);
+            entity.Property(ct => ct.Items)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+                .HasColumnType("jsonb")
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(
+                    new ValueComparer<IReadOnlyList<string>>(
+                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
+                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
+                        c => JsonSerializer.Deserialize<List<string>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
         });
     }
 }
