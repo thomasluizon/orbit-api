@@ -101,6 +101,14 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         return BadRequest(new { error = result.Error });
     }
 
+    [HttpGet("{id:guid}/detail")]
+    public async Task<IActionResult> GetGoalDetail(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetGoalDetailQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+    }
+
     [HttpGet("{id:guid}/metrics")]
     public async Task<IActionResult> GetGoalMetrics(Guid id, CancellationToken cancellationToken)
     {

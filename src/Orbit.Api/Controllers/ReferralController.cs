@@ -35,4 +35,16 @@ public class ReferralController(IMediator mediator) : ControllerBase
 
         return BadRequest(new { error = result.Error });
     }
+
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> GetDashboard(CancellationToken ct)
+    {
+        var userId = HttpContext.GetUserId();
+        var result = await mediator.Send(new GetReferralDashboardQuery(userId), ct);
+
+        if (result.IsSuccess)
+            return Ok(result.Value);
+
+        return BadRequest(new { error = result.Error });
+    }
 }
