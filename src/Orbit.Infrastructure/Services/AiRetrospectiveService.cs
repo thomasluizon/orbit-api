@@ -44,10 +44,10 @@ public sealed class AiRetrospectiveService(
             logger.LogInformation("Retrospective generated successfully ({Length} chars)", trimmed.Length);
             return Result.Success(trimmed);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "AI API call failed for retrospective");
-            return Result.Failure<string>($"AI API error: {ex.Message}");
+            return Result.Failure<string>("AI retrospective temporarily unavailable");
         }
     }
 

@@ -139,17 +139,7 @@ public class GetHabitScheduleQueryHandler(
     {
         // Advance stale bad habit DueDates so they show on the correct next scheduled day
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var staleBadHabits = await habitRepository.FindTrackedAsync(
-            h => h.UserId == request.UserId && h.IsBadHabit && h.FrequencyUnit != null && h.DueDate < today
-                && (!h.EndDate.HasValue || h.EndDate.Value >= today),
-            cancellationToken);
-
-        if (staleBadHabits.Count > 0)
-        {
-            foreach (var habit in staleBadHabits)
-                habit.AdvanceDueDate(today);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
 
         // Include Logs for flexible habits so we can compute window progress
         // Filter logs to the requested date range (extended by overdue window) to avoid loading all historical logs
@@ -228,14 +218,7 @@ public class GetHabitScheduleQueryHandler(
                 && !scheduledDates.Contains(dateFrom))
             {
                 var qty = habit.FrequencyQuantity ?? 1;
-                var lookbackDays = habit.FrequencyUnit switch
-                {
-                    FrequencyUnit.Day => qty,
-                    FrequencyUnit.Week => qty * 7,
-                    FrequencyUnit.Month => qty * 31,
-                    FrequencyUnit.Year => Math.Min(qty * 366, 366),
-                    _ => 7
-                };
+                var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
 
                 var lookbackStart = dateFrom.AddDays(-lookbackDays);
                 if (habit.DueDate > lookbackStart)

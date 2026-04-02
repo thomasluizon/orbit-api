@@ -1,5 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -24,24 +26,17 @@ public record GoalDto(
     List<LinkedHabitDto> LinkedHabits,
     string? TrackingStatus);
 
-public record PaginatedGoalResult(
-    IReadOnlyList<GoalDto> Items,
-    int Page,
-    int PageSize,
-    int TotalCount,
-    int TotalPages);
-
 public record GetGoalsQuery(
     Guid UserId,
     GoalStatus? StatusFilter = null,
     int Page = 1,
-    int PageSize = 50) : IRequest<PaginatedGoalResult>;
+    int PageSize = 50) : IRequest<Result<PaginatedResponse<GoalDto>>>;
 
 public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IUserDateService userDateService) : IRequestHandler<GetGoalsQuery, PaginatedGoalResult>
+    IUserDateService userDateService) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
-    public async Task<PaginatedGoalResult> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
         var allGoals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId,
@@ -69,7 +64,7 @@ public class GetGoalsQueryHandler(
             .Select(g => MapToDto(g, userToday))
             .ToList();
 
-        return new PaginatedGoalResult(items, request.Page, request.PageSize, totalCount, totalPages);
+        return Result.Success(new PaginatedResponse<GoalDto>(items, request.Page, request.PageSize, totalCount, totalPages));
     }
 
     private static GoalDto MapToDto(Goal g, DateOnly userToday) => new(

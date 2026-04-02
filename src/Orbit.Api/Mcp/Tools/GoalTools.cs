@@ -24,16 +24,21 @@ public class GoalTools(IMediator mediator)
 
         var result = await mediator.Send(new GetGoalsQuery(userId, statusFilter), cancellationToken);
 
-        if (result.Items.Count == 0)
+        if (result.IsFailure)
+            return $"Error: {result.Error}";
+
+        var goals = result.Value;
+
+        if (goals.Items.Count == 0)
             return "No goals found.";
 
-        var lines = result.Items.Select(g =>
+        var lines = goals.Items.Select(g =>
             $"- {g.Title} (id: {g.Id}) | {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F0}%)" +
             $" | Status: {g.Status}" +
             (g.Deadline is not null ? $" | Deadline: {g.Deadline}" : "") +
             (g.TrackingStatus is not null ? $" | Tracking: {g.TrackingStatus}" : ""));
 
-        return $"Goals ({result.TotalCount}):\n{string.Join("\n", lines)}";
+        return $"Goals ({goals.TotalCount}):\n{string.Join("\n", lines)}";
     }
 
     [McpServerTool(Name = "create_goal"), Description("Create a new goal. Requires Pro subscription.")]

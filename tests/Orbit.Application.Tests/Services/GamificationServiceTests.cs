@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
@@ -29,7 +30,8 @@ public class GamificationServiceTests
     {
         _sut = new GamificationService(
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo,
-            _achievementRepo, _notificationRepo, _pushService, _userDateService, _unitOfWork);
+            _achievementRepo, _notificationRepo, _pushService, _userDateService, _unitOfWork,
+            Substitute.For<ILogger<GamificationService>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -154,6 +156,30 @@ public class GamificationServiceTests
             .Returns(logs.ToList());
     }
 
+    private void SetupHabitCount(int count)
+    {
+        _habitRepo.CountAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(count);
+    }
+
+    private void SetupGoalCount(int count)
+    {
+        _goalRepo.CountAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(count);
+    }
+
+    private void SetupCompletedGoalCount(int count)
+    {
+        _goalRepo.CountAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(count);
+    }
+
     // --- ProcessHabitCreated: first_orbit ---
 
     [Fact]
@@ -163,8 +189,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        SetupUserHabits(habit);
+        SetupHabitCount(1);
 
         await _sut.ProcessHabitCreated(UserId);
 
@@ -181,9 +206,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit1 = CreateTestHabit();
-        var habit2 = CreateTestHabit();
-        SetupUserHabits(habit1, habit2);
+        SetupHabitCount(2);
 
         await _sut.ProcessHabitCreated(UserId);
 
@@ -296,12 +319,10 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        habit.Log(Today);
-        SetupHabitWithLogs(habit);
-
-        var habitsWithLogs = CreateHabitWithNLogs(10);
-        SetupUserHabits(habitsWithLogs);
+        // Service now loads all habits via FindAsync and sums logs from the collection.
+        // Create a habit with 10 logs total (including the one being logged)
+        var habit = CreateHabitWithNLogs(10);
+        SetupUserHabits(habit);
 
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
@@ -317,12 +338,8 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        habit.Log(Today);
-        SetupHabitWithLogs(habit);
-
-        var habitsWithLogs = CreateHabitWithNLogs(50);
-        SetupUserHabits(habitsWithLogs);
+        var habit = CreateHabitWithNLogs(50);
+        SetupUserHabits(habit);
 
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
@@ -338,12 +355,8 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        habit.Log(Today);
-        SetupHabitWithLogs(habit);
-
-        var habitsWithLogs = CreateHabitWithNLogs(100);
-        SetupUserHabits(habitsWithLogs);
+        var habit = CreateHabitWithNLogs(100);
+        SetupUserHabits(habit);
 
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
@@ -359,12 +372,8 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        habit.Log(Today);
-        SetupHabitWithLogs(habit);
-
-        var habitsWithLogs = CreateHabitWithNLogs(9);
-        SetupUserHabits(habitsWithLogs);
+        var habit = CreateHabitWithNLogs(9);
+        SetupUserHabits(habit);
 
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
@@ -382,13 +391,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal>
-            {
-                Goal.Create(UserId, "Goal 1", 100, "pages").Value
-            });
+        SetupGoalCount(1);
 
         await _sut.ProcessGoalCreated(UserId);
 
@@ -404,15 +407,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal>
-            {
-                Goal.Create(UserId, "Goal 1", 100, "pages").Value,
-                Goal.Create(UserId, "Goal 2", 50, "km").Value,
-                Goal.Create(UserId, "Goal 3", 200, "hours").Value
-            });
+        SetupGoalCount(3);
 
         await _sut.ProcessGoalCreated(UserId);
 
@@ -429,13 +424,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var goal = Goal.Create(UserId, "Read 100 pages", 100, "pages").Value;
-        goal.UpdateProgress(100);
-
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal> { goal });
+        SetupCompletedGoalCount(1);
 
         await _sut.ProcessGoalCompleted(UserId);
 
@@ -452,17 +441,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var goals = Enumerable.Range(1, 5).Select(i =>
-        {
-            var g = Goal.Create(UserId, $"Goal {i}", 100, "units").Value;
-            g.UpdateProgress(100);
-            return g;
-        }).ToList();
-
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goals);
+        SetupCompletedGoalCount(5);
 
         await _sut.ProcessGoalCompleted(UserId);
 
@@ -478,17 +457,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var goals = Enumerable.Range(1, 10).Select(i =>
-        {
-            var g = Goal.Create(UserId, $"Goal {i}", 100, "units").Value;
-            g.UpdateProgress(100);
-            return g;
-        }).ToList();
-
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goals);
+        SetupCompletedGoalCount(10);
 
         await _sut.ProcessGoalCompleted(UserId);
 
@@ -506,8 +475,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupEarnedAchievements(AchievementDefinitions.FirstOrbit);
 
-        var habit = CreateTestHabit();
-        SetupUserHabits(habit);
+        SetupHabitCount(1);
 
         await _sut.ProcessHabitCreated(UserId);
 
@@ -669,10 +637,7 @@ public class GamificationServiceTests
             AchievementDefinitions.Overachiever,
             AchievementDefinitions.DreamMaker);
 
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal>());
+        SetupCompletedGoalCount(0);
 
         await _sut.ProcessGoalCompleted(UserId);
 
@@ -688,8 +653,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        SetupUserHabits(habit);
+        SetupHabitCount(1);
 
         await _sut.ProcessHabitCreated(UserId);
 
@@ -705,8 +669,7 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        var habit = CreateTestHabit();
-        SetupUserHabits(habit);
+        SetupHabitCount(1);
 
         await _sut.ProcessHabitCreated(UserId);
 

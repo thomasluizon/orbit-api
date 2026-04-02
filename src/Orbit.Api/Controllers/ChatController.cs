@@ -4,20 +4,27 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("chat")]
 public class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
 {
     [HttpPost]
     [RequestSizeLimit(10_485_760)] // 10MB
     [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)] // 10MB
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ProcessChat(
         [FromForm] string message,
         [FromForm] string? history,
@@ -49,7 +56,7 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
         List<ChatHistoryMessage>? chatHistory = null;
         if (!string.IsNullOrWhiteSpace(history))
         {
-            if (history.Length > 50_000)
+            if (history.Length > AppConstants.MaxChatHistoryLength)
             {
                 return BadRequest(new { error = "Chat history too large" });
             }
@@ -64,6 +71,7 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
             catch (JsonException ex)
             {
                 logger.LogWarning("Chat history parse failed: {Error}", ex.Message);
+                return BadRequest(new { error = "Invalid chat history format" });
             }
         }
 

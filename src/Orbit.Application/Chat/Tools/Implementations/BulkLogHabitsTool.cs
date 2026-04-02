@@ -55,13 +55,15 @@ public class BulkLogHabitsTool(
         var loggedCount = 0;
         var loggedNames = new List<string>();
 
+        // Batch-load all requested habits in a single query instead of N+1
+        var habits = await habitRepository.FindTrackedAsync(
+            h => habitIds.Contains(h.Id) && h.UserId == userId,
+            q => q.Include(h => h.Logs),
+            ct);
+
         foreach (var habitId in habitIds)
         {
-            var habit = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habitId && h.UserId == userId,
-                q => q.Include(h => h.Logs),
-                ct);
-
+            var habit = habits.FirstOrDefault(h => h.Id == habitId);
             if (habit is null)
                 continue;
 

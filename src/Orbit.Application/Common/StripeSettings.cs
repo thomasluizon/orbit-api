@@ -1,4 +1,4 @@
-namespace Orbit.Infrastructure.Configuration;
+namespace Orbit.Application.Common;
 
 public class StripeSettings
 {

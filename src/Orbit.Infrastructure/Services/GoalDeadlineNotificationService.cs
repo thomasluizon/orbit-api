@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -11,27 +13,38 @@ namespace Orbit.Infrastructure.Services;
 
 public class GoalDeadlineNotificationService(
     IServiceScopeFactory scopeFactory,
-    ILogger<GoalDeadlineNotificationService> logger) : BackgroundService
+    ILogger<GoalDeadlineNotificationService> logger,
+    IConfiguration configuration) : BackgroundService
 {
     private static readonly int[] NotifyDaysBefore = [7, 3, 1];
+
+    private readonly TimeSpan _interval = TimeSpan.FromMinutes(
+        configuration.GetValue("BackgroundServices:GoalDeadlineIntervalMinutes", 30));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("GoalDeadlineNotificationService started");
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await CheckAndSendDeadlineNotifications(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Error in goal deadline notification service");
-            }
+                try
+                {
+                    await CheckAndSendDeadlineNotifications(stoppingToken);
+                    BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Error in goal deadline notification service");
+                }
 
-            // Check every 30 minutes
-            await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        finally
+        {
+            logger.LogInformation("GoalDeadlineNotificationService stopped");
         }
     }
 
@@ -71,9 +84,7 @@ public class GoalDeadlineNotificationService(
         {
             if (!users.TryGetValue(goal.UserId, out var user)) continue;
 
-            var tz = user.TimeZone is not null
-                ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-                : TimeZoneInfo.Utc;
+            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
             var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
             var userToday = DateOnly.FromDateTime(userNow);
 

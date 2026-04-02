@@ -12,6 +12,7 @@ using Orbit.Api.Mcp.Tools;
 using Orbit.Api.OAuth;
 using Orbit.Api.Middleware;
 using Orbit.Api.OpenApi;
+using Orbit.Application.Common;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
@@ -31,6 +32,9 @@ builder.Services.Configure<EncryptionSettings>(
     builder.Configuration.GetSection(EncryptionSettings.SectionName));
 builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 
+// --- Frontend Settings ---
+builder.Services.Configure<FrontendSettings>(builder.Configuration.GetSection("Frontend"));
+
 // --- Database ---
 builder.Services.AddDbContext<OrbitDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -48,12 +52,15 @@ builder.Services.AddScoped<Orbit.Domain.Interfaces.IGoogleTokenService, GoogleTo
 // --- Token Service ---
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 
+// --- HTTP Client Timeout ---
+var httpTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
+
 // --- Supabase (OAuth token validation) ---
 builder.Services.AddHttpClient("Supabase", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
     client.DefaultRequestHeaders.Add("apikey", builder.Configuration["Supabase:AnonKey"]!);
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = httpTimeout;
 });
 
 // --- Resend (Email) ---
@@ -64,7 +71,7 @@ builder.Services.AddHttpClient("Resend", client =>
 {
     client.BaseAddress = new Uri("https://api.resend.com");
     client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["Resend:ApiKey"]}");
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = httpTimeout;
 });
 
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
@@ -85,11 +92,20 @@ if (!string.IsNullOrEmpty(stripeKey))
     Stripe.StripeConfiguration.ApiKey = stripeKey;
 }
 
+// Stripe services (thread-safe singletons)
+builder.Services.AddSingleton<Stripe.CustomerService>();
+builder.Services.AddSingleton<Stripe.Checkout.SessionService>();
+builder.Services.AddSingleton<Stripe.BillingPortal.SessionService>();
+builder.Services.AddSingleton<Stripe.SubscriptionService>();
+builder.Services.AddSingleton<Stripe.InvoiceService>();
+builder.Services.AddSingleton<Stripe.PriceService>();
+builder.Services.AddSingleton<Stripe.CouponService>();
+
 // --- Push Notifications (VAPID + FCM) ---
 builder.Services.Configure<VapidSettings>(
     builder.Configuration.GetSection(VapidSettings.SectionName));
 builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
+    .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
 builder.Services.AddHostedService<ReminderSchedulerService>();
 builder.Services.AddHostedService<GoalDeadlineNotificationService>();
@@ -98,6 +114,10 @@ builder.Services.AddHostedService<AccountDeletionService>();
 builder.Services.AddHostedService<HabitDueDateAdvancementService>();
 builder.Services.AddHostedService<DataEncryptionMigrationService>();
 builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
+
+// --- Health Checks ---
+builder.Services.AddHealthChecks()
+    .AddCheck<BackgroundServiceHealthCheck>("background-services");
 
 // Initialize Firebase Admin SDK for FCM
 var firebaseCredJson = builder.Configuration["Firebase:CredentialsJson"];
@@ -125,7 +145,7 @@ builder.Services.AddSingleton<IImageValidationService, ImageValidationService>()
 
 // --- Geo Location ---
 builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>()
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(30));
+    .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 
 // --- JWT Settings ---
 builder.Services.Configure<JwtSettings>(
@@ -215,14 +235,11 @@ builder.Services.AddMediatR(cfg =>
 // --- CORS ---
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? ["http://localhost:3000"];
-var allOrigins = allowedOrigins
-    .Concat(["https://claude.ai", "https://claude.com"])
-    .ToArray();
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(allOrigins)
+        policy.WithOrigins(allowedOrigins)
               .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
               .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
               .AllowCredentials();
@@ -232,16 +249,43 @@ builder.Services.AddCors(options =>
 // --- Rate Limiting ---
 // NOTE: IMemoryCache-backed rate limiting is not shared across replicas.
 // For multi-replica deployments, replace with a distributed store (e.g., Redis).
-builder.Services.AddRateLimiter(options =>
+// Disabled in non-Production to avoid breaking integration tests.
+if (builder.Environment.IsProduction())
 {
-    options.AddFixedWindowLimiter("auth", limiterOptions =>
+    builder.Services.AddRateLimiter(options =>
     {
-        limiterOptions.Window = TimeSpan.FromMinutes(1);
-        limiterOptions.PermitLimit = 5;
-        limiterOptions.QueueLimit = 0;
-        limiterOptions.AutoReplenishment = true;
+        options.AddFixedWindowLimiter("auth", limiterOptions =>
+        {
+            limiterOptions.Window = TimeSpan.FromMinutes(1);
+            limiterOptions.PermitLimit = 5;
+            limiterOptions.QueueLimit = 0;
+            limiterOptions.AutoReplenishment = true;
+        });
+        options.AddSlidingWindowLimiter("chat", limiterOptions =>
+        {
+            limiterOptions.Window = TimeSpan.FromMinutes(1);
+            limiterOptions.SegmentsPerWindow = 4;
+            limiterOptions.PermitLimit = 20;
+            limiterOptions.QueueLimit = 0;
+            limiterOptions.AutoReplenishment = true;
+        });
+        options.AddFixedWindowLimiter("support", limiterOptions =>
+        {
+            limiterOptions.Window = TimeSpan.FromHours(1);
+            limiterOptions.PermitLimit = 3;
+            limiterOptions.QueueLimit = 0;
+            limiterOptions.AutoReplenishment = true;
+        });
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     });
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+}
+
+// --- Cookie Security Policy ---
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
 });
 
 // --- Request Size Limit ---
@@ -297,7 +341,8 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     // Accept only a single forwarded hop. KnownProxies should be configured per deployment environment.
     ForwardLimit = 1
 });
-app.UseRateLimiter();
+if (app.Environment.IsProduction())
+    app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
@@ -307,6 +352,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseExceptionHandler();
 app.UseCors();
+app.UseCookiePolicy();
 
 if (app.Environment.IsProduction())
 {
@@ -324,9 +370,23 @@ app.Use(async (context, next) =>
         context.Request.Body.Position = 0;
 
         // Allow initialize and notifications without auth
-        if (body.Contains("\"method\":\"initialize\"") ||
-            body.Contains("\"method\":\"notifications/") ||
-            body.Contains("\"method\":\"ping\""))
+        var isUnauthenticatedMethod = false;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("method", out var methodProp))
+            {
+                var method = methodProp.GetString();
+                isUnauthenticatedMethod = method is "initialize" or "ping"
+                    || (method?.StartsWith("notifications/") == true);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Invalid JSON -- require auth
+        }
+
+        if (isUnauthenticatedMethod)
         {
             await next();
             return;
@@ -352,7 +412,25 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapMcp("/mcp");
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                data = e.Value.Data
+            })
+        };
+        await context.Response.WriteAsJsonAsync(result);
+    }
+}).AllowAnonymous();
 
 app.Run();
 

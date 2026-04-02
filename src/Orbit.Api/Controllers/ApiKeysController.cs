@@ -15,6 +15,10 @@ public class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> lo
     public record CreateApiKeyRequest(string Name);
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateApiKey(
         [FromBody] CreateApiKeyRequest request,
         CancellationToken cancellationToken)
@@ -30,6 +34,9 @@ public class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> lo
     }
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetApiKeys(CancellationToken cancellationToken)
     {
         var query = new GetApiKeysQuery(HttpContext.GetUserId());
@@ -38,6 +45,9 @@ public class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> lo
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeApiKey(Guid id, CancellationToken cancellationToken)
     {
         var command = new RevokeApiKeyCommand(HttpContext.GetUserId(), id);

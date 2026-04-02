@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using System.Security.Cryptography;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
@@ -26,13 +27,15 @@ public class ConfirmAccountDeletionCommandHandler(
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
             return Result.Failure<DateTime>("Deletion code expired or not found");
 
-        if (entry.Attempts >= 3)
+        if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
             return Result.Failure<DateTime>("Too many attempts. Please request a new code");
         }
 
-        if (entry.Code != request.Code)
+        if (!CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(entry.Code),
+            System.Text.Encoding.UTF8.GetBytes(request.Code)))
         {
             var updated = new VerificationEntry(entry.Code, entry.Attempts + 1, entry.CreatedAt);
             var remaining = TimeSpan.FromMinutes(10) - (DateTime.UtcNow - entry.CreatedAt);

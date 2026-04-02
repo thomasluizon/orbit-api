@@ -149,7 +149,7 @@ public class BulkLogHabitsCommandHandler(
             {
                 await gamificationService.ProcessHabitLogged(request.UserId, item.HabitId, cancellationToken);
             }
-            catch { /* gamification failure should not block bulk logging */ }
+            catch (Exception ex) { logger.LogWarning(ex, "Gamification processing failed for habit {HabitId}", item.HabitId); }
         }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);

@@ -10,8 +10,11 @@ public static class ResultActionResultExtensions
         if (result.IsSuccess)
             return new OkResult();
 
-        return result.ErrorCode == "PAY_GATE"
-            ? new ObjectResult(new { error = result.Error, code = "PAY_GATE" }) { StatusCode = 403 }
+        if (result.ErrorCode == "PAY_GATE")
+            return new ObjectResult(new { error = result.Error, errorCode = "PAY_GATE" }) { StatusCode = 403 };
+
+        return result.ErrorCode is not null
+            ? new BadRequestObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
             : new BadRequestObjectResult(new { error = result.Error });
     }
 
@@ -20,8 +23,11 @@ public static class ResultActionResultExtensions
         if (result.IsSuccess)
             return onSuccess(result.Value);
 
-        return result.ErrorCode == "PAY_GATE"
-            ? new ObjectResult(new { error = result.Error, code = "PAY_GATE" }) { StatusCode = 403 }
+        if (result.ErrorCode == "PAY_GATE")
+            return new ObjectResult(new { error = result.Error, errorCode = "PAY_GATE" }) { StatusCode = 403 };
+
+        return result.ErrorCode is not null
+            ? new BadRequestObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
             : new BadRequestObjectResult(new { error = result.Error });
     }
 }

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,7 +22,8 @@ public record GetReferralStatsQuery(Guid UserId) : IRequest<Result<ReferralStats
 public class GetReferralStatsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Referral> referralRepository,
-    IAppConfigService appConfigService) : IRequestHandler<GetReferralStatsQuery, Result<ReferralStatsResponse>>
+    IAppConfigService appConfigService,
+    IOptions<FrontendSettings> frontendSettings) : IRequestHandler<GetReferralStatsQuery, Result<ReferralStatsResponse>>
 {
     public async Task<Result<ReferralStatsResponse>> Handle(GetReferralStatsQuery request, CancellationToken cancellationToken)
     {
@@ -40,7 +42,7 @@ public class GetReferralStatsQueryHandler(
             "MaxReferrals", AppConstants.DefaultMaxReferrals, cancellationToken);
 
         var referralLink = user.ReferralCode is not null
-            ? $"https://app.useorbit.org/r/{user.ReferralCode}"
+            ? $"{frontendSettings.Value.BaseUrl}/r/{user.ReferralCode}"
             : null;
 
         return Result.Success(new ReferralStatsResponse(

@@ -22,13 +22,12 @@ public class OAuthController(
     IUnitOfWork unitOfWork,
     IHttpClientFactory httpClientFactory,
     IOptions<GoogleSettings> googleSettings,
+    IConfiguration configuration,
     ILogger<OAuthController> logger) : ControllerBase
 {
-    private static readonly HashSet<string> AllowedRedirectHosts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "claude.ai",
-        "claude.com"
-    };
+    private readonly HashSet<string> _allowedRedirectHosts = configuration.GetSection("OAuth:AllowedRedirectHosts")
+        .Get<string[]>()?.ToHashSet(StringComparer.OrdinalIgnoreCase)
+        ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "claude.ai", "claude.com" };
 
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
@@ -95,7 +94,7 @@ public class OAuthController(
             return BadRequest(new { error = "PKCE with S256 is required" });
 
         if (!Uri.TryCreate(redirect_uri, UriKind.Absolute, out var redirectParsed) ||
-            !AllowedRedirectHosts.Contains(redirectParsed.Host))
+            !_allowedRedirectHosts.Contains(redirectParsed.Host))
             return BadRequest(new { error = "invalid_redirect_uri" });
 
         var googleClientId = googleSettings.Value.ClientId ?? "";

@@ -54,10 +54,10 @@ public sealed class AiGoalReviewService(
             logger.LogInformation("Goal review generated successfully ({Length} chars)", trimmed.Length);
             return Result.Success(trimmed);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "AI API call failed for goal review");
-            return Result.Failure<string>($"AI API error: {ex.Message}");
+            return Result.Failure<string>("AI goal review temporarily unavailable");
         }
     }
 }

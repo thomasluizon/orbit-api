@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
@@ -14,6 +15,7 @@ public class CreateHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
@@ -27,7 +29,8 @@ public class CreateHabitCommandHandlerTests
     public CreateHabitCommandHandlerTests()
     {
         _handler = new CreateHabitCommandHandler(
-            _habitRepo, _tagRepo, _userDateService, _payGate, _gamificationService, _unitOfWork, _cache);
+            _habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _gamificationService, _unitOfWork, _cache,
+            Substitute.For<ILogger<CreateHabitCommandHandler>>());
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -134,7 +137,10 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
+        // CacheInvalidationHelper uses DateOnly.FromDateTime(DateTime.UtcNow) internally,
+        // so the test cache key must use the real UTC date (not the mocked Today).
+        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new CreateHabitCommand(UserId, "Test habit", null, FrequencyUnit.Day, 1);

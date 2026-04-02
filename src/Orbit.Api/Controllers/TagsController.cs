@@ -17,6 +17,9 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
     public record AssignTagsRequest(IReadOnlyList<Guid> TagIds);
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetTags(CancellationToken cancellationToken)
     {
         var query = new GetTagsQuery(HttpContext.GetUserId());
@@ -25,6 +28,9 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateTag(
         [FromBody] CreateTagRequest request,
         CancellationToken cancellationToken)
@@ -41,6 +47,9 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateTag(
         Guid id,
         [FromBody] UpdateTagRequest request,
@@ -58,6 +67,9 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteTag(Guid id, CancellationToken cancellationToken)
     {
         var command = new DeleteTagCommand(HttpContext.GetUserId(), id);
@@ -72,6 +84,9 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
     }
 
     [HttpPut("{habitId:guid}/assign")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> AssignTags(
         Guid habitId,
         [FromBody] AssignTagsRequest request,

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
@@ -19,6 +20,7 @@ public class GetReferralDashboardQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Referral> referralRepository,
     IAppConfigService appConfigService,
+    IOptions<FrontendSettings> frontendSettings,
     IMediator mediator) : IRequestHandler<GetReferralDashboardQuery, Result<ReferralDashboardResponse>>
 {
     public async Task<Result<ReferralDashboardResponse>> Handle(GetReferralDashboardQuery request, CancellationToken cancellationToken)
@@ -29,7 +31,7 @@ public class GetReferralDashboardQueryHandler(
             return Result.Failure<ReferralDashboardResponse>(codeResult.Error);
 
         var code = codeResult.Value;
-        var link = $"https://app.useorbit.org/r/{code}";
+        var link = $"{frontendSettings.Value.BaseUrl}/r/{code}";
 
         // Build stats inline (same logic as GetReferralStatsQueryHandler)
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);

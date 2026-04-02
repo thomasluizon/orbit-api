@@ -30,54 +30,44 @@ public class BulkDeleteHabitsCommandHandler(
     {
         var results = new List<BulkDeleteItemResult>();
 
-        for (int i = 0; i < request.HabitIds.Count; i++)
+        // Batch-load all requested habits in a single query instead of N+1
+        var habits = await habitRepository.FindTrackedAsync(
+            h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
+            cancellationToken);
+        var habitDict = habits.ToDictionary(h => h.Id);
+
+        await unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
         {
-            var habitId = request.HabitIds[i];
-
-            try
+            for (int i = 0; i < request.HabitIds.Count; i++)
             {
-                var habit = await habitRepository.GetByIdAsync(habitId, cancellationToken);
+                var habitId = request.HabitIds[i];
 
-                if (habit is null)
+                if (!habitDict.TryGetValue(habitId, out var habit))
                 {
                     results.Add(new BulkDeleteItemResult(
                         Index: i,
                         Status: BulkItemStatus.Failed,
                         HabitId: habitId,
-                        Error: ErrorMessages.HabitNotFound));
-                    continue;
-                }
-
-                if (habit.UserId != request.UserId)
-                {
-                    results.Add(new BulkDeleteItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: ErrorMessages.HabitNotOwned));
+                        Error: "Habit not found or not owned by user."));
                     continue;
                 }
 
                 habitRepository.Remove(habit);
-
                 results.Add(new BulkDeleteItemResult(
                     Index: i,
                     Status: BulkItemStatus.Success,
                     HabitId: habitId));
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error processing bulk item {HabitId}", habitId);
-                results.Add(new BulkDeleteItemResult(
-                    Index: i,
-                    Status: BulkItemStatus.Failed,
-                    HabitId: habitId,
-                    Error: "An error occurred processing this item"));
-            }
-        }
 
-        // Save all successful deletions once
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.CommitTransactionAsync(cancellationToken);
+        }
+        catch
+        {
+            await unitOfWork.RollbackTransactionAsync(cancellationToken);
+            throw;
+        }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 

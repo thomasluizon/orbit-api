@@ -158,12 +158,12 @@ public sealed class AiIntentService(
         catch (JsonException ex)
         {
             logger.LogError(ex, "Failed to deserialize AI function-calling response");
-            return Result.Failure<AiResponse>($"Failed to parse AI response: {ex.Message}");
+            return Result.Failure<AiResponse>("AI service temporarily unavailable");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "AI API call failed");
-            return Result.Failure<AiResponse>($"AI service error: {ex.Message}");
+            return Result.Failure<AiResponse>("AI service temporarily unavailable");
         }
     }
 

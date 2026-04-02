@@ -13,28 +13,39 @@ namespace Orbit.Api.Controllers;
 public class GamificationController(IMediator mediator) : ControllerBase
 {
     [HttpGet("profile")]
-    public async Task<IActionResult> GetProfile(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetProfile(CancellationToken cancellationToken)
     {
         var query = new GetGamificationProfileQuery(HttpContext.GetUserId());
-        var result = await mediator.Send(query, ct);
+        var result = await mediator.Send(query, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("achievements")]
-    public async Task<IActionResult> GetAchievements(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetAchievements(CancellationToken cancellationToken)
     {
         var query = new GetAchievementsQuery(HttpContext.GetUserId());
-        var result = await mediator.Send(query, ct);
+        var result = await mediator.Send(query, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("streak")]
-    public async Task<IActionResult> GetStreakInfo(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetStreakInfo(CancellationToken cancellationToken)
     {
         var query = new GetStreakInfoQuery(HttpContext.GetUserId());
-        var result = await mediator.Send(query, ct);
+        var result = await mediator.Send(query, cancellationToken);
 
         return result.IsSuccess
             ? Ok(result.Value)
@@ -42,10 +53,13 @@ public class GamificationController(IMediator mediator) : ControllerBase
     }
 
     [HttpPost("streak/freeze")]
-    public async Task<IActionResult> ActivateStreakFreeze(CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ActivateStreakFreeze(CancellationToken cancellationToken)
     {
         var command = new ActivateStreakFreezeCommand(HttpContext.GetUserId());
-        var result = await mediator.Send(command, ct);
+        var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
             ? Ok(result.Value)

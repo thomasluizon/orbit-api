@@ -109,13 +109,18 @@ public class CreateSubHabitCommandHandler(
 
     private static async Task<int> GetDepthAsync(Habit habit, IGenericRepository<Habit> repo, CancellationToken ct)
     {
+        if (habit.ParentHabitId is null) return 0;
+
+        // Load all user habits once and walk in memory instead of N+1 queries
+        var allHabits = await repo.FindAsync(h => h.UserId == habit.UserId, ct);
+        var habitDict = allHabits.ToDictionary(h => h.Id);
+
         var depth = 0;
-        var current = habit;
-        while (current.ParentHabitId is not null)
+        var currentId = habit.ParentHabitId;
+        while (currentId is not null && habitDict.TryGetValue(currentId.Value, out var parent))
         {
             depth++;
-            current = await repo.GetByIdAsync(current.ParentHabitId.Value, ct);
-            if (current is null) break;
+            currentId = parent.ParentHabitId;
         }
         return depth;
     }

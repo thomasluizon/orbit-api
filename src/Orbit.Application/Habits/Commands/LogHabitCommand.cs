@@ -104,12 +104,10 @@ public class LogHabitCommandHandler(
         var isFirstCompletionToday = false;
         if (user is not null)
         {
-            // Targeted EXISTS query: only check if any habit has a completion log for today
-            var habitsWithTodayLogs = await habitRepository.FindAsync(
+            // Use AnyAsync for efficient EXISTS query instead of loading full entities
+            isFirstCompletionToday = !await habitRepository.AnyAsync(
                 h => h.UserId == request.UserId && h.Logs.Any(l => l.Date == targetDate && l.Value > 0),
                 cancellationToken);
-
-            isFirstCompletionToday = !habitsWithTodayLogs.Any();
         }
 
         // Only advance DueDate when logging today or future-adjacent (not past overdue instances)
@@ -136,7 +134,7 @@ public class LogHabitCommandHandler(
         {
             gamificationResult = await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
         }
-        catch { /* gamification failure should not block habit logging */ }
+        catch (Exception ex) { logger.LogWarning(ex, "Gamification processing failed for habit {HabitId}", request.HabitId); }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 

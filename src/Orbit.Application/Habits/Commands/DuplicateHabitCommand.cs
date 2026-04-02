@@ -20,9 +20,10 @@ public class DuplicateHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(DuplicateHabitCommand request, CancellationToken cancellationToken)
     {
-        // Load all habits for this user
-        var allHabits = await habitRepository.FindAsync(
+        // Load all habits for this user with tags pre-loaded to avoid N+1 queries
+        var allHabits = await habitRepository.FindTrackedAsync(
             h => h.UserId == request.UserId,
+            q => q.Include(h => h.Tags),
             cancellationToken);
 
         var original = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
@@ -49,20 +50,12 @@ public class DuplicateHabitCommandHandler(
 
         await habitRepository.AddAsync(rootCopy.Value, cancellationToken);
 
-        // Load original with tags (tracked so EF handles join table correctly)
-        var originalTracked = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Tags),
-            cancellationToken);
+        // Tags are already loaded from the initial query
+        foreach (var tag in original.Tags)
+            rootCopy.Value.AddTag(tag);
 
-        if (originalTracked is not null)
-        {
-            foreach (var tag in originalTracked.Tags)
-                rootCopy.Value.AddTag(tag);
-        }
-
-        // Recursively duplicate children (with tag copying)
-        await DuplicateChildrenAsync(original.Id, rootCopy.Value.Id, childLookup, habitRepository, cancellationToken);
+        // Recursively duplicate children (tags already pre-loaded)
+        await DuplicateChildren(original.Id, rootCopy.Value.Id, childLookup, habitRepository, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -71,7 +64,7 @@ public class DuplicateHabitCommandHandler(
         return Result.Success(rootCopy.Value.Id);
     }
 
-    private static async Task DuplicateChildrenAsync(
+    private static async Task DuplicateChildren(
         Guid originalParentId,
         Guid newParentId,
         ILookup<Guid?, Habit> childLookup,
@@ -85,19 +78,11 @@ public class DuplicateHabitCommandHandler(
 
             await repository.AddAsync(childCopy.Value, cancellationToken);
 
-            // Load child with tags (tracked) and copy them to the clone
-            var childTracked = await repository.FindOneTrackedAsync(
-                h => h.Id == child.Id,
-                q => q.Include(h => h.Tags),
-                cancellationToken);
+            // Tags are already pre-loaded from the initial query
+            foreach (var tag in child.Tags)
+                childCopy.Value.AddTag(tag);
 
-            if (childTracked is not null)
-            {
-                foreach (var tag in childTracked.Tags)
-                    childCopy.Value.AddTag(tag);
-            }
-
-            await DuplicateChildrenAsync(child.Id, childCopy.Value.Id, childLookup, repository, cancellationToken);
+            await DuplicateChildren(child.Id, childCopy.Value.Id, childLookup, repository, cancellationToken);
         }
     }
 

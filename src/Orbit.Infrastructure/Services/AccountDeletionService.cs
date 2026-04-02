@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -8,25 +9,37 @@ namespace Orbit.Infrastructure.Services;
 
 public class AccountDeletionService(
     IServiceScopeFactory scopeFactory,
-    ILogger<AccountDeletionService> logger) : BackgroundService
+    ILogger<AccountDeletionService> logger,
+    IConfiguration configuration) : BackgroundService
 {
+    private readonly TimeSpan _interval = TimeSpan.FromHours(
+        configuration.GetValue("BackgroundServices:AccountDeletionIntervalHours", 24));
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("AccountDeletionService started");
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await ProcessScheduledDeletions(stoppingToken);
-                await CleanupStaleSentRecords(stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Error in account deletion service");
-            }
+                try
+                {
+                    await ProcessScheduledDeletions(stoppingToken);
+                    await CleanupStaleSentRecords(stoppingToken);
+                    BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Error in account deletion service");
+                }
 
-            await Task.Delay(TimeSpan.FromHours(24), stoppingToken);
+                await Task.Delay(_interval, stoppingToken);
+            }
+        }
+        finally
+        {
+            logger.LogInformation("AccountDeletionService stopped");
         }
     }
 
@@ -48,9 +61,15 @@ public class AccountDeletionService(
         {
             try
             {
-                dbContext.Users.Remove(user);
-                await dbContext.SaveChangesAsync(ct);
-                logger.LogInformation("Deleted deactivated account {UserId} ({Email})", user.Id, user.Email);
+                using var deleteScope = scopeFactory.CreateScope();
+                var deleteContext = deleteScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+                var userToDelete = await deleteContext.Users.FindAsync([user.Id], ct);
+                if (userToDelete is not null)
+                {
+                    deleteContext.Users.Remove(userToDelete);
+                    await deleteContext.SaveChangesAsync(ct);
+                }
+                logger.LogInformation("Deleted deactivated account {UserId}", user.Id);
             }
             catch (Exception ex)
             {

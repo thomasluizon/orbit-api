@@ -5,6 +5,8 @@ using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
 
+using static Orbit.Domain.Enums.ScheduledReminderWhen;
+
 namespace Orbit.Application.Tests.Validators;
 
 public class CreateHabitCommandValidatorTests
@@ -99,8 +101,8 @@ public class CreateHabitCommandValidatorTests
     [Fact]
     public void Validate_NullFrequencyQty_NoError()
     {
-        // Arrange
-        var command = ValidCommand() with { FrequencyQuantity = null };
+        // Arrange - FrequencyQuantity can be null when FrequencyUnit is also null (one-time tasks)
+        var command = ValidCommand() with { FrequencyUnit = null, FrequencyQuantity = null };
 
         // Act
         var result = _validator.TestValidate(command);
@@ -192,8 +194,8 @@ public class CreateHabitCommandValidatorTests
         {
             ScheduledReminders = new List<ScheduledReminderTime>
             {
-                new("day_before", new TimeOnly(20, 0)),
-                new("same_day", new TimeOnly(9, 0))
+                new(DayBefore, new TimeOnly(20, 0)),
+                new(SameDay, new TimeOnly(9, 0))
             }
         };
 
@@ -207,7 +209,7 @@ public class CreateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             ScheduledReminders = Enumerable.Range(0, 6)
-                .Select(i => new ScheduledReminderTime("same_day", new TimeOnly(8 + i, 0)))
+                .Select(i => new ScheduledReminderTime(SameDay, new TimeOnly(8 + i, 0)))
                 .ToList()
         };
 
@@ -222,7 +224,7 @@ public class CreateHabitCommandValidatorTests
         {
             ScheduledReminders = new List<ScheduledReminderTime>
             {
-                new("next_week", new TimeOnly(9, 0))
+                new((ScheduledReminderWhen)999, new TimeOnly(9, 0))
             }
         };
 
@@ -237,8 +239,8 @@ public class CreateHabitCommandValidatorTests
         {
             ScheduledReminders = new List<ScheduledReminderTime>
             {
-                new("same_day", new TimeOnly(9, 0)),
-                new("same_day", new TimeOnly(9, 0))
+                new(SameDay, new TimeOnly(9, 0)),
+                new(SameDay, new TimeOnly(9, 0))
             }
         };
 

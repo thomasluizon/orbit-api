@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
@@ -29,7 +30,8 @@ public class CheckReferralCompletionCommandHandlerTests
         _handler = new CheckReferralCompletionCommandHandler(
             _userRepo, _referralRepo, _habitRepo, _habitLogRepo,
             _notificationRepo, _pushNotification,
-            _referralReward, _unitOfWork);
+            _referralReward, _unitOfWork,
+            Substitute.For<ILogger<CheckReferralCompletionCommandHandler>>());
 
         _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns("promo_test123");

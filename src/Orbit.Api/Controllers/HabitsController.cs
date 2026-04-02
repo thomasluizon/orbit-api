@@ -82,7 +82,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         IReadOnlyList<BulkHabitItemRequest>? SubHabits = null,
         bool IsGeneral = false,
         DateOnly? EndDate = null,
-        bool IsFlexible = false);
+        bool IsFlexible = false,
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -119,6 +120,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     public record LinkGoalsRequest(List<Guid> GoalIds);
 
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetHabits(
         [FromQuery] DateOnly? dateFrom = null,
         [FromQuery] DateOnly? dateTo = null,
@@ -151,6 +155,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("calendar-month")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetCalendarMonth(
         [FromQuery] DateOnly dateFrom,
         [FromQuery] DateOnly dateTo,
@@ -162,6 +169,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("summary")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetDailySummary(
         [FromQuery] DateOnly dateFrom,
         [FromQuery] DateOnly dateTo,
@@ -181,6 +192,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("retrospective")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetRetrospective(
         [FromQuery] string period,
         [FromQuery] string language = "en",
@@ -210,6 +225,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetHabitByIdQuery(HttpContext.GetUserId(), id);
@@ -218,6 +236,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("{id:guid}/detail")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetHabitDetail(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetHabitFullDetailQuery(HttpContext.GetUserId(), id);
@@ -226,6 +247,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateHabit(
         [FromBody] CreateHabitRequest request,
         CancellationToken cancellationToken)
@@ -262,6 +287,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost("{id:guid}/log")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> LogHabit(
         Guid id,
         [FromBody] LogHabitRequest? request,
@@ -281,6 +309,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost("{id:guid}/skip")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SkipHabit(
         Guid id,
         [FromBody] SkipHabitRequest? request,
@@ -295,6 +326,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateHabit(
         Guid id,
         [FromBody] UpdateHabitRequest request,
@@ -331,6 +365,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPut("{id:guid}/checklist")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateChecklist(
         Guid id,
         [FromBody] UpdateChecklistRequest request,
@@ -349,6 +386,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteHabit(Guid id, CancellationToken cancellationToken)
     {
         var command = new DeleteHabitCommand(HttpContext.GetUserId(), id);
@@ -364,6 +404,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("logs")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetAllLogs(
         [FromQuery] DateOnly dateFrom,
         [FromQuery] DateOnly dateTo,
@@ -375,6 +418,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("{id:guid}/logs")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetLogs(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetHabitLogsQuery(HttpContext.GetUserId(), id);
@@ -383,6 +429,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpGet("{id:guid}/metrics")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetMetrics(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetHabitMetricsQuery(HttpContext.GetUserId(), id);
@@ -391,6 +440,10 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost("bulk")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> BulkCreate(
         [FromBody] BulkCreateHabitsRequest request,
         CancellationToken cancellationToken)
@@ -406,10 +459,13 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         if (result.IsSuccess)
             logger.LogInformation("Bulk created {Count} habits for user {UserId}", request.Habits.Count, HttpContext.GetUserId());
 
-        return result.ToPayGateAwareResult(v => Ok(v));
+        return result.ToPayGateAwareResult(v => StatusCode(StatusCodes.Status201Created, v));
     }
 
     [HttpDelete("bulk")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkDelete(
         [FromBody] BulkDeleteHabitsRequest request,
         CancellationToken cancellationToken)
@@ -429,6 +485,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost("bulk/log")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkLog(
         [FromBody] BulkLogHabitsRequest request,
         CancellationToken cancellationToken)
@@ -449,6 +508,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost("bulk/skip")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> BulkSkip(
         [FromBody] BulkSkipHabitsRequest request,
         CancellationToken cancellationToken)
@@ -469,6 +531,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPut("reorder")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ReorderHabits(
         [FromBody] ReorderHabitsRequest request,
         CancellationToken cancellationToken)
@@ -486,6 +551,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPut("{id:guid}/parent")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> MoveHabitParent(
         Guid id,
         [FromBody] MoveHabitParentRequest request,
@@ -500,6 +568,9 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     }
 
     [HttpPost("{id:guid}/duplicate")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DuplicateHabit(
         Guid id,
         CancellationToken cancellationToken)
@@ -508,11 +579,15 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         return result.IsSuccess
-            ? Created($"/api/habits/{result.Value}", new { id = result.Value })
+            ? CreatedAtAction(nameof(GetHabitById), new { id = result.Value }, new { id = result.Value })
             : BadRequest(new { error = result.Error });
     }
 
     [HttpPost("{parentId:guid}/sub-habits")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateSubHabit(
         Guid parentId,
         [FromBody] CreateSubHabitRequest request,
@@ -541,10 +616,13 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.ToPayGateAwareResult(v => Created($"/api/habits/{v}", new { id = v }));
+        return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabitById), new { id = v }, new { id = v }));
     }
 
     [HttpPut("{habitId:guid}/goals")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> LinkGoals(
         Guid habitId,
         [FromBody] LinkGoalsRequest request,
@@ -578,7 +656,8 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.IsGeneral,
             request.EndDate,
             request.IsFlexible,
-            request.ScheduledReminders);
+            request.ScheduledReminders,
+            request.ChecklistItems);
     }
 
 }

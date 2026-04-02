@@ -77,8 +77,9 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_AlreadyLogged_TogglesUnlog()
     {
         var habit = CreateTestHabit();
-        // Log the habit first so there's an existing log for today
-        habit.Log(Today);
+        // Log the habit without advancing DueDate so the schedule check still passes
+        // when the handler tries to process the same date (toggle-unlog)
+        habit.Log(Today, advanceDueDate: false);
 
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -141,7 +142,9 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
+        // CacheInvalidationHelper uses DateOnly.FromDateTime(DateTime.UtcNow) internally
+        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new LogHabitCommand(UserId, habit.Id);

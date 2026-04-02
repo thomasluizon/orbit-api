@@ -12,7 +12,11 @@ public sealed class OAuthAuthorizationStore : IDisposable
 
     public OAuthAuthorizationStore()
     {
-        _cleanupTimer = new Timer(_ => Cleanup(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        _cleanupTimer = new Timer(_ =>
+        {
+            try { Cleanup(); }
+            catch (Exception) { /* timer callback - suppress to prevent process crash */ }
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
 
     public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId)

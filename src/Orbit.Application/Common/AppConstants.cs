@@ -30,5 +30,11 @@ public static class AppConstants
     public const int MaxChecklistItems = 50;
     public const int MaxTagNameLength = 50;
     public const int MaxLanguageLength = 10;
+    public const int MaxVerificationAttempts = 3;
+    public const int MaxChatHistoryLength = 50_000;
+    public const int MaxCalendarRangeDays = 62;
+    public const int MaxPageSize = 200;
+    public const int AdRewardBonusMessages = 5;
+    public const int AdRewardDailyCap = 3;
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

@@ -35,12 +35,18 @@ public class MoveHabitParentCommandHandlerTests
         var habit = CreateTestHabit("Child");
         var newParent = CreateTestHabit("New Parent");
 
-        // First call returns the habit, second returns the new parent, third for cycle check
+        // First call returns the habit, second returns the new parent
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(habit, newParent, newParent);
+            .Returns(habit, newParent);
+
+        // WouldCreateCycle loads all user habits via FindAsync
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit, newParent }.AsReadOnly());
 
         var command = new MoveHabitParentCommand(UserId, habit.Id, newParent.Id);
 
@@ -79,22 +85,18 @@ public class MoveHabitParentCommandHandlerTests
         var child = CreateTestHabit("Child");
         child.SetParentHabitId(parent.Id);
 
-        var callCount = 0;
+        // First call returns the habit being moved (parent), second returns the target parent (child)
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
-            {
-                callCount++;
-                // 1st call: find the habit being moved (parent)
-                if (callCount == 1) return parent;
-                // 2nd call: find the target parent (child)
-                if (callCount == 2) return child;
-                // 3rd call: WouldCreateCycle walks up from child -> finds child.ParentHabitId == parent.Id == habitId
-                if (callCount == 3) return child;
-                return null;
-            });
+            .Returns(parent, child);
+
+        // WouldCreateCycle now loads ALL user habits via FindAsync and walks in memory
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child }.AsReadOnly());
 
         var command = new MoveHabitParentCommand(UserId, parent.Id, child.Id);
 

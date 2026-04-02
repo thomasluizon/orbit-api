@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -30,13 +31,13 @@ public class ActivateStreakFreezeCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure<StreakFreezeResponse>("User not found.");
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         // Validate streak > 0
         if (user.CurrentStreak <= 0)
-            return Result.Failure<StreakFreezeResponse>("No active streak to freeze.");
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoActiveStreak);
 
         // Check if user already logged a habit today
         var userHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
@@ -58,7 +59,7 @@ public class ActivateStreakFreezeCommandHandler(
             cancellationToken);
 
         if (existingFreeze.Count > 0)
-            return Result.Failure<StreakFreezeResponse>("Streak is already frozen for today.");
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.AlreadyUsedStreakFreezeToday);
 
         // Count freezes in rolling 30-day window
         var windowStart = today.AddDays(-29);
@@ -67,7 +68,7 @@ public class ActivateStreakFreezeCommandHandler(
             cancellationToken);
 
         if (recentFreezes.Count >= MaxFreezesPerMonth)
-            return Result.Failure<StreakFreezeResponse>("No freezes remaining. You can use 2 freezes per 30-day period.");
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable);
 
         // Create freeze
         var freeze = StreakFreeze.Create(request.UserId, today);

@@ -1,6 +1,7 @@
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Services;
 
@@ -254,6 +255,40 @@ public static class HabitScheduleService
         }
 
         return instances;
+    }
+
+    /// <summary>
+    /// Returns an appropriate lookback window (in days) for overdue detection
+    /// based on the habit's frequency unit and quantity.
+    /// </summary>
+    public static int GetLookbackDays(FrequencyUnit? unit, int qty)
+    {
+        return unit switch
+        {
+            FrequencyUnit.Day => qty,
+            FrequencyUnit.Week => qty * 7,
+            FrequencyUnit.Month => qty * 31,
+            FrequencyUnit.Year => Math.Min(qty * 366, 366),
+            _ => 7
+        };
+    }
+
+    /// <summary>
+    /// Advances stale bad habit DueDates so they appear on the correct next scheduled day.
+    /// </summary>
+    public static async Task AdvanceStaleBadHabitDueDates(
+        IGenericRepository<Habit> habitRepository, IUnitOfWork unitOfWork,
+        Guid userId, DateOnly today, CancellationToken ct)
+    {
+        var staleBadHabits = await habitRepository.FindTrackedAsync(
+            h => h.UserId == userId && h.IsBadHabit && h.FrequencyUnit != null && h.DueDate < today
+                && (!h.EndDate.HasValue || h.EndDate.Value >= today), ct);
+        if (staleBadHabits.Count > 0)
+        {
+            foreach (var habit in staleBadHabits)
+                habit.AdvanceDueDate(today);
+            await unitOfWork.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>
