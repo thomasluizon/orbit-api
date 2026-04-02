@@ -141,7 +141,16 @@ public class ProcessUserChatCommandHandler(
 
             var toolResults = new List<AiToolCallResult>();
 
-            foreach (var call in aiResponse.ToolCalls!)
+            // Sort tool calls so parent habits are created before sub-habits
+            var orderedCalls = aiResponse.ToolCalls!.OrderBy(c => c.Name switch
+            {
+                "create_habit" => 0,
+                "create_sub_habit" => 1,
+                "assign_tags" => 2,
+                _ => 1
+            }).ToList();
+
+            foreach (var call in orderedCalls)
             {
                 var tool = toolRegistry.GetTool(call.Name);
                 if (tool is null)
