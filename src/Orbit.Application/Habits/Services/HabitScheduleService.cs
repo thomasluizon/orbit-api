@@ -80,6 +80,34 @@ public static class HabitScheduleService
         return dates;
     }
 
+    /// <summary>
+    /// Checks if a recurring habit has at least one missed past occurrence (before today, no log).
+    /// Used to allow logging overdue recurring habits on today's date.
+    /// </summary>
+    public static bool HasMissedPastOccurrence(Habit habit, DateOnly today)
+    {
+        if (habit.FrequencyUnit is null || habit.IsBadHabit) return false;
+
+        var qty = habit.FrequencyQuantity ?? 1;
+        var lookbackDays = habit.FrequencyUnit switch
+        {
+            FrequencyUnit.Day => qty,
+            FrequencyUnit.Week => qty * 7,
+            FrequencyUnit.Month => qty * 31,
+            FrequencyUnit.Year => Math.Min(qty * 366, 366),
+            _ => 7
+        };
+
+        var lookbackStart = today.AddDays(-lookbackDays);
+        if (habit.DueDate > lookbackStart)
+            lookbackStart = habit.DueDate;
+
+        var pastDates = GetScheduledDates(habit, lookbackStart, today.AddDays(-1));
+        var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
+
+        return pastDates.Any(d => !logDates.Contains(d));
+    }
+
     // --- Flexible habit methods ---
 
     /// <summary>
