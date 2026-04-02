@@ -47,10 +47,10 @@ public class LogHabitCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
+            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned);
+            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned, ErrorCodes.HabitNotOwned);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var targetDate = request.Date ?? today;

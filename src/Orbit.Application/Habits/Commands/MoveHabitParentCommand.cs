@@ -24,7 +24,7 @@ public class MoveHabitParentCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         // Promote to top-level
         if (request.ParentId is null)
@@ -43,7 +43,7 @@ public class MoveHabitParentCommandHandler(
             cancellationToken: cancellationToken);
 
         if (parent is null)
-            return Result.Failure(ErrorMessages.TargetParentNotFound);
+            return Result.Failure(ErrorMessages.TargetParentNotFound, ErrorCodes.TargetParentNotFound);
 
         // Prevent circular references: walk up from the target parent to ensure
         // we don't encounter the habit being moved

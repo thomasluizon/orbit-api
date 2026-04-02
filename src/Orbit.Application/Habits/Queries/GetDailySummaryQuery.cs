@@ -34,7 +34,7 @@ public class GetDailySummaryQueryHandler(
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DailySummaryResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<DailySummaryResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (!user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>("AI summary is disabled.");

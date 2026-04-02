@@ -25,7 +25,7 @@ public class LinkGoalsToHabitCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         var goals = await goalRepository.FindTrackedAsync(
             g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,

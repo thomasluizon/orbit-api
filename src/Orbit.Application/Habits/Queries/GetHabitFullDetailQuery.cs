@@ -38,7 +38,7 @@ public class GetHabitFullDetailQueryHandler(
 
         var habit = habits.FirstOrDefault();
         if (habit is null)
-            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound);
+            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         // Build detail (same mapping as GetHabitByIdQueryHandler)
         var children = habit.Children
@@ -59,7 +59,7 @@ public class GetHabitFullDetailQueryHandler(
         // Build metrics
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.UserNotFound);
+            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var userTimeZone = user.TimeZone is not null
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)

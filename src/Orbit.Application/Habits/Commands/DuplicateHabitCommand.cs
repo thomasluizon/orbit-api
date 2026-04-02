@@ -28,7 +28,7 @@ public class DuplicateHabitCommandHandler(
 
         var original = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
         if (original is null)
-            return Result.Failure<Guid>(ErrorMessages.HabitNotFound);
+            return Result.Failure<Guid>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         // Check plan limits
         var canCreate = await payGateService.CanCreateHabits(request.UserId, 1, cancellationToken);

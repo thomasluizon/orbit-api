@@ -51,7 +51,7 @@ public class CreateSubHabitCommandHandler(
             cancellationToken: cancellationToken);
 
         if (parent is null)
-            return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound);
+            return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound, ErrorCodes.ParentHabitNotFound);
 
         // Enforce max nesting depth from config
         var maxDepth = await appConfigService.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);

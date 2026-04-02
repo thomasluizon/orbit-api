@@ -22,11 +22,11 @@ public class GetHabitMetricsQueryHandler(
             q => q.Include(h => h.Logs),
             cancellationToken);
         if (habit is null)
-            return Result.Failure<HabitMetrics>(ErrorMessages.HabitNotFound);
+            return Result.Failure<HabitMetrics>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<HabitMetrics>(ErrorMessages.UserNotFound);
+            return Result.Failure<HabitMetrics>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var userTimeZone = user.TimeZone is not null
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
