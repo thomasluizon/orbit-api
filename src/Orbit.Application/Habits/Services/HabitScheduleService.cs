@@ -281,7 +281,7 @@ public static class HabitScheduleService
         Guid userId, DateOnly today, CancellationToken ct)
     {
         var staleBadHabits = await habitRepository.FindTrackedAsync(
-            h => h.UserId == userId && h.IsBadHabit && h.FrequencyUnit != null && h.DueDate < today
+            h => h.UserId == userId && h.IsBadHabit && h.FrequencyUnit != null && h.FrequencyQuantity != null && h.DueDate < today
                 && (!h.EndDate.HasValue || h.EndDate.Value >= today), ct);
         if (staleBadHabits.Count > 0)
         {

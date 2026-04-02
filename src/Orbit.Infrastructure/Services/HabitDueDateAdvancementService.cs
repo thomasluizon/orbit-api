@@ -53,6 +53,7 @@ public class HabitDueDateAdvancementService(
         var habits = await dbContext.Habits
             .Where(h => !h.IsCompleted
                 && h.FrequencyUnit != null
+                && h.FrequencyQuantity != null
                 && !h.IsFlexible
                 && h.DueDate < cutoff)
             .ToListAsync(ct);
