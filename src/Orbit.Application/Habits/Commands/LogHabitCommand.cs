@@ -50,17 +50,22 @@ public class LogHabitCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var targetDate = request.Date ?? today;
 
-        // Validate target date
-        if (targetDate > today)
+        // Validate target date (one-time tasks can be completed early)
+        if (targetDate > today && habit.FrequencyUnit is not null)
             return Result.Failure<LogHabitResponse>("Cannot log a future date.");
 
         if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
             return Result.Failure<LogHabitResponse>("Cannot log a date beyond the overdue window.");
 
         // Validate the habit is actually scheduled on the target date (for recurring habits)
+        // Allow logging on today if the habit is overdue (has a missed past occurrence)
         if (habit.FrequencyUnit is not null && !habit.IsFlexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
-            return Result.Failure<LogHabitResponse>("Habit is not scheduled on this date.");
+        {
+            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            if (!isOverdue)
+                return Result.Failure<LogHabitResponse>("Habit is not scheduled on this date.");
+        }
 
         // Load user for streak info
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
