@@ -9,7 +9,7 @@ namespace Orbit.Api.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/checklist-templates")]
 public class ChecklistTemplatesController(IMediator mediator, ILogger<ChecklistTemplatesController> logger) : ControllerBase
 {
     public record CreateTemplateRequest(string Name, IReadOnlyList<string> Items);
