@@ -19,7 +19,7 @@ public class ConfirmAccountDeletionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DateTime>(ErrorMessages.UserNotFound);
+            return Result.Failure<DateTime>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var email = user.Email.ToLowerInvariant();
         var cacheKey = $"delete:{email}";
@@ -30,7 +30,7 @@ public class ConfirmAccountDeletionCommandHandler(
         if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
-            return Result.Failure<DateTime>("Too many attempts. Please request a new code");
+            return Result.Failure<DateTime>("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
         }
 
         if (!CryptographicOperations.FixedTimeEquals(
@@ -46,7 +46,7 @@ public class ConfirmAccountDeletionCommandHandler(
                     AbsoluteExpirationRelativeToNow = remaining
                 });
             }
-            return Result.Failure<DateTime>("Invalid code");
+            return Result.Failure<DateTime>("Invalid code", ErrorCodes.InvalidVerificationCode);
         }
 
         cache.Remove(cacheKey);

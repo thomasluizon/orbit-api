@@ -21,10 +21,10 @@ public class DeleteHabitCommandHandler(
         var habit = await habitRepository.GetByIdAsync(request.HabitId, cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.NoPermission);
+            return Result.Failure(ErrorMessages.NoPermission, ErrorCodes.NoPermission);
 
         habitRepository.Remove(habit);
         await unitOfWork.SaveChangesAsync(cancellationToken);

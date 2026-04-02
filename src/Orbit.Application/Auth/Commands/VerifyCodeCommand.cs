@@ -29,13 +29,13 @@ public class VerifyCodeCommandHandler(
         var cacheKey = $"verify:{email}";
 
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure<LoginResponse>("Verification code expired or not found");
+            return Result.Failure<LoginResponse>("Verification code expired or not found", ErrorCodes.CodeExpired);
 
         // Check attempts
         if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
-            return Result.Failure<LoginResponse>("Too many attempts. Please request a new code");
+            return Result.Failure<LoginResponse>("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
         }
 
         // Validate code
@@ -53,7 +53,7 @@ public class VerifyCodeCommandHandler(
                     AbsoluteExpirationRelativeToNow = remaining
                 });
             }
-            return Result.Failure<LoginResponse>("Invalid verification code");
+            return Result.Failure<LoginResponse>("Invalid verification code", ErrorCodes.InvalidVerificationCode);
         }
 
         // Code valid - remove from cache
