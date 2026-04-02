@@ -17,10 +17,10 @@ public class GamificationService(
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IGamificationService
 {
-    public async Task ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default)
+    public async Task<HabitLogGamificationResult?> ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default)
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return;
+        if (user is null || !user.HasProAccess) return null;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
@@ -36,7 +36,7 @@ public class GamificationService(
 
         // Find the specific logged habit from the already-loaded collection
         var habit = allUserHabits.FirstOrDefault(h => h.Id == habitId);
-        if (habit is null) return;
+        if (habit is null) return null;
 
         // Calculate XP: 10 base + streak bonus
         var userTz = user.TimeZone is not null
@@ -110,6 +110,10 @@ public class GamificationService(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+
+        return new HabitLogGamificationResult(
+            xp,
+            newAchievements.Select(a => a.Definition.Id).ToList());
     }
 
     public async Task ProcessHabitCreated(Guid userId, CancellationToken ct = default)

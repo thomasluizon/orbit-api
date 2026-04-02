@@ -130,6 +130,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         [FromQuery] bool? isGeneral = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] bool includeGeneral = false,
         CancellationToken cancellationToken = default)
     {
         var query = new GetHabitScheduleQuery(
@@ -143,7 +144,19 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             tagIds is { Length: > 0 } ? tagIds : null,
             isGeneral,
             page,
-            pageSize);
+            pageSize,
+            includeGeneral);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("calendar-month")]
+    public async Task<IActionResult> GetCalendarMonth(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetCalendarMonthQuery(HttpContext.GetUserId(), dateFrom, dateTo);
         var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
@@ -200,6 +213,14 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
     public async Task<IActionResult> GetHabitById(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetHabitByIdQuery(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+    }
+
+    [HttpGet("{id:guid}/detail")]
+    public async Task<IActionResult> GetHabitDetail(Guid id, CancellationToken cancellationToken)
+    {
+        var query = new GetHabitFullDetailQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }

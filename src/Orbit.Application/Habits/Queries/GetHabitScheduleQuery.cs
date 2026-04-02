@@ -84,7 +84,8 @@ public record GetHabitScheduleQuery(
     IReadOnlyList<Guid>? TagIds = null,
     bool? IsGeneral = null,
     int Page = 1,
-    int PageSize = 50) : IRequest<Result<PaginatedResponse<HabitScheduleItem>>>;
+    int PageSize = 50,
+    bool IncludeGeneral = false) : IRequest<Result<PaginatedResponse<HabitScheduleItem>>>;
 
 public class GetHabitScheduleQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -267,6 +268,29 @@ public class GetHabitScheduleQueryHandler(
             .Take(request.PageSize)
             .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo, referenceDate: dateFrom, userToday: today, search: request.Search))
             .ToList();
+
+        // When IncludeGeneral is true, append general habits after the scheduled ones
+        if (request.IncludeGeneral)
+        {
+            var generalHabits = await habitRepository.FindAsync(
+                h => h.UserId == request.UserId && h.IsGeneral,
+                q => q.Include(h => h.Tags)
+                      .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
+                      .Include(h => h.Goals),
+                cancellationToken);
+
+            var generalLookup = generalHabits.ToLookup(h => h.ParentHabitId);
+            var generalTopLevel = generalLookup[null]
+                .OrderBy(h => h.Position ?? int.MaxValue)
+                .ThenBy(h => h.CreatedAtUtc)
+                .ToList();
+
+            var generalItems = generalTopLevel
+                .Select(h => MapToScheduleItem(h, [], false, generalLookup, includeAllChildren: true, userToday: today, search: request.Search))
+                .ToList();
+
+            pagedItems.AddRange(generalItems);
+        }
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,

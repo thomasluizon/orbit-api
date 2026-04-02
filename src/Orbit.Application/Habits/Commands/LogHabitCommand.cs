@@ -11,10 +11,15 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
+public record LinkedGoalUpdate(Guid GoalId, string Title, decimal NewProgress, decimal TargetValue);
+
 public record LogHabitResponse(
     Guid LogId,
     bool IsFirstCompletionToday,
-    int CurrentStreak);
+    int CurrentStreak,
+    IReadOnlyList<LinkedGoalUpdate>? LinkedGoalUpdates = null,
+    int? XpEarned = null,
+    IReadOnlyList<string>? NewAchievementIds = null);
 
 public record LogHabitCommand(
     Guid UserId,
@@ -82,7 +87,7 @@ public class LogHabitCommandHandler(
             habitLogRepository.Remove(unlogResult.Value);
 
             // Decrement linked goal progress
-            await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
+            var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -91,7 +96,8 @@ public class LogHabitCommandHandler(
             return Result.Success(new LogHabitResponse(
                 unlogResult.Value.Id,
                 IsFirstCompletionToday: false,
-                CurrentStreak: user?.CurrentStreak ?? 0));
+                CurrentStreak: user?.CurrentStreak ?? 0,
+                LinkedGoalUpdates: unlogGoalUpdates));
         }
 
         // Check if this is the first completion today (before creating the log)
@@ -116,7 +122,7 @@ public class LogHabitCommandHandler(
         await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
         // Increment linked goal progress
-        await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
+        var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
 
         // Update user streak
         if (user is not null)
@@ -124,10 +130,11 @@ public class LogHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Gamification: process habit completion (fire-and-forget style, don't fail the log)
+        // Gamification: process habit completion and capture results
+        HabitLogGamificationResult? gamificationResult = null;
         try
         {
-            await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
+            gamificationResult = await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
         }
         catch { /* gamification failure should not block habit logging */ }
 
@@ -146,12 +153,15 @@ public class LogHabitCommandHandler(
         return Result.Success(new LogHabitResponse(
             logResult.Value.Id,
             isFirstCompletionToday,
-            CurrentStreak: user?.CurrentStreak ?? 0));
+            CurrentStreak: user?.CurrentStreak ?? 0,
+            LinkedGoalUpdates: goalUpdates,
+            XpEarned: gamificationResult?.XpEarned,
+            NewAchievementIds: gamificationResult?.NewAchievementIds));
     }
 
-    private async Task UpdateLinkedGoalProgress(Habit habit, decimal delta, CancellationToken ct)
+    private async Task<IReadOnlyList<LinkedGoalUpdate>?> UpdateLinkedGoalProgress(Habit habit, decimal delta, CancellationToken ct)
     {
-        if (habit.Goals.Count == 0) return;
+        if (habit.Goals.Count == 0) return null;
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
 
@@ -159,11 +169,15 @@ public class LogHabitCommandHandler(
         var trackedGoals = await goalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id), ct);
 
+        var updates = new List<LinkedGoalUpdate>();
         foreach (var trackedGoal in trackedGoals)
         {
             var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
             trackedGoal.UpdateProgress(newValue);
+            updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, newValue, trackedGoal.TargetValue));
         }
+
+        return updates;
     }
 
 }
