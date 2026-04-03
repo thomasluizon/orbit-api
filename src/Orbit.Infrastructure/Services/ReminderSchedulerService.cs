@@ -185,12 +185,11 @@ public partial class ReminderSchedulerService(
 
             foreach (var sr in habit.ScheduledReminders)
             {
-                DateOnly reminderForDate;
-                if (sr.When == ScheduledReminderWhen.SameDay && isDueToday)
-                    reminderForDate = userToday;
-                else if (sr.When == ScheduledReminderWhen.DayBefore && isDueTomorrow)
-                    reminderForDate = userToday;
-                else
+                if (sr.When == ScheduledReminderWhen.SameDay && !isDueToday)
+                    continue;
+                if (sr.When == ScheduledReminderWhen.DayBefore && !isDueTomorrow)
+                    continue;
+                if (sr.When != ScheduledReminderWhen.SameDay && sr.When != ScheduledReminderWhen.DayBefore)
                     continue;
 
                 // Check if current time matches (within 1-minute window)
@@ -223,15 +222,23 @@ public partial class ReminderSchedulerService(
         return anyChanges;
     }
 
+    private static string Pluralize(string singular, int count) => count > 1 ? singular + "s" : singular;
+
     private static string FormatReminderText(int minutesBefore, string lang)
     {
         var isPt = lang.StartsWith("pt");
         return minutesBefore switch
         {
             0 => isPt ? "Agora" : "Due now",
-            < 60 => isPt ? $"Em {minutesBefore} {(minutesBefore == 1 ? "minuto" : "minutos")}" : $"Due in {minutesBefore} minutes",
-            < 1440 => isPt ? $"Em {minutesBefore / 60} hora{(minutesBefore / 60 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 60} hour{(minutesBefore / 60 > 1 ? "s" : "")}",
-            _ => isPt ? $"Em {minutesBefore / 1440} dia{(minutesBefore / 1440 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 1440} day{(minutesBefore / 1440 > 1 ? "s" : "")}"
+            < 60 => isPt
+                ? $"Em {minutesBefore} {Pluralize("minuto", minutesBefore)}"
+                : $"Due in {minutesBefore} minutes",
+            < 1440 => isPt
+                ? $"Em {minutesBefore / 60} {Pluralize("hora", minutesBefore / 60)}"
+                : $"Due in {minutesBefore / 60} {Pluralize("hour", minutesBefore / 60)}",
+            _ => isPt
+                ? $"Em {minutesBefore / 1440} {Pluralize("dia", minutesBefore / 1440)}"
+                : $"Due in {minutesBefore / 1440} {Pluralize("day", minutesBefore / 1440)}"
         };
     }
 

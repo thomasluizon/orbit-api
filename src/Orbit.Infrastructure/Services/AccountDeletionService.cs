@@ -89,9 +89,8 @@ public partial class AccountDeletionService(
             .Where(r => r.Date < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        var cutoffWeek = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
         var deletedSlipAlerts = await dbContext.SentSlipAlerts
-            .Where(a => a.WeekStart < cutoffWeek)
+            .Where(a => a.WeekStart < cutoff)
             .ExecuteDeleteAsync(ct);
 
         if (deletedReminders > 0 || deletedSlipAlerts > 0)

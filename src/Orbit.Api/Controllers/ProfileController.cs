@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,8 +14,8 @@ namespace Orbit.Api.Controllers;
 public partial class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
-    public record SetAiMemoryRequest(bool Enabled);
-    public record SetAiSummaryRequest(bool Enabled);
+    public record SetAiMemoryRequest([property: JsonRequired] bool Enabled);
+    public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest(int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);

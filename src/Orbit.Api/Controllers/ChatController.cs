@@ -18,6 +18,7 @@ namespace Orbit.Api.Controllers;
 [EnableRateLimiting("chat")]
 public partial class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
 {
+    private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
     [HttpPost]
     [RequestSizeLimit(10_485_760)] // 10MB
     [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)] // 10MB
@@ -63,14 +64,11 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
             try
             {
-                chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, ChatHistoryJsonOptions);
             }
             catch (JsonException ex)
             {
-                logger.LogWarning("Chat history parse failed: {Error}", ex.Message);
+                LogChatHistoryParseFailed(logger, ex, ex.Message);
                 return BadRequest(new { error = "Invalid chat history format" });
             }
         }
