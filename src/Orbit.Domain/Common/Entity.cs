@@ -19,9 +19,4 @@ public abstract class Entity
     }
 
     public override int GetHashCode() => Id.GetHashCode();
-
-    public static bool operator ==(Entity? left, Entity? right) =>
-        left is null ? right is null : left.Equals(right);
-
-    public static bool operator !=(Entity? left, Entity? right) => !(left == right);
 }

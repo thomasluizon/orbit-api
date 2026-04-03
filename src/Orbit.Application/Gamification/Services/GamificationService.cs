@@ -78,19 +78,18 @@ public class GamificationService(
         }
 
         // --- Early Bird / Night Owl ---
-        await CheckTimeBasedAchievements(userId, user, earned, newAchievements, allUserHabits, ct);
+        await CheckTimeBasedAchievements(user, earned, newAchievements, allUserHabits, ct);
 
         // --- Comeback ---
         if (!earned.Contains(AchievementDefinitions.Comeback))
         {
-            await CheckComeback(userId, today, earned, user, newAchievements, allUserHabits, ct);
+            await CheckComeback(today, earned, user, newAchievements, allUserHabits, ct);
         }
 
         // --- Bad Habit Breaker ---
-        if (!earned.Contains(AchievementDefinitions.BadHabitBreaker) && habit.IsBadHabit)
+        if (!earned.Contains(AchievementDefinitions.BadHabitBreaker) && habit.IsBadHabit && metrics.CurrentStreak >= 30)
         {
-            if (metrics.CurrentStreak >= 30)
-                TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
+            TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
         }
 
         // Persist new achievements
@@ -360,7 +359,6 @@ public class GamificationService(
     }
 
     private async Task CheckTimeBasedAchievements(
-        Guid userId,
         User user,
         HashSet<string> earned,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
@@ -406,7 +404,6 @@ public class GamificationService(
     }
 
     private async Task CheckComeback(
-        Guid userId,
         DateOnly today,
         HashSet<string> earned,
         User user,

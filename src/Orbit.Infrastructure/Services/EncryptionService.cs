@@ -73,21 +73,21 @@ public sealed class EncryptionService : IEncryptionService
         return EncPrefix + Convert.ToBase64String(result);
     }
 
-    public string Decrypt(string ciphertextBase64)
+    public string Decrypt(string ciphertext)
     {
         if (!_isConfigured)
-            return ciphertextBase64;
+            return ciphertext;
 
         // New format: prefixed with "enc:"
-        if (ciphertextBase64.StartsWith(EncPrefix))
+        if (ciphertext.StartsWith(EncPrefix))
         {
-            var decrypted = DecryptRaw(ciphertextBase64[EncPrefix.Length..]);
+            var decrypted = DecryptRaw(ciphertext[EncPrefix.Length..]);
             // Handle double-encryption: legacy data that was re-encrypted with prefix
             return TryDecryptLegacy(decrypted);
         }
 
         // Legacy format: encrypted without prefix (migration transition).
-        return TryDecryptLegacy(ciphertextBase64);
+        return TryDecryptLegacy(ciphertext);
     }
 
     private string DecryptRaw(string base64)

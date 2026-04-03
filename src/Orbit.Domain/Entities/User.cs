@@ -5,11 +5,10 @@ using Orbit.Domain.Enums;
 
 namespace Orbit.Domain.Entities;
 
-public class User : Entity
+public partial class User : Entity
 {
-    private static readonly Regex EmailRegex = new(
-        @"^[^@\s]+@[^@\s]+\.[^@\s]+$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EmailRegex();
 
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
@@ -72,7 +71,7 @@ public class User : Entity
             return Result.Failure<User>("Email is required");
 
         var trimmedEmail = email.Trim();
-        if (!EmailRegex.IsMatch(trimmedEmail))
+        if (!EmailRegex().IsMatch(trimmedEmail))
             return Result.Failure<User>("Invalid email format");
 
         return Result.Success(new User

@@ -39,6 +39,17 @@ public class QueryHabitsTool(
         required = Array.Empty<string>()
     };
 
+    private record HabitFilters(
+        bool? IsCompleted,
+        bool? IsGeneral,
+        bool? IsBadHabit,
+        FrequencyUnit? Frequency,
+        bool FrequencyOneTime,
+        DateOnly? Date,
+        bool IncludeOverdue,
+        string? Search,
+        string? Tag);
+
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
@@ -46,6 +57,7 @@ public class QueryHabitsTool(
             return new ToolResult(false, Error: "User not found.");
 
         var today = HabitMetricsCalculator.GetUserToday(user);
+        var filters = ParseFilters(args, today);
 
         var includeMetrics = args.TryGetProperty("include_metrics", out var metricsEl) && metricsEl.ValueKind == JsonValueKind.True;
         var includeSubs = !args.TryGetProperty("include_sub_habits", out var subsEl) || subsEl.ValueKind != JsonValueKind.False;
@@ -53,20 +65,36 @@ public class QueryHabitsTool(
         if (args.TryGetProperty("limit", out var limitEl) && limitEl.ValueKind == JsonValueKind.Number)
             limit = Math.Clamp(limitEl.GetInt32(), 1, 200);
 
-        // Parse filters up-front so we can push them to the DB predicate
-        bool? isCompletedFilter = null;
+        var allHabits = await QueryHabitsAsync(userId, filters, includeMetrics, ct);
+
+        var results = allHabits
+            .Where(h => h.ParentHabitId is null)
+            .OrderBy(h => h.Position)
+            .Take(limit)
+            .ToList();
+
+        if (results.Count == 0)
+            return new ToolResult(true, EntityName: "No habits found matching the given filters.");
+
+        var output = BuildOutput(results, allHabits, today, includeMetrics, includeSubs);
+        return new ToolResult(true, EntityName: output);
+    }
+
+    private static HabitFilters ParseFilters(JsonElement args, DateOnly today)
+    {
+        bool? isCompleted = null;
         if (args.TryGetProperty("is_completed", out var completedEl) && completedEl.ValueKind != JsonValueKind.Null)
-            isCompletedFilter = completedEl.ValueKind == JsonValueKind.True;
+            isCompleted = completedEl.ValueKind == JsonValueKind.True;
 
-        bool? isGeneralFilter = null;
+        bool? isGeneral = null;
         if (args.TryGetProperty("is_general", out var generalEl) && generalEl.ValueKind != JsonValueKind.Null)
-            isGeneralFilter = generalEl.ValueKind == JsonValueKind.True;
+            isGeneral = generalEl.ValueKind == JsonValueKind.True;
 
-        bool? isBadHabitFilter = null;
+        bool? isBadHabit = null;
         if (args.TryGetProperty("is_bad_habit", out var badEl) && badEl.ValueKind != JsonValueKind.Null)
-            isBadHabitFilter = badEl.ValueKind == JsonValueKind.True;
+            isBadHabit = badEl.ValueKind == JsonValueKind.True;
 
-        FrequencyUnit? frequencyFilter = null;
+        FrequencyUnit? frequency = null;
         var frequencyOneTime = false;
         if (args.TryGetProperty("frequency", out var freqEl) && freqEl.ValueKind == JsonValueKind.String)
         {
@@ -74,7 +102,7 @@ public class QueryHabitsTool(
             if (freqStr.Equals("OneTime", StringComparison.OrdinalIgnoreCase))
                 frequencyOneTime = true;
             else if (Enum.TryParse<FrequencyUnit>(freqStr, true, out var parsedFreq))
-                frequencyFilter = parsedFreq;
+                frequency = parsedFreq;
         }
 
         DateOnly? dateFilter = null;
@@ -89,115 +117,94 @@ public class QueryHabitsTool(
                 includeOverdue = overdueEl.ValueKind == JsonValueKind.True;
         }
 
-        string? searchText = null;
+        string? search = null;
         if (args.TryGetProperty("search", out var searchEl) && searchEl.ValueKind == JsonValueKind.String)
-            searchText = searchEl.GetString();
+            search = searchEl.GetString();
 
-        string? tagFilter = null;
+        string? tag = null;
         if (args.TryGetProperty("tag", out var tagEl) && tagEl.ValueKind == JsonValueKind.String)
-            tagFilter = tagEl.GetString();
+            tag = tagEl.GetString();
 
-        // Capture loop variables for use in lambda (avoid closure over mutable vars)
-        var capturedDate = dateFilter;
-        var capturedIncludeOverdue = includeOverdue;
-        var capturedSearch = searchText;
-        var capturedTag = tagFilter;
-        var capturedIsCompleted = isCompletedFilter;
-        var capturedIsGeneral = isGeneralFilter;
-        var capturedIsBad = isBadHabitFilter;
-        var capturedFreqOneTime = frequencyOneTime;
-        var capturedFreq = frequencyFilter;
+        return new HabitFilters(isCompleted, isGeneral, isBadHabit, frequency, frequencyOneTime, dateFilter, includeOverdue, search, tag);
+    }
 
-        // Apply DB-level filtering to avoid loading all user habits into memory
-        IReadOnlyList<Habit> allHabits;
-        if (includeMetrics)
-        {
-            allHabits = await habitRepository.FindAsync(
-                h => h.UserId == userId
-                    && (capturedIsCompleted == null ? !h.IsCompleted : h.IsCompleted == capturedIsCompleted.Value)
-                    && (capturedIsGeneral == null || h.IsGeneral == capturedIsGeneral.Value)
-                    && (capturedIsBad == null || h.IsBadHabit == capturedIsBad.Value)
-                    && (!capturedFreqOneTime || h.FrequencyUnit == null)
-                    && (capturedFreq == null || h.FrequencyUnit == capturedFreq.Value)
-                    && (!capturedDate.HasValue || (!h.IsGeneral && (capturedIncludeOverdue ? h.DueDate <= capturedDate.Value : h.DueDate == capturedDate.Value)))
-                    && (capturedSearch == null || h.Title.ToLower().Contains(capturedSearch.ToLower()))
-                    && (capturedTag == null || h.Tags.Any(t => t.Name.ToLower().Contains(capturedTag.ToLower()))),
-                q => q.Include(h => h.Tags).Include(h => h.Logs),
-                ct);
-        }
-        else
-        {
-            allHabits = await habitRepository.FindAsync(
-                h => h.UserId == userId
-                    && (capturedIsCompleted == null ? !h.IsCompleted : h.IsCompleted == capturedIsCompleted.Value)
-                    && (capturedIsGeneral == null || h.IsGeneral == capturedIsGeneral.Value)
-                    && (capturedIsBad == null || h.IsBadHabit == capturedIsBad.Value)
-                    && (!capturedFreqOneTime || h.FrequencyUnit == null)
-                    && (capturedFreq == null || h.FrequencyUnit == capturedFreq.Value)
-                    && (!capturedDate.HasValue || (!h.IsGeneral && (capturedIncludeOverdue ? h.DueDate <= capturedDate.Value : h.DueDate == capturedDate.Value)))
-                    && (capturedSearch == null || h.Title.ToLower().Contains(capturedSearch.ToLower()))
-                    && (capturedTag == null || h.Tags.Any(t => t.Name.ToLower().Contains(capturedTag.ToLower()))),
-                q => q.Include(h => h.Tags),
-                ct);
-        }
+    private async Task<IReadOnlyList<Habit>> QueryHabitsAsync(Guid userId, HabitFilters f, bool includeMetrics, CancellationToken ct)
+    {
+        return await habitRepository.FindAsync(
+            h => h.UserId == userId
+                && (f.IsCompleted == null ? !h.IsCompleted : h.IsCompleted == f.IsCompleted.Value)
+                && (f.IsGeneral == null || h.IsGeneral == f.IsGeneral.Value)
+                && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
+                && (!f.FrequencyOneTime || h.FrequencyUnit == null)
+                && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
+                && (!f.Date.HasValue || (!h.IsGeneral && (f.IncludeOverdue ? h.DueDate <= f.Date.Value : h.DueDate == f.Date.Value)))
+                && (f.Search == null || h.Title.ToLower().Contains(f.Search.ToLower()))
+                && (f.Tag == null || h.Tags.Any(t => t.Name.ToLower().Contains(f.Tag.ToLower()))),
+            includeMetrics
+                ? q => q.Include(h => h.Tags).Include(h => h.Logs)
+                : q => q.Include(h => h.Tags),
+            ct);
+    }
 
-        // Start with parent habits only
-        var results = allHabits
-            .Where(h => h.ParentHabitId is null)
-            .OrderBy(h => h.Position)
-            .Take(limit)
-            .ToList();
-
-        if (results.Count == 0)
-            return new ToolResult(true, EntityName: "No habits found matching the given filters.");
-
-        // Build output
+    private static string BuildOutput(List<Habit> results, IReadOnlyList<Habit> allHabits, DateOnly today, bool includeMetrics, bool includeSubs)
+    {
         var sb = new StringBuilder();
         sb.AppendLine($"Found {results.Count} habit(s):");
         sb.AppendLine();
 
         foreach (var habit in results)
         {
-            var freqLabel = habit.FrequencyUnit is null ? "One-time" :
-                habit.FrequencyQuantity == 1 ? $"Every {habit.FrequencyUnit.ToString()!.ToLower()}" :
-                $"Every {habit.FrequencyQuantity} {habit.FrequencyUnit.ToString()!.ToLower()}s";
+            sb.AppendLine(BuildHabitLine(habit, today, includeMetrics));
 
-            var labels = new List<string>();
-            if (habit.IsGeneral) labels.Add("GENERAL");
-            if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate < today) labels.Add("OVERDUE");
-            if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
-            if (habit.IsBadHabit) labels.Add("BAD HABIT");
-            if (habit.IsCompleted) labels.Add("COMPLETED");
-            if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
-
-            if (includeMetrics)
-            {
-                var metrics = HabitMetricsCalculator.Calculate(habit, today);
-                if (metrics.CurrentStreak > 0) labels.Add($"Streak: {metrics.CurrentStreak}d");
-                if (metrics.WeeklyCompletionRate > 0) labels.Add($"Week: {metrics.WeeklyCompletionRate:F0}%");
-                if (metrics.TotalCompletions > 0) labels.Add($"Total: {metrics.TotalCompletions}");
-            }
-
-            if (habit.ChecklistItems.Count > 0)
-            {
-                var done = habit.ChecklistItems.Count(i => i.IsChecked);
-                labels.Add($"Checklist: {done}/{habit.ChecklistItems.Count}");
-            }
-
-            var loggedToday = includeMetrics && habit.Logs.Any(l => l.Date == today);
-            if (loggedToday) labels.Add("DONE TODAY");
-
-            var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
-            sb.AppendLine($"- \"{habit.Title}\" | ID: {habit.Id} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}");
-
-            // Sub-habits (recursive, all depth levels)
             if (includeSubs)
-            {
                 AppendChildren(sb, allHabits, habit.Id, today, includeMetrics, 1);
-            }
         }
 
-        return new ToolResult(true, EntityName: sb.ToString());
+        return sb.ToString();
+    }
+
+    private static string BuildHabitLine(Habit habit, DateOnly today, bool includeMetrics)
+    {
+        var freqLabel = FormatFrequencyLabel(habit);
+
+        var labels = new List<string>();
+        if (habit.IsGeneral) labels.Add("GENERAL");
+        if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate < today) labels.Add("OVERDUE");
+        if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
+        if (habit.IsBadHabit) labels.Add("BAD HABIT");
+        if (habit.IsCompleted) labels.Add("COMPLETED");
+        if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
+
+        if (includeMetrics)
+        {
+            var metrics = HabitMetricsCalculator.Calculate(habit, today);
+            if (metrics.CurrentStreak > 0) labels.Add($"Streak: {metrics.CurrentStreak}d");
+            if (metrics.WeeklyCompletionRate > 0) labels.Add($"Week: {metrics.WeeklyCompletionRate:F0}%");
+            if (metrics.TotalCompletions > 0) labels.Add($"Total: {metrics.TotalCompletions}");
+        }
+
+        if (habit.ChecklistItems.Count > 0)
+        {
+            var done = habit.ChecklistItems.Count(i => i.IsChecked);
+            labels.Add($"Checklist: {done}/{habit.ChecklistItems.Count}");
+        }
+
+        var loggedToday = includeMetrics && habit.Logs.Any(l => l.Date == today);
+        if (loggedToday) labels.Add("DONE TODAY");
+
+        var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
+        return $"- \"{habit.Title}\" | ID: {habit.Id} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
+    }
+
+    private static string FormatFrequencyLabel(Habit habit)
+    {
+        if (habit.FrequencyUnit is null)
+            return "One-time";
+
+        var unitName = habit.FrequencyUnit.ToString()!.ToLower();
+        return habit.FrequencyQuantity == 1
+            ? $"Every {unitName}"
+            : $"Every {habit.FrequencyQuantity} {unitName}s";
     }
 
     private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, DateOnly today, bool includeMetrics, int depth)

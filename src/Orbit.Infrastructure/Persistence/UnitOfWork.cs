@@ -3,7 +3,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public class UnitOfWork(OrbitDbContext context) : IUnitOfWork
+public class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisposable
 {
     private IDbContextTransaction? _transaction;
 
@@ -41,6 +41,14 @@ public class UnitOfWork(OrbitDbContext context) : IUnitOfWork
     {
         _transaction?.Dispose();
         context.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_transaction is not null)
+            await _transaction.DisposeAsync();
+        await context.DisposeAsync();
         GC.SuppressFinalize(this);
     }
 }

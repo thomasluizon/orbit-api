@@ -13,7 +13,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class HabitsController(IMediator mediator, ILogger<HabitsController> logger, IUserDateService userDateService) : ControllerBase
+public partial class HabitsController(IMediator mediator, ILogger<HabitsController> logger, IUserDateService userDateService) : ControllerBase
 {
     public record CreateHabitRequest(
         string Title,
@@ -281,7 +281,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Habit created {HabitId} by user {UserId}", result.Value, HttpContext.GetUserId());
+            LogHabitCreated(logger, result.Value, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
     }
@@ -396,7 +396,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Habit deleted {HabitId} by user {UserId}", id, HttpContext.GetUserId());
+            LogHabitDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
 
@@ -457,7 +457,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Bulk created {Count} habits for user {UserId}", request.Habits.Count, HttpContext.GetUserId());
+            LogBulkCreated(logger, request.Habits.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => StatusCode(StatusCodes.Status201Created, v));
     }
@@ -477,7 +477,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Bulk deleted {Count} habits for user {UserId}", request.HabitIds.Count, HttpContext.GetUserId());
+            LogBulkDeleted(logger, request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
@@ -500,7 +500,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Bulk logged {Count} habits for user {UserId}", request.Items.Count, HttpContext.GetUserId());
+            LogBulkLogged(logger, request.Items.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
@@ -523,7 +523,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Bulk skipped {Count} habits for user {UserId}", request.Items.Count, HttpContext.GetUserId());
+            LogBulkSkipped(logger, request.Items.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok(result.Value)
@@ -632,7 +632,7 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            logger.LogInformation("Linked {Count} goals to habit {HabitId} by user {UserId}", request.GoalIds.Count, habitId, HttpContext.GetUserId());
+            LogLinkedGoalsToHabit(logger, request.GoalIds.Count, habitId, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
@@ -659,5 +659,27 @@ public class HabitsController(IMediator mediator, ILogger<HabitsController> logg
             request.ScheduledReminders,
             request.ChecklistItems);
     }
+
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Habit created {HabitId} by user {UserId}")]
+    private static partial void LogHabitCreated(ILogger logger, Guid habitId, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Habit deleted {HabitId} by user {UserId}")]
+    private static partial void LogHabitDeleted(ILogger logger, Guid habitId, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Bulk created {Count} habits for user {UserId}")]
+    private static partial void LogBulkCreated(ILogger logger, int count, Guid userId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Bulk deleted {Count} habits for user {UserId}")]
+    private static partial void LogBulkDeleted(ILogger logger, int count, Guid userId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Bulk logged {Count} habits for user {UserId}")]
+    private static partial void LogBulkLogged(ILogger logger, int count, Guid userId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Bulk skipped {Count} habits for user {UserId}")]
+    private static partial void LogBulkSkipped(ILogger logger, int count, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Linked {Count} goals to habit {HabitId} by user {UserId}")]
+    private static partial void LogLinkedGoalsToHabit(ILogger logger, int count, Guid habitId, Guid userId);
 
 }

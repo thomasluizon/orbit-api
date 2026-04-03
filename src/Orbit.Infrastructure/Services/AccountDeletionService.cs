@@ -7,7 +7,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class AccountDeletionService(
+public partial class AccountDeletionService(
     IServiceScopeFactory scopeFactory,
     ILogger<AccountDeletionService> logger,
     IConfiguration configuration) : BackgroundService

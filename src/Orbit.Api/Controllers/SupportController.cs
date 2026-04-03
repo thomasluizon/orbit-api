@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class SupportController(IMediator mediator, ILogger<SupportController> logger) : ControllerBase
+public partial class SupportController(IMediator mediator, ILogger<SupportController> logger) : ControllerBase
 {
     public record SupportRequest(string Name, string Email, string Subject, string Message);
 
@@ -33,10 +33,14 @@ public class SupportController(IMediator mediator, ILogger<SupportController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Support request sent by user {UserId} subject {Subject}", HttpContext.GetUserId(), request.Subject);
+            LogSupportRequestSent(logger, HttpContext.GetUserId(), request.Subject);
 
         return result.IsSuccess
             ? Ok(new { message = "Support request sent successfully" })
             : BadRequest(new { error = result.Error });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Support request sent by user {UserId} subject {Subject}")]
+    private static partial void LogSupportRequestSent(ILogger logger, Guid userId, string subject);
+
 }

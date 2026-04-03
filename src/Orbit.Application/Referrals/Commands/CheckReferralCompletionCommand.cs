@@ -27,7 +27,7 @@ public class CheckReferralCompletionCommandHandler(
             r => r.ReferredUserId == request.UserId && r.Status == ReferralStatus.Pending,
             cancellationToken: cancellationToken);
 
-        var referral = pendingReferrals.FirstOrDefault();
+        var referral = pendingReferrals.Count > 0 ? pendingReferrals[0] : null;
         if (referral is null)
             return Result.Success();
 
@@ -132,19 +132,7 @@ public class CheckReferralCompletionCommandHandler(
     {
         var isPt = user.Language?.StartsWith("pt") == true;
 
-        var (title, body) = isReferrer
-            ? (isPt ? "Indicação Concluída!" : "Referral Completed!",
-               isPt
-                   ? user.IsPro
-                       ? "Seu amigo começou a usar o Orbit! 10% de desconto aplicado na sua próxima fatura."
-                       : "Seu amigo começou a usar o Orbit e você ganhou um cupom de 10% de desconto no Pro!"
-                   : user.IsPro
-                       ? "Your friend joined Orbit! 10% discount applied to your next invoice."
-                       : "Your friend joined Orbit and you earned a 10% discount coupon for Pro!")
-            : (isPt ? "Você ganhou um cupom!" : "You earned a coupon!",
-               isPt
-                   ? "Boas-vindas ao Orbit! Você ganhou um cupom de 10% de desconto no Pro!"
-                   : "Welcome to Orbit! You earned a 10% discount coupon for Pro!");
+        var (title, body) = GetNotificationContent(isReferrer, isPt, user.IsPro);
 
         await notificationRepository.AddAsync(
             Notification.Create(user.Id, title, body, "/profile"), cancellationToken);
@@ -154,5 +142,29 @@ public class CheckReferralCompletionCommandHandler(
             try { await pushNotificationService.SendToUserAsync(user.Id, title, body, "/profile", CancellationToken.None); }
             catch (Exception ex) { logger.LogWarning(ex, "Failed to send referral push notification for user {UserId}", user.Id); }
         }, CancellationToken.None);
+    }
+
+    private static (string Title, string Body) GetNotificationContent(bool isReferrer, bool isPt, bool isPro)
+    {
+        if (isReferrer)
+        {
+            var title = isPt ? "Indica\u00e7\u00e3o Conclu\u00edda!" : "Referral Completed!";
+            var body = (isPt, isPro) switch
+            {
+                (true, true) => "Seu amigo come\u00e7ou a usar o Orbit! 10% de desconto aplicado na sua pr\u00f3xima fatura.",
+                (true, false) => "Seu amigo come\u00e7ou a usar o Orbit e voc\u00ea ganhou um cupom de 10% de desconto no Pro!",
+                (false, true) => "Your friend joined Orbit! 10% discount applied to your next invoice.",
+                (false, false) => "Your friend joined Orbit and you earned a 10% discount coupon for Pro!"
+            };
+            return (title, body);
+        }
+        else
+        {
+            var title = isPt ? "Voc\u00ea ganhou um cupom!" : "You earned a coupon!";
+            var body = isPt
+                ? "Boas-vindas ao Orbit! Voc\u00ea ganhou um cupom de 10% de desconto no Pro!"
+                : "Welcome to Orbit! You earned a 10% discount coupon for Pro!";
+            return (title, body);
+        }
     }
 }

@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class HabitDueDateAdvancementService(
+public partial class HabitDueDateAdvancementService(
     IServiceScopeFactory scopeFactory,
     ILogger<HabitDueDateAdvancementService> logger,
     IConfiguration configuration) : BackgroundService

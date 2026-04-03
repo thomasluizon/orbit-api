@@ -12,6 +12,7 @@ public class GoogleTokenService(
     IConfiguration configuration,
     ILogger<GoogleTokenService> logger) : IGoogleTokenService
 {
+    private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token";
     public async Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default)
     {
         if (user.GoogleAccessToken is null)
@@ -23,7 +24,7 @@ public class GoogleTokenService(
             try
             {
                 var client = httpClientFactory.CreateClient();
-                var response = await client.PostAsync("https://oauth2.googleapis.com/token",
+                var response = await client.PostAsync(GoogleTokenUrl,
                     new FormUrlEncodedContent(new Dictionary<string, string>
                     {
                         ["client_id"] = configuration["Google:ClientId"]!,

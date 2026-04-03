@@ -636,8 +636,8 @@ public class HabitTests
     {
         var reminders = new List<ScheduledReminderTime>
         {
-            new("day_before", new TimeOnly(20, 0)),
-            new("same_day", new TimeOnly(9, 0))
+            new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0)),
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))
         };
 
         var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
@@ -660,7 +660,7 @@ public class HabitTests
     public void Create_ScheduledReminders_OverLimit_ReturnsFailure()
     {
         var reminders = Enumerable.Range(0, 6)
-            .Select(i => new ScheduledReminderTime("same_day", new TimeOnly(8 + i, 0)))
+            .Select(i => new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8 + i, 0)))
             .ToList();
 
         var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
@@ -671,27 +671,12 @@ public class HabitTests
     }
 
     [Fact]
-    public void Create_ScheduledReminders_InvalidWhen_ReturnsFailure()
-    {
-        var reminders = new List<ScheduledReminderTime>
-        {
-            new("invalid_value", new TimeOnly(9, 0))
-        };
-
-        var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
-            scheduledReminders: reminders);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("'day_before' or 'same_day'");
-    }
-
-    [Fact]
     public void Create_ScheduledReminders_Duplicates_ReturnsFailure()
     {
         var reminders = new List<ScheduledReminderTime>
         {
-            new("same_day", new TimeOnly(9, 0)),
-            new("same_day", new TimeOnly(9, 0))
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0)),
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))
         };
 
         var result = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
@@ -707,7 +692,7 @@ public class HabitTests
         var habit = CreateValidHabit();
         var reminders = new List<ScheduledReminderTime>
         {
-            new("day_before", new TimeOnly(20, 0))
+            new(ScheduledReminderWhen.DayBefore, new TimeOnly(20, 0))
         };
 
         var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
@@ -715,7 +700,7 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         habit.ScheduledReminders.Should().HaveCount(1);
-        habit.ScheduledReminders[0].When.Should().Be("day_before");
+        habit.ScheduledReminders[0].When.Should().Be(ScheduledReminderWhen.DayBefore);
     }
 
     [Fact]
@@ -723,7 +708,7 @@ public class HabitTests
     {
         var habit = CreateValidHabit();
         var reminders = Enumerable.Range(0, 6)
-            .Select(i => new ScheduledReminderTime("same_day", new TimeOnly(8 + i, 0)))
+            .Select(i => new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8 + i, 0)))
             .ToList();
 
         var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
@@ -734,27 +719,11 @@ public class HabitTests
     }
 
     [Fact]
-    public void Update_ScheduledReminders_InvalidWhen_ReturnsFailure()
-    {
-        var habit = CreateValidHabit();
-        var reminders = new List<ScheduledReminderTime>
-        {
-            new("next_week", new TimeOnly(9, 0))
-        };
-
-        var result = habit.Update("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
-            scheduledReminders: reminders);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("'day_before' or 'same_day'");
-    }
-
-    [Fact]
     public void Update_ScheduledReminders_Null_KeepsExisting()
     {
         var reminders = new List<ScheduledReminderTime>
         {
-            new("same_day", new TimeOnly(9, 0))
+            new(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0))
         };
         var habit = Habit.Create(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
             scheduledReminders: reminders).Value;

@@ -44,7 +44,7 @@ public class GetHabitByIdQueryHandler(
             q => q.Include(h => h.Children).ThenInclude(c => c.Children),
             cancellationToken);
 
-        var habit = habits.FirstOrDefault();
+        var habit = habits.Count > 0 ? habits[0] : null;
         if (habit is null)
             return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 

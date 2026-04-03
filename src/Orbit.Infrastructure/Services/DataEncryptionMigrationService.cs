@@ -13,7 +13,7 @@ namespace Orbit.Infrastructure.Services;
 /// Processes entities in small batches to avoid overwhelming the database.
 /// Safe to run multiple times (idempotent).
 /// </summary>
-public sealed class DataEncryptionMigrationService(
+public sealed partial class DataEncryptionMigrationService(
     IServiceScopeFactory scopeFactory,
     ILogger<DataEncryptionMigrationService> logger) : BackgroundService
 {

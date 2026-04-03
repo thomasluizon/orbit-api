@@ -25,6 +25,12 @@ public class OAuthController(
     IConfiguration configuration,
     ILogger<OAuthController> logger) : ControllerBase
 {
+    private static readonly string[] SupportedResponseTypes = ["code"];
+    private static readonly string[] SupportedGrantTypes = ["authorization_code"];
+    private static readonly string[] SupportedCodeChallengeMethods = ["S256"];
+    private static readonly string[] SupportedTokenEndpointAuthMethods = ["none"];
+    private static readonly string[] SupportedBearerMethods = ["header"];
+
     private readonly HashSet<string> _allowedRedirectHosts = configuration.GetSection("OAuth:AllowedRedirectHosts")
         .Get<string[]>()?.ToHashSet(StringComparer.OrdinalIgnoreCase)
         ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "claude.ai", "claude.com" };
@@ -40,10 +46,10 @@ public class OAuthController(
             authorization_endpoint = $"{baseUrl}/oauth/authorize",
             token_endpoint = $"{baseUrl}/oauth/token",
             registration_endpoint = $"{baseUrl}/oauth/register",
-            response_types_supported = new[] { "code" },
-            grant_types_supported = new[] { "authorization_code" },
-            code_challenge_methods_supported = new[] { "S256" },
-            token_endpoint_auth_methods_supported = new[] { "none" }
+            response_types_supported = SupportedResponseTypes,
+            grant_types_supported = SupportedGrantTypes,
+            code_challenge_methods_supported = SupportedCodeChallengeMethods,
+            token_endpoint_auth_methods_supported = SupportedTokenEndpointAuthMethods
         });
     }
 
@@ -74,7 +80,7 @@ public class OAuthController(
         {
             resource = $"{baseUrl}/mcp",
             authorization_servers = new[] { baseUrl },
-            bearer_methods_supported = new[] { "header" }
+            bearer_methods_supported = SupportedBearerMethods
         });
     }
 

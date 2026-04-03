@@ -11,7 +11,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class GoalsController(IMediator mediator, ILogger<GoalsController> logger) : ControllerBase
+public partial class GoalsController(IMediator mediator, ILogger<GoalsController> logger) : ControllerBase
 {
     public record CreateGoalRequest(string Title, string? Description, decimal TargetValue, string Unit, DateOnly? Deadline = null);
     public record UpdateGoalRequest(string Title, string? Description, decimal TargetValue, string Unit, DateOnly? Deadline = null);
@@ -56,7 +56,7 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            logger.LogInformation("Goal created {GoalId} by user {UserId}", result.Value, HttpContext.GetUserId());
+            LogGoalCreated(logger, result.Value, HttpContext.GetUserId());
             return CreatedAtAction(nameof(GetGoalById), new { id = result.Value }, new { id = result.Value });
         }
         return BadRequest(new { error = result.Error });
@@ -120,7 +120,7 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            logger.LogInformation("Linked {Count} habits to goal {GoalId} by user {UserId}", request.HabitIds.Count, goalId, HttpContext.GetUserId());
+            LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
@@ -172,9 +172,19 @@ public class GoalsController(IMediator mediator, ILogger<GoalsController> logger
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            logger.LogInformation("Goal deleted {GoalId} by user {UserId}", id, HttpContext.GetUserId());
+            LogGoalDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Goal created {GoalId} by user {UserId}")]
+    private static partial void LogGoalCreated(ILogger logger, Guid goalId, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Linked {Count} habits to goal {GoalId} by user {UserId}")]
+    private static partial void LogLinkedHabitsToGoal(ILogger logger, int count, Guid goalId, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Goal deleted {GoalId} by user {UserId}")]
+    private static partial void LogGoalDeleted(ILogger logger, Guid goalId, Guid userId);
+
 }

@@ -16,7 +16,7 @@ namespace Orbit.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [EnableRateLimiting("chat")]
-public class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
+public partial class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
 {
     [HttpPost]
     [RequestSizeLimit(10_485_760)] // 10MB
@@ -42,7 +42,7 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
             var validationResult = await imageValidation.ValidateAsync(image);
             if (validationResult.IsFailure)
             {
-                logger.LogWarning("Chat image validation failed: {Error}", validationResult.Error);
+                LogChatImageValidationFailed(logger, validationResult.Error);
                 return BadRequest(new { error = validationResult.Error });
             }
 
@@ -86,4 +86,11 @@ public class ChatController(IMediator mediator, IImageValidationService imageVal
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Chat image validation failed: {Error}")]
+    private static partial void LogChatImageValidationFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Chat history parse failed: {Error}")]
+    private static partial void LogChatHistoryParseFailed(ILogger logger, Exception ex, string error);
+
 }

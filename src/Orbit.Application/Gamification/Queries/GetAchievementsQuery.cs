@@ -25,16 +25,16 @@ public class GetAchievementsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
 {
-    public async Task<Result<AchievementsResponse>> Handle(GetAchievementsQuery request, CancellationToken ct)
+    public async Task<Result<AchievementsResponse>> Handle(GetAchievementsQuery request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.GetByIdAsync(request.UserId, ct);
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<AchievementsResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (!user.HasProAccess)
             return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
 
-        var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, ct);
+        var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
         var earnedMap = earnedList.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
 
         var achievements = AchievementDefinitions.All.Select(def =>

@@ -35,7 +35,7 @@ public record ActionResult(
 
 public enum ActionStatus { Success, Failed, Suggestion }
 
-public class ProcessUserChatCommandHandler(
+public partial class ProcessUserChatCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserFact> userFactRepository,
@@ -56,7 +56,7 @@ public class ProcessUserChatCommandHandler(
         CancellationToken cancellationToken)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        logger.LogInformation("Processing chat message: '{Message}'", request.Message);
+        LogProcessingChatMessage(logger, request.Message);
 
         // 1. Load lightweight context for system prompt (no Logs, no metrics)
         logger.LogInformation("Fetching context from database...");
@@ -90,8 +90,7 @@ public class ProcessUserChatCommandHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
-        logger.LogInformation("Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})",
-            dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
+        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
 
         // 2. Build slim system prompt (habit index only, details fetched via read tools)
         var systemPrompt = systemPromptBuilder.Build(
@@ -108,7 +107,7 @@ public class ProcessUserChatCommandHandler(
         }).ToList();
 
         // 3. Call AI with tool declarations
-        logger.LogInformation("Calling AI intent service with {ToolCount} tools...", toolDeclarations.Count);
+        LogCallingAiIntentService(logger, toolDeclarations.Count);
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var response = await aiIntentService.SendWithToolsAsync(
@@ -121,7 +120,7 @@ public class ProcessUserChatCommandHandler(
             cancellationToken);
 
         aiStopwatch.Stop();
-        logger.LogInformation("AI intent service completed in {ElapsedMs}ms", aiStopwatch.ElapsedMilliseconds);
+        LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
         if (response.IsFailure)
             return Result.Failure<ChatResponse>(response.Error);
@@ -136,8 +135,7 @@ public class ProcessUserChatCommandHandler(
         while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
         {
             iteration++;
-            logger.LogInformation("Tool-calling iteration {Iteration}, {CallCount} calls",
-                iteration, aiResponse.ToolCalls!.Count);
+            LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
             var toolResults = new List<AiToolCallResult>();
 
@@ -155,7 +153,7 @@ public class ProcessUserChatCommandHandler(
                 var tool = toolRegistry.GetTool(call.Name);
                 if (tool is null)
                 {
-                    logger.LogWarning("Unknown tool requested: {Name}", call.Name);
+                    LogUnknownToolRequested(logger, call.Name);
                     toolResults.Add(new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"));
                     allActionResults.Add(new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"));
                     continue;
@@ -169,28 +167,25 @@ public class ProcessUserChatCommandHandler(
                     if (result.Success)
                     {
                         // Read-only tools don't produce action chips for the frontend
-                        if (!tool.IsReadOnly)
+                        if (!tool.IsReadOnly && call.Name == "suggest_breakdown")
                         {
-                            if (call.Name == "suggest_breakdown")
-                            {
-                                var suggestedSubHabits = ExtractSuggestedSubHabits(call.Args);
-                                allActionResults.Add(new ActionResult(
-                                    ToolNameToPascalCase(call.Name),
-                                    ActionStatus.Suggestion,
-                                    EntityName: result.EntityName,
-                                    SuggestedSubHabits: suggestedSubHabits));
-                            }
-                            else
-                            {
-                                allActionResults.Add(new ActionResult(
-                                    ToolNameToPascalCase(call.Name),
-                                    ActionStatus.Success,
-                                    result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
-                                    result.EntityName));
-                            }
+                            var suggestedSubHabits = ExtractSuggestedSubHabits(call.Args);
+                            allActionResults.Add(new ActionResult(
+                                ToolNameToPascalCase(call.Name),
+                                ActionStatus.Suggestion,
+                                EntityName: result.EntityName,
+                                SuggestedSubHabits: suggestedSubHabits));
+                        }
+                        else if (!tool.IsReadOnly)
+                        {
+                            allActionResults.Add(new ActionResult(
+                                ToolNameToPascalCase(call.Name),
+                                ActionStatus.Success,
+                                result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
+                                result.EntityName));
                         }
 
-                        logger.LogInformation("Tool {Name} succeeded: {EntityName}", call.Name, result.EntityName);
+                        LogToolSucceeded(logger, call.Name, result.EntityName);
                     }
                     else
                     {
@@ -202,12 +197,12 @@ public class ProcessUserChatCommandHandler(
                                 EntityName: result.EntityName,
                                 Error: result.Error));
                         }
-                        logger.LogWarning("Tool {Name} failed: {Error}", call.Name, result.Error);
+                        LogToolFailed(logger, call.Name, result.Error);
                     }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Tool {Name} threw an exception", call.Name);
+                    LogToolThrewException(logger, ex, call.Name);
                     toolResults.Add(new AiToolCallResult(call.Name, call.Id, false, null, null, "An unexpected error occurred."));
                     allActionResults.Add(new ActionResult(
                         ToolNameToPascalCase(call.Name),
@@ -220,15 +215,14 @@ public class ProcessUserChatCommandHandler(
             var continueResult = await aiIntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
             if (continueResult.IsFailure)
             {
-                logger.LogWarning("ContinueWithToolResultsAsync failed: {Error}", continueResult.Error);
+                LogContinueWithToolResultsFailed(logger, continueResult.Error);
                 break;
             }
             aiResponse = continueResult.Value;
         }
 
         actionsStopwatch.Stop();
-        logger.LogInformation("Tool execution completed in {ElapsedMs}ms ({Iterations} iterations, {ActionCount} actions)",
-            actionsStopwatch.ElapsedMilliseconds, iteration, allActionResults.Count);
+        LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iteration, allActionResults.Count);
 
         // 5. Persist all changes in a single unit of work
         logger.LogInformation("Saving changes to database...");
@@ -237,7 +231,7 @@ public class ProcessUserChatCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         saveStopwatch.Stop();
-        logger.LogInformation("Changes saved in {ElapsedMs}ms", saveStopwatch.ElapsedMilliseconds);
+        LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
         // 6. Extract AI message (strip JSON wrapper if model didn't use function calling)
         var aiMessage = aiResponse.TextMessage;
@@ -264,6 +258,7 @@ public class ProcessUserChatCommandHandler(
 
         _ = Task.Run(async () =>
         {
+            // Fire-and-forget background work (no caller to propagate cancellation to)
             try
             {
                 using var scope = serviceScopeFactory.CreateScope();
@@ -295,7 +290,7 @@ public class ProcessUserChatCommandHandler(
                                         await bgUserFactRepo.AddAsync(factResult.Value, CancellationToken.None);
                                 }
                                 await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
-                                bgLogger.LogInformation("Background: {FactCount} facts persisted", extractionResult.Value.Facts.Count);
+                                LogBackgroundFactsPersisted(bgLogger, extractionResult.Value.Facts.Count);
                             }
                         }
                     }
@@ -321,17 +316,72 @@ public class ProcessUserChatCommandHandler(
             {
                 logger.LogWarning(ex, "Background post-response work failed");
             }
-        });
+        }, CancellationToken.None);
 
         totalStopwatch.Stop();
-        logger.LogInformation("TOTAL request processing time: {ElapsedMs}ms", totalStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   Context loading: {DbMs}ms", dbStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   AI service: {AiMs}ms", aiStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("   Tool execution: {ActionsMs}ms ({Iterations} iterations)", actionsStopwatch.ElapsedMilliseconds, iteration);
-        logger.LogInformation("   Save changes: {SaveMs}ms", saveStopwatch.ElapsedMilliseconds);
+        LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
+        LogContextLoadingTime(logger, dbStopwatch.ElapsedMilliseconds);
+        LogAiServiceTime(logger, aiStopwatch.ElapsedMilliseconds);
+        LogToolExecutionTime(logger, actionsStopwatch.ElapsedMilliseconds, iteration);
+        LogSaveChangesTime(logger, saveStopwatch.ElapsedMilliseconds);
 
         return Result.Success(new ChatResponse(aiMessage, allActionResults));
     }
+
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Processing chat message: '{Message}'")]
+    private static partial void LogProcessingChatMessage(ILogger logger, string message);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})")]
+    private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount, int factCount);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Calling AI intent service with {ToolCount} tools...")]
+    private static partial void LogCallingAiIntentService(ILogger logger, int toolCount);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "AI intent service completed in {ElapsedMs}ms")]
+    private static partial void LogAiIntentServiceCompleted(ILogger logger, long elapsedMs);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Tool-calling iteration {Iteration}, {CallCount} calls")]
+    private static partial void LogToolCallingIteration(ILogger logger, int iteration, int callCount);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Unknown tool requested: {Name}")]
+    private static partial void LogUnknownToolRequested(ILogger logger, string name);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Tool {Name} succeeded: {EntityName}")]
+    private static partial void LogToolSucceeded(ILogger logger, string name, string? entityName);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Tool {Name} failed: {Error}")]
+    private static partial void LogToolFailed(ILogger logger, string name, string? error);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Tool {Name} threw an exception")]
+    private static partial void LogToolThrewException(ILogger logger, Exception ex, string name);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "ContinueWithToolResultsAsync failed: {Error}")]
+    private static partial void LogContinueWithToolResultsFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Tool execution completed in {ElapsedMs}ms ({Iterations} iterations, {ActionCount} actions)")]
+    private static partial void LogToolExecutionCompleted(ILogger logger, long elapsedMs, int iterations, int actionCount);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Changes saved in {ElapsedMs}ms")]
+    private static partial void LogChangesSaved(ILogger logger, long elapsedMs);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Background: {FactCount} facts persisted")]
+    private static partial void LogBackgroundFactsPersisted(ILogger logger, int factCount);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "TOTAL request processing time: {ElapsedMs}ms")]
+    private static partial void LogTotalRequestProcessingTime(ILogger logger, long elapsedMs);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "   Context loading: {DbMs}ms")]
+    private static partial void LogContextLoadingTime(ILogger logger, long dbMs);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "   AI service: {AiMs}ms")]
+    private static partial void LogAiServiceTime(ILogger logger, long aiMs);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Information, Message = "   Tool execution: {ActionsMs}ms ({Iterations} iterations)")]
+    private static partial void LogToolExecutionTime(ILogger logger, long actionsMs, int iterations);
+
+    [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "   Save changes: {SaveMs}ms")]
+    private static partial void LogSaveChangesTime(ILogger logger, long saveMs);
 
     /// <summary>
     /// Converts snake_case tool names to PascalCase for backward compatibility with the frontend.
@@ -348,7 +398,7 @@ public class ProcessUserChatCommandHandler(
     /// Extracts suggested sub-habits from the suggest_breakdown tool call args
     /// for backward-compatible ActionResult.SuggestedSubHabits.
     /// </summary>
-    private static IReadOnlyList<AiAction>? ExtractSuggestedSubHabits(JsonElement args)
+    private static List<AiAction>? ExtractSuggestedSubHabits(JsonElement args)
     {
         if (!args.TryGetProperty("suggested_sub_habits", out var subHabitsEl) ||
             subHabitsEl.ValueKind != JsonValueKind.Array)

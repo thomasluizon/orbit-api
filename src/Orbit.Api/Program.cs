@@ -432,7 +432,4 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
     }
 }).AllowAnonymous();
 
-app.Run();
-
-// Make Program class accessible to integration tests
-public partial class Program { }
+await app.RunAsync();

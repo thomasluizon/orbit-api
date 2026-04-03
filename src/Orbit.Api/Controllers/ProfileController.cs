@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
+public partial class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
     public record SetAiMemoryRequest(bool Enabled);
@@ -43,7 +43,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Timezone changed to {Timezone} for user {UserId}", request.TimeZone, HttpContext.GetUserId());
+            LogTimezoneChanged(logger, request.TimeZone, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -62,7 +62,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("AI memory {State} for user {UserId}", request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogAiMemoryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -81,7 +81,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("AI summary {State} for user {UserId}", request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogAiSummaryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -100,7 +100,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Language changed to {Language} for user {UserId}", request.Language, HttpContext.GetUserId());
+            LogLanguageChanged(logger, request.Language, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -119,7 +119,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Week start day changed to {WeekStartDay} for user {UserId}", request.WeekStartDay, HttpContext.GetUserId());
+            LogWeekStartDayChanged(logger, request.WeekStartDay, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -138,7 +138,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Theme preference changed to {ThemePreference} for user {UserId}", request.ThemePreference, HttpContext.GetUserId());
+            LogThemePreferenceChanged(logger, request.ThemePreference, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -157,7 +157,7 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Color scheme changed to {ColorScheme} for user {UserId}", request.ColorScheme, HttpContext.GetUserId());
+            LogColorSchemeChanged(logger, request.ColorScheme, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -185,11 +185,36 @@ public class ProfileController(IMediator mediator, ILogger<ProfileController> lo
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Account reset for user {UserId}", HttpContext.GetUserId());
+            LogAccountReset(logger, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? Ok()
             : BadRequest(new { error = result.Error });
     }
+
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Timezone changed to {Timezone} for user {UserId}")]
+    private static partial void LogTimezoneChanged(ILogger logger, string timezone, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI memory {State} for user {UserId}")]
+    private static partial void LogAiMemoryToggled(ILogger logger, string state, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI summary {State} for user {UserId}")]
+    private static partial void LogAiSummaryToggled(ILogger logger, string state, Guid userId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Language changed to {Language} for user {UserId}")]
+    private static partial void LogLanguageChanged(ILogger logger, string language, Guid userId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Week start day changed to {WeekStartDay} for user {UserId}")]
+    private static partial void LogWeekStartDayChanged(ILogger logger, int weekStartDay, Guid userId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Theme preference changed to {ThemePreference} for user {UserId}")]
+    private static partial void LogThemePreferenceChanged(ILogger logger, string? themePreference, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Color scheme changed to {ColorScheme} for user {UserId}")]
+    private static partial void LogColorSchemeChanged(ILogger logger, string? colorScheme, Guid userId);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account reset for user {UserId}")]
+    private static partial void LogAccountReset(ILogger logger, Guid userId);
 
 }

@@ -11,7 +11,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class GoalDeadlineNotificationService(
+public partial class GoalDeadlineNotificationService(
     IServiceScopeFactory scopeFactory,
     ILogger<GoalDeadlineNotificationService> logger,
     IConfiguration configuration) : BackgroundService

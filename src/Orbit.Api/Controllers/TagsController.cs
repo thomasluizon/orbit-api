@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class TagsController(IMediator mediator, ILogger<TagsController> logger) : ControllerBase
+public partial class TagsController(IMediator mediator, ILogger<TagsController> logger) : ControllerBase
 {
     public record CreateTagRequest(string Name, string Color);
     public record UpdateTagRequest(string Name, string Color);
@@ -40,7 +40,7 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Tag created {TagId} by user {UserId}", result.Value, HttpContext.GetUserId());
+            LogTagCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
         return BadRequest(new { error = result.Error });
@@ -60,7 +60,7 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Tag updated {TagId} by user {UserId}", id, HttpContext.GetUserId());
+            LogTagUpdated(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
@@ -77,7 +77,7 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Tag deleted {TagId} by user {UserId}", id, HttpContext.GetUserId());
+            LogTagDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
@@ -97,4 +97,14 @@ public class TagsController(IMediator mediator, ILogger<TagsController> logger) 
 
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Tag created {TagId} by user {UserId}")]
+    private static partial void LogTagCreated(ILogger logger, Guid tagId, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Tag updated {TagId} by user {UserId}")]
+    private static partial void LogTagUpdated(ILogger logger, Guid tagId, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Tag deleted {TagId} by user {UserId}")]
+    private static partial void LogTagDeleted(ILogger logger, Guid tagId, Guid userId);
+
 }

@@ -10,7 +10,7 @@ namespace Orbit.IntegrationTests;
 [Collection("Sequential")]
 public class EncryptionTests
 {
-    private readonly IEncryptionService _encryptionService;
+    private readonly EncryptionService _encryptionService;
 
     public EncryptionTests()
     {
