@@ -8,6 +8,10 @@ namespace Orbit.Domain.Tests.Entities;
 public class HabitTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
+    private static readonly int[] ReminderTimes5And10 = [5, 10];
+    private static readonly int[] ReminderTimes5And15And30 = [5, 15, 30];
+    private static readonly ChecklistItem[] SingleChecklistItem = [new("Item 1", false)];
+    private static readonly ChecklistItem[] SingleChecklistItemStep1 = [new("Step 1", false)];
 
     private static Habit CreateValidHabit(
         FrequencyUnit? frequencyUnit = FrequencyUnit.Day,
@@ -753,9 +757,9 @@ public class HabitTests
             DueTime: new TimeOnly(9, 0),
             DueEndTime: new TimeOnly(10, 0),
             ReminderEnabled: true,
-            ReminderTimes: new[] { 5, 10 },
+            ReminderTimes: ReminderTimes5And10,
             SlipAlertEnabled: true,
-            ChecklistItems: new[] { new ChecklistItem("Item 1", false) },
+            ChecklistItems: SingleChecklistItem,
             IsGeneral: false,
             IsFlexible: false));
 
@@ -769,7 +773,7 @@ public class HabitTests
         habit.DueTime.Should().Be(new TimeOnly(9, 0));
         habit.DueEndTime.Should().Be(new TimeOnly(10, 0));
         habit.ReminderEnabled.Should().BeTrue();
-        habit.ReminderTimes.Should().BeEquivalentTo(new[] { 5, 10 });
+        habit.ReminderTimes.Should().BeEquivalentTo(ReminderTimes5And10);
         habit.SlipAlertEnabled.Should().BeTrue();
         habit.ChecklistItems.Should().HaveCount(1);
     }
@@ -1288,15 +1292,15 @@ public class HabitTests
             DueTime: new TimeOnly(9, 0),
             DueEndTime: new TimeOnly(10, 0),
             ReminderEnabled: true,
-            ReminderTimes: new[] { 5, 15, 30 },
+            ReminderTimes: ReminderTimes5And15And30,
             SlipAlertEnabled: true,
-            ChecklistItems: new[] { new ChecklistItem("Step 1", false) }));
+            ChecklistItems: SingleChecklistItemStep1));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.DueTime.Should().Be(new TimeOnly(9, 0));
         result.Value.DueEndTime.Should().Be(new TimeOnly(10, 0));
         result.Value.ReminderEnabled.Should().BeTrue();
-        result.Value.ReminderTimes.Should().BeEquivalentTo(new[] { 5, 15, 30 });
+        result.Value.ReminderTimes.Should().BeEquivalentTo(ReminderTimes5And15And30);
         result.Value.SlipAlertEnabled.Should().BeTrue();
         result.Value.ChecklistItems.Should().HaveCount(1);
     }

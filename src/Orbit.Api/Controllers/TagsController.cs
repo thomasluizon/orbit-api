@@ -5,6 +5,8 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Api.Controllers;
 
 [Authorize]

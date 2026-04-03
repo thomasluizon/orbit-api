@@ -8,6 +8,8 @@ using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(

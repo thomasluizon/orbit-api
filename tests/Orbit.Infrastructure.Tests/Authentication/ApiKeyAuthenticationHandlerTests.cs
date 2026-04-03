@@ -18,7 +18,7 @@ public class ApiKeyAuthenticationHandlerTests
 {
     private static readonly Guid TestUserId = Guid.NewGuid();
 
-    private async Task<AuthenticateResult> RunHandler(string? authorizationHeader)
+    private static async Task<AuthenticateResult> RunHandler(string? authorizationHeader)
     {
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
         var unitOfWork = Substitute.For<IUnitOfWork>();

@@ -127,7 +127,7 @@ public partial class GoogleAuthCommandHandler(
         User user, GoogleAuthCommand request, bool isNewUser, CancellationToken cancellationToken)
     {
         if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
-            ProcessReferralSafe(user.Id, request.ReferralCode, cancellationToken);
+            _ = ProcessReferralSafeAsync(user.Id, request.ReferralCode, cancellationToken);
 
         var wasReactivated = false;
         if (user.IsDeactivated)
@@ -142,7 +142,7 @@ public partial class GoogleAuthCommandHandler(
         return wasReactivated;
     }
 
-    private async void ProcessReferralSafe(Guid userId, string referralCode, CancellationToken cancellationToken)
+    private async Task ProcessReferralSafeAsync(Guid userId, string referralCode, CancellationToken cancellationToken)
     {
         try
         {

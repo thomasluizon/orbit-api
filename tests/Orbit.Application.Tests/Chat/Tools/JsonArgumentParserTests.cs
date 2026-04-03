@@ -8,6 +8,8 @@ namespace Orbit.Application.Tests.Chat.Tools;
 
 public class JsonArgumentParserTests
 {
+    private static readonly int[] ExpectedReminderTimes = [15, 30, 60];
+
     // --- GetOptionalString ---
 
     [Fact]
@@ -207,7 +209,7 @@ public class JsonArgumentParserTests
         var el = Parse("""{"reminder_times": [15, 30, 60]}""");
         var result = JsonArgumentParser.ParseIntArray(el, "reminder_times");
         result.Should().NotBeNull();
-        result.Should().BeEquivalentTo(new[] { 15, 30, 60 });
+        result.Should().BeEquivalentTo(ExpectedReminderTimes);
     }
 
     [Fact]

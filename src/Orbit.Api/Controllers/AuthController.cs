@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Orbit.Api.Extensions;
 using Orbit.Application.Auth.Commands;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Api.Controllers;
 
 [ApiController]

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
+using Orbit.Application.Auth.Commands;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -143,4 +144,205 @@ public class ProfileCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    // ----- SetColorScheme -----
+
+    [Fact]
+    public async Task SetColorScheme_Valid_UpdatesAndSaves()
+    {
+        var user = CreateTestUser();
+        SetupUserFound(user);
+
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetColorSchemeCommand(UserId, "purple");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ColorScheme.Should().Be("purple");
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetColorScheme_UserNotFound_ReturnsFailure()
+    {
+        SetupUserNotFound();
+
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetColorSchemeCommand(UserId, "purple");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("User not found.");
+    }
+
+    [Fact]
+    public async Task SetColorScheme_Null_ClearsScheme()
+    {
+        var user = CreateTestUser();
+        SetupUserFound(user);
+
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetColorSchemeCommand(UserId, null);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ColorScheme.Should().BeNull();
+    }
+
+    // ----- SetThemePreference -----
+
+    [Fact]
+    public async Task SetThemePreference_Valid_UpdatesAndSaves()
+    {
+        var user = CreateTestUser();
+        SetupUserFound(user);
+
+        var handler = new SetThemePreferenceCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetThemePreferenceCommand(UserId, "dark");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ThemePreference.Should().Be("dark");
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetThemePreference_UserNotFound_ReturnsFailure()
+    {
+        SetupUserNotFound();
+
+        var handler = new SetThemePreferenceCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetThemePreferenceCommand(UserId, "dark");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("User not found.");
+    }
+
+    [Fact]
+    public async Task SetThemePreference_Null_ClearsPreference()
+    {
+        var user = CreateTestUser();
+        SetupUserFound(user);
+
+        var handler = new SetThemePreferenceCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetThemePreferenceCommand(UserId, null);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ThemePreference.Should().BeNull();
+    }
+
+    // ----- SetWeekStartDay -----
+
+    [Fact]
+    public async Task SetWeekStartDay_Valid_UpdatesAndSaves()
+    {
+        var user = CreateTestUser();
+        SetupUserFound(user);
+
+        var handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetWeekStartDayCommand(UserId, 0);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.WeekStartDay.Should().Be(0);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetWeekStartDay_UserNotFound_ReturnsFailure()
+    {
+        SetupUserNotFound();
+
+        var handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork);
+        var command = new SetWeekStartDayCommand(UserId, 0);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("User not found.");
+    }
+
+    // ----- ResetAccount -----
+
+    [Fact]
+    public async Task ResetAccount_Valid_ResetsAndSaves()
+    {
+        var user = CreateTestUser();
+        SetupUserFound(user);
+        var accountResetRepo = Substitute.For<IAccountResetRepository>();
+
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _cache);
+        var command = new ResetAccountCommand(UserId);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await accountResetRepo.Received(1).DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResetAccount_UserNotFound_ReturnsFailure()
+    {
+        SetupUserNotFound();
+        var accountResetRepo = Substitute.For<IAccountResetRepository>();
+
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _cache);
+        var command = new ResetAccountCommand(UserId);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("User not found.");
+        await accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    // ----- RequestAccountDeletion -----
+
+    [Fact]
+    public async Task RequestAccountDeletion_Valid_SendsCodeAndSucceeds()
+    {
+        var user = CreateTestUser();
+        var emailService = Substitute.For<IEmailService>();
+
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var handler = new RequestAccountDeletionCommandHandler(_cache, _userRepo, emailService);
+        var command = new RequestAccountDeletionCommand(UserId);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await emailService.Received(1).SendAccountDeletionCodeAsync(
+            user.Email,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RequestAccountDeletion_UserNotFound_ReturnsFailure()
+    {
+        var emailService = Substitute.For<IEmailService>();
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        var handler = new RequestAccountDeletionCommandHandler(_cache, _userRepo, emailService);
+        var command = new RequestAccountDeletionCommand(UserId);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("User not found.");
+        await emailService.DidNotReceive().SendAccountDeletionCodeAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
 }
