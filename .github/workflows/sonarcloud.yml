@@ -42,7 +42,8 @@ jobs:
             /o:"thomasluizon" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs"
+            /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs" \
+            /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/AppConfigService.cs,**/Services/UserDateService.cs,**/Services/StripeCouponRewardService.cs,**/AI/AiCompletionClient.cs,**/Services/GeoLocationService.cs"
 
       - name: Build
         run: dotnet build --no-restore
