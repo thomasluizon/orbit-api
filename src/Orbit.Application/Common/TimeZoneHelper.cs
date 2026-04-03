@@ -13,9 +13,9 @@ public static class TimeZoneHelper
         {
             return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         }
-        catch
+        catch (TimeZoneNotFoundException ex)
         {
-            logger?.LogWarning("Unknown timezone {TimeZone} for user {UserId}, falling back to UTC",
+            logger?.LogWarning(ex, "Unknown timezone {TimeZone} for user {UserId}, falling back to UTC",
                 timeZoneId, userId);
             return TimeZoneInfo.Utc;
         }

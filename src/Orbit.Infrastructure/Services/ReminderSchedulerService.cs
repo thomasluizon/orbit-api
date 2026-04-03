@@ -132,7 +132,8 @@ public partial class ReminderSchedulerService(
                 sentReminderSet.Add((habit.Id, minutesBefore));
                 anyChanges = true;
 
-                LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
             }
         }
 
@@ -214,7 +215,8 @@ public partial class ReminderSchedulerService(
                 sentScheduledSet.Add((habit.Id, dueDate, sr.Time));
                 anyChanges = true;
 
-                LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
             }
         }
 

@@ -11,28 +11,28 @@ public class SuggestBreakdownTool : IAiTool
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = "string", description = "The broad habit title to break down" },
+            title = new { type = JsonSchemaTypes.String, description = "The broad habit title to break down" },
             suggested_sub_habits = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Suggested sub-habit breakdowns",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        title = new { type = "string", description = "Sub-habit title" },
-                        description = new { type = "string", description = "Optional description" },
+                        title = new { type = JsonSchemaTypes.String, description = "Sub-habit title" },
+                        description = new { type = JsonSchemaTypes.String, description = "Optional description" },
                         frequency_unit = new
                         {
-                            type = "string",
-                            @enum = new[] { "Day", "Week", "Month", "Year" }
+                            type = JsonSchemaTypes.String,
+                            @enum = JsonSchemaTypes.FrequencyUnitEnum
                         },
-                        frequency_quantity = new { type = "integer" },
-                        days = new { type = "array", items = new { type = "string" } }
+                        frequency_quantity = new { type = JsonSchemaTypes.Integer },
+                        days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } }
                     },
                     required = new[] { "title" }
                 }

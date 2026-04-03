@@ -111,18 +111,15 @@ public partial class GetCalendarEventsQueryHandler(
                 {
                     rrule = ev.Recurrence.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
                 }
-                else if (ev.RecurringEventId is not null)
+                else if (ev.RecurringEventId is not null && !masterRRuleCache.TryGetValue(ev.RecurringEventId, out rrule))
                 {
-                    if (!masterRRuleCache.TryGetValue(ev.RecurringEventId, out rrule))
+                    try
                     {
-                        try
-                        {
-                            var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
-                            rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
-                        }
-                        catch (Exception ex) { LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId); rrule = null; }
-                        masterRRuleCache[ev.RecurringEventId] = rrule;
+                        var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
+                        rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
                     }
+                    catch (Exception ex) { LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId); rrule = null; }
+                    masterRRuleCache[ev.RecurringEventId] = rrule;
                 }
 
                 var reminders = ev.Reminders?.Overrides?

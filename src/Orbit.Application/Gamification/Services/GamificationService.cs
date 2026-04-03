@@ -434,7 +434,7 @@ public partial class GamificationService(
             user.SetLevel(newLevel.Level);
     }
 
-    // TODO (Issue 52): These hardcoded Portuguese translations should be moved to a proper
+    // FUTURE (Issue #52): These hardcoded Portuguese translations should be moved to a proper
     // localization resource file (e.g., .resx or a JSON-backed IStringLocalizer) once a
     // backend i18n strategy is established. Currently only pt-BR is supported; adding more
     // languages would require duplicating this pattern, which is not maintainable.

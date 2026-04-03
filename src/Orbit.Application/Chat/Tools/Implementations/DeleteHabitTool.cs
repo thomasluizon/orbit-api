@@ -14,10 +14,10 @@ public class DeleteHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = "string", description = "ID of the habit to delete" }
+            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to delete" }
         },
         required = new[] { "habit_id" }
     };

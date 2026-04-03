@@ -19,11 +19,11 @@ public class SkipHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = "string", description = "ID of the habit to skip" },
-            date = new { type = "string", description = "ISO date (YYYY-MM-DD) to skip a specific instance. Defaults to today." }
+            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to skip" },
+            date = new { type = JsonSchemaTypes.String, description = "ISO date (YYYY-MM-DD) to skip a specific instance. Defaults to today." }
         },
         required = new[] { "habit_id" }
     };

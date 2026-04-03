@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -23,107 +24,107 @@ public class CreateHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = "string", description = "Name of the habit" },
-            description = new { type = "string", description = "Optional description" },
+            title = new { type = JsonSchemaTypes.String, description = "Name of the habit" },
+            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
             frequency_unit = new
             {
-                type = "string",
+                type = JsonSchemaTypes.String,
                 description = "Recurrence unit. Omit for one-time tasks.",
                 nullable = true,
-                @enum = new[] { "Day", "Week", "Month", "Year" }
+                @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
-            frequency_quantity = new { type = "integer", description = "How often (e.g. every 2 days). Defaults to 1." },
+            frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "How often (e.g. every 2 days). Defaults to 1." },
             days = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Specific weekdays (e.g. ['Monday','Wednesday','Friday']). Only when frequency_quantity is 1.",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             },
-            due_date = new { type = "string", description = "YYYY-MM-DD. Defaults to today." },
-            end_date = new { type = "string", description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
-            due_time = new { type = "string", description = "HH:mm 24h format" },
-            is_bad_habit = new { type = "boolean", description = "Whether this is a bad habit to reduce. Defaults to false." },
-            is_flexible = new { type = "boolean", description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
-            slip_alert_enabled = new { type = "boolean", description = "Enable slip pattern alerts. Defaults to true for bad habits." },
-            reminder_enabled = new { type = "boolean", description = "Enable reminders" },
+            due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Defaults to today." },
+            end_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD. Optional end date. Habit stops appearing after this date. Only for recurring habits.", nullable = true },
+            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit to reduce. Defaults to false." },
+            is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking (e.g. '3x per week, any days'). Cannot have days set. Requires frequency_unit." },
+            slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip pattern alerts. Defaults to true for bad habits." },
+            reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable reminders" },
             reminder_times = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Minutes before due time to remind (e.g. [15, 60])",
-                items = new { type = "integer" }
+                items = new { type = JsonSchemaTypes.Integer }
             },
             tag_names = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Tag names to assign. Existing tags reused, new ones created.",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             },
             checklist_items = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Inline checklist items",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        text = new { type = "string", description = "Checklist item text" },
-                        is_checked = new { type = "boolean", description = "Whether checked. Defaults to false." }
+                        text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
+                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
                     },
                     required = new[] { "text" }
                 }
             },
             scheduled_reminders = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Absolute-time reminders for habits WITHOUT a due_time. Use INSTEAD of reminder_times when no due_time is set.",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        when = new { type = "string", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
-                        time = new { type = "string", description = "HH:mm 24h format, e.g. '09:00'" }
+                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format, e.g. '09:00'" }
                     },
                     required = new[] { "when", "time" }
                 }
             },
             goal_ids = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "IDs of goals to link this habit to",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             },
             sub_habits = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Inline child habits to create under this parent",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        title = new { type = "string", description = "Sub-habit name" },
-                        description = new { type = "string", description = "Optional description" },
-                        frequency_unit = new { type = "string", @enum = new[] { "Day", "Week", "Month", "Year" } },
-                        frequency_quantity = new { type = "integer" },
-                        days = new { type = "array", items = new { type = "string" } },
-                        due_date = new { type = "string", description = "YYYY-MM-DD" },
-                        is_bad_habit = new { type = "boolean" },
+                        title = new { type = JsonSchemaTypes.String, description = "Sub-habit name" },
+                        description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+                        frequency_unit = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.FrequencyUnitEnum },
+                        frequency_quantity = new { type = JsonSchemaTypes.Integer },
+                        days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
+                        due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD" },
+                        is_bad_habit = new { type = JsonSchemaTypes.Boolean },
                         checklist_items = new
                         {
-                            type = "array",
+                            type = JsonSchemaTypes.Array,
                             description = "Inline checklist items",
                             items = new
                             {
-                                type = "object",
+                                type = JsonSchemaTypes.Object,
                                 properties = new
                                 {
-                                    text = new { type = "string", description = "Checklist item text" },
-                                    is_checked = new { type = "boolean", description = "Whether checked. Defaults to false." }
+                                    text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
+                                    is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked. Defaults to false." }
                                 },
                                 required = new[] { "text" }
                             }

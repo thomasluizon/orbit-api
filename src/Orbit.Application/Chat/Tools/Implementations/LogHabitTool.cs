@@ -18,12 +18,12 @@ public class LogHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = "string", description = "ID of the habit to log" },
-            note = new { type = "string", description = "Optional note about the completion" },
-            date = new { type = "string", description = "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today." }
+            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to log" },
+            note = new { type = JsonSchemaTypes.String, description = "Optional note about the completion" },
+            date = new { type = JsonSchemaTypes.String, description = "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today." }
         },
         required = new[] { "habit_id" }
     };
