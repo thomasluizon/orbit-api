@@ -14,7 +14,9 @@ using Orbit.Infrastructure.Configuration;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
-public class OAuthController(
+#pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
+#pragma warning disable S107 // OAuth controller legitimately requires many DI dependencies
+public partial class OAuthController(
     IMediator mediator,
     OAuthAuthorizationStore authStore,
     IGenericRepository<ApiKey> apiKeyRepository,
@@ -38,7 +40,7 @@ public class OAuthController(
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
     {
-        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme; // S6932: Request.Headers needed for reverse proxy forwarding
         var baseUrl = $"{scheme}://{Request.Host}";
         return Ok(new
         {
@@ -74,7 +76,7 @@ public class OAuthController(
     [HttpGet("/.well-known/oauth-protected-resource")]
     public IActionResult GetProtectedResourceMetadata()
     {
-        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme; // S6932: Required for reverse proxy
         var baseUrl = $"{scheme}://{Request.Host}";
         return Ok(new
         {
@@ -229,7 +231,7 @@ public class OAuthController(
         var keyResult = ApiKey.Create(entry.UserId, "Claude.ai");
         if (keyResult.IsFailure)
         {
-            logger.LogError("Failed to create OAuth API key for user {UserId}: {Error}", entry.UserId, keyResult.Error);
+            LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
             return StatusCode(500, new { error = "server_error" });
         }
 
@@ -237,7 +239,7 @@ public class OAuthController(
         await apiKeyRepository.AddAsync(apiKey, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        logger.LogInformation("OAuth API key created for user {UserId} via {ClientId}", entry.UserId, entry.ClientId);
+        LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
 
         return Ok(new
         {
@@ -246,4 +248,10 @@ public class OAuthController(
             scope = "all"
         });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create OAuth API key for user {UserId}: {Error}")]
+    private static partial void LogFailedToCreateOAuthApiKey(ILogger logger, Guid userId, string? error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "OAuth API key created for user {UserId} via {ClientId}")]
+    private static partial void LogOAuthApiKeyCreated(ILogger logger, Guid userId, string? clientId);
 }

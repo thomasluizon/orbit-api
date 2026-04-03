@@ -22,7 +22,7 @@ public partial class ReminderSchedulerService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("ReminderSchedulerService started");
+        LogServiceStarted(logger);
 
         try
         {
@@ -35,7 +35,7 @@ public partial class ReminderSchedulerService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Error in reminder scheduler");
+                    LogServiceError(logger, ex);
                 }
 
                 await Task.Delay(_interval, stoppingToken);
@@ -43,7 +43,7 @@ public partial class ReminderSchedulerService(
         }
         finally
         {
-            logger.LogInformation("ReminderSchedulerService stopped");
+            LogServiceStopped(logger);
         }
     }
 
@@ -132,7 +132,7 @@ public partial class ReminderSchedulerService(
                 sentReminderSet.Add((habit.Id, minutesBefore));
                 anyChanges = true;
 
-                logger.LogInformation("Sent reminder ({Minutes}min) for habit {HabitId} to user {UserId}", minutesBefore, habit.Id, habit.UserId);
+                LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
             }
         }
 
@@ -185,12 +185,11 @@ public partial class ReminderSchedulerService(
 
             foreach (var sr in habit.ScheduledReminders)
             {
-                DateOnly reminderForDate;
-                if (sr.When == ScheduledReminderWhen.SameDay && isDueToday)
-                    reminderForDate = userToday;
-                else if (sr.When == ScheduledReminderWhen.DayBefore && isDueTomorrow)
-                    reminderForDate = userToday;
-                else
+                if (sr.When == ScheduledReminderWhen.SameDay && !isDueToday)
+                    continue;
+                if (sr.When == ScheduledReminderWhen.DayBefore && !isDueTomorrow)
+                    continue;
+                if (sr.When != ScheduledReminderWhen.SameDay && sr.When != ScheduledReminderWhen.DayBefore)
                     continue;
 
                 // Check if current time matches (within 1-minute window)
@@ -215,13 +214,14 @@ public partial class ReminderSchedulerService(
                 sentScheduledSet.Add((habit.Id, dueDate, sr.Time));
                 anyChanges = true;
 
-                logger.LogInformation("Sent scheduled reminder ({When} at {Time}) for habit {HabitId} to user {UserId}",
-                    sr.When, sr.Time, habit.Id, habit.UserId);
+                LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
             }
         }
 
         return anyChanges;
     }
+
+    private static string Pluralize(string singular, int count) => count > 1 ? singular + "s" : singular;
 
     private static string FormatReminderText(int minutesBefore, string lang)
     {
@@ -229,9 +229,15 @@ public partial class ReminderSchedulerService(
         return minutesBefore switch
         {
             0 => isPt ? "Agora" : "Due now",
-            < 60 => isPt ? $"Em {minutesBefore} {(minutesBefore == 1 ? "minuto" : "minutos")}" : $"Due in {minutesBefore} minutes",
-            < 1440 => isPt ? $"Em {minutesBefore / 60} hora{(minutesBefore / 60 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 60} hour{(minutesBefore / 60 > 1 ? "s" : "")}",
-            _ => isPt ? $"Em {minutesBefore / 1440} dia{(minutesBefore / 1440 > 1 ? "s" : "")}" : $"Due in {minutesBefore / 1440} day{(minutesBefore / 1440 > 1 ? "s" : "")}"
+            < 60 => isPt
+                ? $"Em {minutesBefore} {Pluralize("minuto", minutesBefore)}"
+                : $"Due in {minutesBefore} minutes",
+            < 1440 => isPt
+                ? $"Em {minutesBefore / 60} {Pluralize("hora", minutesBefore / 60)}"
+                : $"Due in {minutesBefore / 60} {Pluralize("hour", minutesBefore / 60)}",
+            _ => isPt
+                ? $"Em {minutesBefore / 1440} {Pluralize("dia", minutesBefore / 1440)}"
+                : $"Due in {minutesBefore / 1440} {Pluralize("day", minutesBefore / 1440)}"
         };
     }
 
@@ -245,4 +251,20 @@ public partial class ReminderSchedulerService(
             _ => isPt ? "Lembrete" : "Reminder"
         };
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "ReminderSchedulerService started")]
+    private static partial void LogServiceStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "ReminderSchedulerService stopped")]
+    private static partial void LogServiceStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in reminder scheduler")]
+    private static partial void LogServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sent reminder ({Minutes}min) for habit {HabitId} to user {UserId}")]
+    private static partial void LogSentReminder(ILogger logger, int minutes, Guid habitId, Guid userId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Sent scheduled reminder ({When} at {Time}) for habit {HabitId} to user {UserId}")]
+    private static partial void LogSentScheduledReminder(ILogger logger, Orbit.Domain.Enums.ScheduledReminderWhen when, TimeOnly time, Guid habitId, Guid userId);
+
 }

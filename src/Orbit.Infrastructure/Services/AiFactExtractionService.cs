@@ -7,7 +7,7 @@ using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class AiFactExtractionService(
+public sealed partial class AiFactExtractionService(
     AiCompletionClient aiClient,
     ILogger<AiFactExtractionService> logger) : IFactExtractionService
 {
@@ -23,30 +23,30 @@ public sealed class AiFactExtractionService(
 
         try
         {
-            logger.LogInformation("Calling AI API for fact extraction...");
+            LogCallingFactExtraction(logger);
 
             var facts = await aiClient.CompleteJsonAsync<ExtractedFacts>(prompt, temperature: 0.1, cancellationToken);
 
             stopwatch.Stop();
-            logger.LogInformation("AI fact extraction responded in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+            LogFactExtractionResponded(logger, stopwatch.ElapsedMilliseconds);
 
             if (facts is null)
             {
-                logger.LogInformation("AI returned empty response - no facts to extract");
+                LogEmptyFactResponse(logger);
                 return Result.Success(new ExtractedFacts { Facts = [] });
             }
 
-            logger.LogInformation("Extracted {FactCount} facts from conversation", facts.Facts.Count);
+            LogFactsExtracted(logger, facts.Facts.Count);
             return Result.Success(facts);
         }
         catch (System.Text.Json.JsonException ex)
         {
-            logger.LogWarning(ex, "Failed to deserialize fact extraction response - returning empty facts");
+            LogFactDeserializationFailed(logger, ex);
             return Result.Success(new ExtractedFacts { Facts = [] });
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Fact extraction failed - non-critical error");
+            LogFactExtractionFailed(logger, ex);
             return Result.Success(new ExtractedFacts { Facts = [] });
         }
     }
@@ -113,4 +113,23 @@ public sealed class AiFactExtractionService(
             - Category: preference (likes/dislikes/personal style), routine (real schedule patterns and constraints), context (life situation, goals, background)
             """;
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API for fact extraction...")]
+    private static partial void LogCallingFactExtraction(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI fact extraction responded in {ElapsedMs}ms")]
+    private static partial void LogFactExtractionResponded(ILogger logger, long elapsedMs);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI returned empty response - no facts to extract")]
+    private static partial void LogEmptyFactResponse(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Extracted {FactCount} facts from conversation")]
+    private static partial void LogFactsExtracted(ILogger logger, int factCount);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Failed to deserialize fact extraction response - returning empty facts")]
+    private static partial void LogFactDeserializationFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Fact extraction failed - non-critical error")]
+    private static partial void LogFactExtractionFailed(ILogger logger, Exception ex);
+
 }

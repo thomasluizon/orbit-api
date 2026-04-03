@@ -27,7 +27,7 @@ public record LogHabitCommand(
     string? Note = null,
     DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>;
 
-public class LogHabitCommandHandler(
+public partial class LogHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Goal> goalRepository,
@@ -134,7 +134,7 @@ public class LogHabitCommandHandler(
         {
             gamificationResult = await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
         }
-        catch (Exception ex) { logger.LogWarning(ex, "Gamification processing failed for habit {HabitId}", request.HabitId); }
+        catch (Exception ex) { LogGamificationHabitLogFailed(logger, ex, request.HabitId); }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
@@ -145,7 +145,7 @@ public class LogHabitCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Referral completion check failed for user {UserId}", request.UserId);
+            LogReferralCompletionCheckFailed(logger, ex, request.UserId);
         }
 
         return Result.Success(new LogHabitResponse(
@@ -178,4 +178,9 @@ public class LogHabitCommandHandler(
         return updates;
     }
 
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit {HabitId}")]
+    private static partial void LogGamificationHabitLogFailed(ILogger logger, Exception ex, Guid habitId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Referral completion check failed for user {UserId}")]
+    private static partial void LogReferralCompletionCheckFailed(ILogger logger, Exception ex, Guid userId);
 }

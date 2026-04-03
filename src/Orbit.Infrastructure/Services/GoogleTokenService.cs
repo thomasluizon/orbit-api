@@ -7,7 +7,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Services;
 
-public class GoogleTokenService(
+public partial class GoogleTokenService(
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
     ILogger<GoogleTokenService> logger) : IGoogleTokenService
@@ -47,10 +47,14 @@ public class GoogleTokenService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to refresh Google token for user {UserId}", user.Id);
+                LogGoogleTokenRefreshFailed(logger, ex, user.Id);
             }
         }
 
         return user.GoogleAccessToken;
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to refresh Google token for user {UserId}")]
+    private static partial void LogGoogleTokenRefreshFailed(ILogger logger, Exception ex, Guid userId);
+
 }

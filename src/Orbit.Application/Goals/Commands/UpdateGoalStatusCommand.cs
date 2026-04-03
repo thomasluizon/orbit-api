@@ -13,7 +13,7 @@ public record UpdateGoalStatusCommand(
     Guid GoalId,
     GoalStatus NewStatus) : IRequest<Result>;
 
-public class UpdateGoalStatusCommandHandler(
+public partial class UpdateGoalStatusCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
@@ -48,10 +48,13 @@ public class UpdateGoalStatusCommandHandler(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Gamification processing failed for goal completion by user {UserId}", request.UserId);
+                LogGamificationGoalCompletionFailed(logger, ex, request.UserId);
             }
         }
 
         return Result.Success();
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal completion by user {UserId}")]
+    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

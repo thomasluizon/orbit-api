@@ -22,6 +22,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     private const string TestCode = "999999";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly string[] DefaultChecklistItems = ["Old item 1", "Old item 2"];
 
     // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
@@ -268,7 +269,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     {
         // Create habit with checklist via API
         var habitId = await CreateHabitViaApiWithChecklist("Checklist Update Test", "Day",
-            new[] { "Old item 1", "Old item 2" });
+            DefaultChecklistItems);
 
         var response = await SendChat(
             "Replace the checklist of 'Checklist Update Test' with these items: New Alpha, New Beta, New Gamma");

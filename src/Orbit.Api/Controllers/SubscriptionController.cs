@@ -11,7 +11,7 @@ namespace Orbit.Api.Controllers;
 [ApiController]
 [Route("api/subscriptions")]
 [Authorize]
-public class SubscriptionController(IMediator mediator, ILogger<SubscriptionController> logger) : ControllerBase
+public partial class SubscriptionController(IMediator mediator, ILogger<SubscriptionController> logger) : ControllerBase
 {
     [HttpPost("checkout")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -91,14 +91,17 @@ public class SubscriptionController(IMediator mediator, ILogger<SubscriptionCont
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> HandleWebhook(CancellationToken cancellationToken)
     {
-        var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken);
+        var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken); // S6932: Raw body needed for Stripe webhook signature verification
         var signature = Request.Headers["Stripe-Signature"].ToString();
         var command = new HandleWebhookCommand(json, signature);
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess) return Ok();
-        logger.LogError("Webhook processing failed: {Error}", result.Error);
+        LogWebhookProcessingFailed(logger, result.Error);
         return StatusCode(500, new { error = result.Error });
     }
 
     public record CreateCheckoutRequest(string Interval);
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Webhook processing failed: {Error}")]
+    private static partial void LogWebhookProcessingFailed(ILogger logger, string? error);
 }

@@ -13,7 +13,7 @@ namespace Orbit.Application.Auth.Commands;
 public record GoogleAuthCommand(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null)
     : IRequest<Result<LoginResponse>>;
 
-public class GoogleAuthCommandHandler(
+public partial class GoogleAuthCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     ITokenService tokenService,
@@ -78,7 +78,7 @@ public class GoogleAuthCommandHandler(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Welcome email failed for user {Email}", user.Email);
+                    LogWelcomeEmailFailed(logger, ex, user.Email);
                 }
             }, CancellationToken.None);
         }
@@ -92,7 +92,7 @@ public class GoogleAuthCommandHandler(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Referral processing failed for user {UserId}", user.Id);
+                LogReferralProcessingFailed(logger, ex, user.Id);
             }
         }
 
@@ -118,4 +118,10 @@ public class GoogleAuthCommandHandler(
 
         return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Welcome email failed for user {Email}")]
+    private static partial void LogWelcomeEmailFailed(ILogger logger, Exception ex, string email);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]
+    private static partial void LogReferralProcessingFailed(ILogger logger, Exception ex, Guid userId);
 }

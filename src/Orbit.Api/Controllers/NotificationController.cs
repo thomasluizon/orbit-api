@@ -11,7 +11,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/notifications")]
-public class NotificationController(
+public partial class NotificationController(
     IMediator mediator,
     ILogger<NotificationController> logger) : ControllerBase
 {
@@ -90,7 +90,7 @@ public class NotificationController(
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Push subscription registered for user {UserId}", HttpContext.GetUserId());
+            LogPushSubscriptionRegistered(logger, HttpContext.GetUserId());
             return Ok();
         }
 
@@ -109,7 +109,7 @@ public class NotificationController(
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            logger.LogInformation("Push subscription removed for user {UserId}", HttpContext.GetUserId());
+            LogPushSubscriptionRemoved(logger, HttpContext.GetUserId());
 
         return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
@@ -127,8 +127,17 @@ public class NotificationController(
             return BadRequest(new { error = result.Error });
 
         if (result.Value.Status == "failed")
-            logger.LogWarning("Test push failed for user {UserId}", HttpContext.GetUserId());
+            LogTestPushFailed(logger, HttpContext.GetUserId());
 
         return Ok(result.Value);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Push subscription registered for user {UserId}")]
+    private static partial void LogPushSubscriptionRegistered(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Push subscription removed for user {UserId}")]
+    private static partial void LogPushSubscriptionRemoved(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Test push failed for user {UserId}")]
+    private static partial void LogTestPushFailed(ILogger logger, Guid userId);
 }

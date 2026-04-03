@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,10 +14,10 @@ namespace Orbit.Api.Controllers;
 [Route("api/[controller]")]
 public partial class GoalsController(IMediator mediator, ILogger<GoalsController> logger) : ControllerBase
 {
-    public record CreateGoalRequest(string Title, string? Description, decimal TargetValue, string Unit, DateOnly? Deadline = null);
-    public record UpdateGoalRequest(string Title, string? Description, decimal TargetValue, string Unit, DateOnly? Deadline = null);
-    public record UpdateProgressRequest(decimal CurrentValue, string? Note = null);
-    public record UpdateStatusRequest(GoalStatus Status);
+    public record CreateGoalRequest(string Title, string? Description, [property: JsonRequired] decimal TargetValue, string Unit, DateOnly? Deadline = null);
+    public record UpdateGoalRequest(string Title, string? Description, [property: JsonRequired] decimal TargetValue, string Unit, DateOnly? Deadline = null);
+    public record UpdateProgressRequest([property: JsonRequired] decimal CurrentValue, string? Note = null);
+    public record UpdateStatusRequest([property: JsonRequired] GoalStatus Status);
     public record ReorderGoalsRequest(IReadOnlyList<GoalPositionRequest> Positions);
     public record GoalPositionRequest(Guid Id, int Position);
     public record LinkHabitsRequest(List<Guid> HabitIds);

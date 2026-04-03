@@ -5,7 +5,7 @@ using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class AiSlipAlertMessageService(
+public sealed partial class AiSlipAlertMessageService(
     AiCompletionClient aiClient,
     ILogger<AiSlipAlertMessageService> logger) : ISlipAlertMessageService
 {
@@ -54,7 +54,7 @@ public sealed class AiSlipAlertMessageService(
 
             if (string.IsNullOrWhiteSpace(text))
             {
-                logger.LogWarning("AI returned empty response for slip alert message");
+                LogEmptySlipAlertResponse(logger);
                 return GenerateFallback(habitTitle, language);
             }
 
@@ -67,7 +67,7 @@ public sealed class AiSlipAlertMessageService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to generate slip alert message via AI");
+            LogSlipAlertGenerationFailed(logger, ex);
             return GenerateFallback(habitTitle, language);
         }
     }
@@ -80,4 +80,11 @@ public sealed class AiSlipAlertMessageService(
             : Result.Success(($"Heads up: {habitTitle}",
                 "You tend to slip around this time. Stay strong -- you've got this!"));
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "AI returned empty response for slip alert message")]
+    private static partial void LogEmptySlipAlertResponse(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to generate slip alert message via AI")]
+    private static partial void LogSlipAlertGenerationFailed(ILogger logger, Exception ex);
+
 }

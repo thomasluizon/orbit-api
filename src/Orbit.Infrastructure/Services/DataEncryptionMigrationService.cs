@@ -28,11 +28,11 @@ public sealed partial class DataEncryptionMigrationService(
         {
             if (await HasAlreadyRun(stoppingToken))
             {
-                logger.LogInformation("Encryption migration already completed -- skipping");
+                LogMigrationAlreadyComplete(logger);
                 return;
             }
 
-            logger.LogInformation("Starting full data encryption migration");
+            LogStartingMigration(logger);
 
             var success = true;
             success &= await MigrateEntities<Habit>("Habits", stoppingToken);
@@ -44,16 +44,16 @@ public sealed partial class DataEncryptionMigrationService(
             if (success)
             {
                 await SetMigrationComplete(stoppingToken);
-                logger.LogInformation("Full data encryption migration completed successfully");
+                LogMigrationCompleted(logger);
             }
             else
             {
-                logger.LogWarning("Encryption migration had errors -- will retry on next startup");
+                LogMigrationHadErrors(logger);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "Data encryption migration failed -- will retry on next startup");
+            LogMigrationFailed(logger, ex);
         }
     }
 
@@ -109,14 +109,14 @@ public sealed partial class DataEncryptionMigrationService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Batch failed for {Entity} at offset {Offset} -- skipping batch", entityName, offset);
+                LogBatchFailed(logger, ex, entityName, offset);
                 hadErrors = true;
                 offset += BatchSize;
             }
         }
 
         if (totalProcessed > 0)
-            logger.LogInformation("Encrypted {Count} {Entity}", totalProcessed, entityName);
+            LogEntitiesEncrypted(logger, totalProcessed, entityName);
 
         return !hadErrors;
     }
@@ -157,15 +157,43 @@ public sealed partial class DataEncryptionMigrationService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Batch failed for UserFacts at offset {Offset} -- skipping batch", offset);
+                LogUserFactsBatchFailed(logger, ex, offset);
                 hadErrors = true;
                 offset += BatchSize;
             }
         }
 
         if (totalProcessed > 0)
-            logger.LogInformation("Encrypted {Count} UserFacts", totalProcessed);
+            LogUserFactsEncrypted(logger, totalProcessed);
 
         return !hadErrors;
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Encryption migration already completed -- skipping")]
+    private static partial void LogMigrationAlreadyComplete(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Starting full data encryption migration")]
+    private static partial void LogStartingMigration(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Full data encryption migration completed successfully")]
+    private static partial void LogMigrationCompleted(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Encryption migration had errors -- will retry on next startup")]
+    private static partial void LogMigrationHadErrors(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Data encryption migration failed -- will retry on next startup")]
+    private static partial void LogMigrationFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Batch failed for {Entity} at offset {Offset} -- skipping batch")]
+    private static partial void LogBatchFailed(ILogger logger, Exception ex, string entity, int offset);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Encrypted {Count} {Entity}")]
+    private static partial void LogEntitiesEncrypted(ILogger logger, int count, string entity);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Batch failed for UserFacts at offset {Offset} -- skipping batch")]
+    private static partial void LogUserFactsBatchFailed(ILogger logger, Exception ex, int offset);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Encrypted {Count} UserFacts")]
+    private static partial void LogUserFactsEncrypted(ILogger logger, int count);
+
 }

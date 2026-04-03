@@ -5,7 +5,7 @@ using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class AiGoalReviewService(
+public sealed partial class AiGoalReviewService(
     AiCompletionClient aiClient,
     ILogger<AiGoalReviewService> logger) : IGoalReviewService
 {
@@ -36,7 +36,7 @@ public sealed class AiGoalReviewService(
             - Plain text only
             """;
 
-        logger.LogInformation("Generating goal review (language: {Language})...", language);
+        LogGeneratingGoalReview(logger, language);
 
         try
         {
@@ -51,13 +51,23 @@ public sealed class AiGoalReviewService(
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
 
-            logger.LogInformation("Goal review generated successfully ({Length} chars)", trimmed.Length);
+            LogGoalReviewGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "AI API call failed for goal review");
+            LogGoalReviewFailed(logger, ex);
             return Result.Failure<string>("AI goal review temporarily unavailable");
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating goal review (language: {Language})...")]
+    private static partial void LogGeneratingGoalReview(ILogger logger, string language);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Goal review generated successfully ({Length} chars)")]
+    private static partial void LogGoalReviewGenerated(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for goal review")]
+    private static partial void LogGoalReviewFailed(ILogger logger, Exception ex);
+
 }

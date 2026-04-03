@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Diagnostics;
 
 namespace Orbit.Api.Middleware;
 
-internal sealed class ValidationExceptionHandler(ILogger<ValidationExceptionHandler> logger) : IExceptionHandler
+internal sealed partial class ValidationExceptionHandler(ILogger<ValidationExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -23,9 +23,7 @@ internal sealed class ValidationExceptionHandler(ILogger<ValidationExceptionHand
                 g => g.Key,
                 g => g.Select(e => e.ErrorMessage).ToArray());
 
-        logger.LogWarning("Validation failed on {Path}: {Fields}",
-            httpContext.Request.Path,
-            string.Join(", ", errors.Keys));
+        LogValidationFailed(logger, httpContext.Request.Path, string.Join(", ", errors.Keys));
 
         var response = new
         {
@@ -38,4 +36,7 @@ internal sealed class ValidationExceptionHandler(ILogger<ValidationExceptionHand
 
         return true;
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Validation failed on {Path}: {Fields}")]
+    private static partial void LogValidationFailed(ILogger logger, string path, string fields);
 }

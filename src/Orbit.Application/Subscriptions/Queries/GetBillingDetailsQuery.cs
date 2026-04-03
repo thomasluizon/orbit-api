@@ -11,7 +11,7 @@ namespace Orbit.Application.Subscriptions.Queries;
 
 public record GetBillingDetailsQuery(Guid UserId) : IRequest<Result<BillingDetailsResponse>>;
 
-public class GetBillingDetailsQueryHandler(
+public partial class GetBillingDetailsQueryHandler(
     IGenericRepository<User> userRepository,
     SubscriptionService subscriptionService,
     InvoiceService invoiceService,
@@ -73,7 +73,7 @@ public class GetBillingDetailsQueryHandler(
         }
         catch (StripeException ex)
         {
-            logger.LogError(ex, "Failed to fetch billing details from Stripe for user {UserId}", request.UserId);
+            LogFetchBillingDetailsFailed(logger, ex, request.UserId);
             return Result.Failure<BillingDetailsResponse>("Failed to load billing details from payment provider");
         }
     }
@@ -89,4 +89,7 @@ public class GetBillingDetailsQueryHandler(
             _ => SubscriptionInterval.Monthly
         };
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to fetch billing details from Stripe for user {UserId}")]
+    private static partial void LogFetchBillingDetailsFailed(ILogger logger, Exception ex, Guid userId);
 }

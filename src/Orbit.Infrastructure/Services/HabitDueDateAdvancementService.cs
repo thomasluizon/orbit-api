@@ -18,7 +18,7 @@ public partial class HabitDueDateAdvancementService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("HabitDueDateAdvancementService started");
+        LogServiceStarted(logger);
 
         try
         {
@@ -31,7 +31,7 @@ public partial class HabitDueDateAdvancementService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Error in habit due date advancement");
+                    LogServiceError(logger, ex);
                 }
 
                 await Task.Delay(_interval, stoppingToken);
@@ -39,7 +39,7 @@ public partial class HabitDueDateAdvancementService(
         }
         finally
         {
-            logger.LogInformation("HabitDueDateAdvancementService stopped");
+            LogServiceStopped(logger);
         }
     }
 
@@ -83,7 +83,20 @@ public partial class HabitDueDateAdvancementService(
         if (advanced > 0)
         {
             await dbContext.SaveChangesAsync(ct);
-            logger.LogInformation("Advanced DueDate for {Count} recurring habits", advanced);
+            LogDueDatesAdvanced(logger, advanced);
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "HabitDueDateAdvancementService started")]
+    private static partial void LogServiceStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "HabitDueDateAdvancementService stopped")]
+    private static partial void LogServiceStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in habit due date advancement")]
+    private static partial void LogServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Advanced DueDate for {Count} recurring habits")]
+    private static partial void LogDueDatesAdvanced(ILogger logger, int count);
+
 }

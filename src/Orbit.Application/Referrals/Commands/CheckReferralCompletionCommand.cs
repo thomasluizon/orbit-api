@@ -10,7 +10,7 @@ namespace Orbit.Application.Referrals.Commands;
 
 public record CheckReferralCompletionCommand(Guid UserId) : IRequest<Result>;
 
-public class CheckReferralCompletionCommandHandler(
+public partial class CheckReferralCompletionCommandHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Referral> referralRepository,
     IGenericRepository<Habit> habitRepository,
@@ -103,7 +103,7 @@ public class CheckReferralCompletionCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to create referral coupon for user {UserId}", user.Id);
+            LogCreateReferralCouponFailed(logger, ex, user.Id);
             return;
         }
 
@@ -116,8 +116,7 @@ public class CheckReferralCompletionCommandHandler(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to apply referral coupon {CouponId} to subscription {SubscriptionId} for user {UserId}",
-                    couponId, user.StripeSubscriptionId, user.Id);
+                LogApplyReferralCouponFailed(logger, ex, couponId, user.StripeSubscriptionId, user.Id);
                 // Fall back to storing coupon for next checkout
                 user.SetReferralCoupon(couponId);
             }
@@ -140,7 +139,7 @@ public class CheckReferralCompletionCommandHandler(
         _ = Task.Run(async () =>
         {
             try { await pushNotificationService.SendToUserAsync(user.Id, title, body, "/profile", CancellationToken.None); }
-            catch (Exception ex) { logger.LogWarning(ex, "Failed to send referral push notification for user {UserId}", user.Id); }
+            catch (Exception ex) { LogReferralPushNotificationFailed(logger, ex, user.Id); }
         }, CancellationToken.None);
     }
 
@@ -167,4 +166,13 @@ public class CheckReferralCompletionCommandHandler(
             return (title, body);
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create referral coupon for user {UserId}")]
+    private static partial void LogCreateReferralCouponFailed(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to apply referral coupon {CouponId} to subscription {SubscriptionId} for user {UserId}")]
+    private static partial void LogApplyReferralCouponFailed(ILogger logger, Exception ex, string couponId, string? subscriptionId, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Failed to send referral push notification for user {UserId}")]
+    private static partial void LogReferralPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

@@ -15,6 +15,7 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService)
 {
+    private static readonly System.Text.Json.JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
     private const string HabitIdDescription = "The habit ID (GUID)";
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
@@ -243,7 +244,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var items = System.Text.Json.JsonSerializer.Deserialize<List<ChecklistItem>>(
             checklistItemsJson,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            CaseInsensitiveJsonOptions)
             ?? [];
 
         var command = new UpdateChecklistCommand(userId, Guid.Parse(habitId), items);
@@ -360,7 +361,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var items = System.Text.Json.JsonSerializer.Deserialize<List<BulkHabitItemDto>>(
             habitsJson,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            CaseInsensitiveJsonOptions)
             ?? [];
 
         var bulkItems = items.Select(MapToBulkHabitItem).ToList();
@@ -459,7 +460,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var items = System.Text.Json.JsonSerializer.Deserialize<List<HabitPositionDto>>(
             positionsJson,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            CaseInsensitiveJsonOptions)
             ?? [];
 
         var positions = items.Select(p => new HabitPositionUpdate(Guid.Parse(p.HabitId), p.Position)).ToList();

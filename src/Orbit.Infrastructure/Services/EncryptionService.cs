@@ -7,7 +7,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class EncryptionService : IEncryptionService
+public sealed partial class EncryptionService : IEncryptionService
 {
     private const int NonceSize = 12;  // AES-GCM standard nonce size
     private const int TagSize = 16;    // AES-GCM standard tag size
@@ -24,7 +24,7 @@ public sealed class EncryptionService : IEncryptionService
 
             if (string.IsNullOrEmpty(keyString) || keyString.Contains("REPLACE"))
             {
-                logger.LogWarning("Encryption key not configured -- encryption is disabled (passthrough mode)");
+                LogEncryptionKeyNotConfigured(logger);
                 _isConfigured = false;
                 return;
             }
@@ -38,7 +38,7 @@ public sealed class EncryptionService : IEncryptionService
         }
         catch (FormatException)
         {
-            logger.LogWarning("Encryption key is not valid Base64 -- encryption is disabled (passthrough mode)");
+            LogEncryptionKeyInvalidBase64(logger);
             _isConfigured = false;
         }
     }
@@ -135,4 +135,11 @@ public sealed class EncryptionService : IEncryptionService
     {
         return ciphertext is null ? null : Decrypt(ciphertext);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Encryption key not configured -- encryption is disabled (passthrough mode)")]
+    private static partial void LogEncryptionKeyNotConfigured(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Encryption key is not valid Base64 -- encryption is disabled (passthrough mode)")]
+    private static partial void LogEncryptionKeyInvalidBase64(ILogger logger);
+
 }

@@ -9,7 +9,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
 
-public sealed class AiCompletionClient
+public sealed partial class AiCompletionClient
 {
     private readonly ChatClient _chatClient;
     private readonly ILogger<AiCompletionClient> _logger;
@@ -60,13 +60,13 @@ public sealed class AiCompletionClient
             Temperature = (float)temperature
         };
 
-        _logger.LogInformation("Calling AI API for text completion...");
+        LogCallingTextCompletion(_logger);
 
         var completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
         var text = completion.Value.Content.FirstOrDefault()?.Text;
 
         if (!string.IsNullOrWhiteSpace(text))
-            _logger.LogInformation("AI text completion successful ({Length} chars)", text.Length);
+            LogTextCompletionSuccessful(_logger, text.Length);
 
         return text;
     }
@@ -92,19 +92,35 @@ public sealed class AiCompletionClient
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
 
-        _logger.LogInformation("Calling AI API for JSON completion...");
+        LogCallingJsonCompletion(_logger);
 
         var completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
         var text = completion.Value.Content.FirstOrDefault()?.Text;
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            _logger.LogWarning("AI returned empty response for JSON completion");
+            LogEmptyJsonResponse(_logger);
             return default;
         }
 
-        _logger.LogInformation("AI JSON completion successful ({Length} chars)", text.Length);
+        LogJsonCompletionSuccessful(_logger, text.Length);
 
         return JsonSerializer.Deserialize<T>(text, JsonOptions);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API for text completion...")]
+    private static partial void LogCallingTextCompletion(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI text completion successful ({Length} chars)")]
+    private static partial void LogTextCompletionSuccessful(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Calling AI API for JSON completion...")]
+    private static partial void LogCallingJsonCompletion(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "AI returned empty response for JSON completion")]
+    private static partial void LogEmptyJsonResponse(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "AI JSON completion successful ({Length} chars)")]
+    private static partial void LogJsonCompletionSuccessful(ILogger logger, int length);
+
 }

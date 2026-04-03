@@ -123,7 +123,7 @@ public partial class ResendEmailService(
                 var parts = pair.Split(':', 2);
                 if (parts.Length >= 1 && string.Equals(parts[0].Trim(), toNormalized, StringComparison.OrdinalIgnoreCase))
                 {
-                    logger.LogInformation("Skipping email to test account {To} subject={Subject}", to, subject);
+                    LogSkippingTestEmail(logger, to, subject);
                     return;
                 }
             }
@@ -145,17 +145,17 @@ public partial class ResendEmailService(
             var response = await client.PostAsync("/emails", content, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
-                logger.LogInformation("Email sent to {To} subject={Subject}", to, subject);
+                LogEmailSent(logger, to, subject);
             }
             else
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("Email failed to {To} status={Status} body={Body}", to, response.StatusCode, body);
+                LogEmailFailed(logger, to, response.StatusCode, body);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Email send exception to {To}", to);
+            LogEmailSendException(logger, ex, to);
         }
     }
 
@@ -346,4 +346,17 @@ public partial class ResendEmailService(
 </body>
 </html>";
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Skipping email to test account {To} subject={Subject}")]
+    private static partial void LogSkippingTestEmail(ILogger logger, string to, string subject);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Email sent to {To} subject={Subject}")]
+    private static partial void LogEmailSent(ILogger logger, string to, string subject);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Email failed to {To} status={Status} body={Body}")]
+    private static partial void LogEmailFailed(ILogger logger, string to, System.Net.HttpStatusCode status, string body);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Email send exception to {To}")]
+    private static partial void LogEmailSendException(ILogger logger, Exception ex, string to);
+
 }

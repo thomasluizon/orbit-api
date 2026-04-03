@@ -45,7 +45,7 @@ public record BulkCreateItemResult(
 
 public enum BulkItemStatus { Success, Failed }
 
-public class BulkCreateHabitsCommandHandler(
+public partial class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IPayGateService payGate,
     IUserDateService userDateService,
@@ -169,7 +169,7 @@ public class BulkCreateHabitsCommandHandler(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "BulkCreate item {Index} failed", i);
+                    LogBulkCreateItemFailed(logger, ex, i);
                     results.Add(new BulkCreateItemResult(
                         Index: i,
                         Status: BulkItemStatus.Failed,
@@ -203,4 +203,7 @@ public class BulkCreateHabitsCommandHandler(
             return "Days";
         return null;
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "BulkCreate item {Index} failed")]
+    private static partial void LogBulkCreateItemFailed(ILogger logger, Exception ex, int index);
 }

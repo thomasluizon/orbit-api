@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public class CalendarController(IMediator mediator, ILogger<CalendarController> logger) : ControllerBase
+public partial class CalendarController(IMediator mediator, ILogger<CalendarController> logger) : ControllerBase
 {
     [HttpGet("events")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -24,7 +24,7 @@ public class CalendarController(IMediator mediator, ILogger<CalendarController> 
         if (result.IsSuccess)
             return Ok(result.Value);
 
-        logger.LogWarning("Failed to fetch calendar events: {Error}", result.Error);
+        LogFailedToFetchCalendarEvents(logger, result.Error);
         return BadRequest(new { error = result.Error });
     }
 
@@ -38,4 +38,7 @@ public class CalendarController(IMediator mediator, ILogger<CalendarController> 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch calendar events: {Error}")]
+    private static partial void LogFailedToFetchCalendarEvents(ILogger logger, string? error);
 }
