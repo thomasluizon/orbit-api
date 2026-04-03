@@ -25,9 +25,9 @@ public class CreateUserFactCommandHandler(
         if (existingFacts.Count >= maxFacts)
             return Result.Failure<Guid>($"You've reached the maximum of {maxFacts} saved facts. Delete some to add new ones.");
 
-        var normalizedNew = request.FactText.Trim().ToLowerInvariant();
+        var normalizedNew = request.FactText.Trim();
         var isDuplicate = existingFacts.Any(f =>
-            f.FactText.ToLowerInvariant() == normalizedNew);
+            string.Equals(f.FactText, normalizedNew, StringComparison.OrdinalIgnoreCase));
 
         if (isDuplicate)
             return Result.Failure<Guid>("A similar fact already exists.");

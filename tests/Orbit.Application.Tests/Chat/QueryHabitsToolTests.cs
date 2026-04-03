@@ -150,11 +150,12 @@ public class QueryHabitsToolTests
     [Fact]
     public async Task DateSpecific_ReturnsHabitsDueOnThatDate()
     {
-        var match = CreateHabit("Friday task", null, null, dueDate: new DateOnly(2026, 4, 3));
+        var specificDate = Today.AddDays(5);
+        var match = CreateHabit("Friday task", null, null, dueDate: specificDate);
         var noMatch = CreateHabit("Other", null, null, dueDate: Today);
         SetupHabits(match, noMatch);
 
-        var result = await Execute("""{"date": "2026-04-03"}""");
+        var result = await Execute($$$"""{"date": "{{{specificDate:yyyy-MM-dd}}}"}""");
 
         result.EntityName.Should().Contain("Friday task");
         result.EntityName.Should().NotContain("Other");

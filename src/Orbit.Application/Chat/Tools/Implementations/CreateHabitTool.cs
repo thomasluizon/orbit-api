@@ -332,7 +332,7 @@ public class CreateHabitTool(
         return Enum.TryParse<FrequencyUnit>(str, ignoreCase: true, out var unit) ? unit : null;
     }
 
-    private static IReadOnlyList<DayOfWeek>? ParseDays(JsonElement el)
+    private static List<DayOfWeek>? ParseDays(JsonElement el)
     {
         if (!el.TryGetProperty("days", out var daysEl) || daysEl.ValueKind != JsonValueKind.Array)
             return null;
@@ -358,10 +358,10 @@ public class CreateHabitTool(
     {
         var str = GetOptionalString(el, prop);
         if (str is null) return null;
-        return TimeOnly.TryParse(str, out var time) ? time : null;
+        return TimeOnly.TryParse(str, CultureInfo.InvariantCulture, out var time) ? time : null;
     }
 
-    private static IReadOnlyList<int>? ParseIntArray(JsonElement el, string prop)
+    private static List<int>? ParseIntArray(JsonElement el, string prop)
     {
         if (!el.TryGetProperty(prop, out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
             return null;
@@ -375,7 +375,7 @@ public class CreateHabitTool(
         return items.Count > 0 ? items : null;
     }
 
-    private static IReadOnlyList<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
+    private static List<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
     {
         if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
             return null;
@@ -387,7 +387,7 @@ public class CreateHabitTool(
             var timeStr = GetOptionalString(item, "time");
             if (whenStr is null || timeStr is null) continue;
             if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
-            if (!TimeOnly.TryParse(timeStr, out var time)) continue;
+            if (!TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var time)) continue;
             items.Add(new ScheduledReminderTime(when, time));
         }
         return items.Count > 0 ? items : null;
@@ -404,7 +404,7 @@ public class CreateHabitTool(
         return value is "same_day" or "day_before";
     }
 
-    private static IReadOnlyList<ChecklistItem>? ParseChecklistItems(JsonElement el)
+    private static List<ChecklistItem>? ParseChecklistItems(JsonElement el)
     {
         if (!el.TryGetProperty("checklist_items", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
             return null;

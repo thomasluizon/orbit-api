@@ -74,10 +74,10 @@ public class CreateSubHabitTool(
         var title = titleEl.GetString() ?? string.Empty;
 
         FrequencyUnit? frequencyUnit = null;
-        if (args.TryGetProperty("frequency_unit", out var fuEl) && fuEl.ValueKind == JsonValueKind.String)
+        if (args.TryGetProperty("frequency_unit", out var fuEl) && fuEl.ValueKind == JsonValueKind.String
+            && Enum.TryParse<FrequencyUnit>(fuEl.GetString(), ignoreCase: true, out var fu))
         {
-            if (Enum.TryParse<FrequencyUnit>(fuEl.GetString(), ignoreCase: true, out var fu))
-                frequencyUnit = fu;
+            frequencyUnit = fu;
         }
 
         int? frequencyQuantity = null;
@@ -99,17 +99,17 @@ public class CreateSubHabitTool(
         }
 
         TimeOnly? dueTime = null;
-        if (args.TryGetProperty("due_time", out var dtEl) && dtEl.ValueKind == JsonValueKind.String)
+        if (args.TryGetProperty("due_time", out var dtEl) && dtEl.ValueKind == JsonValueKind.String
+            && TimeOnly.TryParse(dtEl.GetString(), CultureInfo.InvariantCulture, out var time))
         {
-            if (TimeOnly.TryParse(dtEl.GetString(), out var time))
-                dueTime = time;
+            dueTime = time;
         }
 
         TimeOnly? dueEndTime = null;
-        if (args.TryGetProperty("due_end_time", out var detEl) && detEl.ValueKind == JsonValueKind.String)
+        if (args.TryGetProperty("due_end_time", out var detEl) && detEl.ValueKind == JsonValueKind.String
+            && TimeOnly.TryParse(detEl.GetString(), CultureInfo.InvariantCulture, out var endTime))
         {
-            if (TimeOnly.TryParse(detEl.GetString(), out var endTime))
-                dueEndTime = endTime;
+            dueEndTime = endTime;
         }
 
         string? description = null;
@@ -154,8 +154,8 @@ public class CreateSubHabitTool(
                     timeStr = tEl.GetString();
                 if (whenStr is null || timeStr is null) continue;
                 if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
-                if (!TimeOnly.TryParse(timeStr, out var time)) continue;
-                parsed.Add(new ScheduledReminderTime(when, time));
+                if (!TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var reminderTime)) continue;
+                parsed.Add(new ScheduledReminderTime(when, reminderTime));
             }
             if (parsed.Count > 0) scheduledReminders = parsed;
         }

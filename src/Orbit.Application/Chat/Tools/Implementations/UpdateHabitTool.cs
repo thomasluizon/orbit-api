@@ -183,7 +183,7 @@ public class UpdateHabitTool(
             if (edStr is null)
                 clearEndDate = true;
             else
-                endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", out var ed) ? ed : null;
+                endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var ed) ? ed : null;
         }
 
         var result = habit.Update(
@@ -239,7 +239,7 @@ public class UpdateHabitTool(
         return null;
     }
 
-    private static IReadOnlyList<DayOfWeek>? ParseDays(JsonElement el)
+    private static List<DayOfWeek>? ParseDays(JsonElement el)
     {
         if (!el.TryGetProperty("days", out var daysEl) || daysEl.ValueKind != JsonValueKind.Array)
             return null;
@@ -262,9 +262,9 @@ public class UpdateHabitTool(
     }
 
     private static TimeOnly? ParseTimeOnly(string str) =>
-        TimeOnly.TryParse(str, out var time) ? time : null;
+        TimeOnly.TryParse(str, CultureInfo.InvariantCulture, out var time) ? time : null;
 
-    private static IReadOnlyList<int>? ParseIntArray(JsonElement el, string prop)
+    private static List<int>? ParseIntArray(JsonElement el, string prop)
     {
         if (!el.TryGetProperty(prop, out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
             return null;
@@ -278,7 +278,7 @@ public class UpdateHabitTool(
         return items.Count > 0 ? items : null;
     }
 
-    private static IReadOnlyList<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
+    private static List<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
     {
         if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
             return null;
@@ -290,7 +290,7 @@ public class UpdateHabitTool(
             var timeStr = GetString(item, "time");
             if (whenStr is null || timeStr is null) continue;
             if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
-            if (!TimeOnly.TryParse(timeStr, out var time)) continue;
+            if (!TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var time)) continue;
             items.Add(new ScheduledReminderTime(when, time));
         }
         return items.Count > 0 ? items : null;
@@ -307,7 +307,7 @@ public class UpdateHabitTool(
         return value is "same_day" or "day_before";
     }
 
-    private static IReadOnlyList<ChecklistItem>? ParseChecklistItems(JsonElement el)
+    private static List<ChecklistItem>? ParseChecklistItems(JsonElement el)
     {
         if (!el.TryGetProperty("checklist_items", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
             return null;

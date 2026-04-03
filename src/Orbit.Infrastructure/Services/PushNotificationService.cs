@@ -11,7 +11,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class PushNotificationService(
+public partial class PushNotificationService(
     OrbitDbContext dbContext,
     IOptions<VapidSettings> vapidSettings,
     ILogger<PushNotificationService> logger,
@@ -58,7 +58,7 @@ public class PushNotificationService(
     {
         if (FirebaseMessaging.DefaultInstance is null)
         {
-            logger.LogWarning("FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).", subs.Count);
+            LogFcmNotInitialized(logger, subs.Count);
             return;
         }
 
@@ -73,19 +73,19 @@ public class PushNotificationService(
                     Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
                 };
                 await FirebaseMessaging.DefaultInstance.SendAsync(message, ct);
-                logger.LogInformation("FCM push sent to {Token}", sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
+                LogFcmPushSent(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
             }
             catch (FirebaseMessagingException ex) when (
                 ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
                 ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
                 ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
             {
-                logger.LogInformation("FCM token {Token} is stale, removing", sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
+                LogFcmTokenStale(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
                 staleSubscriptions.Add(sub);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send FCM push to {Token}", sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
+                LogFcmPushFailed(logger, ex, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
             }
         }
     }
@@ -121,22 +121,48 @@ public class PushNotificationService(
                     }
                 };
                 await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
-                logger.LogInformation("Web push sent to {Endpoint}", sub.Endpoint);
+                LogWebPushSent(logger, sub.Endpoint);
             }
             catch (PushServiceClientException ex)
                 when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
             {
-                logger.LogInformation("Web push subscription {Endpoint} is gone, removing", sub.Endpoint);
+                LogWebPushSubscriptionGone(logger, sub.Endpoint);
                 staleSubscriptions.Add(sub);
             }
             catch (PushServiceClientException ex)
             {
-                logger.LogWarning("Failed to send web push to {Endpoint}: {Status} {Message}", sub.Endpoint, ex.StatusCode, ex.Message);
+                LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send web push to {Endpoint}", sub.Endpoint);
+                LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
             }
         }
     }
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).")]
+    private static partial void LogFcmNotInitialized(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "FCM push sent to {Token}")]
+    private static partial void LogFcmPushSent(ILogger logger, string token);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "FCM token {Token} is stale, removing")]
+    private static partial void LogFcmTokenStale(ILogger logger, string token);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to send FCM push to {Token}")]
+    private static partial void LogFcmPushFailed(ILogger logger, Exception ex, string token);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Web push sent to {Endpoint}")]
+    private static partial void LogWebPushSent(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Web push subscription {Endpoint} is gone, removing")]
+    private static partial void LogWebPushSubscriptionGone(ILogger logger, string endpoint);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to send web push to {Endpoint}: {Status} {Message}")]
+    private static partial void LogWebPushFailed(ILogger logger, string endpoint, System.Net.HttpStatusCode? status, string message);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Failed to send web push to {Endpoint}")]
+    private static partial void LogWebPushFailedGeneric(ILogger logger, Exception ex, string endpoint);
+
+
+
 }

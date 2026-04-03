@@ -45,11 +45,8 @@ public static class HabitScheduleService
         if (target < anchor) return false;
 
         // Day filter: if habit has specific days, check target's weekday
-        if (habit.Days.Count > 0)
-        {
-            if (!habit.Days.Contains(target.DayOfWeek))
-                return false;
-        }
+        if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
+            return false;
 
         return unit switch
         {

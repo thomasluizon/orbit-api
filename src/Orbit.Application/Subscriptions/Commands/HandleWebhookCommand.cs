@@ -13,7 +13,7 @@ namespace Orbit.Application.Subscriptions.Commands;
 
 public record HandleWebhookCommand(string Json, string Signature) : IRequest<Result>;
 
-public class HandleWebhookCommandHandler(
+public partial class HandleWebhookCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IOptions<StripeSettings> stripeSettings,
@@ -24,7 +24,7 @@ public class HandleWebhookCommandHandler(
 
     public async Task<Result> Handle(HandleWebhookCommand request, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Stripe webhook received, body length: {Length}", request.Json.Length);
+        LogStripeWebhookReceived(logger, request.Json.Length);
 
         if (string.IsNullOrEmpty(_settings.WebhookSecret))
         {
@@ -47,7 +47,7 @@ public class HandleWebhookCommandHandler(
             return Result.Failure("Invalid webhook signature");
         }
 
-        logger.LogInformation("Stripe event type: {Type}, id: {Id}", stripeEvent.Type, stripeEvent.Id);
+        LogStripeEventType(logger, stripeEvent.Type, stripeEvent.Id);
 
         try
         {
@@ -72,7 +72,7 @@ public class HandleWebhookCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing Stripe webhook event {Type}", stripeEvent.Type);
+            LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
             return Result.Failure("Error processing webhook event");
         }
 
@@ -82,109 +82,151 @@ public class HandleWebhookCommandHandler(
     private async Task HandleCheckoutSessionCompleted(Event stripeEvent, CancellationToken ct)
     {
         var session = stripeEvent.Data.Object as Session;
-        logger.LogInformation("Checkout session: id={Id}, subscription={SubId}, metadata keys={Keys}",
-            session?.Id, session?.SubscriptionId ?? session?.Subscription?.Id,
+        LogCheckoutSession(logger, session?.Id, session?.SubscriptionId ?? session?.Subscription?.Id,
             session?.Metadata != null ? string.Join(",", session.Metadata.Keys) : "null");
 
         var subscriptionId = session?.SubscriptionId ?? session?.Subscription?.Id;
 
-        if (session?.Metadata?.TryGetValue("userId", out var userIdStr) == true
-            && Guid.TryParse(userIdStr, out var uid))
-        {
-            var user = await userRepository.FindOneTrackedAsync(u => u.Id == uid, cancellationToken: ct);
-            logger.LogInformation("User found: {Found}, subscriptionId: {SubId}", user is not null, subscriptionId);
-
-            if (user is not null && subscriptionId is not null)
-            {
-                var subscription = await subscriptionService.GetAsync(subscriptionId, cancellationToken: ct);
-                var periodEnd = subscription.Items?.Data?.Count > 0
-                    ? subscription.Items.Data[0].CurrentPeriodEnd
-                    : DateTime.UtcNow.AddMonths(1);
-
-                user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
-                user.SetStripeSubscription(subscriptionId, periodEnd, GetSubscriptionInterval(subscription));
-
-                if (!string.IsNullOrEmpty(user.ReferralCouponId))
-                {
-                    logger.LogInformation("Clearing referral coupon {CouponId} for user {UserId} after checkout", user.ReferralCouponId, uid);
-                    user.SetReferralCoupon(null);
-                }
-
-                await unitOfWork.SaveChangesAsync(ct);
-                logger.LogInformation("User {UserId} upgraded to Pro, expires {Expires}", uid, periodEnd);
-            }
-        }
-        else
+        if (session?.Metadata?.TryGetValue("userId", out var userIdStr) != true
+            || !Guid.TryParse(userIdStr, out var uid))
         {
             logger.LogWarning("Could not extract userId from checkout session metadata");
+            return;
         }
+
+        var user = await userRepository.FindOneTrackedAsync(u => u.Id == uid, cancellationToken: ct);
+        LogUserFound(logger, user is not null, subscriptionId);
+
+        if (user is null || subscriptionId is null)
+            return;
+
+        var subscription = await subscriptionService.GetAsync(subscriptionId, cancellationToken: ct);
+        var periodEnd = GetPeriodEnd(subscription);
+
+        user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
+        user.SetStripeSubscription(subscriptionId, periodEnd, GetSubscriptionInterval(subscription));
+
+        if (!string.IsNullOrEmpty(user.ReferralCouponId))
+        {
+            LogClearingReferralCoupon(logger, user.ReferralCouponId, uid);
+            user.SetReferralCoupon(null);
+        }
+
+        await unitOfWork.SaveChangesAsync(ct);
+        LogUserUpgradedToPro(logger, uid, periodEnd);
     }
 
     private async Task HandleInvoicePaid(Event stripeEvent, CancellationToken ct)
     {
         var invoice = stripeEvent.Data.Object as Invoice;
         var invoiceSubId = invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
-        logger.LogInformation("Invoice paid: subId={SubId}", invoiceSubId);
+        LogInvoicePaid(logger, invoiceSubId);
 
-        if (invoiceSubId is not null)
-        {
-            var user = await userRepository.FindOneTrackedAsync(
-                u => u.StripeSubscriptionId == invoiceSubId, cancellationToken: ct);
-            if (user is not null)
-            {
-                var subscription = await subscriptionService.GetAsync(invoiceSubId, cancellationToken: ct);
-                var periodEnd = subscription.Items?.Data?.Count > 0
-                    ? subscription.Items.Data[0].CurrentPeriodEnd
-                    : DateTime.UtcNow.AddMonths(1);
-                user.SetStripeSubscription(invoiceSubId, periodEnd, GetSubscriptionInterval(subscription));
-                await unitOfWork.SaveChangesAsync(ct);
-                logger.LogInformation("User {UserId} subscription renewed, expires {Expires}", user.Id, periodEnd);
-            }
-        }
+        if (invoiceSubId is null)
+            return;
+
+        var user = await userRepository.FindOneTrackedAsync(
+            u => u.StripeSubscriptionId == invoiceSubId, cancellationToken: ct);
+
+        if (user is null)
+            return;
+
+        var subscription = await subscriptionService.GetAsync(invoiceSubId, cancellationToken: ct);
+        var periodEnd = GetPeriodEnd(subscription);
+        user.SetStripeSubscription(invoiceSubId, periodEnd, GetSubscriptionInterval(subscription));
+        await unitOfWork.SaveChangesAsync(ct);
+        LogSubscriptionRenewed(logger, user.Id, periodEnd);
     }
 
     private async Task HandleSubscriptionDeleted(Event stripeEvent, CancellationToken ct)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
-        logger.LogInformation("Subscription deleted: {SubId}", subscription?.Id);
-        if (subscription is not null)
-        {
-            var user = await userRepository.FindOneTrackedAsync(
-                u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
-            if (user is not null)
-            {
-                user.CancelSubscription();
-                await unitOfWork.SaveChangesAsync(ct);
-                logger.LogInformation("User {UserId} downgraded to Free", user.Id);
-            }
-        }
+        LogSubscriptionDeleted(logger, subscription?.Id);
+
+        if (subscription is null)
+            return;
+
+        var user = await userRepository.FindOneTrackedAsync(
+            u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
+
+        if (user is null)
+            return;
+
+        user.CancelSubscription();
+        await unitOfWork.SaveChangesAsync(ct);
+        LogUserDowngraded(logger, user.Id);
     }
 
     private async Task HandleSubscriptionUpdated(Event stripeEvent, CancellationToken ct)
     {
         var subscription = stripeEvent.Data.Object as Subscription;
-        logger.LogInformation("Subscription updated: {SubId}, status={Status}", subscription?.Id, subscription?.Status);
-        if (subscription is not null)
+        LogSubscriptionUpdated(logger, subscription?.Id, subscription?.Status);
+
+        if (subscription is null)
+            return;
+
+        var user = await userRepository.FindOneTrackedAsync(
+            u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
+
+        if (user is null)
+            return;
+
+        if (subscription.Status == "active")
         {
-            var user = await userRepository.FindOneTrackedAsync(
-                u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
-            if (user is not null)
-            {
-                if (subscription.Status == "active")
-                {
-                    var periodEnd = subscription.Items?.Data?.Count > 0
-                        ? subscription.Items.Data[0].CurrentPeriodEnd
-                        : DateTime.UtcNow.AddMonths(1);
-                    user.SetStripeSubscription(subscription.Id, periodEnd, GetSubscriptionInterval(subscription));
-                }
-                else if (subscription.Status == "canceled" || subscription.Status == "unpaid")
-                {
-                    user.CancelSubscription();
-                }
-                await unitOfWork.SaveChangesAsync(ct);
-            }
+            var periodEnd = GetPeriodEnd(subscription);
+            user.SetStripeSubscription(subscription.Id, periodEnd, GetSubscriptionInterval(subscription));
         }
+        else if (subscription.Status is "canceled" or "unpaid")
+        {
+            user.CancelSubscription();
+        }
+
+        await unitOfWork.SaveChangesAsync(ct);
     }
+
+    private static DateTime GetPeriodEnd(Subscription subscription)
+    {
+        return subscription.Items?.Data?.Count > 0
+            ? subscription.Items.Data[0].CurrentPeriodEnd
+            : DateTime.UtcNow.AddMonths(1);
+    }
+
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Stripe webhook received, body length: {Length}")]
+    private static partial void LogStripeWebhookReceived(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Stripe event type: {Type}, id: {Id}")]
+    private static partial void LogStripeEventType(ILogger logger, string type, string id);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error processing Stripe webhook event {Type}")]
+    private static partial void LogErrorProcessingStripeEvent(ILogger logger, Exception ex, string type);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Checkout session: id={Id}, subscription={SubId}, metadata keys={Keys}")]
+    private static partial void LogCheckoutSession(ILogger logger, string? id, string? subId, string? keys);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "User found: {Found}, subscriptionId: {SubId}")]
+    private static partial void LogUserFound(ILogger logger, bool found, string? subId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Clearing referral coupon {CouponId} for user {UserId} after checkout")]
+    private static partial void LogClearingReferralCoupon(ILogger logger, string? couponId, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "User {UserId} upgraded to Pro, expires {Expires}")]
+    private static partial void LogUserUpgradedToPro(ILogger logger, Guid userId, DateTime expires);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Invoice paid: subId={SubId}")]
+    private static partial void LogInvoicePaid(ILogger logger, string? subId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "User {UserId} subscription renewed, expires {Expires}")]
+    private static partial void LogSubscriptionRenewed(ILogger logger, Guid userId, DateTime expires);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "Subscription deleted: {SubId}")]
+    private static partial void LogSubscriptionDeleted(ILogger logger, string? subId);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "User {UserId} downgraded to Free")]
+    private static partial void LogUserDowngraded(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Subscription updated: {SubId}, status={Status}")]
+    private static partial void LogSubscriptionUpdated(ILogger logger, string? subId, string? status);
 
     private static SubscriptionInterval GetSubscriptionInterval(Subscription subscription)
     {

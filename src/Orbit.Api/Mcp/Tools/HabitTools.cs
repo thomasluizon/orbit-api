@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -14,11 +15,14 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService)
 {
+    private const string HabitIdDescription = "The habit ID (GUID)";
+    private const string DateFromDescription = "Start date in YYYY-MM-DD format";
+    private const string DateToDescription = "End date in YYYY-MM-DD format";
     [McpServerTool(Name = "list_habits"), Description("List habits for a date range with schedule info. Returns paginated results with scheduled dates and overdue status.")]
     public async Task<string> ListHabits(
         ClaimsPrincipal user,
-        [Description("Start date in YYYY-MM-DD format")] string dateFrom,
-        [Description("End date in YYYY-MM-DD format")] string dateTo,
+        [Description(DateFromDescription)] string dateFrom,
+        [Description(DateToDescription)] string dateTo,
         [Description("Include overdue habits")] bool includeOverdue = true,
         [Description("Search term to filter habits")] string? search = null,
         [Description("Page number (default 1)")] int page = 1,
@@ -28,8 +32,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var query = new GetHabitScheduleQuery(
             userId,
-            DateOnly.Parse(dateFrom),
-            DateOnly.Parse(dateTo),
+            DateOnly.Parse(dateFrom, CultureInfo.InvariantCulture),
+            DateOnly.Parse(dateTo, CultureInfo.InvariantCulture),
             includeOverdue,
             search,
             Page: page,
@@ -59,7 +63,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "get_habit"), Description("Get detailed information about a specific habit by ID.")]
     public async Task<string> GetHabit(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -109,11 +113,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             description,
             freqUnit,
             frequencyQuantity,
-            DueDate: DateOnly.Parse(dueDate),
+            DueDate: DateOnly.Parse(dueDate, CultureInfo.InvariantCulture),
             IsBadHabit: isBadHabit,
             IsGeneral: isGeneral,
             IsFlexible: isFlexible,
-            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime) : null);
+            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -124,7 +128,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Title is required (pass current title if unchanged). Only change fields you need to modify.")]
     public async Task<string> UpdateHabit(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         [Description("Habit title (required, pass current title if not changing)")] string title,
         [Description("New description")] string? description = null,
         [Description("New frequency unit: Day, Week, Month, Year")] string? frequencyUnit = null,
@@ -143,8 +147,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             description,
             freqUnit,
             frequencyQuantity,
-            DueDate: dueDate is not null ? DateOnly.Parse(dueDate) : null,
-            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime) : null);
+            DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
+            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -155,7 +159,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "delete_habit"), Description("Delete a habit by ID.")]
     public async Task<string> DeleteHabit(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -169,7 +173,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "log_habit"), Description("Log a habit as completed (or toggle it off if already logged today).")]
     public async Task<string> LogHabit(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         [Description("Optional note about the completion")] string? note = null,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
@@ -179,7 +183,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             userId,
             Guid.Parse(habitId),
             note,
-            date is not null ? DateOnly.Parse(date) : null);
+            date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -190,7 +194,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "get_habit_metrics"), Description("Get streak, completion rate, and other metrics for a habit.")]
     public async Task<string> GetHabitMetrics(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -213,7 +217,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "skip_habit"), Description("Skip a habit for today (or a specific date). Advances to next scheduled date without logging completion. Only works on recurring habits.")]
     public async Task<string> SkipHabit(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
@@ -221,7 +225,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var command = new SkipHabitCommand(
             userId,
             Guid.Parse(habitId),
-            date is not null ? DateOnly.Parse(date) : null);
+            date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -232,7 +236,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "update_checklist"), Description("Update the checklist items for a habit. Pass the full list of items with their checked state.")]
     public async Task<string> UpdateChecklist(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         [Description("JSON array of checklist items, each with 'text' (string) and 'isChecked' (boolean)")] string checklistItemsJson,
         CancellationToken cancellationToken = default)
     {
@@ -252,7 +256,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "get_habit_logs"), Description("Get completion logs for a specific habit (last 365 days).")]
     public async Task<string> GetHabitLogs(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -277,12 +281,12 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "get_all_habit_logs"), Description("Get completion logs for all habits within a date range, grouped by habit ID.")]
     public async Task<string> GetAllHabitLogs(
         ClaimsPrincipal user,
-        [Description("Start date in YYYY-MM-DD format")] string dateFrom,
-        [Description("End date in YYYY-MM-DD format")] string dateTo,
+        [Description(DateFromDescription)] string dateFrom,
+        [Description(DateToDescription)] string dateTo,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetAllHabitLogsQuery(userId, DateOnly.Parse(dateFrom), DateOnly.Parse(dateTo));
+        var query = new GetAllHabitLogsQuery(userId, DateOnly.Parse(dateFrom, CultureInfo.InvariantCulture), DateOnly.Parse(dateTo, CultureInfo.InvariantCulture));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -322,10 +326,10 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             description,
             freqUnit,
             frequencyQuantity,
-            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime) : null,
+            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
             IsBadHabit: isBadHabit,
             IsFlexible: isFlexible,
-            DueDate: dueDate is not null ? DateOnly.Parse(dueDate) : null);
+            DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -408,7 +412,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(Guid.Parse).ToList();
-        var logDate = date is not null ? DateOnly.Parse(date) : (DateOnly?)null;
+        var logDate = date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : (DateOnly?)null;
 
         var items = ids.Select(id => new BulkLogItem(id, logDate)).ToList();
         var command = new BulkLogHabitsCommand(userId, items);
@@ -432,7 +436,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(Guid.Parse).ToList();
-        var skipDate = date is not null ? DateOnly.Parse(date) : (DateOnly?)null;
+        var skipDate = date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : (DateOnly?)null;
 
         var items = ids.Select(id => new BulkSkipItem(id, skipDate)).ToList();
         var command = new BulkSkipHabitsCommand(userId, items);
@@ -490,7 +494,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "link_goals_to_habit"), Description("Link goals to a habit. Pass the full list of goal IDs (replaces existing links).")]
     public async Task<string> LinkGoalsToHabit(
         ClaimsPrincipal user,
-        [Description("The habit ID (GUID)")] string habitId,
+        [Description(HabitIdDescription)] string habitId,
         [Description("Comma-separated goal IDs (GUIDs)")] string goalIds,
         CancellationToken cancellationToken = default)
     {
@@ -508,8 +512,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "get_daily_summary"), Description("Get an AI-generated daily summary of habits. Requires Pro subscription and AI summary enabled.")]
     public async Task<string> GetDailySummary(
         ClaimsPrincipal user,
-        [Description("Start date in YYYY-MM-DD format")] string dateFrom,
-        [Description("End date in YYYY-MM-DD format")] string dateTo,
+        [Description(DateFromDescription)] string dateFrom,
+        [Description(DateToDescription)] string dateTo,
         [Description("Include overdue habits")] bool includeOverdue = true,
         [Description("Language code (en, pt-BR)")] string language = "en",
         CancellationToken cancellationToken = default)
@@ -517,8 +521,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var query = new GetDailySummaryQuery(
             userId,
-            DateOnly.Parse(dateFrom),
-            DateOnly.Parse(dateTo),
+            DateOnly.Parse(dateFrom, CultureInfo.InvariantCulture),
+            DateOnly.Parse(dateTo, CultureInfo.InvariantCulture),
             includeOverdue,
             language);
 
@@ -623,8 +627,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             freqUnit,
             dto.FrequencyQuantity,
             IsBadHabit: dto.IsBadHabit,
-            DueDate: dto.DueDate is not null ? DateOnly.Parse(dto.DueDate) : null,
-            DueTime: dto.DueTime is not null ? TimeOnly.Parse(dto.DueTime) : null,
+            DueDate: dto.DueDate is not null ? DateOnly.Parse(dto.DueDate, CultureInfo.InvariantCulture) : null,
+            DueTime: dto.DueTime is not null ? TimeOnly.Parse(dto.DueTime, CultureInfo.InvariantCulture) : null,
             IsGeneral: dto.IsGeneral,
             IsFlexible: dto.IsFlexible,
             SubHabits: dto.SubHabits?.Select(MapToBulkHabitItem).ToList());

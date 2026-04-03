@@ -37,31 +37,28 @@ public class MoveHabitTool(
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
 
         Guid? newParentId = null;
-        if (args.TryGetProperty("new_parent_id", out var parentEl))
+        if (args.TryGetProperty("new_parent_id", out var parentEl)
+            && parentEl.ValueKind == JsonValueKind.String
+            && Guid.TryParse(parentEl.GetString(), out var parsedParentId))
         {
-            if (parentEl.ValueKind == JsonValueKind.String &&
-                Guid.TryParse(parentEl.GetString(), out var parsedParentId))
-            {
-                // Verify the new parent exists and belongs to the user
-                var parent = await habitRepository.FindOneTrackedAsync(
-                    h => h.Id == parsedParentId && h.UserId == userId,
-                    cancellationToken: ct);
+            // Verify the new parent exists and belongs to the user
+            var parent = await habitRepository.FindOneTrackedAsync(
+                h => h.Id == parsedParentId && h.UserId == userId,
+                cancellationToken: ct);
 
-                if (parent is null)
-                    return new ToolResult(false, Error: $"New parent habit {parsedParentId} not found.");
+            if (parent is null)
+                return new ToolResult(false, Error: $"New parent habit {parsedParentId} not found.");
 
-                // Prevent direct self-reference
-                if (parsedParentId == habitId)
-                    return new ToolResult(false, Error: "A habit cannot be its own parent.");
+            // Prevent direct self-reference
+            if (parsedParentId == habitId)
+                return new ToolResult(false, Error: "A habit cannot be its own parent.");
 
-                // Prevent deep circular reference: walk the parent chain of the target parent
-                // to ensure we never reach the habit being moved
-                if (await WouldCreateCycleAsync(habitId, parsedParentId, userId, ct))
-                    return new ToolResult(false, Error: "Cannot move habit: this would create a circular parent chain.");
+            // Prevent deep circular reference: walk the parent chain of the target parent
+            // to ensure we never reach the habit being moved
+            if (await WouldCreateCycleAsync(habitId, parsedParentId, userId, ct))
+                return new ToolResult(false, Error: "Cannot move habit: this would create a circular parent chain.");
 
-                newParentId = parsedParentId;
-            }
-            // else: null or invalid = make top-level
+            newParentId = parsedParentId;
         }
 
         habit.SetParentHabitId(newParentId);

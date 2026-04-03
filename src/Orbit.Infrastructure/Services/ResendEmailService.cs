@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
 
-public class ResendEmailService(
+public partial class ResendEmailService(
     IHttpClientFactory httpClientFactory,
     IOptions<ResendSettings> options,
     IOptions<FrontendSettings> frontendSettings,
@@ -117,11 +117,11 @@ public class ResendEmailService(
         var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
         if (!string.IsNullOrEmpty(testAccountsEnv))
         {
-            var toNormalized = to.Trim().ToLowerInvariant();
+            var toNormalized = to.Trim();
             foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 var parts = pair.Split(':', 2);
-                if (parts.Length >= 1 && parts[0].Trim().ToLowerInvariant() == toNormalized)
+                if (parts.Length >= 1 && string.Equals(parts[0].Trim(), toNormalized, StringComparison.OrdinalIgnoreCase))
                 {
                     logger.LogInformation("Skipping email to test account {To} subject={Subject}", to, subject);
                     return;

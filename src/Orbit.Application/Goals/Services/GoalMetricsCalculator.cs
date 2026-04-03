@@ -34,7 +34,7 @@ public static class GoalMetricsCalculator
             : null;
 
         // Tracking status
-        var trackingStatus = DetermineTrackingStatus(goal, projectedCompletionDate, daysToDeadline);
+        var trackingStatus = DetermineTrackingStatus(goal, daysToDeadline);
 
         // Habit adherence
         var habitAdherence = goal.Habits.Select(h =>
@@ -52,7 +52,7 @@ public static class GoalMetricsCalculator
             daysToDeadline, trackingStatus, habitAdherence);
     }
 
-    private static string DetermineTrackingStatus(Goal goal, DateOnly? projected, int? daysToDeadline)
+    private static string DetermineTrackingStatus(Goal goal, int? daysToDeadline)
     {
         if (goal.Status == GoalStatus.Completed) return "completed";
         if (!goal.Deadline.HasValue) return "no_deadline";

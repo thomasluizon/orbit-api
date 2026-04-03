@@ -91,7 +91,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
         response.Actions[0].Status.Should().Be("Success");
         response.Actions[0].EntityId.Should().NotBeEmpty();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        response.AiMessage.Should().Match(s => s.ToLower().Contains("meditat"));
+        response.AiMessage.Should().Match(s => s.Contains("meditat", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

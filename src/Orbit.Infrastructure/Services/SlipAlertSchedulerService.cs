@@ -11,7 +11,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class SlipAlertSchedulerService(
+public partial class SlipAlertSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<SlipAlertSchedulerService> logger,
     IConfiguration configuration) : BackgroundService

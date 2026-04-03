@@ -125,15 +125,10 @@ public class GetCalendarEventsQueryHandler(
                     }
                 }
 
-                var reminders = new List<int>();
-                if (ev.Reminders?.Overrides is not null)
-                {
-                    foreach (var r in ev.Reminders.Overrides)
-                    {
-                        if (r.Minutes.HasValue)
-                            reminders.Add(r.Minutes.Value);
-                    }
-                }
+                var reminders = ev.Reminders?.Overrides?
+                    .Where(r => r.Minutes.HasValue)
+                    .Select(r => r.Minutes!.Value)
+                    .ToList() ?? [];
 
                 // Auto-add default reminder for timed events with no explicit reminders
                 if (reminders.Count == 0 && startTime is not null)

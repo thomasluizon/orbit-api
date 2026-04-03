@@ -10,7 +10,7 @@ using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class AiIntentService(
+public sealed partial class AiIntentService(
     AiCompletionClient aiClient,
     ILogger<AiIntentService> logger) : IAiIntentService
 {
@@ -186,9 +186,12 @@ public sealed class AiIntentService(
         return ChatTool.CreateFunctionTool(name, description, parameters);
     }
 
+    [GeneratedRegex(@"""type""\s*:\s*""(OBJECT|STRING|ARRAY|NUMBER|BOOLEAN|INTEGER)""")]
+    private static partial Regex SchemaTypeRegex();
+
     private static string NormalizeSchemaTypes(string json)
     {
-        return Regex.Replace(json, @"""type""\s*:\s*""(OBJECT|STRING|ARRAY|NUMBER|BOOLEAN|INTEGER)""",
+        return SchemaTypeRegex().Replace(json,
             m => $@"""type"":""{m.Groups[1].Value.ToLowerInvariant()}""");
     }
 }

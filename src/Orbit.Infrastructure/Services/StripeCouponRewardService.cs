@@ -7,7 +7,7 @@ using Stripe;
 
 namespace Orbit.Infrastructure.Services;
 
-public class StripeCouponRewardService(
+public partial class StripeCouponRewardService(
     IGenericRepository<User> userRepository,
     IOptions<StripeSettings> stripeSettings,
     ILogger<StripeCouponRewardService> logger) : IReferralRewardService

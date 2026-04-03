@@ -28,7 +28,7 @@ public class SendCodeCommandHandler(
             foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {
                 var parts = pair.Split(':', 2);
-                if (parts.Length == 2 && parts[0].Trim().ToLowerInvariant() == email)
+                if (parts.Length == 2 && string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
                 {
                     var testEntry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
                     cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions

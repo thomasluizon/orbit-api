@@ -46,7 +46,7 @@ public static class SlipPatternDetectionService
                 .OrderByDescending(g => g.Count())
                 .ToList();
 
-            var topBucket = hourBuckets.First();
+            var topBucket = hourBuckets[0];
 
             // Only assign a peak hour if the top bucket has meaningful concentration
             int? peakHour = topBucket.Count() >= MinBucketCountForTimePeak

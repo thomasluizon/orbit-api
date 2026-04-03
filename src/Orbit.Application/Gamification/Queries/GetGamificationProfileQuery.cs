@@ -29,9 +29,9 @@ public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
-    public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken ct)
+    public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.GetByIdAsync(request.UserId, ct);
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<GamificationProfileResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
@@ -43,7 +43,7 @@ public class GetGamificationProfileQueryHandler(
         var nextLevel = currentLevel.Level < 10
             ? LevelDefinitions.All[currentLevel.Level]
             : currentLevel;
-        var earned = await achievementRepository.FindAsync(a => a.UserId == request.UserId, ct);
+        var earned = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
         var earnedMap = earned.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
 
         var achievements = AchievementDefinitions.All.Select(def =>

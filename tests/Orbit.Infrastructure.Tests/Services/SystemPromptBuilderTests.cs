@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
@@ -10,6 +11,15 @@ public class SystemPromptBuilderTests
 {
     private static readonly Guid TestUserId = Guid.NewGuid();
 
+    private static string BuildPrompt(
+        IReadOnlyList<Habit> habits, IReadOnlyList<UserFact> facts,
+        bool hasImage = false, IReadOnlyList<Tag>? userTags = null,
+        DateOnly? userToday = null, IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
+    {
+        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        return builder.Build(habits, facts, hasImage, userTags: userTags, userToday: userToday, habitMetrics: habitMetrics);
+    }
+
     [Fact]
     public void Build_NoHabits_ContainsNoneMarker()
     {
@@ -18,10 +28,10 @@ public class SystemPromptBuilderTests
         var facts = Array.Empty<UserFact>();
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(habits, facts);
+        var result = BuildPrompt(habits, facts);
 
-        // Assert
-        result.Should().Contain("(none)");
+        // Assert -- with no habits, the prompt still includes the habits section header
+        result.Should().Contain("Habits (0 total");
     }
 
     [Fact]
@@ -33,7 +43,7 @@ public class SystemPromptBuilderTests
         var facts = Array.Empty<UserFact>();
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(habits, facts);
+        var result = BuildPrompt(habits, facts);
 
         // Assert
         result.Should().Contain("Morning Run");
@@ -58,13 +68,12 @@ public class SystemPromptBuilderTests
         };
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(
+        var result = BuildPrompt(
             habits, facts, habitMetrics: metrics);
 
-        // Assert
-        result.Should().Contain("streak: 5d");
-        result.Should().Contain("best: 10d");
-        result.Should().Contain("total: 30");
+        // Assert -- metrics are now accessed via query_habits tool, not inlined in prompt
+        result.Should().Contain("Meditation");
+        result.Should().Contain("query_habits");
     }
 
     [Fact]
@@ -77,7 +86,7 @@ public class SystemPromptBuilderTests
         var facts = new[] { preferenceFact, routineFact };
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(habits, facts);
+        var result = BuildPrompt(habits, facts);
 
         // Assert
         result.Should().Contain("**Preferences**");
@@ -94,7 +103,7 @@ public class SystemPromptBuilderTests
         var facts = Array.Empty<UserFact>();
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(habits, facts);
+        var result = BuildPrompt(habits, facts);
 
         // Assert
         result.Should().Contain("(nothing yet");
@@ -108,7 +117,7 @@ public class SystemPromptBuilderTests
         var facts = Array.Empty<UserFact>();
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(habits, facts, hasImage: true);
+        var result = BuildPrompt(habits, facts, hasImage: true);
 
         // Assert
         result.Should().Contain("Image Analysis Instructions");
@@ -127,7 +136,7 @@ public class SystemPromptBuilderTests
         };
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(
+        var result = BuildPrompt(
             habits, facts, userTags: tags);
 
         // Assert
@@ -144,7 +153,7 @@ public class SystemPromptBuilderTests
         var today = new DateOnly(2026, 3, 20);
 
         // Act
-        var result = SystemPromptBuilder.BuildSystemPrompt(
+        var result = BuildPrompt(
             habits, facts, userToday: today);
 
         // Assert

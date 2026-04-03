@@ -9,7 +9,7 @@ namespace Orbit.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController(IMediator mediator, ILogger<AuthController> logger) : ControllerBase
+public partial class AuthController(IMediator mediator, ILogger<AuthController> logger) : ControllerBase
 {
     public record SendCodeRequest(string Email, string Language = "en");
     public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
@@ -29,11 +29,11 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Verification code sent to {Email}", request.Email);
+            LogVerificationCodeSent(logger, request.Email);
             return Ok(new { message = "Verification code sent" });
         }
 
-        logger.LogWarning("Failed to send code to {Email}: {Error}", request.Email, result.Error);
+        LogFailedToSendCode(logger, request.Email, result.Error);
         return BadRequest(new { error = result.Error });
     }
 
@@ -50,11 +50,11 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("User logged in via code {Email}", request.Email);
+            LogUserLoggedInViaCode(logger, request.Email);
             return Ok(result.Value);
         }
 
-        logger.LogWarning("Code verification failed for {Email}: {Error}", request.Email, result.Error);
+        LogCodeVerificationFailed(logger, request.Email, result.Error);
         return Unauthorized(new { error = result.Error });
     }
 
@@ -75,7 +75,7 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
             return Ok(result.Value);
         }
 
-        logger.LogWarning("Google auth failed: {Error}", result.Error);
+        LogGoogleAuthFailed(logger, result.Error);
         return Unauthorized(new { error = result.Error });
     }
 
@@ -91,11 +91,11 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Account deletion requested by {UserId}", HttpContext.GetUserId());
+            LogAccountDeletionRequested(logger, HttpContext.GetUserId());
             return Ok(new { message = "Deletion code sent" });
         }
 
-        logger.LogWarning("Deletion request failed for {UserId}: {Error}", HttpContext.GetUserId(), result.Error);
+        LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
         return BadRequest(new { error = result.Error });
     }
 
@@ -113,11 +113,39 @@ public class AuthController(IMediator mediator, ILogger<AuthController> logger) 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("Account deactivated for {UserId}, scheduled deletion at {ScheduledAt}", HttpContext.GetUserId(), result.Value);
+            LogAccountDeactivated(logger, HttpContext.GetUserId(), result.Value);
             return Ok(new { message = "Account deactivated", scheduledDeletionAt = result.Value });
         }
 
-        logger.LogWarning("Deletion confirmation failed for {UserId}: {Error}", HttpContext.GetUserId(), result.Error);
+        LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
         return BadRequest(new { error = result.Error });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent to {Email}")]
+    private static partial void LogVerificationCodeSent(ILogger logger, string email);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code to {Email}: {Error}")]
+    private static partial void LogFailedToSendCode(ILogger logger, string email, string? error);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code {Email}")]
+    private static partial void LogUserLoggedInViaCode(ILogger logger, string email);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed for {Email}: {Error}")]
+    private static partial void LogCodeVerificationFailed(ILogger logger, string email, string? error);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Google auth failed: {Error}")]
+    private static partial void LogGoogleAuthFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Account deletion requested by {UserId}")]
+    private static partial void LogAccountDeletionRequested(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Deletion request failed for {UserId}: {Error}")]
+    private static partial void LogDeletionRequestFailed(ILogger logger, Guid userId, string? error);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account deactivated for {UserId}, scheduled deletion at {ScheduledAt}")]
+    private static partial void LogAccountDeactivated(ILogger logger, Guid userId, DateTime scheduledAt);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Deletion confirmation failed for {UserId}: {Error}")]
+    private static partial void LogDeletionConfirmationFailed(ILogger logger, Guid userId, string? error);
+
 }

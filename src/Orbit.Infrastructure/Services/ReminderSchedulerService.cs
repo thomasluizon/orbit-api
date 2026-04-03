@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class ReminderSchedulerService(
+public partial class ReminderSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<ReminderSchedulerService> logger,
     IConfiguration configuration) : BackgroundService
