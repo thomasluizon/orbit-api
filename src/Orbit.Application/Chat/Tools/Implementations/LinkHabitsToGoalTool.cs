@@ -18,15 +18,15 @@ public class LinkHabitsToGoalTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            goal_id = new { type = "string", description = "ID of the goal to link habits to" },
+            goal_id = new { type = JsonSchemaTypes.String, description = "ID of the goal to link habits to" },
             habit_ids = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "IDs of habits to link to the goal. Replaces all existing links.",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             }
         },
         required = new[] { "goal_id", "habit_ids" }

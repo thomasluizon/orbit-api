@@ -16,7 +16,7 @@ public class GoalReviewTool(
     public string Description => "Review all active goals with progress metrics, projections, and linked habit performance. Use when user asks about their goals progress.";
     public bool IsReadOnly => true;
 
-    public object GetParameterSchema() => new { type = "object", properties = new { } };
+    public object GetParameterSchema() => new { type = JsonSchemaTypes.Object, properties = new { } };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {

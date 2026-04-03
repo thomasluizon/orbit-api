@@ -18,16 +18,16 @@ public class BulkLogHabitsTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
             habit_ids = new
             {
-                type = "array",
-                items = new { type = "string" },
+                type = JsonSchemaTypes.Array,
+                items = new { type = JsonSchemaTypes.String },
                 description = "Array of habit IDs to log as completed"
             },
-            note = new { type = "string", description = "Optional note about the completions" }
+            note = new { type = JsonSchemaTypes.String, description = "Optional note about the completions" }
         },
         required = new[] { "habit_ids" }
     };

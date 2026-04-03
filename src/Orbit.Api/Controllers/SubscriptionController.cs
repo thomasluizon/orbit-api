@@ -85,13 +85,14 @@ public partial class SubscriptionController(IMediator mediator, ILogger<Subscrip
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+#pragma warning disable S6932 // Raw Request.Body and Request.Headers needed for Stripe webhook signature verification
     [HttpPost("webhook")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> HandleWebhook(CancellationToken cancellationToken)
     {
-        var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken); // S6932: Raw body needed for Stripe webhook signature verification
+        var json = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken);
         var signature = Request.Headers["Stripe-Signature"].ToString();
         var command = new HandleWebhookCommand(json, signature);
         var result = await mediator.Send(command, cancellationToken);
@@ -99,6 +100,7 @@ public partial class SubscriptionController(IMediator mediator, ILogger<Subscrip
         LogWebhookProcessingFailed(logger, result.Error);
         return StatusCode(500, new { error = result.Error });
     }
+#pragma warning restore S6932
 
     public record CreateCheckoutRequest(string Interval);
 
