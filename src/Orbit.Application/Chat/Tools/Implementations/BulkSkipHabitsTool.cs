@@ -47,7 +47,6 @@ public class BulkSkipHabitsTool(
             return new ToolResult(false, Error: "No valid habit IDs provided.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var skippedCount = 0;
         var skippedNames = new List<string>();
 
         foreach (var habitId in habitIds)
@@ -57,48 +56,47 @@ public class BulkSkipHabitsTool(
                 q => q.Include(h => h.Logs),
                 ct);
 
-            if (habit is null)
-                continue;
-
-            if (habit.IsCompleted)
-                continue;
-
-            if (habit.FrequencyUnit is null)
-            {
-                // One-time task: postpone to tomorrow
-                habit.PostponeTo(today.AddDays(1));
-                skippedCount++;
+            if (habit is not null && await TrySkipHabit(habit, today, ct))
                 skippedNames.Add(habit.Title);
-                continue;
-            }
-
-            if (!habit.IsFlexible && habit.DueDate > today)
-                continue;
-
-            if (habit.IsFlexible)
-            {
-                var remaining = HabitScheduleService.GetRemainingCompletions(habit, today, habit.Logs);
-                if (remaining <= 0)
-                    continue;
-
-                var skipResult = habit.SkipFlexible(today);
-                if (skipResult.IsFailure)
-                    continue;
-
-                await habitLogRepository.AddAsync(skipResult.Value, ct);
-            }
-            else
-            {
-                habit.AdvanceDueDate(today);
-            }
-
-            skippedCount++;
-            skippedNames.Add(habit.Title);
         }
 
-        if (skippedCount == 0)
+        if (skippedNames.Count == 0)
             return new ToolResult(false, Error: "No habits were skipped. They may be completed, not yet due, or not found.");
 
         return new ToolResult(true, EntityName: string.Join(", ", skippedNames));
+    }
+
+    private async Task<bool> TrySkipHabit(Habit habit, DateOnly today, CancellationToken ct)
+    {
+        if (habit.IsCompleted)
+            return false;
+
+        if (habit.FrequencyUnit is null)
+        {
+            habit.PostponeTo(today.AddDays(1));
+            return true;
+        }
+
+        if (!habit.IsFlexible && habit.DueDate > today)
+            return false;
+
+        if (habit.IsFlexible)
+        {
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, today, habit.Logs);
+            if (remaining <= 0)
+                return false;
+
+            var skipResult = habit.SkipFlexible(today);
+            if (skipResult.IsFailure)
+                return false;
+
+            await habitLogRepository.AddAsync(skipResult.Value, ct);
+        }
+        else
+        {
+            habit.AdvanceDueDate(today);
+        }
+
+        return true;
     }
 }

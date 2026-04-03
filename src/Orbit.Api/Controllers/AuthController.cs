@@ -29,13 +29,11 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogVerificationCodeSent(logger, request.Email);
+            LogVerificationCodeSent(logger, request.Email);
             return Ok(new { message = "Verification code sent" });
         }
 
-        if (logger.IsEnabled(LogLevel.Warning))
-            LogFailedToSendCode(logger, request.Email, result.Error);
+        LogFailedToSendCode(logger, request.Email, result.Error);
         return BadRequest(new { error = result.Error });
     }
 
@@ -52,13 +50,11 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogUserLoggedInViaCode(logger, request.Email);
+            LogUserLoggedInViaCode(logger, request.Email);
             return Ok(result.Value);
         }
 
-        if (logger.IsEnabled(LogLevel.Warning))
-            LogCodeVerificationFailed(logger, request.Email, result.Error);
+        LogCodeVerificationFailed(logger, request.Email, result.Error);
         return Unauthorized(new { error = result.Error });
     }
 
@@ -75,13 +71,11 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogUserLoggedInViaGoogle(logger);
+            LogUserLoggedInViaGoogle(logger);
             return Ok(result.Value);
         }
 
-        if (logger.IsEnabled(LogLevel.Warning))
-            LogGoogleAuthFailed(logger, result.Error);
+        LogGoogleAuthFailed(logger, result.Error);
         return Unauthorized(new { error = result.Error });
     }
 
@@ -97,13 +91,11 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogAccountDeletionRequested(logger, HttpContext.GetUserId());
+            LogAccountDeletionRequested(logger, HttpContext.GetUserId());
             return Ok(new { message = "Deletion code sent" });
         }
 
-        if (logger.IsEnabled(LogLevel.Warning))
-            LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
+        LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
         return BadRequest(new { error = result.Error });
     }
 
@@ -121,13 +113,11 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogAccountDeactivated(logger, HttpContext.GetUserId(), result.Value);
+            LogAccountDeactivated(logger, HttpContext.GetUserId(), result.Value);
             return Ok(new { message = "Account deactivated", scheduledDeletionAt = result.Value });
         }
 
-        if (logger.IsEnabled(LogLevel.Warning))
-            LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
+        LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
         return BadRequest(new { error = result.Error });
     }
 

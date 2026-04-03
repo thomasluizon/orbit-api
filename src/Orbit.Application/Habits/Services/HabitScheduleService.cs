@@ -200,62 +200,51 @@ public static class HabitScheduleService
 
         // One-time tasks: single instance on DueDate
         if (habit.FrequencyUnit is null)
-        {
-            if (habit.DueDate >= dateFrom && habit.DueDate <= dateTo)
-            {
-                var log = habit.Logs.FirstOrDefault(l => l.Date == habit.DueDate);
-                InstanceStatus status;
-                if (log is not null)
-                    status = InstanceStatus.Completed;
-                else if (habit.DueDate < userToday)
-                    status = InstanceStatus.Overdue;
-                else
-                    status = InstanceStatus.Pending;
-                return [new HabitInstanceItem(habit.DueDate, status, log?.Id, log?.Note)];
-            }
-            return [];
-        }
+            return GetOneTimeTaskInstance(habit, dateFrom, dateTo, userToday);
 
+        return GetRecurringInstances(habit, dateFrom, dateTo, userToday, overdueWindowDays);
+    }
+
+    private static List<HabitInstanceItem> GetOneTimeTaskInstance(
+        Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday)
+    {
+        if (habit.DueDate < dateFrom || habit.DueDate > dateTo)
+            return [];
+
+        var log = habit.Logs.FirstOrDefault(l => l.Date == habit.DueDate);
+        var status = ResolveInstanceStatus(log, habit.DueDate, userToday, habit.IsBadHabit);
+        return [new HabitInstanceItem(habit.DueDate, status, log?.Id, log?.Note)];
+    }
+
+    private static List<HabitInstanceItem> GetRecurringInstances(
+        Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday, int overdueWindowDays)
+    {
         // Compute the overdue lookback start (capped by habit's DueDate -- no instances before anchor)
         var lookbackStart = dateFrom.AddDays(-overdueWindowDays);
         if (lookbackStart < habit.DueDate)
             lookbackStart = habit.DueDate;
 
-        // Get all scheduled dates from lookback through dateTo
         var scheduledDates = GetScheduledDates(habit, lookbackStart, dateTo);
-
-        // Build a lookup of logs by date for efficient matching
         var logsByDate = habit.Logs.ToDictionary(l => l.Date, l => l);
-
         var instances = new List<HabitInstanceItem>(scheduledDates.Count);
 
         foreach (var date in scheduledDates)
         {
             logsByDate.TryGetValue(date, out var log);
-
-            InstanceStatus status;
-            if (log is not null)
-            {
-                status = InstanceStatus.Completed;
-            }
-            else if (habit.IsBadHabit)
-            {
-                // Bad habits never show as overdue
-                status = InstanceStatus.Pending;
-            }
-            else if (date < userToday)
-            {
-                status = InstanceStatus.Overdue;
-            }
-            else
-            {
-                status = InstanceStatus.Pending;
-            }
-
+            var status = ResolveInstanceStatus(log, date, userToday, habit.IsBadHabit);
             instances.Add(new HabitInstanceItem(date, status, log?.Id, log?.Note));
         }
 
         return instances;
+    }
+
+    private static InstanceStatus ResolveInstanceStatus(
+        HabitLog? log, DateOnly date, DateOnly userToday, bool isBadHabit)
+    {
+        if (log is not null) return InstanceStatus.Completed;
+        if (isBadHabit) return InstanceStatus.Pending;
+        if (date < userToday) return InstanceStatus.Overdue;
+        return InstanceStatus.Pending;
     }
 
     /// <summary>

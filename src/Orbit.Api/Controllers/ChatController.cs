@@ -35,45 +35,13 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         if (string.IsNullOrWhiteSpace(message) || message.Length > 4000)
             return BadRequest(new { error = "Message must be between 1 and 4000 characters" });
 
-        byte[]? imageData = null;
-        string? imageMimeType = null;
+        var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
+        if (imageError is not null)
+            return imageError;
 
-        if (image is not null)
-        {
-            var validationResult = await imageValidation.ValidateAsync(image);
-            if (validationResult.IsFailure)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogChatImageValidationFailed(logger, validationResult.Error);
-                return BadRequest(new { error = validationResult.Error });
-            }
-
-            using var ms = new MemoryStream();
-            await image.CopyToAsync(ms, cancellationToken);
-            imageData = ms.ToArray();
-            imageMimeType = validationResult.Value.MimeType;
-        }
-
-        // Parse conversation history
-        List<ChatHistoryMessage>? chatHistory = null;
-        if (!string.IsNullOrWhiteSpace(history))
-        {
-            if (history.Length > AppConstants.MaxChatHistoryLength)
-            {
-                return BadRequest(new { error = "Chat history too large" });
-            }
-
-            try
-            {
-                chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, ChatHistoryJsonOptions);
-            }
-            catch (JsonException ex)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogChatHistoryParseFailed(logger, ex, ex.Message);
-                return BadRequest(new { error = "Invalid chat history format" });
-            }
-        }
+        var (chatHistory, historyError) = ParseChatHistory(history);
+        if (historyError is not null)
+            return historyError;
 
         var command = new ProcessUserChatCommand(
             HttpContext.GetUserId(),
@@ -85,6 +53,46 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+    private async Task<(byte[]? Data, string? MimeType, IActionResult? Error)> ProcessImageAsync(
+        IFormFile? image, CancellationToken cancellationToken)
+    {
+        if (image is null)
+            return (null, null, null);
+
+        var validationResult = await imageValidation.ValidateAsync(image);
+        if (validationResult.IsFailure)
+        {
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogChatImageValidationFailed(logger, validationResult.Error);
+            return (null, null, BadRequest(new { error = validationResult.Error }));
+        }
+
+        using var ms = new MemoryStream();
+        await image.CopyToAsync(ms, cancellationToken);
+        return (ms.ToArray(), validationResult.Value.MimeType, null);
+    }
+
+    private (List<ChatHistoryMessage>? History, IActionResult? Error) ParseChatHistory(string? history)
+    {
+        if (string.IsNullOrWhiteSpace(history))
+            return (null, null);
+
+        if (history.Length > AppConstants.MaxChatHistoryLength)
+            return (null, BadRequest(new { error = "Chat history too large" }));
+
+        try
+        {
+            var chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, ChatHistoryJsonOptions);
+            return (chatHistory, null);
+        }
+        catch (JsonException ex)
+        {
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogChatHistoryParseFailed(logger, ex, ex.Message);
+            return (null, BadRequest(new { error = "Invalid chat history format" }));
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Chat image validation failed: {Error}")]

@@ -17,7 +17,7 @@ public class UpdateHabitCommandHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly UpdateHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();

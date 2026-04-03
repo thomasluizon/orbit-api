@@ -37,53 +37,59 @@ public static class HabitMetricsCalculator
         return DateOnly.FromDateTime(userNow);
     }
 
-    private static IEnumerable<DateOnly> GenerateExpectedDates(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
+    private static List<DateOnly> GenerateExpectedDates(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
     {
         // Convert habit creation timestamp to user local date to avoid UTC-vs-local day boundary errors
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var habitStartDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
-        var expectedDates = new List<DateOnly>();
 
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
-        {
-            expectedDates.Add(habitStartDate);
-            return expectedDates;
-        }
+            return [habitStartDate];
 
         if (habit.Days.Count > 0 && habit.FrequencyQuantity == 1)
+            return GenerateDayFilteredDates(habit, today, habitStartDate);
+
+        return GenerateFrequencyBasedDates(habit, today, habitStartDate);
+    }
+
+    private static List<DateOnly> GenerateDayFilteredDates(Habit habit, DateOnly today, DateOnly startDate)
+    {
+        var expectedDates = new List<DateOnly>();
+        var current = today;
+        var iterations = 0;
+
+        while (iterations < 365 && current >= startDate)
         {
-            var current = today;
-            var iterations = 0;
-
-            while (iterations < 365 && current >= habitStartDate)
-            {
-                if (habit.Days.Contains(current.DayOfWeek))
-                    expectedDates.Add(current);
-
-                current = current.AddDays(-1);
-                iterations++;
-            }
-        }
-        else
-        {
-            var current = today;
-            var iterations = 0;
-
-            while (iterations < 365 && current >= habitStartDate)
-            {
+            if (habit.Days.Contains(current.DayOfWeek))
                 expectedDates.Add(current);
 
-                current = habit.FrequencyUnit switch
-                {
-                    FrequencyUnit.Day => current.AddDays(-habit.FrequencyQuantity.Value),
-                    FrequencyUnit.Week => current.AddDays(-7 * habit.FrequencyQuantity.Value),
-                    FrequencyUnit.Month => current.AddMonths(-habit.FrequencyQuantity.Value),
-                    FrequencyUnit.Year => current.AddYears(-habit.FrequencyQuantity.Value),
-                    _ => throw new InvalidOperationException($"Unknown frequency unit: {habit.FrequencyUnit}")
-                };
+            current = current.AddDays(-1);
+            iterations++;
+        }
 
-                iterations++;
-            }
+        return expectedDates;
+    }
+
+    private static List<DateOnly> GenerateFrequencyBasedDates(Habit habit, DateOnly today, DateOnly startDate)
+    {
+        var expectedDates = new List<DateOnly>();
+        var current = today;
+        var iterations = 0;
+
+        while (iterations < 365 && current >= startDate)
+        {
+            expectedDates.Add(current);
+
+            current = habit.FrequencyUnit switch
+            {
+                FrequencyUnit.Day => current.AddDays(-habit.FrequencyQuantity!.Value),
+                FrequencyUnit.Week => current.AddDays(-7 * habit.FrequencyQuantity!.Value),
+                FrequencyUnit.Month => current.AddMonths(-habit.FrequencyQuantity!.Value),
+                FrequencyUnit.Year => current.AddYears(-habit.FrequencyQuantity!.Value),
+                _ => throw new InvalidOperationException($"Unknown frequency unit: {habit.FrequencyUnit}")
+            };
+
+            iterations++;
         }
 
         return expectedDates;

@@ -71,50 +71,8 @@ public sealed partial class AiRetrospectiveService(
         };
 
         var totalDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
-
-        var habitLines = new List<string>();
-        var totalCompletions = 0;
-        var totalScheduled = 0;
-        var badHabitSlips = 0;
-
-        foreach (var habit in habits.Where(h => h.ParentHabitId is null))
-        {
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
-            var scheduledCount = scheduledDates.Count;
-            var logs = habit.Logs.Where(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0).ToList();
-            var completedCount = logs.Count;
-
-            if (scheduledCount == 0 && completedCount == 0)
-                continue;
-
-            totalScheduled += scheduledCount;
-            totalCompletions += completedCount;
-
-            var rate = scheduledCount > 0 ? (int)Math.Round(100.0 * completedCount / scheduledCount) : 0;
-
-            if (habit.IsBadHabit)
-            {
-                badHabitSlips += completedCount;
-                habitLines.Add($"- {habit.Title} (bad habit): {completedCount} slips in {totalDays} days");
-            }
-            else
-            {
-                habitLines.Add($"- {habit.Title}: {completedCount}/{scheduledCount} completed ({rate}%)");
-            }
-
-            var children = habits.Where(h => h.ParentHabitId == habit.Id).ToList();
-            foreach (var child in children)
-            {
-                var childLogs = child.Logs.Where(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0).ToList();
-                var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count;
-                var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childLogs.Count / childScheduled) : 0;
-                habitLines.Add($"  - {child.Title}: {childLogs.Count}/{childScheduled} ({childRate}%)");
-            }
-        }
-
-        var habitSection = habitLines.Count > 0
-            ? string.Join("\n", habitLines)
-            : "(no habit activity)";
+        var (habitSection, totalCompletions, totalScheduled, badHabitSlips) =
+            BuildHabitBreakdown(habits, dateFrom, dateTo, totalDays);
 
         var overallRate = totalScheduled > 0 ? (int)Math.Round(100.0 * totalCompletions / totalScheduled) : 0;
 
@@ -144,6 +102,61 @@ public sealed partial class AiRetrospectiveService(
             - Use markdown bold for section headings only
             - Write ONLY in {languageName}
             """;
+    }
+
+    private static (string HabitSection, int TotalCompletions, int TotalScheduled, int BadHabitSlips) BuildHabitBreakdown(
+        List<Habit> habits, DateOnly dateFrom, DateOnly dateTo, int totalDays)
+    {
+        var habitLines = new List<string>();
+        var totalCompletions = 0;
+        var totalScheduled = 0;
+        var badHabitSlips = 0;
+
+        foreach (var habit in habits.Where(h => h.ParentHabitId is null))
+        {
+            var scheduledCount = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo).Count;
+            var completedCount = habit.Logs.Count(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
+
+            if (scheduledCount == 0 && completedCount == 0)
+                continue;
+
+            totalScheduled += scheduledCount;
+            totalCompletions += completedCount;
+
+            AppendParentHabitLine(habitLines, habit, scheduledCount, completedCount, totalDays, ref badHabitSlips);
+            AppendChildHabitLines(habitLines, habits, habit.Id, dateFrom, dateTo);
+        }
+
+        var section = habitLines.Count > 0 ? string.Join("\n", habitLines) : "(no habit activity)";
+        return (section, totalCompletions, totalScheduled, badHabitSlips);
+    }
+
+    private static void AppendParentHabitLine(
+        List<string> lines, Habit habit, int scheduledCount, int completedCount, int totalDays, ref int badHabitSlips)
+    {
+        var rate = scheduledCount > 0 ? (int)Math.Round(100.0 * completedCount / scheduledCount) : 0;
+
+        if (habit.IsBadHabit)
+        {
+            badHabitSlips += completedCount;
+            lines.Add($"- {habit.Title} (bad habit): {completedCount} slips in {totalDays} days");
+        }
+        else
+        {
+            lines.Add($"- {habit.Title}: {completedCount}/{scheduledCount} completed ({rate}%)");
+        }
+    }
+
+    private static void AppendChildHabitLines(
+        List<string> lines, List<Habit> allHabits, Guid parentId, DateOnly dateFrom, DateOnly dateTo)
+    {
+        foreach (var child in allHabits.Where(h => h.ParentHabitId == parentId))
+        {
+            var childLogs = child.Logs.Count(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
+            var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count;
+            var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childLogs / childScheduled) : 0;
+            lines.Add($"  - {child.Title}: {childLogs}/{childScheduled} ({childRate}%)");
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating retrospective (period: {Period}, from: {From}, to: {To}, language: {Language})...")]

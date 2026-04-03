@@ -17,7 +17,7 @@ public class BulkSkipHabitsCommandHandlerTests
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly BulkSkipHabitsCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();

@@ -83,7 +83,7 @@ public partial class GetCalendarEventsQueryHandler(
     /// <summary>
     /// Holds pre-built sets for filtering out already-imported calendar events.
     /// </summary>
-    private record ExistingHabitFilter(
+    private sealed record ExistingHabitFilter(
         HashSet<string> RecurringHabitTitles,
         HashSet<(string Title, string Date, string Time)> OneTimeHabitKeys);
 

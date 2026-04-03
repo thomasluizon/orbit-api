@@ -91,11 +91,12 @@ public class TagTools(IMediator mediator)
 
         var command = new AssignTagsCommand(userId, Guid.Parse(habitId), ids);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? ids.Count > 0
-                ? $"Assigned {ids.Count} tags to habit {habitId}"
-                : $"Removed all tags from habit {habitId}"
-            : $"Error: {result.Error}";
+        if (!result.IsSuccess)
+            return $"Error: {result.Error}";
+
+        return ids.Count > 0
+            ? $"Assigned {ids.Count} tags to habit {habitId}"
+            : $"Removed all tags from habit {habitId}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

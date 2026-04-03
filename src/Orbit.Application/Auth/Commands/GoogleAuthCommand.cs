@@ -24,14 +24,38 @@ public partial class GoogleAuthCommandHandler(
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
     {
-        // Validate token with Supabase
+        var tokenResult = await ValidateGoogleTokenAsync(request.AccessToken, cancellationToken);
+        if (tokenResult.IsFailure)
+            return Result.Failure<LoginResponse>(tokenResult.Error);
+
+        var (email, name) = tokenResult.Value;
+
+        var findResult = await FindOrCreateUserAsync(email, name, request.Language, cancellationToken);
+        if (findResult.IsFailure)
+            return Result.Failure<LoginResponse>(findResult.Error);
+
+        var (user, isNewUser) = findResult.Value;
+
+        var wasReactivated = HandlePostLogin(user, request, isNewUser, cancellationToken);
+
+        if (wasReactivated || request.GoogleAccessToken is not null)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var token = tokenService.GenerateToken(user.Id, user.Email);
+
+        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
+    }
+
+    private async Task<Result<(string Email, string Name)>> ValidateGoogleTokenAsync(
+        string accessToken, CancellationToken cancellationToken)
+    {
         var client = httpClientFactory.CreateClient("Supabase");
         using var httpRequest = new HttpRequestMessage(HttpMethod.Get, "/auth/v1/user");
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", request.AccessToken);
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         var response = await client.SendAsync(httpRequest, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            return Result.Failure<LoginResponse>("Invalid or expired Google sign-in token");
+            return Result.Failure<(string, string)>("Invalid or expired Google sign-in token");
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         using var doc = JsonDocument.Parse(json);
@@ -39,64 +63,72 @@ public partial class GoogleAuthCommandHandler(
 
         var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
         if (string.IsNullOrEmpty(email))
-            return Result.Failure<LoginResponse>("Could not retrieve email from Google account");
+            return Result.Failure<(string, string)>("Could not retrieve email from Google account");
 
-        // Extract name from user_metadata
-        var name = "User";
-        if (root.TryGetProperty("user_metadata", out var metadata))
-        {
-            if (metadata.TryGetProperty("full_name", out var fullName) && fullName.GetString() is string fn)
-                name = fn;
-            else if (metadata.TryGetProperty("name", out var nameProperty) && nameProperty.GetString() is string n)
-                name = n;
-        }
+        var name = ExtractNameFromMetadata(root);
 
-        // Find or create user (tracked so token updates persist)
+        return Result.Success((email, name));
+    }
+
+    private static string ExtractNameFromMetadata(JsonElement root)
+    {
+        if (!root.TryGetProperty("user_metadata", out var metadata))
+            return "User";
+
+        if (metadata.TryGetProperty("full_name", out var fullName) && fullName.GetString() is string fn)
+            return fn;
+
+        if (metadata.TryGetProperty("name", out var nameProperty) && nameProperty.GetString() is string n)
+            return n;
+
+        return "User";
+    }
+
+    private async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
+        string email, string name, string language, CancellationToken cancellationToken)
+    {
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Email == email,
             cancellationToken: cancellationToken);
 
-        var isNewUser = user is null;
+        if (user is not null)
+            return Result.Success((user, false));
 
-        if (user is null)
-        {
-            var createResult = User.Create(name, email);
-            if (createResult.IsFailure)
-                return Result.Failure<LoginResponse>(createResult.Error);
+        var createResult = User.Create(name, email);
+        if (createResult.IsFailure)
+            return Result.Failure<(User, bool)>(createResult.Error);
 
-            user = createResult.Value;
-            user.SetLanguage(request.Language);
-            await userRepository.AddAsync(user, cancellationToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+        user = createResult.Value;
+        user.SetLanguage(language);
+        await userRepository.AddAsync(user, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            // Send welcome email (fire and forget - don't fail auth if email fails)
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await emailService.SendWelcomeEmailAsync(user.Email, user.Name, request.Language, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    LogWelcomeEmailFailed(logger, ex, user.Email);
-                }
-            }, CancellationToken.None);
-        }
+        SendWelcomeEmailInBackground(user.Email, user.Name, language);
 
-        // Process referral code for new users (fire and forget -- don't fail login)
-        if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
+        return Result.Success((user, true));
+    }
+
+    private void SendWelcomeEmailInBackground(string email, string name, string language)
+    {
+        _ = Task.Run(async () =>
         {
             try
             {
-                await mediator.Send(new ProcessReferralCodeCommand(user.Id, request.ReferralCode), cancellationToken);
+                await emailService.SendWelcomeEmailAsync(email, name, language, CancellationToken.None);
             }
             catch (Exception ex)
             {
-                LogReferralProcessingFailed(logger, ex, user.Id);
+                LogWelcomeEmailFailed(logger, ex, email);
             }
-        }
+        }, CancellationToken.None);
+    }
 
-        // Cancel deactivation if user was deactivated
+    private bool HandlePostLogin(
+        User user, GoogleAuthCommand request, bool isNewUser, CancellationToken cancellationToken)
+    {
+        if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
+            ProcessReferralSafe(user.Id, request.ReferralCode, cancellationToken);
+
         var wasReactivated = false;
         if (user.IsDeactivated)
         {
@@ -104,19 +136,22 @@ public partial class GoogleAuthCommandHandler(
             wasReactivated = true;
         }
 
-        // Store Google tokens for Calendar API access
         if (request.GoogleAccessToken is not null)
-        {
             user.SetGoogleTokens(request.GoogleAccessToken, request.GoogleRefreshToken);
+
+        return wasReactivated;
+    }
+
+    private async void ProcessReferralSafe(Guid userId, string referralCode, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await mediator.Send(new ProcessReferralCodeCommand(userId, referralCode), cancellationToken);
         }
-
-        if (wasReactivated || request.GoogleAccessToken is not null)
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Generate app JWT
-        var token = tokenService.GenerateToken(user.Id, user.Email);
-
-        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
+        catch (Exception ex)
+        {
+            LogReferralProcessingFailed(logger, ex, userId);
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Welcome email failed for user {Email}")]

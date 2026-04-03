@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -20,7 +21,7 @@ public class CreateHabitCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CreateHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -28,8 +29,9 @@ public class CreateHabitCommandHandlerTests
 
     public CreateHabitCommandHandlerTests()
     {
+        var repos = new CreateHabitRepositories(_habitRepo, _tagRepo, _goalRepo);
         _handler = new CreateHabitCommandHandler(
-            _habitRepo, _tagRepo, _goalRepo, _userDateService, _payGate, _gamificationService, _unitOfWork, _cache,
+            repos, _userDateService, _payGate, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<CreateHabitCommandHandler>>());
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -148,5 +150,171 @@ public class CreateHabitCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         _cache.TryGetValue(cacheKey, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_WithGoalIds_LinksGoalsToHabit()
+    {
+        var goalId = Guid.NewGuid();
+        var goal = Goal.Create(UserId, "Fitness Goal", 10, "workouts").Value;
+
+        _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal });
+
+        var command = new CreateHabitCommand(
+            UserId, "Exercise", null, FrequencyUnit.Day, 1,
+            GoalIds: new List<Guid> { goalId });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _goalRepo.Received(1).FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_BadHabitCreation_Success()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "Smoking", "Quit smoking", FrequencyUnit.Day, 1, IsBadHabit: true);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.IsBadHabit),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_OneTimeTask_NoFrequency()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "One-time task", null, null, null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.FrequencyUnit == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FlexibleHabit_Success()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "Flexible Workout", null, FrequencyUnit.Week, 3,
+            Options: new HabitCommandOptions(IsFlexible: true));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.IsFlexible),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithDueDate_UsesProvidedDate()
+    {
+        var dueDate = new DateOnly(2026, 6, 15);
+        var command = new CreateHabitCommand(
+            UserId, "Future Habit", null, FrequencyUnit.Day, 1, DueDate: dueDate);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.DueDate == dueDate),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithoutDueDate_UsesUserToday()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "Today Habit", null, FrequencyUnit.Day, 1);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.DueDate == Today),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithOptions_PassesDaysAndTimes()
+    {
+        var options = new HabitCommandOptions(
+            Days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday },
+            DueTime: new TimeOnly(9, 0),
+            DueEndTime: new TimeOnly(10, 0));
+
+        var command = new CreateHabitCommand(
+            UserId, "Scheduled Habit", null, FrequencyUnit.Day, 1,
+            Options: options);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.DueTime == new TimeOnly(9, 0)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SubHabitWithInvalidTitle_ReturnsFailure()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "Parent Habit", null, FrequencyUnit.Day, 1,
+            SubHabits: new List<string> { "" });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_GamificationFailure_DoesNotBreakCreate()
+    {
+        _gamificationService.ProcessHabitCreated(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Gamification down"));
+
+        var command = new CreateHabitCommand(UserId, "Test habit", null, FrequencyUnit.Day, 1);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneral_CreatesGeneralHabit()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "General Habit", null, null, null, IsGeneral: true);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.IsGeneral),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoTagsOrGoals_DoesNotQueryRepos()
+    {
+        var command = new CreateHabitCommand(
+            UserId, "Simple habit", null, FrequencyUnit.Day, 1);
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _tagRepo.DidNotReceive().FindTrackedAsync(
+            Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>());
+        await _goalRepo.DidNotReceive().FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
     }
 }

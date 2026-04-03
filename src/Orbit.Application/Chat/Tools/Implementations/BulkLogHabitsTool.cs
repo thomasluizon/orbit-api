@@ -52,7 +52,6 @@ public class BulkLogHabitsTool(
             note = noteEl.GetString();
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var loggedCount = 0;
         var loggedNames = new List<string>();
 
         // Batch-load all requested habits in a single query instead of N+1
@@ -64,27 +63,26 @@ public class BulkLogHabitsTool(
         foreach (var habitId in habitIds)
         {
             var habit = habits.FirstOrDefault(h => h.Id == habitId);
-            if (habit is null)
-                continue;
-
-            // Skip if already logged today
-            if (habit.Logs.Any(l => l.Date == today))
-                continue;
-
-            var logResult = habit.Log(today, note);
-            if (logResult.IsFailure)
-                continue;
-
-            await habitLogRepository.AddAsync(logResult.Value, ct);
-
-            loggedCount++;
-            loggedNames.Add(habit.Title);
+            if (habit is not null && await TryLogHabit(habit, today, note, ct))
+                loggedNames.Add(habit.Title);
         }
 
-        if (loggedCount == 0)
+        if (loggedNames.Count == 0)
             return new ToolResult(false, Error: "No habits were logged. They may already be completed or not found.");
 
         return new ToolResult(true, EntityName: string.Join(", ", loggedNames));
     }
 
+    private async Task<bool> TryLogHabit(Habit habit, DateOnly today, string? note, CancellationToken ct)
+    {
+        if (habit.Logs.Any(l => l.Date == today))
+            return false;
+
+        var logResult = habit.Log(today, note);
+        if (logResult.IsFailure)
+            return false;
+
+        await habitLogRepository.AddAsync(logResult.Value, ct);
+        return true;
+    }
 }

@@ -90,8 +90,7 @@ public partial class NotificationController(
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogPushSubscriptionRegistered(logger, HttpContext.GetUserId());
+            LogPushSubscriptionRegistered(logger, HttpContext.GetUserId());
             return Ok();
         }
 
@@ -109,7 +108,7 @@ public partial class NotificationController(
         var command = new UnsubscribePushCommand(HttpContext.GetUserId(), request.Endpoint);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+        if (result.IsSuccess)
             LogPushSubscriptionRemoved(logger, HttpContext.GetUserId());
 
         return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
@@ -127,7 +126,7 @@ public partial class NotificationController(
         if (result.IsFailure)
             return BadRequest(new { error = result.Error });
 
-        if (result.Value.Status == "failed" && logger.IsEnabled(LogLevel.Warning))
+        if (result.Value.Status == "failed")
             LogTestPushFailed(logger, HttpContext.GetUserId());
 
         return Ok(result.Value);

@@ -20,6 +20,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
     [McpServerTool(Name = "list_habits"), Description("List habits for a date range with schedule info. Returns paginated results with scheduled dates and overdue status.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
     public async Task<string> ListHabits(
         ClaimsPrincipal user,
         [Description(DateFromDescription)] string dateFrom,
@@ -51,9 +52,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var lines = new List<string>();
         foreach (var h in items)
         {
-            lines.Add(FormatHabitLine(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
+            lines.Add(FormatHabitLine(new HabitLineData(h.Id, h.Title, h.FrequencyUnit, h.FrequencyQuantity,
                 h.DueTime, h.IsCompleted, h.IsOverdue, h.IsBadHabit, h.IsGeneral, h.IsFlexible,
-                h.ChecklistItems, h.Tags, indent: 0));
+                h.ChecklistItems, h.Tags), indent: 0));
             AppendChildren(lines, h.Children, indent: 1);
         }
 
@@ -491,11 +492,12 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             parentId is not null ? Guid.Parse(parentId) : null);
 
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? parentId is not null
-                ? $"Moved habit {habitId} under parent {parentId}"
-                : $"Promoted habit {habitId} to top-level"
-            : $"Error: {result.Error}";
+        if (!result.IsSuccess)
+            return $"Error: {result.Error}";
+
+        return parentId is not null
+            ? $"Moved habit {habitId} under parent {parentId}"
+            : $"Promoted habit {habitId} to top-level";
     }
 
     [McpServerTool(Name = "link_goals_to_habit"), Description("Link goals to a habit. Pass the full list of goal IDs (replaces existing links).")]
@@ -591,21 +593,25 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         bool IsFlexible = false,
         List<BulkHabitItemDto>? SubHabits = null);
 
-    private static string FormatHabitLine(Guid id, string title, FrequencyUnit? freqUnit, int? freqQty,
-        TimeOnly? dueTime, bool isCompleted, bool isOverdue, bool isBadHabit, bool isGeneral, bool isFlexible,
-        IReadOnlyList<ChecklistItem> checklist, IReadOnlyList<HabitTagItem> tags, int indent)
+    private sealed record HabitLineData(
+        Guid Id, string Title, FrequencyUnit? FreqUnit, int? FreqQty,
+        TimeOnly? DueTime, bool IsCompleted, bool IsOverdue, bool IsBadHabit,
+        bool IsGeneral, bool IsFlexible,
+        IReadOnlyList<ChecklistItem> Checklist, IReadOnlyList<HabitTagItem> Tags);
+
+    private static string FormatHabitLine(HabitLineData data, int indent)
     {
         var prefix = new string(' ', indent * 2) + "- ";
-        var line = $"{prefix}[{(isCompleted ? "x" : " ")}] {title} (id: {id})";
-        if (freqUnit is not null) line += $" | {freqQty}x/{freqUnit}";
-        else if (!isGeneral) line += " | one-time";
-        if (isGeneral) line += " | general";
-        if (isFlexible) line += " | flexible";
-        if (dueTime is not null) line += $" | at {dueTime:HH:mm}";
-        if (isOverdue) line += " | OVERDUE";
-        if (isBadHabit) line += " | bad habit";
-        if (checklist.Count > 0) line += $" | checklist: {checklist.Count(i => i.IsChecked)}/{checklist.Count}";
-        if (tags.Count > 0) line += $" | tags: {string.Join(", ", tags.Select(t => t.Name))}";
+        var line = $"{prefix}[{(data.IsCompleted ? "x" : " ")}] {data.Title} (id: {data.Id})";
+        if (data.FreqUnit is not null) line += $" | {data.FreqQty}x/{data.FreqUnit}";
+        else if (!data.IsGeneral) line += " | one-time";
+        if (data.IsGeneral) line += " | general";
+        if (data.IsFlexible) line += " | flexible";
+        if (data.DueTime is not null) line += $" | at {data.DueTime:HH:mm}";
+        if (data.IsOverdue) line += " | OVERDUE";
+        if (data.IsBadHabit) line += " | bad habit";
+        if (data.Checklist.Count > 0) line += $" | checklist: {data.Checklist.Count(i => i.IsChecked)}/{data.Checklist.Count}";
+        if (data.Tags.Count > 0) line += $" | tags: {string.Join(", ", data.Tags.Select(t => t.Name))}";
         return line;
     }
 
@@ -613,9 +619,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     {
         foreach (var c in children)
         {
-            lines.Add(FormatHabitLine(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
+            lines.Add(FormatHabitLine(new HabitLineData(c.Id, c.Title, c.FrequencyUnit, c.FrequencyQuantity,
                 c.DueTime, c.IsCompleted, false, c.IsBadHabit, c.IsGeneral, c.IsFlexible,
-                c.ChecklistItems, c.Tags, indent));
+                c.ChecklistItems, c.Tags), indent));
             if (c.Children.Count > 0)
                 AppendChildren(lines, c.Children, indent + 1);
         }

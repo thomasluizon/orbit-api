@@ -70,37 +70,42 @@ public class UpdateHabitCommandHandler(
         if (result.IsFailure)
             return result;
 
-        // If dueTime changed, clear today's sent reminders so they re-trigger
         if (opts.DueTime.HasValue)
-        {
-            var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-            var existing = await sentReminderRepository.FindAsync(
-                r => r.HabitId == request.HabitId && r.Date == userToday,
-                cancellationToken);
-            foreach (var r in existing)
-                sentReminderRepository.Remove(r);
-        }
+            await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
-        // Sync goal links if GoalIds was provided
         if (request.GoalIds is not null)
-        {
-            foreach (var existingGoal in habit.Goals.ToList())
-                habit.RemoveGoal(existingGoal);
-
-            if (request.GoalIds.Count > 0)
-            {
-                var goals = await goalRepository.FindTrackedAsync(
-                    g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,
-                    cancellationToken);
-                foreach (var goal in goals)
-                    habit.AddGoal(goal);
-            }
-        }
+            await SyncGoalLinksAsync(habit, request.UserId, request.GoalIds, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success();
+    }
+
+    private async Task ClearTodaySentRemindersAsync(Guid userId, Guid habitId, CancellationToken cancellationToken)
+    {
+        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var existing = await sentReminderRepository.FindAsync(
+            r => r.HabitId == habitId && r.Date == userToday,
+            cancellationToken);
+        foreach (var r in existing)
+            sentReminderRepository.Remove(r);
+    }
+
+    private async Task SyncGoalLinksAsync(
+        Habit habit, Guid userId, IReadOnlyList<Guid> goalIds, CancellationToken cancellationToken)
+    {
+        foreach (var existingGoal in habit.Goals.ToList())
+            habit.RemoveGoal(existingGoal);
+
+        if (goalIds.Count == 0)
+            return;
+
+        var goals = await goalRepository.FindTrackedAsync(
+            g => goalIds.Contains(g.Id) && g.UserId == userId,
+            cancellationToken);
+        foreach (var goal in goals)
+            habit.AddGoal(goal);
     }
 }

@@ -32,7 +32,7 @@ public partial class SupportController(IMediator mediator, ILogger<SupportContro
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
+        if (result.IsSuccess)
             LogSupportRequestSent(logger, HttpContext.GetUserId(), request.Subject);
 
         return result.IsSuccess

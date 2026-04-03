@@ -113,21 +113,11 @@ public partial class ResendEmailService(
 
     private async Task SendEmailAsync(string to, string subject, string html, CancellationToken cancellationToken, string? replyTo = null)
     {
-        // Suppress emails to test accounts
-        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
-        if (!string.IsNullOrEmpty(testAccountsEnv))
+        if (IsTestAccount(to))
         {
-            var toNormalized = to.Trim();
-            foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var parts = pair.Split(':', 2);
-                if (parts.Length >= 1 && string.Equals(parts[0].Trim(), toNormalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (logger.IsEnabled(LogLevel.Information))
-                        LogSkippingTestEmail(logger, to, subject);
-                    return;
-                }
-            }
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSkippingTestEmail(logger, to, subject);
+            return;
         }
 
         var client = httpClientFactory.CreateClient("Resend");
@@ -160,6 +150,23 @@ public partial class ResendEmailService(
         {
             LogEmailSendException(logger, ex, to);
         }
+    }
+
+    private static bool IsTestAccount(string to)
+    {
+        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        if (string.IsNullOrEmpty(testAccountsEnv))
+            return false;
+
+        var toNormalized = to.Trim();
+        foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split(':', 2);
+            if (parts.Length >= 1 && string.Equals(parts[0].Trim(), toNormalized, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private string BuildVerificationCodeEmailHtml(string code, string email, bool isPtBr)

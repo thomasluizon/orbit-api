@@ -61,98 +61,88 @@ public partial class LogHabitCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var targetDate = request.Date ?? today;
 
-        // Validate target date (one-time tasks can be completed early)
+        var dateValidation = ValidateTargetDate(habit, targetDate, today);
+        if (dateValidation.IsFailure)
+            return Result.Failure<LogHabitResponse>(dateValidation.Error);
+
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
+
+        // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
+        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
+        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
+            return await HandleUnlogAsync(habit, targetDate, user, cancellationToken);
+
+        return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
+    }
+
+    private static Result ValidateTargetDate(Habit habit, DateOnly targetDate, DateOnly today)
+    {
         if (targetDate > today && habit.FrequencyUnit is not null)
-            return Result.Failure<LogHabitResponse>("Cannot log a future date.");
+            return Result.Failure("Cannot log a future date.");
 
         if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
-            return Result.Failure<LogHabitResponse>("Cannot log a date beyond the overdue window.");
+            return Result.Failure("Cannot log a date beyond the overdue window.");
 
-        // Validate the habit is actually scheduled on the target date (for recurring habits)
-        // Allow logging on today if the habit is overdue (has a missed past occurrence)
         if (habit.FrequencyUnit is not null && !habit.IsFlexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
         {
             var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
-                return Result.Failure<LogHabitResponse>("Habit is not scheduled on this date.");
+                return Result.Failure("Habit is not scheduled on this date.");
         }
 
-        // Load user for streak info
-        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
+        return Result.Success();
+    }
 
-        // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
-        // Only match completion logs (Value > 0) to prevent toggle from removing skip logs (Value == 0)
-        var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
-        if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-        {
-            var unlogResult = habit.Unlog(targetDate);
-            if (unlogResult.IsFailure)
-                return Result.Failure<LogHabitResponse>(unlogResult.Error);
+    private async Task<Result<LogHabitResponse>> HandleUnlogAsync(
+        Habit habit, DateOnly targetDate, User? user, CancellationToken cancellationToken)
+    {
+        var unlogResult = habit.Unlog(targetDate);
+        if (unlogResult.IsFailure)
+            return Result.Failure<LogHabitResponse>(unlogResult.Error);
 
-            repos.HabitLogRepository.Remove(unlogResult.Value);
+        repos.HabitLogRepository.Remove(unlogResult.Value);
 
-            // Decrement linked goal progress
-            var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
+        var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
 
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
-            CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        return Result.Success(new LogHabitResponse(
+            unlogResult.Value.Id,
+            IsFirstCompletionToday: false,
+            CurrentStreak: user?.CurrentStreak ?? 0,
+            LinkedGoalUpdates: unlogGoalUpdates));
+    }
 
-            return Result.Success(new LogHabitResponse(
-                unlogResult.Value.Id,
-                IsFirstCompletionToday: false,
-                CurrentStreak: user?.CurrentStreak ?? 0,
-                LinkedGoalUpdates: unlogGoalUpdates));
-        }
-
-        // Check if this is the first completion today (before creating the log)
-        var isFirstCompletionToday = false;
-        if (user is not null)
-        {
-            // Use AnyAsync for efficient EXISTS query instead of loading full entities
-            isFirstCompletionToday = !await repos.HabitRepository.AnyAsync(
+    private async Task<Result<LogHabitResponse>> HandleLogAsync(
+        Habit habit, LogHabitCommand request, DateOnly targetDate, DateOnly today,
+        User? user, CancellationToken cancellationToken)
+    {
+        var isFirstCompletionToday = user is not null
+            && !await repos.HabitRepository.AnyAsync(
                 h => h.UserId == request.UserId && h.Logs.Any(l => l.Date == targetDate && l.Value > 0),
                 cancellationToken);
-        }
 
-        // Only advance DueDate when logging today or future-adjacent (not past overdue instances)
         var shouldAdvanceDueDate = targetDate >= today;
         var logResult = habit.Log(targetDate, request.Note, advanceDueDate: shouldAdvanceDueDate);
-
         if (logResult.IsFailure)
             return Result.Failure<LogHabitResponse>(logResult.Error);
 
         await repos.HabitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
-        // Increment linked goal progress
         var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
 
-        // Update user streak
         if (user is not null)
             user.UpdateStreak(targetDate);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Gamification: process habit completion and capture results
-        HabitLogGamificationResult? gamificationResult = null;
-        try
-        {
-            gamificationResult = await gamificationService.ProcessHabitLogged(request.UserId, request.HabitId, cancellationToken);
-        }
-        catch (Exception ex) { LogGamificationHabitLogFailed(logger, ex, request.HabitId); }
+        var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
-        // Check referral completion (fire and forget - don't fail the log)
-        try
-        {
-            await mediator.Send(new CheckReferralCompletionCommand(request.UserId), cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogReferralCompletionCheckFailed(logger, ex, request.UserId);
-        }
+        await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
         return Result.Success(new LogHabitResponse(
             logResult.Value.Id,
@@ -161,6 +151,32 @@ public partial class LogHabitCommandHandler(
             LinkedGoalUpdates: goalUpdates,
             XpEarned: gamificationResult?.XpEarned,
             NewAchievementIds: gamificationResult?.NewAchievementIds));
+    }
+
+    private async Task<HabitLogGamificationResult?> ProcessGamificationSafeAsync(
+        Guid userId, Guid habitId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await gamificationService.ProcessHabitLogged(userId, habitId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogGamificationHabitLogFailed(logger, ex, habitId);
+            return null;
+        }
+    }
+
+    private async Task CheckReferralCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await mediator.Send(new CheckReferralCompletionCommand(userId), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogReferralCompletionCheckFailed(logger, ex, userId);
+        }
     }
 
     private async Task<IReadOnlyList<LinkedGoalUpdate>?> UpdateLinkedGoalProgress(Habit habit, decimal delta, CancellationToken ct)

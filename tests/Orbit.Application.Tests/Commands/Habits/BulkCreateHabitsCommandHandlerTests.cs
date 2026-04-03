@@ -16,7 +16,7 @@ public class BulkCreateHabitsCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly BulkCreateHabitsCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();

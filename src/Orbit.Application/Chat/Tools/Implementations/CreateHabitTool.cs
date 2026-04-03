@@ -15,6 +15,8 @@ public class CreateHabitTool(
     IPayGateService payGate,
     IUnitOfWork unitOfWork) : IAiTool
 {
+    private const string TitleProperty = "title";
+
     public string Name => "create_habit";
 
     public string Description =>
@@ -128,16 +130,16 @@ public class CreateHabitTool(
                             }
                         }
                     },
-                    required = new[] { "title" }
+                    required = new[] { TitleProperty }
                 }
             }
         },
-        required = new[] { "title" }
+        required = new[] { TitleProperty }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        if (!args.TryGetProperty("title", out var titleEl) || string.IsNullOrWhiteSpace(titleEl.GetString()))
+        if (!args.TryGetProperty(TitleProperty, out var titleEl) || string.IsNullOrWhiteSpace(titleEl.GetString()))
             return new ToolResult(false, Error: "title is required.");
 
         var title = titleEl.GetString() ?? string.Empty;
@@ -228,7 +230,7 @@ public class CreateHabitTool(
 
         return Habit.Create(new HabitCreateParams(
             userId,
-            JsonArgumentParser.GetOptionalString(sub, "title") ?? "Untitled",
+            JsonArgumentParser.GetOptionalString(sub, TitleProperty) ?? "Untitled",
             JsonArgumentParser.ParseFrequencyUnit(sub) ?? parentFreqUnit,
             JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity") ?? parentFreqQty,
             JsonArgumentParser.GetOptionalString(sub, "description"),

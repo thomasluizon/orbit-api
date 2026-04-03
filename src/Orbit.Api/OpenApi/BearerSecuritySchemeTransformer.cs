@@ -32,10 +32,10 @@ internal sealed class BearerSecuritySchemeTransformer(
             if (document.Paths is null)
                 return;
 
-            foreach (var operation in document.Paths.Values.SelectMany(p => p.Operations ?? []))
+            foreach (var operation in document.Paths.Values.SelectMany(p => p.Operations ?? []).Select(o => o.Value))
             {
-                operation.Value.Security ??= [];
-                operation.Value.Security.Add(new OpenApiSecurityRequirement
+                operation.Security ??= [];
+                operation.Security.Add(new OpenApiSecurityRequirement
                 {
                     [schemeReference] = new List<string>()
                 });

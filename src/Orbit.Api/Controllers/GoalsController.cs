@@ -57,8 +57,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogGoalCreated(logger, result.Value, HttpContext.GetUserId());
+            LogGoalCreated(logger, result.Value, HttpContext.GetUserId());
             return CreatedAtAction(nameof(GetGoalById), new { id = result.Value }, new { id = result.Value });
         }
         return BadRequest(new { error = result.Error });
@@ -122,8 +121,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
+            LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
@@ -175,8 +173,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogGoalDeleted(logger, id, HttpContext.GetUserId());
+            LogGoalDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });

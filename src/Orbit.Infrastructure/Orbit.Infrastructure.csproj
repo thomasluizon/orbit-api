@@ -24,4 +24,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orbit.Infrastructure.Tests" />
+  </ItemGroup>
+
 </Project>
