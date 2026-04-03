@@ -235,7 +235,8 @@ public partial class OAuthController(
         var keyResult = ApiKey.Create(entry.UserId, "Claude.ai");
         if (keyResult.IsFailure)
         {
-            LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
+            if (logger.IsEnabled(LogLevel.Error))
+                LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
             return StatusCode(500, new { error = "server_error" });
         }
 
@@ -243,7 +244,8 @@ public partial class OAuthController(
         await apiKeyRepository.AddAsync(apiKey, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
 
         return Ok(new
         {

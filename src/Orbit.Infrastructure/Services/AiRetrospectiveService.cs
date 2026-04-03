@@ -24,7 +24,8 @@ public sealed partial class AiRetrospectiveService(
 
         var prompt = BuildRetrospectivePrompt(habits, dateFrom, dateTo, period, language);
 
-        LogGeneratingRetrospective(logger, period, dateFrom, dateTo, language);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogGeneratingRetrospective(logger, period, dateFrom, dateTo, language);
 
         try
         {
@@ -39,7 +40,8 @@ public sealed partial class AiRetrospectiveService(
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
 
-            LogRetrospectiveGenerated(logger, trimmed.Length);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogRetrospectiveGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

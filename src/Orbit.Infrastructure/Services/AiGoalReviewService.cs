@@ -36,7 +36,8 @@ public sealed partial class AiGoalReviewService(
             - Plain text only
             """;
 
-        LogGeneratingGoalReview(logger, language);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogGeneratingGoalReview(logger, language);
 
         try
         {
@@ -51,7 +52,8 @@ public sealed partial class AiGoalReviewService(
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
 
-            LogGoalReviewGenerated(logger, trimmed.Length);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogGoalReviewGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

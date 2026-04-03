@@ -20,7 +20,8 @@ public partial class GeoLocationService(HttpClient httpClient, ILogger<GeoLocati
         }
         catch (Exception ex)
         {
-            LogGeolocationLookupFailed(logger, ex, ipAddress);
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogGeolocationLookupFailed(logger, ex, ipAddress);
             return "US";
         }
     }
