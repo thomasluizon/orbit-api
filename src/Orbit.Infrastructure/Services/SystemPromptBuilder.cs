@@ -32,7 +32,7 @@ public class SystemPromptBuilder : ISystemPromptBuilder
     public string Build(PromptContext context)
     {
         var sb = new StringBuilder();
-        foreach (var section in _sections.OrderBy(s => s.Order).Where(s => s.ShouldInclude(context)))
+        foreach (var section in _sections.Where(s => s.ShouldInclude(context)).OrderBy(s => s.Order))
         {
             sb.Append(section.Build(context));
         }

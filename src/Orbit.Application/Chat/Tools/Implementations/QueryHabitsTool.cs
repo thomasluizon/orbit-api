@@ -39,7 +39,7 @@ public class QueryHabitsTool(
         required = Array.Empty<string>()
     };
 
-    private record HabitFilters(
+    private sealed record HabitFilters(
         bool? IsCompleted,
         bool? IsGeneral,
         bool? IsBadHabit,
@@ -82,50 +82,54 @@ public class QueryHabitsTool(
 
     private static HabitFilters ParseFilters(JsonElement args, DateOnly today)
     {
-        bool? isCompleted = null;
-        if (args.TryGetProperty("is_completed", out var completedEl) && completedEl.ValueKind != JsonValueKind.Null)
-            isCompleted = completedEl.ValueKind == JsonValueKind.True;
+        var isCompleted = ParseBoolFilter(args, "is_completed");
+        var isGeneral = ParseBoolFilter(args, "is_general");
+        var isBadHabit = ParseBoolFilter(args, "is_bad_habit");
 
-        bool? isGeneral = null;
-        if (args.TryGetProperty("is_general", out var generalEl) && generalEl.ValueKind != JsonValueKind.Null)
-            isGeneral = generalEl.ValueKind == JsonValueKind.True;
+        var (frequency, frequencyOneTime) = ParseFrequencyFilter(args);
+        var (dateFilter, includeOverdue) = ParseDateFilter(args, today);
 
-        bool? isBadHabit = null;
-        if (args.TryGetProperty("is_bad_habit", out var badEl) && badEl.ValueKind != JsonValueKind.Null)
-            isBadHabit = badEl.ValueKind == JsonValueKind.True;
+        return new HabitFilters(isCompleted, isGeneral, isBadHabit, frequency, frequencyOneTime,
+            dateFilter, includeOverdue, ParseStringFilter(args, "search"), ParseStringFilter(args, "tag"));
+    }
 
-        FrequencyUnit? frequency = null;
-        var frequencyOneTime = false;
-        if (args.TryGetProperty("frequency", out var freqEl) && freqEl.ValueKind == JsonValueKind.String)
-        {
-            var freqStr = freqEl.GetString() ?? string.Empty;
-            if (freqStr.Equals("OneTime", StringComparison.OrdinalIgnoreCase))
-                frequencyOneTime = true;
-            else if (Enum.TryParse<FrequencyUnit>(freqStr, true, out var parsedFreq))
-                frequency = parsedFreq;
-        }
+    private static bool? ParseBoolFilter(JsonElement args, string name) =>
+        args.TryGetProperty(name, out var el) && el.ValueKind != JsonValueKind.Null
+            ? el.ValueKind == JsonValueKind.True
+            : null;
 
-        DateOnly? dateFilter = null;
-        var includeOverdue = false;
-        if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
-        {
-            var dateStr = dateEl.GetString() ?? string.Empty;
-            dateFilter = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase) ? today
-                : DateOnly.TryParseExact(dateStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate) ? parsedDate : today;
-            includeOverdue = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase);
-            if (args.TryGetProperty("include_overdue", out var overdueEl))
-                includeOverdue = overdueEl.ValueKind == JsonValueKind.True;
-        }
+    private static string? ParseStringFilter(JsonElement args, string name) =>
+        args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
+            ? el.GetString()
+            : null;
 
-        string? search = null;
-        if (args.TryGetProperty("search", out var searchEl) && searchEl.ValueKind == JsonValueKind.String)
-            search = searchEl.GetString();
+    private static (FrequencyUnit? Frequency, bool IsOneTime) ParseFrequencyFilter(JsonElement args)
+    {
+        if (!args.TryGetProperty("frequency", out var freqEl) || freqEl.ValueKind != JsonValueKind.String)
+            return (null, false);
 
-        string? tag = null;
-        if (args.TryGetProperty("tag", out var tagEl) && tagEl.ValueKind == JsonValueKind.String)
-            tag = tagEl.GetString();
+        var freqStr = freqEl.GetString() ?? string.Empty;
+        if (freqStr.Equals("OneTime", StringComparison.OrdinalIgnoreCase))
+            return (null, true);
 
-        return new HabitFilters(isCompleted, isGeneral, isBadHabit, frequency, frequencyOneTime, dateFilter, includeOverdue, search, tag);
+        return Enum.TryParse<FrequencyUnit>(freqStr, true, out var parsed) ? (parsed, false) : (null, false);
+    }
+
+    private static (DateOnly? Date, bool IncludeOverdue) ParseDateFilter(JsonElement args, DateOnly today)
+    {
+        if (!args.TryGetProperty("date", out var dateEl) || dateEl.ValueKind != JsonValueKind.String)
+            return (null, false);
+
+        var dateStr = dateEl.GetString() ?? string.Empty;
+        var date = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase)
+            ? today
+            : DateOnly.TryParseExact(dateStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : today;
+
+        var includeOverdue = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase);
+        if (args.TryGetProperty("include_overdue", out var overdueEl))
+            includeOverdue = overdueEl.ValueKind == JsonValueKind.True;
+
+        return (date, includeOverdue);
     }
 
     private async Task<IReadOnlyList<Habit>> QueryHabitsAsync(Guid userId, HabitFilters f, bool includeMetrics, CancellationToken ct)
@@ -138,8 +142,8 @@ public class QueryHabitsTool(
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
                 && (!f.Date.HasValue || (!h.IsGeneral && (f.IncludeOverdue ? h.DueDate <= f.Date.Value : h.DueDate == f.Date.Value)))
-                && (f.Search == null || h.Title.ToLower().Contains(f.Search.ToLower()))
-                && (f.Tag == null || h.Tags.Any(t => t.Name.ToLower().Contains(f.Tag.ToLower()))),
+                && (f.Search == null || h.Title.Contains(f.Search, StringComparison.OrdinalIgnoreCase))
+                && (f.Tag == null || h.Tags.Any(t => t.Name.Contains(f.Tag, StringComparison.OrdinalIgnoreCase))),
             includeMetrics
                 ? q => q.Include(h => h.Tags).Include(h => h.Logs)
                 : q => q.Include(h => h.Tags),
@@ -166,7 +170,13 @@ public class QueryHabitsTool(
     private static string BuildHabitLine(Habit habit, DateOnly today, bool includeMetrics)
     {
         var freqLabel = FormatFrequencyLabel(habit);
+        var labels = BuildLabels(habit, today, includeMetrics);
+        var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
+        return $"- \"{habit.Title}\" | ID: {habit.Id} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
+    }
 
+    private static List<string> BuildLabels(Habit habit, DateOnly today, bool includeMetrics)
+    {
         var labels = new List<string>();
         if (habit.IsGeneral) labels.Add("GENERAL");
         if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate < today) labels.Add("OVERDUE");
@@ -175,25 +185,24 @@ public class QueryHabitsTool(
         if (habit.IsCompleted) labels.Add("COMPLETED");
         if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
 
-        if (includeMetrics)
-        {
-            var metrics = HabitMetricsCalculator.Calculate(habit, today);
-            if (metrics.CurrentStreak > 0) labels.Add($"Streak: {metrics.CurrentStreak}d");
-            if (metrics.WeeklyCompletionRate > 0) labels.Add($"Week: {metrics.WeeklyCompletionRate:F0}%");
-            if (metrics.TotalCompletions > 0) labels.Add($"Total: {metrics.TotalCompletions}");
-        }
+        AddMetricLabels(labels, habit, today, includeMetrics);
 
         if (habit.ChecklistItems.Count > 0)
-        {
-            var done = habit.ChecklistItems.Count(i => i.IsChecked);
-            labels.Add($"Checklist: {done}/{habit.ChecklistItems.Count}");
-        }
+            labels.Add($"Checklist: {habit.ChecklistItems.Count(i => i.IsChecked)}/{habit.ChecklistItems.Count}");
 
-        var loggedToday = includeMetrics && habit.Logs.Any(l => l.Date == today);
-        if (loggedToday) labels.Add("DONE TODAY");
+        if (includeMetrics && habit.Logs.Any(l => l.Date == today))
+            labels.Add("DONE TODAY");
 
-        var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
-        return $"- \"{habit.Title}\" | ID: {habit.Id} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
+        return labels;
+    }
+
+    private static void AddMetricLabels(List<string> labels, Habit habit, DateOnly today, bool includeMetrics)
+    {
+        if (!includeMetrics) return;
+        var metrics = HabitMetricsCalculator.Calculate(habit, today);
+        if (metrics.CurrentStreak > 0) labels.Add($"Streak: {metrics.CurrentStreak}d");
+        if (metrics.WeeklyCompletionRate > 0) labels.Add($"Week: {metrics.WeeklyCompletionRate:F0}%");
+        if (metrics.TotalCompletions > 0) labels.Add($"Total: {metrics.TotalCompletions}");
     }
 
     private static string FormatFrequencyLabel(Habit habit)

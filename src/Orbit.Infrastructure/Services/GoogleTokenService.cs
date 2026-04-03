@@ -12,7 +12,8 @@ public class GoogleTokenService(
     IConfiguration configuration,
     ILogger<GoogleTokenService> logger) : IGoogleTokenService
 {
-    private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token";
+    // S1075: Stable Google OAuth API endpoint - not configurable
+    private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token"; // NOSONAR
     public async Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default)
     {
         if (user.GoogleAccessToken is null)

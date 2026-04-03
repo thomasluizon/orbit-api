@@ -406,50 +406,47 @@ public partial class ProcessUserChatCommandHandler(
 
         var suggestions = new List<AiAction>();
         foreach (var item in subHabitsEl.EnumerateArray())
-        {
-            string? title = null;
-            string? description = null;
-            FrequencyUnit? frequencyUnit = null;
-            int? frequencyQuantity = null;
-            List<DayOfWeek>? days = null;
+            suggestions.Add(ParseSingleSubHabit(item));
 
-            if (item.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
-                title = titleEl.GetString();
-
-            if (item.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String)
-                description = descEl.GetString();
-
-            if (item.TryGetProperty("frequency_unit", out var freqEl) && freqEl.ValueKind == JsonValueKind.String)
-            {
-                if (Enum.TryParse<FrequencyUnit>(freqEl.GetString(), true, out var fu))
-                    frequencyUnit = fu;
-            }
-
-            if (item.TryGetProperty("frequency_quantity", out var fqEl) && fqEl.ValueKind == JsonValueKind.Number)
-                frequencyQuantity = fqEl.GetInt32();
-
-            if (item.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
-            {
-                days = [];
-                foreach (var dayEl in daysEl.EnumerateArray())
-                {
-                    if (dayEl.ValueKind == JsonValueKind.String &&
-                        Enum.TryParse<DayOfWeek>(dayEl.GetString(), true, out var dow))
-                        days.Add(dow);
-                }
-            }
-
-            suggestions.Add(new AiAction
-            {
-                Type = AiActionType.SuggestBreakdown,
-                Title = title,
-                Description = description,
-                FrequencyUnit = frequencyUnit,
-                FrequencyQuantity = frequencyQuantity,
-                Days = days
-            });
-        }
 
         return suggestions.Count > 0 ? suggestions : null;
+    }
+
+    private static AiAction ParseSingleSubHabit(JsonElement item)
+    {
+        string? title = item.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String
+            ? titleEl.GetString() : null;
+        string? description = item.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String
+            ? descEl.GetString() : null;
+
+        FrequencyUnit? frequencyUnit = null;
+        if (item.TryGetProperty("frequency_unit", out var freqEl) && freqEl.ValueKind == JsonValueKind.String
+            && Enum.TryParse<FrequencyUnit>(freqEl.GetString(), true, out var fu))
+            frequencyUnit = fu;
+
+        int? frequencyQuantity = item.TryGetProperty("frequency_quantity", out var fqEl) && fqEl.ValueKind == JsonValueKind.Number
+            ? fqEl.GetInt32() : null;
+
+        List<DayOfWeek>? days = null;
+        if (item.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
+        {
+            days = [];
+            foreach (var dayEl in daysEl.EnumerateArray())
+            {
+                if (dayEl.ValueKind == JsonValueKind.String &&
+                    Enum.TryParse<DayOfWeek>(dayEl.GetString(), true, out var dow))
+                    days.Add(dow);
+            }
+        }
+
+        return new AiAction
+        {
+            Type = AiActionType.SuggestBreakdown,
+            Title = title,
+            Description = description,
+            FrequencyUnit = frequencyUnit,
+            FrequencyQuantity = frequencyQuantity,
+            Days = days
+        };
     }
 }
