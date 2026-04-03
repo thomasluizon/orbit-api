@@ -34,7 +34,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
         var command = new DeleteUserFactCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogUserFactDeleted(logger, id, HttpContext.GetUserId());
 
         return result.IsSuccess

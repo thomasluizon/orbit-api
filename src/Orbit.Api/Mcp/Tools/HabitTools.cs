@@ -573,7 +573,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     }
 
     // DTOs for JSON deserialization
-    private record BulkHabitItemDto(
+    private sealed record BulkHabitItemDto(
         string Title,
         string? Description = null,
         string? FrequencyUnit = null,
@@ -615,7 +615,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         }
     }
 
-    private record HabitPositionDto(string HabitId, int Position);
+    private sealed record HabitPositionDto(string HabitId, int Position);
 
     private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemDto dto)
     {

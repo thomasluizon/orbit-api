@@ -3,7 +3,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisposable
+public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisposable
 {
     private IDbContextTransaction? _transaction;
 

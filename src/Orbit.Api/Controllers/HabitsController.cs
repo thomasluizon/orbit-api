@@ -103,7 +103,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         public DateOnly? DateFrom { get; init; }
         public DateOnly? DateTo { get; init; }
-        public bool IncludeOverdue { get; init; }
+        public bool? IncludeOverdue { get; init; }
         public string? Search { get; init; }
         public string? FrequencyUnit { get; init; }
         public bool? IsCompleted { get; init; }
@@ -111,7 +111,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         public bool? IsGeneral { get; init; }
         public int Page { get; init; } = 1;
         public int PageSize { get; init; } = 50;
-        public bool IncludeGeneral { get; init; }
+        public bool? IncludeGeneral { get; init; }
     }
 
     public record CreateSubHabitRequest(
@@ -146,7 +146,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             HttpContext.GetUserId(),
             filter.DateFrom,
             filter.DateTo,
-            filter.IncludeOverdue,
+            filter.IncludeOverdue ?? false,
             filter.Search,
             filter.FrequencyUnit,
             filter.IsCompleted,
@@ -154,7 +154,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             filter.IsGeneral,
             filter.Page,
             filter.PageSize,
-            filter.IncludeGeneral);
+            filter.IncludeGeneral ?? false);
         var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
@@ -285,7 +285,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogHabitCreated(logger, result.Value, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
@@ -401,7 +401,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         if (result.IsSuccess)
         {
-            LogHabitDeleted(logger, id, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogHabitDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
 
@@ -461,7 +462,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkCreated(logger, request.Habits.Count, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => StatusCode(StatusCodes.Status201Created, v));
@@ -481,7 +482,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkDeleted(logger, request.HabitIds.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -504,7 +505,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkLogged(logger, request.Items.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -527,7 +528,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogBulkSkipped(logger, request.Items.Count, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -637,7 +638,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsSuccess)
         {
-            LogLinkedGoalsToHabit(logger, request.GoalIds.Count, habitId, HttpContext.GetUserId());
+            if (logger.IsEnabled(LogLevel.Information))
+                LogLinkedGoalsToHabit(logger, request.GoalIds.Count, habitId, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });

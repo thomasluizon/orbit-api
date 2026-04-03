@@ -24,7 +24,8 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
         if (result.IsSuccess)
             return Ok(result.Value);
 
-        LogFailedToFetchCalendarEvents(logger, result.Error);
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogFailedToFetchCalendarEvents(logger, result.Error);
         return BadRequest(new { error = result.Error });
     }
 

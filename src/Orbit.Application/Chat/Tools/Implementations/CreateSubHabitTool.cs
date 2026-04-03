@@ -16,44 +16,44 @@ public class CreateSubHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            parent_habit_id = new { type = "string", description = "ID of the existing parent habit" },
-            title = new { type = "string", description = "Name of the new sub-habit" },
-            description = new { type = "string", description = "Optional description" },
+            parent_habit_id = new { type = JsonSchemaTypes.String, description = "ID of the existing parent habit" },
+            title = new { type = JsonSchemaTypes.String, description = "Name of the new sub-habit" },
+            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
             frequency_unit = new
             {
-                type = "string",
+                type = JsonSchemaTypes.String,
                 description = "Override parent frequency",
-                @enum = new[] { "Day", "Week", "Month", "Year" }
+                @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
-            frequency_quantity = new { type = "integer", description = "Override parent frequency quantity" },
+            frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "Override parent frequency quantity" },
             days = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Specific weekdays, only when frequency_quantity is 1",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             },
-            due_time = new { type = "string", description = "HH:mm 24h format" },
-            due_end_time = new { type = "string", description = "HH:mm 24h format end time" },
-            is_bad_habit = new { type = "boolean", description = "True for habits the user wants to AVOID" },
-            reminder_enabled = new { type = "boolean", description = "Set true for reminder notifications" },
-            reminder_times = new { type = "array", description = "Minutes before dueTime to send reminders", items = new { type = "integer" } },
-            slip_alert_enabled = new { type = "boolean", description = "Enable slip alert notifications" },
-            is_flexible = new { type = "boolean", description = "True for flexible frequency" },
-            due_date = new { type = "string", description = "YYYY-MM-DD override for due date" },
+            due_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" },
+            due_end_time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format end time" },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "True for habits the user wants to AVOID" },
+            reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Set true for reminder notifications" },
+            reminder_times = new { type = JsonSchemaTypes.Array, description = "Minutes before dueTime to send reminders", items = new { type = JsonSchemaTypes.Integer } },
+            slip_alert_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable slip alert notifications" },
+            is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for flexible frequency" },
+            due_date = new { type = JsonSchemaTypes.String, description = "YYYY-MM-DD override for due date" },
             scheduled_reminders = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Absolute-time reminders for habits WITHOUT a due_time",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        when = new { type = "string", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
-                        time = new { type = "string", description = "HH:mm 24h format" }
+                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
                     },
                     required = new[] { "when", "time" }
                 }

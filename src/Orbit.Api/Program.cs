@@ -67,9 +67,11 @@ builder.Services.AddHttpClient("Supabase", client =>
 builder.Services.Configure<ResendSettings>(
     builder.Configuration.GetSection(ResendSettings.SectionName));
 
+#pragma warning disable S1075 // Resend API base URL is a stable, well-known endpoint
 builder.Services.AddHttpClient("Resend", client =>
 {
     client.BaseAddress = new Uri("https://api.resend.com");
+#pragma warning restore S1075
     client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["Resend:ApiKey"]}");
     client.Timeout = httpTimeout;
 });
@@ -393,13 +395,15 @@ app.Use(async (context, next) =>
         }
 
         // For tool calls, require auth
+        const string xForwardedProto = "X-Forwarded-Proto";
+        const string wwwAuthenticate = "WWW-Authenticate";
         var authResult = await context.AuthenticateAsync();
         if (!authResult.Succeeded)
         {
-            var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
+            var scheme = context.Request.Headers[xForwardedProto].FirstOrDefault() ?? context.Request.Scheme;
             var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
             context.Response.StatusCode = 401;
-            context.Response.Headers["WWW-Authenticate"] = $"Bearer resource_metadata=\"{resourceUrl}\"";
+            context.Response.Headers[wwwAuthenticate] = $"Bearer resource_metadata=\"{resourceUrl}\"";
             return;
         }
         context.User = authResult.Principal!;

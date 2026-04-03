@@ -12,14 +12,16 @@ public class UpdateGoalProgressTool(
     public string Name => "update_goal_progress";
     public string Description => "Update progress on an existing goal. Finds the goal by fuzzy title match and sets the new current value.";
 
+    private const string Number = "number";
+
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            goal_name = new { type = "string", description = "Name or partial name of the goal to update" },
-            current_value = new { type = "number", description = "New current progress value" },
-            note = new { type = "string", description = "Optional note about this progress update" }
+            goal_name = new { type = JsonSchemaTypes.String, description = "Name or partial name of the goal to update" },
+            current_value = new { type = Number, description = "New current progress value" },
+            note = new { type = JsonSchemaTypes.String, description = "Optional note about this progress update" }
         },
         required = new[] { "goal_name", "current_value" }
     };

@@ -22,7 +22,8 @@ public partial class StripeCouponRewardService(
 
         if (user is null)
         {
-            LogUserNotFoundForCoupon(logger, userId);
+            if (logger.IsEnabled(LogLevel.Error))
+                LogUserNotFoundForCoupon(logger, userId);
             throw new InvalidOperationException($"User {userId} not found for coupon creation");
         }
 
@@ -38,7 +39,8 @@ public partial class StripeCouponRewardService(
                 : null
         }, cancellationToken: cancellationToken);
 
-        LogCouponCreated(logger, userId, coupon.Id);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogCouponCreated(logger, userId, coupon.Id);
 
         return coupon.Id;
     }
@@ -51,7 +53,8 @@ public partial class StripeCouponRewardService(
             Discounts = [new SubscriptionDiscountOptions { Coupon = couponId }]
         }, cancellationToken: cancellationToken);
 
-        LogCouponApplied(logger, couponId, subscriptionId);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogCouponApplied(logger, couponId, subscriptionId);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "User {UserId} not found for referral coupon creation")]

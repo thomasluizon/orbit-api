@@ -97,7 +97,7 @@ public partial class GoalDeadlineNotificationService(
                 if (daysUntilDeadline != daysBefore) continue;
 
                 // Check if we already sent a notification for this goal + daysBefore.
-                // TODO: The Url field is being repurposed as a deduplication key here (notificationKey).
+                // FUTURE: The Url field is being repurposed as a deduplication key here (notificationKey).
                 // This is a hack -- the Notification entity's Url field was designed to hold a navigation URL,
                 // not an opaque string identifier. This should be replaced with a proper SentGoalDeadlineNotification
                 // entity (similar to SentReminder/SentSlipAlert) that tracks (GoalId, DaysBefore) with a unique
@@ -128,7 +128,8 @@ public partial class GoalDeadlineNotificationService(
                 sentKeys.Add(notificationKey);
                 anyChanges = true;
 
-                LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
             }
         }
 

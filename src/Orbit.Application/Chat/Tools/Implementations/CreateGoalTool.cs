@@ -12,16 +12,18 @@ public class CreateGoalTool(
     public string Name => "create_goal";
     public string Description => "Create a new goal to track progress toward a target. Goals can have a target value and unit (e.g., 'read 12 books', 'lose 5 kg'). If the user doesn't specify a target, use target_value=1 and unit='goal'. Use when user wants to track measurable long-term progress.";
 
+    private const string Number = "number";
+
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = "string", description = "Name of the goal" },
-            description = new { type = "string", description = "Optional description" },
-            target_value = new { type = "number", description = "Target number to reach (default: 1)" },
-            unit = new { type = "string", description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
-            deadline = new { type = "string", description = "Optional deadline in YYYY-MM-DD format" }
+            title = new { type = JsonSchemaTypes.String, description = "Name of the goal" },
+            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            target_value = new { type = Number, description = "Target number to reach (default: 1)" },
+            unit = new { type = JsonSchemaTypes.String, description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
+            deadline = new { type = JsonSchemaTypes.String, description = "Optional deadline in YYYY-MM-DD format" }
         },
         required = new[] { "title" }
     };

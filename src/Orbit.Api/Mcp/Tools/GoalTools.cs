@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -59,7 +60,7 @@ public class GoalTools(IMediator mediator)
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline) : null);
+            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -112,7 +113,7 @@ public class GoalTools(IMediator mediator)
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline) : null);
+            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -264,5 +265,5 @@ public class GoalTools(IMediator mediator)
         return Guid.Parse(claim);
     }
 
-    private record GoalPositionDto(string Id, int Position);
+    private sealed record GoalPositionDto(string Id, int Position);
 }

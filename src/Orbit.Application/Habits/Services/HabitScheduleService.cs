@@ -204,9 +204,13 @@ public static class HabitScheduleService
             if (habit.DueDate >= dateFrom && habit.DueDate <= dateTo)
             {
                 var log = habit.Logs.FirstOrDefault(l => l.Date == habit.DueDate);
-                var status = log is not null
-                    ? InstanceStatus.Completed
-                    : habit.DueDate < userToday ? InstanceStatus.Overdue : InstanceStatus.Pending;
+                InstanceStatus status;
+                if (log is not null)
+                    status = InstanceStatus.Completed;
+                else if (habit.DueDate < userToday)
+                    status = InstanceStatus.Overdue;
+                else
+                    status = InstanceStatus.Pending;
                 return [new HabitInstanceItem(habit.DueDate, status, log?.Id, log?.Note)];
             }
             return [];
