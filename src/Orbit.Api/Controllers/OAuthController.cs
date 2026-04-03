@@ -27,7 +27,6 @@ public partial class OAuthController(
     IConfiguration configuration,
     ILogger<OAuthController> logger) : ControllerBase
 {
-    private const string XForwardedProtoHeader = "X-Forwarded-Proto";
     private static readonly string[] SupportedResponseTypes = ["code"];
     private static readonly string[] SupportedGrantTypes = ["authorization_code"];
     private static readonly string[] SupportedCodeChallengeMethods = ["S256"];
@@ -42,7 +41,7 @@ public partial class OAuthController(
     [HttpGet("/.well-known/oauth-authorization-server")]
     public IActionResult GetMetadata()
     {
-        var scheme = Request.Headers[XForwardedProtoHeader].FirstOrDefault() ?? Request.Scheme;
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
         var baseUrl = $"{scheme}://{Request.Host}";
         return Ok(new
         {
@@ -80,7 +79,7 @@ public partial class OAuthController(
     [HttpGet("/.well-known/oauth-protected-resource")]
     public IActionResult GetProtectedResourceMetadata()
     {
-        var scheme = Request.Headers[XForwardedProtoHeader].FirstOrDefault() ?? Request.Scheme;
+        var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
         var baseUrl = $"{scheme}://{Request.Host}";
         return Ok(new
         {
@@ -236,8 +235,7 @@ public partial class OAuthController(
         var keyResult = ApiKey.Create(entry.UserId, "Claude.ai");
         if (keyResult.IsFailure)
         {
-            if (logger.IsEnabled(LogLevel.Error))
-                LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
+            LogFailedToCreateOAuthApiKey(logger, entry.UserId, keyResult.Error);
             return StatusCode(500, new { error = "server_error" });
         }
 
@@ -245,8 +243,7 @@ public partial class OAuthController(
         await apiKeyRepository.AddAsync(apiKey, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        if (logger.IsEnabled(LogLevel.Information))
-            LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
+        LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
 
         return Ok(new
         {

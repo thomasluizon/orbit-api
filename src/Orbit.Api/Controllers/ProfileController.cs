@@ -17,7 +17,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetAiMemoryRequest([property: JsonRequired] bool Enabled);
     public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
-    public record SetWeekStartDayRequest(int WeekStartDay);
+    public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record SetColorSchemeRequest(string? ColorScheme);
 
