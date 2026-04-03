@@ -7,7 +7,7 @@ using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class AiSummaryService(
+public sealed partial class AiSummaryService(
     AiCompletionClient aiClient,
     ILogger<AiSummaryService> logger) : ISummaryService
 {
@@ -40,7 +40,7 @@ public sealed class AiSummaryService(
 
         var prompt = BuildSummaryPrompt(scheduledHabits, overdueHabits, dateFrom, language);
 
-        logger.LogInformation("Generating daily summary (date: {Date}, language: {Language})...", dateFrom, language);
+        LogGeneratingDailySummary(logger, dateFrom, language);
 
         try
         {
@@ -55,12 +55,12 @@ public sealed class AiSummaryService(
 
             var trimmed = StripMarkdownFences(text);
 
-            logger.LogInformation("Daily summary generated successfully ({Length} chars)", trimmed.Length);
+            LogDailySummaryGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "AI API call failed for daily summary");
+            LogDailySummaryFailed(logger, ex);
             return Result.Failure<string>("AI summary temporarily unavailable");
         }
     }
@@ -152,4 +152,14 @@ public sealed class AiSummaryService(
         }
         return trimmed.Trim();
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating daily summary (date: {Date}, language: {Language})...")]
+    private static partial void LogGeneratingDailySummary(ILogger logger, DateOnly date, string language);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Daily summary generated successfully ({Length} chars)")]
+    private static partial void LogDailySummaryGenerated(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for daily summary")]
+    private static partial void LogDailySummaryFailed(ILogger logger, Exception ex);
+
 }

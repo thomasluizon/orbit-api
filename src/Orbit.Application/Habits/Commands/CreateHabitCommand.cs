@@ -33,7 +33,7 @@ public record CreateHabitCommand(
     IReadOnlyList<Guid>? GoalIds = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result<Guid>>;
 
-public class CreateHabitCommandHandler(
+public partial class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Tag> tagRepository,
     IGenericRepository<Goal> goalRepository,
@@ -135,11 +135,14 @@ public class CreateHabitCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Gamification processing failed for habit creation by user {UserId}", request.UserId);
+            LogGamificationHabitCreationFailed(logger, ex, request.UserId);
         }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(habit.Id);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit creation by user {UserId}")]
+    private static partial void LogGamificationHabitCreationFailed(ILogger logger, Exception ex, Guid userId);
 }

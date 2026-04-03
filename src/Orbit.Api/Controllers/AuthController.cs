@@ -71,7 +71,7 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("User logged in via Google");
+            LogUserLoggedInViaGoogle(logger);
             return Ok(result.Value);
         }
 
@@ -147,5 +147,8 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Deletion confirmation failed for {UserId}: {Error}")]
     private static partial void LogDeletionConfirmationFailed(ILogger logger, Guid userId, string? error);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "User logged in via Google")]
+    private static partial void LogUserLoggedInViaGoogle(ILogger logger);
 
 }

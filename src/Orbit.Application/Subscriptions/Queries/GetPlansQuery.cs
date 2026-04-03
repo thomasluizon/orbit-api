@@ -11,7 +11,7 @@ namespace Orbit.Application.Subscriptions.Queries;
 
 public record GetPlansQuery(Guid UserId, string? IpAddress) : IRequest<Result<PlansResponse>>;
 
-public class GetPlansQueryHandler(
+public partial class GetPlansQueryHandler(
     IGenericRepository<User> userRepository,
     IGeoLocationService geoLocationService,
     IOptions<StripeSettings> stripeSettings,
@@ -56,7 +56,7 @@ public class GetPlansQueryHandler(
                 }
                 catch (StripeException ex)
                 {
-                    logger.LogWarning(ex, "Failed to fetch referral coupon {CouponId} for user {UserId}", user.ReferralCouponId, request.UserId);
+                    LogFetchReferralCouponFailed(logger, ex, user.ReferralCouponId, request.UserId);
                 }
             }
 
@@ -69,8 +69,14 @@ public class GetPlansQueryHandler(
         }
         catch (StripeException ex)
         {
-            logger.LogError(ex, "Failed to fetch plans from Stripe");
+            LogFetchPlansFailed(logger, ex);
             return Result.Failure<PlansResponse>("Payment service temporarily unavailable");
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch referral coupon {CouponId} for user {UserId}")]
+    private static partial void LogFetchReferralCouponFailed(ILogger logger, Exception ex, string? couponId, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to fetch plans from Stripe")]
+    private static partial void LogFetchPlansFailed(ILogger logger, Exception ex);
 }

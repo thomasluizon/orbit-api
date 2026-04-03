@@ -59,7 +59,7 @@ public partial class ProcessUserChatCommandHandler(
         LogProcessingChatMessage(logger, request.Message);
 
         // 1. Load lightweight context for system prompt (no Logs, no metrics)
-        logger.LogInformation("Fetching context from database...");
+        LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var activeHabits = await habitRepository.FindAsync(
@@ -135,97 +135,20 @@ public partial class ProcessUserChatCommandHandler(
         while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
         {
             iteration++;
-            LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
+            var continueResponse = await ProcessToolCallsAsync(
+                aiResponse, request.UserId, allActionResults, iteration, cancellationToken);
 
-            var toolResults = new List<AiToolCallResult>();
-
-            // Sort tool calls so parent habits are created before sub-habits
-            var orderedCalls = aiResponse.ToolCalls!.OrderBy(c => c.Name switch
-            {
-                "create_habit" => 0,
-                "create_sub_habit" => 1,
-                "assign_tags" => 2,
-                _ => 1
-            }).ToList();
-
-            foreach (var call in orderedCalls)
-            {
-                var tool = toolRegistry.GetTool(call.Name);
-                if (tool is null)
-                {
-                    LogUnknownToolRequested(logger, call.Name);
-                    toolResults.Add(new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"));
-                    allActionResults.Add(new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"));
-                    continue;
-                }
-
-                try
-                {
-                    var result = await tool.ExecuteAsync(call.Args, request.UserId, cancellationToken);
-                    toolResults.Add(new AiToolCallResult(call.Name, call.Id, result.Success, result.EntityId, result.EntityName, result.Error));
-
-                    if (result.Success)
-                    {
-                        // Read-only tools don't produce action chips for the frontend
-                        if (!tool.IsReadOnly && call.Name == "suggest_breakdown")
-                        {
-                            var suggestedSubHabits = ExtractSuggestedSubHabits(call.Args);
-                            allActionResults.Add(new ActionResult(
-                                ToolNameToPascalCase(call.Name),
-                                ActionStatus.Suggestion,
-                                EntityName: result.EntityName,
-                                SuggestedSubHabits: suggestedSubHabits));
-                        }
-                        else if (!tool.IsReadOnly)
-                        {
-                            allActionResults.Add(new ActionResult(
-                                ToolNameToPascalCase(call.Name),
-                                ActionStatus.Success,
-                                result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
-                                result.EntityName));
-                        }
-
-                        LogToolSucceeded(logger, call.Name, result.EntityName);
-                    }
-                    else
-                    {
-                        if (!tool.IsReadOnly)
-                        {
-                            allActionResults.Add(new ActionResult(
-                                ToolNameToPascalCase(call.Name),
-                                ActionStatus.Failed,
-                                EntityName: result.EntityName,
-                                Error: result.Error));
-                        }
-                        LogToolFailed(logger, call.Name, result.Error);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogToolThrewException(logger, ex, call.Name);
-                    toolResults.Add(new AiToolCallResult(call.Name, call.Id, false, null, null, "An unexpected error occurred."));
-                    allActionResults.Add(new ActionResult(
-                        ToolNameToPascalCase(call.Name),
-                        ActionStatus.Failed,
-                        Error: "An unexpected error occurred."));
-                }
-            }
-
-            // Send results back to the AI for next iteration or final message
-            var continueResult = await aiIntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
-            if (continueResult.IsFailure)
-            {
-                LogContinueWithToolResultsFailed(logger, continueResult.Error);
+            if (continueResponse is null)
                 break;
-            }
-            aiResponse = continueResult.Value;
+
+            aiResponse = continueResponse;
         }
 
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iteration, allActionResults.Count);
 
         // 5. Persist all changes in a single unit of work
-        logger.LogInformation("Saving changes to database...");
+        LogSavingChanges(logger);
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -234,89 +157,15 @@ public partial class ProcessUserChatCommandHandler(
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
         // 6. Extract AI message (strip JSON wrapper if model didn't use function calling)
-        var aiMessage = aiResponse.TextMessage;
-        if (aiMessage is not null && aiMessage.TrimStart().StartsWith('{'))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(aiMessage);
-                if (doc.RootElement.TryGetProperty("aiMessage", out var msgEl))
-                    aiMessage = msgEl.GetString();
-            }
-            catch (JsonException)
-            {
-                // Not valid JSON, use as-is
-            }
-        }
+        var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
 
         // 7. Fire-and-forget: fact extraction + message counter (non-blocking background work)
-        var userId = request.UserId;
-        var userMessage = request.Message;
-        var shouldExtractFacts = aiMemoryEnabled && user is not null && user.HasProAccess;
-        var existingFactCount = userFacts.Count;
-        var existingFacts = userFacts;
-
-        _ = Task.Run(async () =>
-        {
-            // Fire-and-forget background work (no caller to propagate cancellation to)
-            try
-            {
-                using var scope = serviceScopeFactory.CreateScope();
-                var bgFactService = scope.ServiceProvider.GetRequiredService<IFactExtractionService>();
-                var bgUserFactRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<UserFact>>();
-                var bgUserRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<User>>();
-                var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                var bgAppConfig = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
-                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessUserChatCommandHandler>>();
-
-                // Fact extraction
-                if (shouldExtractFacts)
-                {
-                    try
-                    {
-                        var extractionResult = await bgFactService.ExtractFactsAsync(
-                            userMessage, aiMessage, existingFacts, CancellationToken.None);
-
-                        if (extractionResult.IsSuccess && extractionResult.Value.Facts.Count > 0)
-                        {
-                            var maxFacts = await bgAppConfig.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, CancellationToken.None);
-                            if (existingFactCount < maxFacts)
-                            {
-                                var remaining = maxFacts - existingFactCount;
-                                foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
-                                {
-                                    var factResult = UserFact.Create(userId, candidate.FactText, candidate.Category);
-                                    if (factResult.IsSuccess)
-                                        await bgUserFactRepo.AddAsync(factResult.Value, CancellationToken.None);
-                                }
-                                await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
-                                LogBackgroundFactsPersisted(bgLogger, extractionResult.Value.Facts.Count);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        bgLogger.LogWarning(ex, "Background fact extraction failed");
-                    }
-                }
-
-                // Increment AI message counter
-                try
-                {
-                    var userForIncrement = await bgUserRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: CancellationToken.None);
-                    userForIncrement?.IncrementAiMessageCount();
-                    await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    bgLogger.LogWarning(ex, "Background message counter increment failed");
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Background post-response work failed");
-            }
-        }, CancellationToken.None);
+        RunBackgroundPostResponseWork(
+            request.UserId,
+            request.Message,
+            aiMessage,
+            shouldExtractFacts: aiMemoryEnabled && user is not null && user.HasProAccess,
+            existingFacts: userFacts);
 
         totalStopwatch.Stop();
         LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
@@ -328,6 +177,240 @@ public partial class ProcessUserChatCommandHandler(
         return Result.Success(new ChatResponse(aiMessage, allActionResults));
     }
 
+    /// <summary>
+    /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
+    /// back to the AI. Returns the next AI response, or null if continuation failed.
+    /// </summary>
+    private async Task<AiResponse?> ProcessToolCallsAsync(
+        AiResponse aiResponse,
+        Guid userId,
+        List<ActionResult> allActionResults,
+        int iteration,
+        CancellationToken cancellationToken)
+    {
+        LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
+
+        var toolResults = new List<AiToolCallResult>();
+
+        // Sort tool calls so parent habits are created before sub-habits
+        var orderedCalls = aiResponse.ToolCalls!.OrderBy(c => c.Name switch
+        {
+            "create_habit" => 0,
+            "create_sub_habit" => 1,
+            "assign_tags" => 2,
+            _ => 1
+        }).ToList();
+
+        foreach (var call in orderedCalls)
+        {
+            var (toolCallResult, actionResult) = await ExecuteSingleToolCallAsync(call, userId, cancellationToken);
+            toolResults.Add(toolCallResult);
+            if (actionResult is not null)
+                allActionResults.Add(actionResult);
+        }
+
+        // Send results back to the AI for next iteration or final message
+        var continueResult = await aiIntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
+        if (continueResult.IsFailure)
+        {
+            LogContinueWithToolResultsFailed(logger, continueResult.Error);
+            return null;
+        }
+
+        return continueResult.Value;
+    }
+
+    /// <summary>
+    /// Executes a single tool call: resolves the tool, runs it, and produces both a result
+    /// for the AI and an optional action result for the frontend.
+    /// </summary>
+    private async Task<(AiToolCallResult ToolResult, ActionResult? ActionResult)> ExecuteSingleToolCallAsync(
+        AiToolCall call,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var tool = toolRegistry.GetTool(call.Name);
+        if (tool is null)
+        {
+            LogUnknownToolRequested(logger, call.Name);
+            return (
+                new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"),
+                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"));
+        }
+
+        try
+        {
+            var result = await tool.ExecuteAsync(call.Args, userId, cancellationToken);
+            var toolResult = new AiToolCallResult(call.Name, call.Id, result.Success, result.EntityId, result.EntityName, result.Error);
+            var actionResult = BuildActionResult(call, tool, result);
+
+            if (result.Success)
+                LogToolSucceeded(logger, call.Name, result.EntityName);
+            else
+                LogToolFailed(logger, call.Name, result.Error);
+
+            return (toolResult, actionResult);
+        }
+        catch (Exception ex)
+        {
+            LogToolThrewException(logger, ex, call.Name);
+            return (
+                new AiToolCallResult(call.Name, call.Id, false, null, null, "An unexpected error occurred."),
+                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "An unexpected error occurred."));
+        }
+    }
+
+    /// <summary>
+    /// Builds the frontend-facing ActionResult from a tool execution result.
+    /// Returns null for read-only tools (they don't produce action chips).
+    /// </summary>
+    private static ActionResult? BuildActionResult(AiToolCall call, IAiTool tool, ToolResult result)
+    {
+        if (tool.IsReadOnly)
+            return null;
+
+        if (!result.Success)
+        {
+            return new ActionResult(
+                ToolNameToPascalCase(call.Name),
+                ActionStatus.Failed,
+                EntityName: result.EntityName,
+                Error: result.Error);
+        }
+
+        if (call.Name == "suggest_breakdown")
+        {
+            return new ActionResult(
+                ToolNameToPascalCase(call.Name),
+                ActionStatus.Suggestion,
+                EntityName: result.EntityName,
+                SuggestedSubHabits: ExtractSuggestedSubHabits(call.Args));
+        }
+
+        return new ActionResult(
+            ToolNameToPascalCase(call.Name),
+            ActionStatus.Success,
+            result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
+            result.EntityName);
+    }
+
+    /// <summary>
+    /// Strips a JSON wrapper from the AI response text, extracting the "aiMessage" property
+    /// if the model returned a raw JSON object instead of using function calling.
+    /// </summary>
+    private static string? StripJsonWrapper(string? text)
+    {
+        if (text is null || !text.TrimStart().StartsWith('{'))
+            return text;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.TryGetProperty("aiMessage", out var msgEl))
+                return msgEl.GetString();
+        }
+        catch (JsonException)
+        {
+            // Not valid JSON, use as-is
+        }
+
+        return text;
+    }
+
+    /// <summary>
+    /// Fires off background work for fact extraction and AI message counter increment.
+    /// Runs in a separate DI scope so it doesn't block the response.
+    /// </summary>
+    private void RunBackgroundPostResponseWork(
+        Guid userId,
+        string userMessage,
+        string? aiMessage,
+        bool shouldExtractFacts,
+        IReadOnlyList<UserFact> existingFacts)
+    {
+        var existingFactCount = existingFacts.Count;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = serviceScopeFactory.CreateScope();
+                var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                var bgUserRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<User>>();
+                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessUserChatCommandHandler>>();
+
+                if (shouldExtractFacts)
+                    await ExtractAndPersistFactsAsync(scope, userId, userMessage, aiMessage, existingFacts, existingFactCount, bgLogger);
+
+                await IncrementAiMessageCountAsync(bgUserRepo, bgUnitOfWork, userId, bgLogger);
+            }
+            catch (Exception ex)
+            {
+                LogBackgroundPostResponseFailed(logger, ex);
+            }
+        }, CancellationToken.None);
+    }
+
+    private static async Task ExtractAndPersistFactsAsync(
+        IServiceScope scope,
+        Guid userId,
+        string userMessage,
+        string? aiMessage,
+        IReadOnlyList<UserFact> existingFacts,
+        int existingFactCount,
+        ILogger bgLogger)
+    {
+        var bgFactService = scope.ServiceProvider.GetRequiredService<IFactExtractionService>();
+        var bgUserFactRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<UserFact>>();
+        var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var bgAppConfig = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
+
+        try
+        {
+            var extractionResult = await bgFactService.ExtractFactsAsync(
+                userMessage, aiMessage, existingFacts, CancellationToken.None);
+
+            if (extractionResult.IsFailure || extractionResult.Value.Facts.Count == 0)
+                return;
+
+            var maxFacts = await bgAppConfig.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, CancellationToken.None);
+            if (existingFactCount >= maxFacts)
+                return;
+
+            var remaining = maxFacts - existingFactCount;
+            foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
+            {
+                var factResult = UserFact.Create(userId, candidate.FactText, candidate.Category);
+                if (factResult.IsSuccess)
+                    await bgUserFactRepo.AddAsync(factResult.Value, CancellationToken.None);
+            }
+
+            await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
+            LogBackgroundFactsPersisted(bgLogger, extractionResult.Value.Facts.Count);
+        }
+        catch (Exception ex)
+        {
+            LogBackgroundFactExtractionFailed(bgLogger, ex);
+        }
+    }
+
+    private static async Task IncrementAiMessageCountAsync(
+        IGenericRepository<User> bgUserRepo,
+        IUnitOfWork bgUnitOfWork,
+        Guid userId,
+        ILogger bgLogger)
+    {
+        try
+        {
+            var userForIncrement = await bgUserRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: CancellationToken.None);
+            userForIncrement?.IncrementAiMessageCount();
+            await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            LogBackgroundMessageCounterFailed(bgLogger, ex);
+        }
+    }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Processing chat message: '{Message}'")]
     private static partial void LogProcessingChatMessage(ILogger logger, string message);
@@ -382,6 +465,21 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "   Save changes: {SaveMs}ms")]
     private static partial void LogSaveChangesTime(ILogger logger, long saveMs);
+
+    [LoggerMessage(EventId = 19, Level = LogLevel.Information, Message = "Fetching context from database...")]
+    private static partial void LogFetchingContext(ILogger logger);
+
+    [LoggerMessage(EventId = 20, Level = LogLevel.Information, Message = "Saving changes to database...")]
+    private static partial void LogSavingChanges(ILogger logger);
+
+    [LoggerMessage(EventId = 21, Level = LogLevel.Warning, Message = "Background fact extraction failed")]
+    private static partial void LogBackgroundFactExtractionFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Background message counter increment failed")]
+    private static partial void LogBackgroundMessageCounterFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
+    private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);
 
     /// <summary>
     /// Converts snake_case tool names to PascalCase for backward compatibility with the frontend.

@@ -8,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Gamification.Services;
 
-public class GamificationService(
+public partial class GamificationService(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
@@ -511,7 +511,7 @@ public class GamificationService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Push notification failed for achievement {AchievementId} for user {UserId}", achievement.Id, userId);
+            LogPushNotificationFailedForAchievement(logger, ex, achievement.Id, userId);
         }
     }
 
@@ -536,8 +536,14 @@ public class GamificationService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Push notification failed for level up to level {Level} for user {UserId}", newLevel.Level, userId);
+            LogPushNotificationFailedForLevelUp(logger, ex, newLevel.Level, userId);
         }
     }
 
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Push notification failed for achievement {AchievementId} for user {UserId}")]
+    private static partial void LogPushNotificationFailedForAchievement(ILogger logger, Exception ex, string achievementId, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Push notification failed for level up to level {Level} for user {UserId}")]
+    private static partial void LogPushNotificationFailedForLevelUp(ILogger logger, Exception ex, int level, Guid userId);
 }

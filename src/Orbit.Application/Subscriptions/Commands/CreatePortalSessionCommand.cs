@@ -11,7 +11,7 @@ namespace Orbit.Application.Subscriptions.Commands;
 
 public record CreatePortalSessionCommand(Guid UserId) : IRequest<Result<PortalResponse>>;
 
-public class CreatePortalSessionCommandHandler(
+public partial class CreatePortalSessionCommandHandler(
     IGenericRepository<User> userRepository,
     IOptions<StripeSettings> stripeSettings,
     Stripe.BillingPortal.SessionService portalSessionService,
@@ -40,8 +40,11 @@ public class CreatePortalSessionCommandHandler(
         }
         catch (StripeException ex)
         {
-            logger.LogError(ex, "Stripe API error during portal creation for user {UserId}", request.UserId);
+            LogStripePortalError(logger, ex, request.UserId);
             return Result.Failure<PortalResponse>("Payment service temporarily unavailable");
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Stripe API error during portal creation for user {UserId}")]
+    private static partial void LogStripePortalError(ILogger logger, Exception ex, Guid userId);
 }

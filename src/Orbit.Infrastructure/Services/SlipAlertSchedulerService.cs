@@ -23,7 +23,7 @@ public partial class SlipAlertSchedulerService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("SlipAlertSchedulerService started");
+        LogServiceStarted(logger);
 
         try
         {
@@ -36,7 +36,7 @@ public partial class SlipAlertSchedulerService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Error in slip alert scheduler");
+                    LogServiceError(logger, ex);
                 }
 
                 await Task.Delay(_interval, stoppingToken);
@@ -44,7 +44,7 @@ public partial class SlipAlertSchedulerService(
         }
         finally
         {
-            logger.LogInformation("SlipAlertSchedulerService stopped");
+            LogServiceStopped(logger);
         }
     }
 
@@ -93,68 +93,111 @@ public partial class SlipAlertSchedulerService(
 
         foreach (var habit in habits)
         {
-            if (!users.TryGetValue(habit.UserId, out var user)) continue;
+            var alertSent = await ProcessHabitSlipAlertAsync(
+                habit, users, logsByHabit, sentAlertHabitIds,
+                pushService, messageService, dbContext, ct);
 
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var userToday = DateOnly.FromDateTime(userNow);
-            var userTimeNow = TimeOnly.FromDateTime(userNow);
-
-            // Use pre-loaded logs for pattern detection
-            var logs = logsByHabit.GetValueOrDefault(habit.Id) ?? [];
-            var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, tz);
-            if (pattern is null) continue;
-
-            // Check if today matches the pattern's day of week
-            if (userNow.DayOfWeek != pattern.DayOfWeek) continue;
-
-            // Calculate alert time:
-            // - If time pattern exists: 2 hours before peak, clamped to 8:00-22:00
-            // - If day-only pattern: send at 8:00 AM (early morning heads-up)
-            var alertHour = pattern.PeakHour.HasValue
-                ? Math.Clamp(pattern.PeakHour.Value - 2, 8, 22)
-                : DefaultMorningHour;
-            var alertTime = new TimeOnly(alertHour, 0);
-
-            // Check if we're within the 5-minute send window
-            var diffMinutes = (userTimeNow - alertTime).TotalMinutes;
-            if (diffMinutes < 0 || diffMinutes >= 5) continue;
-
-            // Check weekly idempotency using pre-loaded set
-            if (sentAlertHabitIds.Contains(habit.Id)) continue;
-
-            // Generate AI message
-            var lang = user.Language ?? "en";
-            var messageResult = await messageService.GenerateMessageAsync(
-                habit.Title, pattern.DayOfWeek, pattern.PeakHour, lang, ct);
-
-            if (messageResult.IsFailure)
-            {
-                logger.LogWarning("Failed to generate slip alert message for habit {HabitId}", habit.Id);
-                continue;
-            }
-
-            var (title, body) = messageResult.Value;
-
-            await pushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
-
-            // Record sent alert + create in-app notification
-            var daysToMonday = ((int)userToday.DayOfWeek - 1 + 7) % 7;
-            var weekStart = userToday.AddDays(-daysToMonday);
-            var sentAlert = SentSlipAlert.Create(habit.Id, weekStart);
-            await dbContext.SentSlipAlerts.AddAsync(sentAlert, ct);
-
-            var notification = Notification.Create(habit.UserId, title, body, "/", habit.Id);
-            await dbContext.Notifications.AddAsync(notification, ct);
-
-            // Track in memory to prevent duplicate sends within the same scheduler tick
-            sentAlertHabitIds.Add(habit.Id);
-            anyChanges = true;
-
-            logger.LogInformation("Sent slip alert for habit {HabitId} to user {UserId}", habit.Id, habit.UserId);
+            if (alertSent) anyChanges = true;
         }
 
         if (anyChanges)
             await dbContext.SaveChangesAsync(ct);
     }
+
+    private async Task<bool> ProcessHabitSlipAlertAsync(
+        Habit habit,
+        Dictionary<Guid, User> users,
+        Dictionary<Guid, List<HabitLog>> logsByHabit,
+        HashSet<Guid> sentAlertHabitIds,
+        IPushNotificationService pushService,
+        ISlipAlertMessageService messageService,
+        OrbitDbContext dbContext,
+        CancellationToken ct)
+    {
+        if (!users.TryGetValue(habit.UserId, out var user)) return false;
+
+        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var userTimeNow = TimeOnly.FromDateTime(userNow);
+
+        var logs = logsByHabit.GetValueOrDefault(habit.Id) ?? [];
+        var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, tz);
+        if (pattern is null) return false;
+
+        if (userNow.DayOfWeek != pattern.DayOfWeek) return false;
+
+        var alertTime = CalculateAlertTime(pattern.PeakHour);
+        if (!IsWithinSendWindow(userTimeNow, alertTime)) return false;
+
+        if (sentAlertHabitIds.Contains(habit.Id)) return false;
+
+        var lang = user.Language ?? "en";
+        var messageResult = await messageService.GenerateMessageAsync(
+            habit.Title, pattern.DayOfWeek, pattern.PeakHour, lang, ct);
+
+        if (messageResult.IsFailure)
+        {
+            LogSlipAlertMessageFailed(logger, habit.Id);
+            return false;
+        }
+
+        var (title, body) = messageResult.Value;
+
+        await pushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
+
+        await RecordSentAlertAsync(habit, userNow, title, body, dbContext, ct);
+
+        sentAlertHabitIds.Add(habit.Id);
+        LogSentSlipAlert(logger, habit.Id, habit.UserId);
+        return true;
+    }
+
+    /// <summary>
+    /// If a time pattern exists: 2 hours before peak, clamped to 8:00-22:00.
+    /// If day-only pattern: send at 8:00 AM (early morning heads-up).
+    /// </summary>
+    private static TimeOnly CalculateAlertTime(int? peakHour)
+    {
+        var alertHour = peakHour.HasValue
+            ? Math.Clamp(peakHour.Value - 2, 8, 22)
+            : DefaultMorningHour;
+
+        return new TimeOnly(alertHour, 0);
+    }
+
+    private static bool IsWithinSendWindow(TimeOnly userTimeNow, TimeOnly alertTime)
+    {
+        var diffMinutes = (userTimeNow - alertTime).TotalMinutes;
+        return diffMinutes >= 0 && diffMinutes < 5;
+    }
+
+    private static async Task RecordSentAlertAsync(
+        Habit habit, DateTime userNow, string title, string body,
+        OrbitDbContext dbContext, CancellationToken ct)
+    {
+        var userToday = DateOnly.FromDateTime(userNow);
+        var daysToMonday = ((int)userToday.DayOfWeek - 1 + 7) % 7;
+        var weekStart = userToday.AddDays(-daysToMonday);
+        var sentAlert = SentSlipAlert.Create(habit.Id, weekStart);
+        await dbContext.SentSlipAlerts.AddAsync(sentAlert, ct);
+
+        var notification = Notification.Create(habit.UserId, title, body, "/", habit.Id);
+        await dbContext.Notifications.AddAsync(notification, ct);
+    }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "SlipAlertSchedulerService started")]
+    private static partial void LogServiceStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "SlipAlertSchedulerService stopped")]
+    private static partial void LogServiceStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in slip alert scheduler")]
+    private static partial void LogServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to generate slip alert message for habit {HabitId}")]
+    private static partial void LogSlipAlertMessageFailed(ILogger logger, Guid habitId);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Sent slip alert for habit {HabitId} to user {UserId}")]
+    private static partial void LogSentSlipAlert(ILogger logger, Guid habitId, Guid userId);
+
 }

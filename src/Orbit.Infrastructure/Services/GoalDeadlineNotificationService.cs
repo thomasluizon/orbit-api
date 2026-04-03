@@ -23,7 +23,7 @@ public partial class GoalDeadlineNotificationService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("GoalDeadlineNotificationService started");
+        LogServiceStarted(logger);
 
         try
         {
@@ -36,7 +36,7 @@ public partial class GoalDeadlineNotificationService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Error in goal deadline notification service");
+                    LogServiceError(logger, ex);
                 }
 
                 await Task.Delay(_interval, stoppingToken);
@@ -44,7 +44,7 @@ public partial class GoalDeadlineNotificationService(
         }
         finally
         {
-            logger.LogInformation("GoalDeadlineNotificationService stopped");
+            LogServiceStopped(logger);
         }
     }
 
@@ -128,13 +128,24 @@ public partial class GoalDeadlineNotificationService(
                 sentKeys.Add(notificationKey);
                 anyChanges = true;
 
-                logger.LogInformation(
-                    "Sent deadline notification ({Days}d before) for goal {GoalId} to user {UserId}",
-                    daysBefore, goal.Id, goal.UserId);
+                LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
             }
         }
 
         if (anyChanges)
             await dbContext.SaveChangesAsync(ct);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "GoalDeadlineNotificationService started")]
+    private static partial void LogServiceStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "GoalDeadlineNotificationService stopped")]
+    private static partial void LogServiceStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in goal deadline notification service")]
+    private static partial void LogServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sent deadline notification ({Days}d before) for goal {GoalId} to user {UserId}")]
+    private static partial void LogSentDeadlineNotification(ILogger logger, int days, Guid goalId, Guid userId);
+
 }

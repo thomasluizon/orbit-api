@@ -99,6 +99,21 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
     public record MoveHabitParentRequest(Guid? ParentId);
 
+    public record GetHabitsFilterRequest
+    {
+        public DateOnly? DateFrom { get; init; }
+        public DateOnly? DateTo { get; init; }
+        public bool IncludeOverdue { get; init; }
+        public string? Search { get; init; }
+        public string? FrequencyUnit { get; init; }
+        public bool? IsCompleted { get; init; }
+        public Guid[]? TagIds { get; init; }
+        public bool? IsGeneral { get; init; }
+        public int Page { get; init; } = 1;
+        public int PageSize { get; init; } = 50;
+        public bool IncludeGeneral { get; init; }
+    }
+
     public record CreateSubHabitRequest(
         string Title,
         string? Description = null,
@@ -124,32 +139,22 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetHabits(
-        [FromQuery] DateOnly? dateFrom = null,
-        [FromQuery] DateOnly? dateTo = null,
-        [FromQuery] bool includeOverdue = false,
-        [FromQuery] string? search = null,
-        [FromQuery] string? frequencyUnit = null,
-        [FromQuery] bool? isCompleted = null,
-        [FromQuery] Guid[]? tagIds = null,
-        [FromQuery] bool? isGeneral = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
-        [FromQuery] bool includeGeneral = false,
+        [FromQuery] GetHabitsFilterRequest filter,
         CancellationToken cancellationToken = default)
     {
         var query = new GetHabitScheduleQuery(
             HttpContext.GetUserId(),
-            dateFrom,
-            dateTo,
-            includeOverdue,
-            search,
-            frequencyUnit,
-            isCompleted,
-            tagIds is { Length: > 0 } ? tagIds : null,
-            isGeneral,
-            page,
-            pageSize,
-            includeGeneral);
+            filter.DateFrom,
+            filter.DateTo,
+            filter.IncludeOverdue,
+            filter.Search,
+            filter.FrequencyUnit,
+            filter.IsCompleted,
+            filter.TagIds is { Length: > 0 } ? filter.TagIds : null,
+            filter.IsGeneral,
+            filter.Page,
+            filter.PageSize,
+            filter.IncludeGeneral);
         var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }

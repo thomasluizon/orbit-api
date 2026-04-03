@@ -121,9 +121,13 @@ public class QueryHabitsTool(
             return (null, false);
 
         var dateStr = dateEl.GetString() ?? string.Empty;
-        var date = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase)
-            ? today
-            : DateOnly.TryParseExact(dateStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : today;
+        DateOnly date;
+        if (dateStr.Equals("today", StringComparison.OrdinalIgnoreCase))
+            date = today;
+        else if (DateOnly.TryParseExact(dateStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            date = parsed;
+        else
+            date = today;
 
         var includeOverdue = dateStr.Equals("today", StringComparison.OrdinalIgnoreCase);
         if (args.TryGetProperty("include_overdue", out var overdueEl))

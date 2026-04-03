@@ -28,7 +28,7 @@ public partial class HandleWebhookCommandHandler(
 
         if (string.IsNullOrEmpty(_settings.WebhookSecret))
         {
-            logger.LogCritical("Stripe WebhookSecret is not configured -- rejecting webhook");
+            LogWebhookSecretNotConfigured(logger);
             return Result.Failure("Webhook secret not configured");
         }
 
@@ -43,7 +43,7 @@ public partial class HandleWebhookCommandHandler(
         }
         catch (StripeException ex)
         {
-            logger.LogError(ex, "Stripe webhook signature verification failed");
+            LogWebhookSignatureVerificationFailed(logger, ex);
             return Result.Failure("Invalid webhook signature");
         }
 
@@ -90,7 +90,7 @@ public partial class HandleWebhookCommandHandler(
         if (session?.Metadata?.TryGetValue("userId", out var userIdStr) != true
             || !Guid.TryParse(userIdStr, out var uid))
         {
-            logger.LogWarning("Could not extract userId from checkout session metadata");
+            LogCheckoutUserIdExtractionFailed(logger);
             return;
         }
 
@@ -227,6 +227,15 @@ public partial class HandleWebhookCommandHandler(
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Subscription updated: {SubId}, status={Status}")]
     private static partial void LogSubscriptionUpdated(ILogger logger, string? subId, string? status);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Critical, Message = "Stripe WebhookSecret is not configured -- rejecting webhook")]
+    private static partial void LogWebhookSecretNotConfigured(ILogger logger);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Error, Message = "Stripe webhook signature verification failed")]
+    private static partial void LogWebhookSignatureVerificationFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "Could not extract userId from checkout session metadata")]
+    private static partial void LogCheckoutUserIdExtractionFailed(ILogger logger);
 
     private static SubscriptionInterval GetSubscriptionInterval(Subscription subscription)
     {

@@ -32,7 +32,7 @@ public class ApiKeyAuthenticationHandler(
         var candidates = await apiKeyRepository.FindTrackedAsync(
             k => k.KeyPrefix == keyPrefix && !k.IsRevoked);
 
-        foreach (var candidate in candidates)
+        foreach (var candidate in candidates) // S3267: BCrypt.Verify is expensive; foreach with early return is intentional
         {
             if (BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash))
             {

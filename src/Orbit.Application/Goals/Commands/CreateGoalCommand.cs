@@ -16,7 +16,7 @@ public record CreateGoalCommand(
     DateOnly? Deadline,
     int Position = 0) : IRequest<Result<Guid>>;
 
-public class CreateGoalCommandHandler(
+public partial class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
     IGamificationService gamificationService,
@@ -52,9 +52,12 @@ public class CreateGoalCommandHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Gamification processing failed for goal creation by user {UserId}", request.UserId);
+            LogGamificationGoalCreationFailed(logger, ex, request.UserId);
         }
 
         return Result.Success(goal.Id);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal creation by user {UserId}")]
+    private static partial void LogGamificationGoalCreationFailed(ILogger logger, Exception ex, Guid userId);
 }

@@ -11,6 +11,7 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class GoalTools(IMediator mediator)
 {
+    private static readonly System.Text.Json.JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
     [McpServerTool(Name = "list_goals"), Description("List all goals for the authenticated user.")]
     public async Task<string> ListGoals(
         ClaimsPrincipal user,
@@ -179,7 +180,7 @@ public class GoalTools(IMediator mediator)
         var userId = GetUserId(user);
         var items = System.Text.Json.JsonSerializer.Deserialize<List<GoalPositionDto>>(
             positionsJson,
-            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            CaseInsensitiveJsonOptions)
             ?? [];
 
         var positions = items.Select(p => new GoalPositionUpdate(Guid.Parse(p.Id), p.Position)).ToList();

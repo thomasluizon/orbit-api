@@ -22,7 +22,7 @@ public record CalendarEventItem(
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>;
 
-public class GetCalendarEventsQueryHandler(
+public partial class GetCalendarEventsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGoogleTokenService googleTokenService,
@@ -120,7 +120,7 @@ public class GetCalendarEventsQueryHandler(
                             var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
                             rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
                         }
-                        catch (Exception ex) { logger.LogWarning(ex, "Failed to fetch master event RRULE for recurring event {EventId}", ev.RecurringEventId); rrule = null; }
+                        catch (Exception ex) { LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId); rrule = null; }
                         masterRRuleCache[ev.RecurringEventId] = rrule;
                     }
                 }
@@ -152,8 +152,14 @@ public class GetCalendarEventsQueryHandler(
         }
         catch (Google.GoogleApiException ex)
         {
-            logger.LogError(ex, "Google Calendar API error for user {UserId}", request.UserId);
+            LogGoogleCalendarApiError(logger, ex, request.UserId);
             return Result.Failure<List<CalendarEventItem>>("Failed to fetch calendar events. Please try again.");
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch master event RRULE for recurring event {EventId}")]
+    private static partial void LogFetchMasterRruleFailed(ILogger logger, Exception ex, string? eventId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]
+    private static partial void LogGoogleCalendarApiError(ILogger logger, Exception ex, Guid userId);
 }

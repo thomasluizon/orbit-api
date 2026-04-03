@@ -25,7 +25,7 @@ public record BulkLogItemResult(
     Guid? LogId = null,
     string? Error = null);
 
-public class BulkLogHabitsCommandHandler(
+public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService,
@@ -130,7 +130,7 @@ public class BulkLogHabitsCommandHandler(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error processing bulk item {HabitId}", habitId);
+                LogBulkLogItemError(logger, ex, habitId);
                 results.Add(new BulkLogItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,
@@ -149,7 +149,7 @@ public class BulkLogHabitsCommandHandler(
             {
                 await gamificationService.ProcessHabitLogged(request.UserId, item.HabitId, cancellationToken);
             }
-            catch (Exception ex) { logger.LogWarning(ex, "Gamification processing failed for habit {HabitId}", item.HabitId); }
+            catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, item.HabitId); }
         }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
@@ -157,4 +157,9 @@ public class BulkLogHabitsCommandHandler(
         return Result.Success(new BulkLogResult(results));
     }
 
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Error processing bulk item {HabitId}")]
+    private static partial void LogBulkLogItemError(ILogger logger, Exception ex, Guid habitId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for habit {HabitId}")]
+    private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid habitId);
 }

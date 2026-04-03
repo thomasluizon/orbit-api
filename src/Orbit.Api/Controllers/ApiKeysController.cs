@@ -10,7 +10,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/api-keys")]
-public class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> logger) : ControllerBase
+public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> logger) : ControllerBase
 {
     public record CreateApiKeyRequest(string Name);
 
@@ -28,7 +28,7 @@ public class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> lo
 
         return result.ToPayGateAwareResult(value =>
         {
-            logger.LogInformation("API key created {KeyId} by user {UserId}", value.Id, HttpContext.GetUserId());
+            LogApiKeyCreated(logger, value.Id, HttpContext.GetUserId());
             return Created($"/api/api-keys/{value.Id}", value);
         });
     }
@@ -55,9 +55,15 @@ public class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> lo
 
         if (result.IsSuccess)
         {
-            logger.LogInformation("API key revoked {KeyId} by user {UserId}", id, HttpContext.GetUserId());
+            LogApiKeyRevoked(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return NotFound(new { error = result.Error });
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "API key created {KeyId} by user {UserId}")]
+    private static partial void LogApiKeyCreated(ILogger logger, Guid keyId, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "API key revoked {KeyId} by user {UserId}")]
+    private static partial void LogApiKeyRevoked(ILogger logger, Guid keyId, Guid userId);
 }

@@ -17,7 +17,7 @@ public partial class AccountDeletionService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("AccountDeletionService started");
+        LogServiceStarted(logger);
 
         try
         {
@@ -31,7 +31,7 @@ public partial class AccountDeletionService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    logger.LogError(ex, "Error in account deletion service");
+                    LogServiceError(logger, ex);
                 }
 
                 await Task.Delay(_interval, stoppingToken);
@@ -39,7 +39,7 @@ public partial class AccountDeletionService(
         }
         finally
         {
-            logger.LogInformation("AccountDeletionService stopped");
+            LogServiceStopped(logger);
         }
     }
 
@@ -55,7 +55,7 @@ public partial class AccountDeletionService(
         if (usersToDelete.Count == 0)
             return;
 
-        logger.LogInformation("Processing {Count} scheduled account deletions", usersToDelete.Count);
+        LogProcessingDeletions(logger, usersToDelete.Count);
 
         foreach (var user in usersToDelete)
         {
@@ -69,11 +69,11 @@ public partial class AccountDeletionService(
                     deleteContext.Users.Remove(userToDelete);
                     await deleteContext.SaveChangesAsync(ct);
                 }
-                logger.LogInformation("Deleted deactivated account {UserId}", user.Id);
+                LogAccountDeleted(logger, user.Id);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to delete account {UserId}", user.Id);
+                LogAccountDeletionFailed(logger, ex, user.Id);
             }
         }
     }
@@ -89,14 +89,33 @@ public partial class AccountDeletionService(
             .Where(r => r.Date < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        var cutoffWeek = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
         var deletedSlipAlerts = await dbContext.SentSlipAlerts
-            .Where(a => a.WeekStart < cutoffWeek)
+            .Where(a => a.WeekStart < cutoff)
             .ExecuteDeleteAsync(ct);
 
         if (deletedReminders > 0 || deletedSlipAlerts > 0)
-            logger.LogInformation(
-                "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days",
-                deletedReminders, deletedSlipAlerts);
+            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "AccountDeletionService started")]
+    private static partial void LogServiceStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AccountDeletionService stopped")]
+    private static partial void LogServiceStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in account deletion service")]
+    private static partial void LogServiceError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Processing {Count} scheduled account deletions")]
+    private static partial void LogProcessingDeletions(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Deleted deactivated account {UserId}")]
+    private static partial void LogAccountDeleted(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to delete account {UserId}")]
+    private static partial void LogAccountDeletionFailed(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days")]
+    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts);
+
 }

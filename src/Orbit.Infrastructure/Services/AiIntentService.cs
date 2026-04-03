@@ -115,14 +115,14 @@ public sealed partial class AiIntentService(
     {
         try
         {
-            logger.LogInformation("Calling AI API with tools...");
+            LogCallingAiWithTools(logger);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var completion = await aiClient.ChatClient.CompleteChatAsync(
                 _conversationMessages!, _conversationOptions!, cancellationToken);
 
             stopwatch.Stop();
-            logger.LogInformation("AI API responded in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+            LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
             var result = completion.Value;
 
@@ -140,8 +140,7 @@ public sealed partial class AiIntentService(
                     })
                     .ToList();
 
-                logger.LogInformation("AI returned {Count} tool call(s): {Names}",
-                    toolCalls.Count,
+                LogAiReturnedToolCalls(logger, toolCalls.Count,
                     string.Join(", ", toolCalls.Select(tc => tc.Name)));
 
                 return Result.Success(new AiResponse { ToolCalls = toolCalls });
@@ -152,17 +151,17 @@ public sealed partial class AiIntentService(
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<AiResponse>("AI returned neither tool calls nor text.");
 
-            logger.LogInformation("AI returned text response (length: {Length} chars)", text.Length);
+            LogAiReturnedTextResponse(logger, text.Length);
             return Result.Success(new AiResponse { TextMessage = text });
         }
         catch (JsonException ex)
         {
-            logger.LogError(ex, "Failed to deserialize AI function-calling response");
+            LogAiDeserializationFailed(logger, ex);
             return Result.Failure<AiResponse>("AI service temporarily unavailable");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "AI API call failed");
+            LogAiApiCallFailed(logger, ex);
             return Result.Failure<AiResponse>("AI service temporarily unavailable");
         }
     }
@@ -194,4 +193,23 @@ public sealed partial class AiIntentService(
         return SchemaTypeRegex().Replace(json,
             m => $@"""type"":""{m.Groups[1].Value.ToLowerInvariant()}""");
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API with tools...")]
+    private static partial void LogCallingAiWithTools(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI API responded in {ElapsedMs}ms")]
+    private static partial void LogAiApiResponded(ILogger logger, long elapsedMs);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI returned {Count} tool call(s): {Names}")]
+    private static partial void LogAiReturnedToolCalls(ILogger logger, int count, string names);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "AI returned text response (length: {Length} chars)")]
+    private static partial void LogAiReturnedTextResponse(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to deserialize AI function-calling response")]
+    private static partial void LogAiDeserializationFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "AI API call failed")]
+    private static partial void LogAiApiCallFailed(ILogger logger, Exception ex);
+
 }

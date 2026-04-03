@@ -3,7 +3,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Services;
 
-public class GeoLocationService(HttpClient httpClient, ILogger<GeoLocationService> logger) : IGeoLocationService
+public partial class GeoLocationService(HttpClient httpClient, ILogger<GeoLocationService> logger) : IGeoLocationService
 {
     public async Task<string> GetCountryCodeAsync(string? ipAddress, CancellationToken ct = default)
     {
@@ -20,8 +20,12 @@ public class GeoLocationService(HttpClient httpClient, ILogger<GeoLocationServic
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Geolocation lookup failed for IP {IP}, defaulting to US", ipAddress);
+            LogGeolocationLookupFailed(logger, ex, ipAddress);
             return "US";
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Geolocation lookup failed for IP {Ip}, defaulting to US")]
+    private static partial void LogGeolocationLookupFailed(ILogger logger, Exception ex, string? ip);
+
 }
