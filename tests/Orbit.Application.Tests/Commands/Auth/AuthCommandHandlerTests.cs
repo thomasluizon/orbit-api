@@ -10,7 +10,7 @@ namespace Orbit.Application.Tests.Commands.Auth;
 
 public class AuthCommandHandlerTests
 {
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();

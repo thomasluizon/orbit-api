@@ -262,4 +262,87 @@ public class FuzzyMatcherTests
     {
         FuzzyMatcher.FuzzyContains(text, term).Should().Be(expected);
     }
+
+    // --- Additional edge cases ---
+
+    [Fact]
+    public void FuzzyContains_SpecialCharacters_ExactMatch()
+    {
+        FuzzyMatcher.FuzzyContains("C++ programming", "C++").Should().BeTrue();
+    }
+
+    [Fact]
+    public void FuzzyContains_SpecialCharacters_NoMatch()
+    {
+        FuzzyMatcher.FuzzyContains("C++ programming", "Java").Should().BeFalse();
+    }
+
+    [Fact]
+    public void FuzzyContains_MultipleSpacesInTerm_SplitCorrectly()
+    {
+        // Extra spaces between words
+        FuzzyMatcher.FuzzyContains("Daily morning exercise", "daily   exercise").Should().BeTrue();
+    }
+
+    [Fact]
+    public void FuzzyContains_SingleWordText_ExactMatch()
+    {
+        FuzzyMatcher.FuzzyContains("exercise", "exercise").Should().BeTrue();
+    }
+
+    [Fact]
+    public void FuzzyContains_SingleWordText_FuzzyMatch()
+    {
+        FuzzyMatcher.FuzzyContains("exercise", "exrcise").Should().BeTrue();
+    }
+
+    [Fact]
+    public void FuzzyContains_SingleWordText_NoMatch()
+    {
+        FuzzyMatcher.FuzzyContains("exercise", "sleeping").Should().BeFalse();
+    }
+
+    [Fact]
+    public void LevenshteinDistance_LongStrings_CalculatesCorrectly()
+    {
+        // "programming" vs "programing" - 1 deletion
+        FuzzyMatcher.LevenshteinDistance("programming", "programing").Should().Be(1);
+    }
+
+    [Fact]
+    public void FuzzyContains_NumbersInText_MatchesExact()
+    {
+        FuzzyMatcher.FuzzyContains("Run 5km daily", "5km").Should().BeTrue();
+    }
+
+    [Fact]
+    public void FuzzyContains_MixedCase_AllVariations()
+    {
+        FuzzyMatcher.FuzzyContains("DAILY Exercise", "daily exercise").Should().BeTrue();
+        FuzzyMatcher.FuzzyContains("daily exercise", "DAILY EXERCISE").Should().BeTrue();
+        FuzzyMatcher.FuzzyContains("DaIlY eXeRcIsE", "daily exercise").Should().BeTrue();
+    }
+
+    [Fact]
+    public void FuzzyContains_ThreeWordSearch_AllMustMatch()
+    {
+        FuzzyMatcher.FuzzyContains("Morning daily exercise routine", "morning daily exercise").Should().BeTrue();
+        FuzzyMatcher.FuzzyContains("Morning daily exercise routine", "morning daily cooking").Should().BeFalse();
+    }
+
+    [Fact]
+    public void FuzzyContains_ExactSubstring_MiddleOfWord()
+    {
+        FuzzyMatcher.FuzzyContains("unexercised", "exercise").Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("ab", "ab", 0)]
+    [InlineData("ab", "cd", 2)]
+    [InlineData("abc", "aec", 1)]
+    [InlineData("abc", "abc", 0)]
+    public void LevenshteinDistance_ShortStrings(string a, string b, int expected)
+    {
+        FuzzyMatcher.LevenshteinDistance(a, b).Should().Be(expected);
+    }
 }

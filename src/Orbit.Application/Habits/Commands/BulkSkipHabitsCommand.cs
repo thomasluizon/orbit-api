@@ -46,111 +46,18 @@ public class BulkSkipHabitsCommandHandler(
         for (int i = 0; i < request.Items.Count; i++)
         {
             var item = request.Items[i];
-            var habitId = item.HabitId;
             var targetDate = item.Date ?? today;
 
             try
             {
-                if (targetDate > today)
-                {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Cannot skip a future date."));
-                    continue;
-                }
-
-                if (!habitMap.TryGetValue(habitId, out var habit))
-                {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: ErrorMessages.HabitNotFound));
-                    continue;
-                }
-
-                if (habit.IsCompleted)
-                {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Cannot skip a completed habit."));
-                    continue;
-                }
-
-                if (habit.FrequencyUnit is null)
-                {
-                    // One-time task: postpone to tomorrow
-                    habit.PostponeTo(today.AddDays(1));
-                    results.Add(new BulkSkipItemResult(Index: i, Status: BulkItemStatus.Success, HabitId: habitId));
-                    continue;
-                }
-
-                if (!habit.IsFlexible && habit.DueDate > targetDate)
-                {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Cannot skip a habit that is not yet due."));
-                    continue;
-                }
-
-                if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
-                {
-                    results.Add(new BulkSkipItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Habit is not scheduled on this date."));
-                    continue;
-                }
-
-                if (habit.IsFlexible)
-                {
-                    var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
-                    if (remaining <= 0)
-                    {
-                        results.Add(new BulkSkipItemResult(
-                            Index: i,
-                            Status: BulkItemStatus.Failed,
-                            HabitId: habitId,
-                            Error: "All instances for this period have already been completed or skipped."));
-                        continue;
-                    }
-
-                    var skipResult = habit.SkipFlexible(targetDate);
-                    if (skipResult.IsFailure)
-                    {
-                        results.Add(new BulkSkipItemResult(
-                            Index: i,
-                            Status: BulkItemStatus.Failed,
-                            HabitId: habitId,
-                            Error: skipResult.Error));
-                        continue;
-                    }
-
-                    await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
-                }
-                else
-                {
-                    habit.AdvanceDueDate(targetDate);
-                }
-
-                results.Add(new BulkSkipItemResult(
-                    Index: i,
-                    Status: BulkItemStatus.Success,
-                    HabitId: habitId));
+                results.Add(await ProcessSkipItem(i, item.HabitId, targetDate, today, habitMap, cancellationToken));
             }
             catch (Exception ex)
             {
                 results.Add(new BulkSkipItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,
-                    HabitId: habitId,
+                    HabitId: item.HabitId,
                     Error: ex.Message));
             }
         }
@@ -160,5 +67,57 @@ public class BulkSkipHabitsCommandHandler(
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(new BulkSkipResult(results));
+    }
+
+    private async Task<BulkSkipItemResult> ProcessSkipItem(
+        int index, Guid habitId, DateOnly targetDate, DateOnly today,
+        Dictionary<Guid, Habit> habitMap, CancellationToken cancellationToken)
+    {
+        if (targetDate > today)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Cannot skip a future date.");
+
+        if (!habitMap.TryGetValue(habitId, out var habit))
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.HabitNotFound);
+
+        if (habit.IsCompleted)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Cannot skip a completed habit.");
+
+        if (habit.FrequencyUnit is null)
+        {
+            habit.PostponeTo(today.AddDays(1));
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
+        }
+
+        if (!habit.IsFlexible && habit.DueDate > targetDate)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Cannot skip a habit that is not yet due.");
+
+        if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Habit is not scheduled on this date.");
+
+        if (habit.IsFlexible)
+        {
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+            if (remaining <= 0)
+                return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                    Error: "All instances for this period have already been completed or skipped.");
+
+            var skipResult = habit.SkipFlexible(targetDate);
+            if (skipResult.IsFailure)
+                return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                    Error: skipResult.Error);
+
+            await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
+        }
+        else
+        {
+            habit.AdvanceDueDate(targetDate);
+        }
+
+        return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
     }
 }

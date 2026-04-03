@@ -40,8 +40,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogTagCreated(logger, result.Value, HttpContext.GetUserId());
+            LogTagCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
         return BadRequest(new { error = result.Error });
@@ -61,8 +60,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogTagUpdated(logger, id, HttpContext.GetUserId());
+            LogTagUpdated(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });
@@ -79,8 +77,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogTagDeleted(logger, id, HttpContext.GetUserId());
+            LogTagDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return BadRequest(new { error = result.Error });

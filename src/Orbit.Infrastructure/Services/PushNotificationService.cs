@@ -64,33 +64,41 @@ public partial class PushNotificationService(
         }
 
         foreach (var sub in subs)
+            await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct);
+    }
+
+    private async Task SendFcmToSubscription(
+        Domain.Entities.PushSubscription sub,
+        string title, string body, string? url,
+        List<Domain.Entities.PushSubscription> staleSubscriptions,
+        CancellationToken ct)
+    {
+        var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
+        try
         {
-            try
+            var message = new Message
             {
-                var message = new Message
-                {
-                    Token = sub.Endpoint,
-                    Notification = new Notification { Title = title, Body = body },
-                    Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
-                };
-                await FirebaseMessaging.DefaultInstance.SendAsync(message, ct);
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogFcmPushSent(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
-            }
-            catch (FirebaseMessagingException ex) when (
-                ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
-                ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
-                ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
-            {
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogFcmTokenStale(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
-                staleSubscriptions.Add(sub);
-            }
-            catch (Exception ex)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogFcmPushFailed(logger, ex, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
-            }
+                Token = sub.Endpoint,
+                Notification = new Notification { Title = title, Body = body },
+                Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
+            };
+            await FirebaseMessaging.DefaultInstance!.SendAsync(message, ct);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFcmPushSent(logger, tokenPreview);
+        }
+        catch (FirebaseMessagingException ex) when (
+            ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
+            ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
+            ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFcmTokenStale(logger, tokenPreview);
+            staleSubscriptions.Add(sub);
+        }
+        catch (Exception ex)
+        {
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogFcmPushFailed(logger, ex, tokenPreview);
         }
     }
 
@@ -112,39 +120,47 @@ public partial class PushNotificationService(
         var message = new PushMessage(payload) { TimeToLive = 3600 };
 
         foreach (var sub in subs)
+            await SendWebPushToSubscription(client, sub, message, staleSubscriptions, ct);
+    }
+
+    private async Task SendWebPushToSubscription(
+        PushServiceClient client,
+        Domain.Entities.PushSubscription sub,
+        PushMessage message,
+        List<Domain.Entities.PushSubscription> staleSubscriptions,
+        CancellationToken ct)
+    {
+        try
         {
-            try
+            var pushSub = new Lib.Net.Http.WebPush.PushSubscription
             {
-                var pushSub = new Lib.Net.Http.WebPush.PushSubscription
+                Endpoint = sub.Endpoint,
+                Keys = new Dictionary<string, string>
                 {
-                    Endpoint = sub.Endpoint,
-                    Keys = new Dictionary<string, string>
-                    {
-                        ["p256dh"] = sub.P256dh,
-                        ["auth"] = sub.Auth
-                    }
-                };
-                await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogWebPushSent(logger, sub.Endpoint);
-            }
-            catch (PushServiceClientException ex)
-                when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogWebPushSubscriptionGone(logger, sub.Endpoint);
-                staleSubscriptions.Add(sub);
-            }
-            catch (PushServiceClientException ex)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
-            }
-            catch (Exception ex)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
-            }
+                    ["p256dh"] = sub.P256dh,
+                    ["auth"] = sub.Auth
+                }
+            };
+            await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogWebPushSent(logger, sub.Endpoint);
+        }
+        catch (PushServiceClientException ex)
+            when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                LogWebPushSubscriptionGone(logger, sub.Endpoint);
+            staleSubscriptions.Add(sub);
+        }
+        catch (PushServiceClientException ex)
+        {
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
         }
     }
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).")]

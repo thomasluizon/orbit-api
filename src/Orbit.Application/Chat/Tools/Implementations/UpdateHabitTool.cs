@@ -165,7 +165,7 @@ public class UpdateHabitTool(
         return (frequencyUnit, frequencyQuantity);
     }
 
-    private static IReadOnlyList<DayOfWeek>? ResolveDays(JsonElement args, Habit habit) =>
+    private static List<DayOfWeek>? ResolveDays(JsonElement args, Habit habit) =>
         JsonArgumentParser.PropertyExists(args, "days")
             ? JsonArgumentParser.ParseDays(args)
             : habit.Days.ToList();
@@ -207,17 +207,17 @@ public class UpdateHabitTool(
             ? JsonArgumentParser.GetOptionalBool(args, prop)
             : null;
 
-    private static IReadOnlyList<int>? ResolveOptionalArray(JsonElement args, string prop) =>
+    private static List<int>? ResolveOptionalArray(JsonElement args, string prop) =>
         JsonArgumentParser.PropertyExists(args, prop)
             ? JsonArgumentParser.ParseIntArray(args, prop)
             : null;
 
-    private static IReadOnlyList<ChecklistItem>? ResolveOptionalChecklist(JsonElement args) =>
+    private static List<ChecklistItem>? ResolveOptionalChecklist(JsonElement args) =>
         JsonArgumentParser.PropertyExists(args, "checklist_items")
             ? JsonArgumentParser.ParseChecklistItems(args)
             : null;
 
-    private static IReadOnlyList<ScheduledReminderTime>? ResolveOptionalScheduledReminders(JsonElement args) =>
+    private static List<ScheduledReminderTime>? ResolveOptionalScheduledReminders(JsonElement args) =>
         JsonArgumentParser.PropertyExists(args, "scheduled_reminders")
             ? JsonArgumentParser.ParseScheduledReminders(args)
             : null;

@@ -63,6 +63,106 @@ public class AiToolRegistryTests
         tool.IsReadOnly.Should().BeFalse();
     }
 
+    [Fact]
+    public void GetAll_EmptyRegistry_ReturnsEmptyList()
+    {
+        var registry = new AiToolRegistry(Array.Empty<IAiTool>());
+
+        registry.GetAll().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetTool_EmptyString_ReturnsNull()
+    {
+        var tools = new IAiTool[] { new FakeTool("log_habit") };
+        var registry = new AiToolRegistry(tools);
+
+        registry.GetTool("").Should().BeNull();
+    }
+
+    [Fact]
+    public void GetTool_MixedCaseVariations_FindsTool()
+    {
+        var tools = new IAiTool[] { new FakeTool("Create_Habit") };
+        var registry = new AiToolRegistry(tools);
+
+        registry.GetTool("create_habit").Should().NotBeNull();
+        registry.GetTool("CREATE_HABIT").Should().NotBeNull();
+        registry.GetTool("Create_Habit").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void GetAll_PreservesToolOrder()
+    {
+        var tools = new IAiTool[]
+        {
+            new FakeTool("alpha"),
+            new FakeTool("beta"),
+            new FakeTool("gamma"),
+        };
+        var registry = new AiToolRegistry(tools);
+
+        var all = registry.GetAll();
+        all.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void GetTool_ReturnsCorrectTool_WhenMultipleExist()
+    {
+        var tools = new IAiTool[]
+        {
+            new FakeTool("log_habit"),
+            new FakeTool("create_habit"),
+            new FakeTool("delete_habit"),
+        };
+        var registry = new AiToolRegistry(tools);
+
+        var tool = registry.GetTool("create_habit");
+        tool.Should().NotBeNull();
+        tool!.Name.Should().Be("create_habit");
+    }
+
+    [Fact]
+    public void FakeTool_GetParameterSchema_ReturnsObject()
+    {
+        var tool = new FakeTool("test");
+        var schema = tool.GetParameterSchema();
+        schema.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task FakeTool_ExecuteAsync_ReturnsSuccess()
+    {
+        var tool = new FakeTool("test");
+        var args = JsonSerializer.Deserialize<JsonElement>("{}");
+
+        var result = await tool.ExecuteAsync(args, Guid.NewGuid(), CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ToolResult_DefaultValues()
+    {
+        var result = new ToolResult(true);
+
+        result.Success.Should().BeTrue();
+        result.EntityId.Should().BeNull();
+        result.EntityName.Should().BeNull();
+        result.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToolResult_WithAllFields()
+    {
+        var result = new ToolResult(false, "123", "MyEntity", "Something went wrong");
+
+        result.Success.Should().BeFalse();
+        result.EntityId.Should().Be("123");
+        result.EntityName.Should().Be("MyEntity");
+        result.Error.Should().Be("Something went wrong");
+    }
+
     private class FakeTool(string name, bool isReadOnly = false) : IAiTool
     {
         public string Name => name;

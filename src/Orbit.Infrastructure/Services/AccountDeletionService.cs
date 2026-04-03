@@ -58,25 +58,25 @@ public partial class AccountDeletionService(
         if (logger.IsEnabled(LogLevel.Information))
             LogProcessingDeletions(logger, usersToDelete.Count);
 
-        foreach (var user in usersToDelete)
+        foreach (var userId in usersToDelete.Select(user => user.Id))
         {
             try
             {
                 using var deleteScope = scopeFactory.CreateScope();
                 var deleteContext = deleteScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-                var userToDelete = await deleteContext.Users.FindAsync([user.Id], ct);
+                var userToDelete = await deleteContext.Users.FindAsync([userId], ct);
                 if (userToDelete is not null)
                 {
                     deleteContext.Users.Remove(userToDelete);
                     await deleteContext.SaveChangesAsync(ct);
                 }
                 if (logger.IsEnabled(LogLevel.Information))
-                    LogAccountDeleted(logger, user.Id);
+                    LogAccountDeleted(logger, userId);
             }
             catch (Exception ex)
             {
                 if (logger.IsEnabled(LogLevel.Error))
-                    LogAccountDeletionFailed(logger, ex, user.Id);
+                    LogAccountDeletionFailed(logger, ex, userId);
             }
         }
     }

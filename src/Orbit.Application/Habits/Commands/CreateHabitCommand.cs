@@ -23,10 +23,16 @@ public record CreateHabitCommand(
     IReadOnlyList<Guid>? TagIds = null,
     IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result<Guid>>;
 
+/// <summary>
+/// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).
+/// </summary>
+public record CreateHabitRepositories(
+    IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<Tag> TagRepository,
+    IGenericRepository<Goal> GoalRepository);
+
 public partial class CreateHabitCommandHandler(
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<Tag> tagRepository,
-    IGenericRepository<Goal> goalRepository,
+    CreateHabitRepositories repos,
     IUserDateService userDateService,
     IPayGateService payGate,
     IGamificationService gamificationService,
@@ -36,12 +42,10 @@ public partial class CreateHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
-        // Check habit limit
         var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
 
-        // Check sub-habit access if creating with sub-habits
         if (request.SubHabits is { Count: > 0 })
         {
             var subGateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
@@ -76,62 +80,83 @@ public partial class CreateHabitCommandHandler(
 
         var habit = habitResult.Value;
 
-        if (request.SubHabits is { Count: > 0 })
+        var subResult = await CreateSubHabitsAsync(request, habit.Id, dueDate, opts, cancellationToken);
+        if (subResult.IsFailure)
+            return Result.Failure<Guid>(subResult.Error);
+
+        await LinkTagsAndGoalsAsync(habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
+
+        await repos.HabitRepository.AddAsync(habit, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
+
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
+
+        return Result.Success(habit.Id);
+    }
+
+    private async Task<Result> CreateSubHabitsAsync(
+        CreateHabitCommand request, Guid parentId, DateOnly dueDate,
+        HabitCommandOptions opts, CancellationToken cancellationToken)
+    {
+        if (request.SubHabits is not { Count: > 0 })
+            return Result.Success();
+
+        foreach (var subTitle in request.SubHabits)
         {
-            foreach (var subTitle in request.SubHabits)
-            {
-                var childResult = Habit.Create(new HabitCreateParams(
-                    request.UserId,
-                    subTitle,
-                    request.FrequencyUnit,
-                    request.FrequencyQuantity,
-                    DueDate: request.DueDate ?? dueDate,
-                    ParentHabitId: habit.Id,
-                    IsGeneral: request.IsGeneral,
-                    EndDate: opts.EndDate));
+            var childResult = Habit.Create(new HabitCreateParams(
+                request.UserId,
+                subTitle,
+                request.FrequencyUnit,
+                request.FrequencyQuantity,
+                DueDate: request.DueDate ?? dueDate,
+                ParentHabitId: parentId,
+                IsGeneral: request.IsGeneral,
+                EndDate: opts.EndDate));
 
-                if (childResult.IsFailure)
-                    return Result.Failure<Guid>(childResult.Error);
+            if (childResult.IsFailure)
+                return Result.Failure(childResult.Error);
 
-                await habitRepository.AddAsync(childResult.Value, cancellationToken);
-            }
+            await repos.HabitRepository.AddAsync(childResult.Value, cancellationToken);
         }
 
-        if (request.TagIds is { Count: > 0 })
+        return Result.Success();
+    }
+
+    private async Task LinkTagsAndGoalsAsync(
+        Habit habit, Guid userId, IReadOnlyList<Guid>? tagIds,
+        IReadOnlyList<Guid>? goalIds, CancellationToken cancellationToken)
+    {
+        if (tagIds is { Count: > 0 })
         {
-            var tags = await tagRepository.FindTrackedAsync(
-                t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,
+            var tags = await repos.TagRepository.FindTrackedAsync(
+                t => tagIds.Contains(t.Id) && t.UserId == userId,
                 cancellationToken);
             foreach (var tag in tags)
                 habit.AddTag(tag);
         }
 
-        if (request.GoalIds is { Count: > 0 })
+        if (goalIds is { Count: > 0 })
         {
-            var goals = await goalRepository.FindTrackedAsync(
-                g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,
+            var goals = await repos.GoalRepository.FindTrackedAsync(
+                g => goalIds.Contains(g.Id) && g.UserId == userId,
                 cancellationToken);
             foreach (var goal in goals)
                 habit.AddGoal(goal);
         }
+    }
 
-        await habitRepository.AddAsync(habit, cancellationToken);
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Gamification: process habit creation
+    private async Task ProcessGamificationSafeAsync(Guid userId, CancellationToken cancellationToken)
+    {
         try
         {
-            await gamificationService.ProcessHabitCreated(request.UserId, cancellationToken);
+            await gamificationService.ProcessHabitCreated(userId, cancellationToken);
         }
         catch (Exception ex)
         {
-            LogGamificationHabitCreationFailed(logger, ex, request.UserId);
+            LogGamificationHabitCreationFailed(logger, ex, userId);
         }
-
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
-
-        return Result.Success(habit.Id);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit creation by user {UserId}")]

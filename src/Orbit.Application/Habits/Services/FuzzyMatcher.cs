@@ -43,23 +43,19 @@ public static class FuzzyMatcher
         var searchWords = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var textWords = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var searchWord in searchWords)
-        {
-            var maxDistance = searchWord.Length >= 8 ? 2 : 1;
-            var wordMatched = false;
-            foreach (var textWord in textWords)
-            {
-                if (Math.Abs(searchWord.Length - textWord.Length) > maxDistance)
-                    continue;
-                if (LevenshteinDistance(searchWord, textWord) <= maxDistance)
-                {
-                    wordMatched = true;
-                    break;
-                }
-            }
-            if (!wordMatched) return false;
-        }
+        return searchWords.All(sw => HasFuzzyWordMatch(sw, textWords));
+    }
 
-        return true;
+    private static bool HasFuzzyWordMatch(string searchWord, string[] textWords)
+    {
+        var maxDistance = searchWord.Length >= 8 ? 2 : 1;
+        foreach (var textWord in textWords)
+        {
+            if (Math.Abs(searchWord.Length - textWord.Length) > maxDistance)
+                continue;
+            if (LevenshteinDistance(searchWord, textWord) <= maxDistance)
+                return true;
+        }
+        return false;
     }
 }

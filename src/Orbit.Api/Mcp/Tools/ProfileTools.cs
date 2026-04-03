@@ -71,9 +71,10 @@ public class ProfileTools(IMediator mediator)
         var userId = GetUserId(user);
         var command = new SetAiMemoryCommand(userId, enabled);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"AI memory {(enabled ? "enabled" : "disabled")}"
-            : $"Error: {result.Error}";
+        if (!result.IsSuccess)
+            return $"Error: {result.Error}";
+
+        return enabled ? "AI memory enabled" : "AI memory disabled";
     }
 
     [McpServerTool(Name = "set_ai_summary"), Description("Enable or disable AI daily summary on the Today page.")]
@@ -85,9 +86,10 @@ public class ProfileTools(IMediator mediator)
         var userId = GetUserId(user);
         var command = new SetAiSummaryCommand(userId, enabled);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"AI summary {(enabled ? "enabled" : "disabled")}"
-            : $"Error: {result.Error}";
+        if (!result.IsSuccess)
+            return $"Error: {result.Error}";
+
+        return enabled ? "AI summary enabled" : "AI summary disabled";
     }
 
     [McpServerTool(Name = "set_week_start_day"), Description("Set which day the week starts on.")]
@@ -99,9 +101,10 @@ public class ProfileTools(IMediator mediator)
         var userId = GetUserId(user);
         var command = new SetWeekStartDayCommand(userId, weekStartDay);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Week start day set to {(weekStartDay == 0 ? "Sunday" : "Monday")}"
-            : $"Error: {result.Error}";
+        if (!result.IsSuccess)
+            return $"Error: {result.Error}";
+
+        return weekStartDay == 0 ? "Week start day set to Sunday" : "Week start day set to Monday";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

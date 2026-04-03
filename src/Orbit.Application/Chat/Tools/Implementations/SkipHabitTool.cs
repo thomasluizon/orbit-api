@@ -49,20 +49,30 @@ public class SkipHabitTool(
 
         if (habit.FrequencyUnit is null)
         {
-            // One-time task: postpone to tomorrow
             habit.PostponeTo(today.AddDays(1));
             return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
         }
 
-        DateOnly targetDate = today;
-        if (args.TryGetProperty("date", out var dateEl) && dateEl.ValueKind == JsonValueKind.String)
-        {
-            if (DateOnly.TryParseExact(dateEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
-                targetDate = parsed;
-            else
-                return new ToolResult(false, Error: "Invalid date format. Use YYYY-MM-DD.");
-        }
+        var targetDate = ParseTargetDate(args, today);
+        if (targetDate is null)
+            return new ToolResult(false, Error: "Invalid date format. Use YYYY-MM-DD.");
 
+        return await SkipRecurringHabit(habit, targetDate.Value, today, ct);
+    }
+
+    private static DateOnly? ParseTargetDate(JsonElement args, DateOnly today)
+    {
+        if (!args.TryGetProperty("date", out var dateEl) || dateEl.ValueKind != JsonValueKind.String)
+            return today;
+
+        return DateOnly.TryParseExact(dateEl.GetString(), "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private async Task<ToolResult> SkipRecurringHabit(Habit habit, DateOnly targetDate, DateOnly today, CancellationToken ct)
+    {
         if (targetDate > today)
             return new ToolResult(false, Error: "Cannot skip a future date.");
 

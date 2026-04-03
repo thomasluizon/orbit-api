@@ -14,14 +14,7 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine();
 
         var parents = context.ActiveHabits.Where(h => h.ParentHabitId is null).ToList();
-        var general = parents.Count(h => h.IsGeneral);
-        var todayHabits = context.UserToday.HasValue
-            ? parents.Where(h => !h.IsCompleted && !h.IsGeneral && h.DueDate <= context.UserToday.Value).OrderBy(h => h.Position).ToList()
-            : [];
-        var dueToday = context.UserToday.HasValue
-            ? todayHabits.Count(h => h.DueDate == context.UserToday.Value)
-            : 0;
-        var overdue = todayHabits.Count - dueToday;
+        var (general, dueToday, overdue) = ComputeHabitCounts(parents, context.UserToday);
 
         sb.AppendLine($"## User's Habits ({parents.Count} total, {general} general, {dueToday} due today, {overdue} overdue)");
         sb.AppendLine();
@@ -33,22 +26,7 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine("### All Habits:");
         foreach (var habit in parents.OrderBy(h => h.Position))
         {
-            var labels = new List<string>();
-            if (habit.IsGeneral) labels.Add("GENERAL");
-            else if (!habit.IsCompleted && context.UserToday.HasValue && habit.DueDate < context.UserToday.Value) labels.Add("OVERDUE");
-            else if (!habit.IsCompleted && context.UserToday.HasValue && habit.DueDate == context.UserToday.Value) labels.Add("TODAY");
-            if (habit.IsBadHabit) labels.Add("BAD");
-            if (habit.IsCompleted) labels.Add("COMPLETED");
-            var labelStr = labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "";
-
-            sb.AppendLine($"- \"{SanitizeTitle(habit.Title)}\" | {habit.Id}{labelStr}");
-
-            if (habit.Goals.Count > 0)
-            {
-                var goalNames = string.Join(", ", habit.Goals.Select(g => SanitizeTitle(g.Title)));
-                sb.AppendLine($"  Goals: {goalNames}");
-            }
-
+            AppendHabitEntry(sb, habit, context);
             AppendChildren(sb, context.ActiveHabits, habit.Id, 1);
         }
         sb.AppendLine();
@@ -57,6 +35,43 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine("When user mentions a NEW activity -> use create_habit");
 
         return sb.ToString();
+    }
+
+    private static (int general, int dueToday, int overdue) ComputeHabitCounts(
+        List<Habit> parents, DateOnly? userToday)
+    {
+        var general = parents.Count(h => h.IsGeneral);
+        if (!userToday.HasValue)
+            return (general, 0, 0);
+
+        var todayHabits = parents
+            .Where(h => !h.IsCompleted && !h.IsGeneral && h.DueDate <= userToday.Value)
+            .ToList();
+        var dueToday = todayHabits.Count(h => h.DueDate == userToday.Value);
+        return (general, dueToday, todayHabits.Count - dueToday);
+    }
+
+    private static void AppendHabitEntry(StringBuilder sb, Habit habit, PromptContext context)
+    {
+        var labelStr = BuildHabitLabel(habit, context.UserToday);
+        sb.AppendLine($"- \"{SanitizeTitle(habit.Title)}\" | {habit.Id}{labelStr}");
+
+        if (habit.Goals.Count > 0)
+        {
+            var goalNames = string.Join(", ", habit.Goals.Select(g => SanitizeTitle(g.Title)));
+            sb.AppendLine($"  Goals: {goalNames}");
+        }
+    }
+
+    private static string BuildHabitLabel(Habit habit, DateOnly? userToday)
+    {
+        var labels = new List<string>();
+        if (habit.IsGeneral) labels.Add("GENERAL");
+        else if (!habit.IsCompleted && userToday.HasValue && habit.DueDate < userToday.Value) labels.Add("OVERDUE");
+        else if (!habit.IsCompleted && userToday.HasValue && habit.DueDate == userToday.Value) labels.Add("TODAY");
+        if (habit.IsBadHabit) labels.Add("BAD");
+        if (habit.IsCompleted) labels.Add("COMPLETED");
+        return labels.Count > 0 ? $" [{string.Join(", ", labels)}]" : "";
     }
 
     private static void AppendChildren(StringBuilder sb, IReadOnlyList<Habit> allHabits, Guid parentId, int depth)

@@ -91,11 +91,12 @@ public partial class SlipAlertSchedulerService(
 
         var anyChanges = false;
 
+        var context = new SlipAlertContext(users, logsByHabit, sentAlertHabitIds,
+            pushService, messageService, dbContext);
+
         foreach (var habit in habits)
         {
-            var alertSent = await ProcessHabitSlipAlertAsync(
-                habit, users, logsByHabit, sentAlertHabitIds,
-                pushService, messageService, dbContext, ct);
+            var alertSent = await ProcessHabitSlipAlertAsync(habit, context, ct);
 
             if (alertSent) anyChanges = true;
         }
@@ -104,23 +105,24 @@ public partial class SlipAlertSchedulerService(
             await dbContext.SaveChangesAsync(ct);
     }
 
+    private sealed record SlipAlertContext(
+        Dictionary<Guid, User> Users,
+        Dictionary<Guid, List<HabitLog>> LogsByHabit,
+        HashSet<Guid> SentAlertHabitIds,
+        IPushNotificationService PushService,
+        ISlipAlertMessageService MessageService,
+        OrbitDbContext DbContext);
+
     private async Task<bool> ProcessHabitSlipAlertAsync(
-        Habit habit,
-        Dictionary<Guid, User> users,
-        Dictionary<Guid, List<HabitLog>> logsByHabit,
-        HashSet<Guid> sentAlertHabitIds,
-        IPushNotificationService pushService,
-        ISlipAlertMessageService messageService,
-        OrbitDbContext dbContext,
-        CancellationToken ct)
+        Habit habit, SlipAlertContext ctx, CancellationToken ct)
     {
-        if (!users.TryGetValue(habit.UserId, out var user)) return false;
+        if (!ctx.Users.TryGetValue(habit.UserId, out var user)) return false;
 
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
         var userTimeNow = TimeOnly.FromDateTime(userNow);
 
-        var logs = logsByHabit.GetValueOrDefault(habit.Id) ?? [];
+        var logs = ctx.LogsByHabit.GetValueOrDefault(habit.Id) ?? [];
         var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, tz);
         if (pattern is null) return false;
 
@@ -129,10 +131,10 @@ public partial class SlipAlertSchedulerService(
         var alertTime = CalculateAlertTime(pattern.PeakHour);
         if (!IsWithinSendWindow(userTimeNow, alertTime)) return false;
 
-        if (sentAlertHabitIds.Contains(habit.Id)) return false;
+        if (ctx.SentAlertHabitIds.Contains(habit.Id)) return false;
 
         var lang = user.Language ?? "en";
-        var messageResult = await messageService.GenerateMessageAsync(
+        var messageResult = await ctx.MessageService.GenerateMessageAsync(
             habit.Title, pattern.DayOfWeek, pattern.PeakHour, lang, ct);
 
         if (messageResult.IsFailure)
@@ -144,11 +146,11 @@ public partial class SlipAlertSchedulerService(
 
         var (title, body) = messageResult.Value;
 
-        await pushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
+        await ctx.PushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
 
-        await RecordSentAlertAsync(habit, userNow, title, body, dbContext, ct);
+        await RecordSentAlertAsync(habit, userNow, title, body, ctx.DbContext, ct);
 
-        sentAlertHabitIds.Add(habit.Id);
+        ctx.SentAlertHabitIds.Add(habit.Id);
         if (logger.IsEnabled(LogLevel.Information))
             LogSentSlipAlert(logger, habit.Id, habit.UserId);
         return true;

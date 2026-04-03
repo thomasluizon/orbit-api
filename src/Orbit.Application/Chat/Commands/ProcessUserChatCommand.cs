@@ -524,39 +524,49 @@ public partial class ProcessUserChatCommandHandler(
 
     private static AiAction ParseSingleSubHabit(JsonElement item)
     {
-        string? title = item.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String
-            ? titleEl.GetString() : null;
-        string? description = item.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String
-            ? descEl.GetString() : null;
-
-        FrequencyUnit? frequencyUnit = null;
-        if (item.TryGetProperty("frequency_unit", out var freqEl) && freqEl.ValueKind == JsonValueKind.String
-            && Enum.TryParse<FrequencyUnit>(freqEl.GetString(), true, out var fu))
-            frequencyUnit = fu;
-
-        int? frequencyQuantity = item.TryGetProperty("frequency_quantity", out var fqEl) && fqEl.ValueKind == JsonValueKind.Number
-            ? fqEl.GetInt32() : null;
-
-        List<DayOfWeek>? days = null;
-        if (item.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
-        {
-            days = [];
-            foreach (var dayEl in daysEl.EnumerateArray())
-            {
-                if (dayEl.ValueKind == JsonValueKind.String &&
-                    Enum.TryParse<DayOfWeek>(dayEl.GetString(), true, out var dow))
-                    days.Add(dow);
-            }
-        }
-
         return new AiAction
         {
             Type = AiActionType.SuggestBreakdown,
-            Title = title,
-            Description = description,
-            FrequencyUnit = frequencyUnit,
-            FrequencyQuantity = frequencyQuantity,
-            Days = days
+            Title = GetStringProperty(item, "title"),
+            Description = GetStringProperty(item, "description"),
+            FrequencyUnit = GetEnumProperty<FrequencyUnit>(item, "frequency_unit"),
+            FrequencyQuantity = GetIntProperty(item, "frequency_quantity"),
+            Days = GetDaysProperty(item)
         };
+    }
+
+    private static string? GetStringProperty(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var el) && el.ValueKind == JsonValueKind.String
+            ? el.GetString() : null;
+    }
+
+    private static TEnum? GetEnumProperty<TEnum>(JsonElement element, string propertyName) where TEnum : struct, Enum
+    {
+        return element.TryGetProperty(propertyName, out var el) && el.ValueKind == JsonValueKind.String
+            && Enum.TryParse<TEnum>(el.GetString(), true, out var value)
+            ? value : null;
+    }
+
+    private static int? GetIntProperty(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var el) && el.ValueKind == JsonValueKind.Number
+            ? el.GetInt32() : null;
+    }
+
+    private static List<DayOfWeek>? GetDaysProperty(JsonElement item)
+    {
+        if (!item.TryGetProperty("days", out var daysEl) || daysEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var days = new List<DayOfWeek>();
+        foreach (var dayEl in daysEl.EnumerateArray())
+        {
+            if (dayEl.ValueKind == JsonValueKind.String &&
+                Enum.TryParse<DayOfWeek>(dayEl.GetString(), true, out var dow))
+                days.Add(dow);
+        }
+
+        return days;
     }
 }

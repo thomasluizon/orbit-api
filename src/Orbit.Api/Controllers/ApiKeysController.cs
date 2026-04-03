@@ -28,8 +28,7 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
 
         return result.ToPayGateAwareResult(value =>
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogApiKeyCreated(logger, value.Id, HttpContext.GetUserId());
+            LogApiKeyCreated(logger, value.Id, HttpContext.GetUserId());
             return Created($"/api/api-keys/{value.Id}", value);
         });
     }
@@ -56,8 +55,7 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
 
         if (result.IsSuccess)
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogApiKeyRevoked(logger, id, HttpContext.GetUserId());
+            LogApiKeyRevoked(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
         return NotFound(new { error = result.Error });

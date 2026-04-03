@@ -68,8 +68,8 @@ public sealed partial class AiSummaryService(
     }
 
     private static string BuildSummaryPrompt(
-        IReadOnlyList<Habit> scheduledHabits,
-        IReadOnlyList<Habit> overdueHabits,
+        List<Habit> scheduledHabits,
+        List<Habit> overdueHabits,
         DateOnly date,
         string language)
     {
@@ -79,36 +79,7 @@ public sealed partial class AiSummaryService(
             _ => "English"
         };
 
-        var habitLines = new List<string>();
-        foreach (var habit in scheduledHabits)
-        {
-            var status = habit.IsCompleted ? "done" : "pending";
-            var children = scheduledHabits
-                .Where(h => h.ParentHabitId == habit.Id)
-                .ToList();
-
-            if (habit.ParentHabitId is not null)
-                continue;
-
-            if (children.Count > 0)
-            {
-                var doneCount = children.Count(c => c.IsCompleted);
-                habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done)");
-                foreach (var child in children)
-                {
-                    var childStatus = child.IsCompleted ? "done" : "pending";
-                    habitLines.Add($"  - {child.Title} ({childStatus})");
-                }
-            }
-            else
-            {
-                habitLines.Add($"- {habit.Title} ({status})");
-            }
-        }
-
-        var habitSection = habitLines.Count > 0
-            ? string.Join("\n", habitLines)
-            : "(no habits scheduled)";
+        var habitSection = BuildHabitSection(scheduledHabits);
 
         var overdueSection = overdueHabits.Count > 0
             ? string.Join("\n", overdueHabits.Select(h => $"- {h.Title}"))
@@ -141,6 +112,31 @@ public sealed partial class AiSummaryService(
             - Write ONLY in {languageName}
             - No greeting like "good morning", no sign-off -- just the briefing
             """;
+    }
+
+    private static string BuildHabitSection(List<Habit> scheduledHabits)
+    {
+        var habitLines = new List<string>();
+
+        foreach (var habit in scheduledHabits.Where(h => h.ParentHabitId is null))
+        {
+            var status = habit.IsCompleted ? "done" : "pending";
+            var children = scheduledHabits.Where(h => h.ParentHabitId == habit.Id).ToList();
+
+            if (children.Count > 0)
+            {
+                var doneCount = children.Count(c => c.IsCompleted);
+                habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done)");
+                foreach (var child in children)
+                    habitLines.Add($"  - {child.Title} ({(child.IsCompleted ? "done" : "pending")})");
+            }
+            else
+            {
+                habitLines.Add($"- {habit.Title} ({status})");
+            }
+        }
+
+        return habitLines.Count > 0 ? string.Join("\n", habitLines) : "(no habits scheduled)";
     }
 
     internal static string StripMarkdownFences(string text)

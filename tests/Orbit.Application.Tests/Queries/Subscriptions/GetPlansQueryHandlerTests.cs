@@ -1,0 +1,148 @@
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Common;
+using Orbit.Application.Subscriptions.Queries;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
+using Stripe;
+
+namespace Orbit.Application.Tests.Queries.Subscriptions;
+
+public class GetPlansQueryHandlerTests
+{
+    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGeoLocationService _geoLocationService = Substitute.For<IGeoLocationService>();
+    private readonly IOptions<StripeSettings> _stripeSettings;
+    private readonly PriceService _priceService = Substitute.For<PriceService>();
+    private readonly CouponService _couponService = Substitute.For<CouponService>();
+    private readonly ILogger<GetPlansQueryHandler> _logger = Substitute.For<ILogger<GetPlansQueryHandler>>();
+    private readonly GetPlansQueryHandler _handler;
+
+    private static readonly Guid UserId = Guid.NewGuid();
+
+    public GetPlansQueryHandlerTests()
+    {
+        _stripeSettings = Options.Create(new StripeSettings
+        {
+            MonthlyPriceIdUsd = "price_monthly_usd",
+            YearlyPriceIdUsd = "price_yearly_usd",
+            MonthlyPriceIdBrl = "price_monthly_brl",
+            YearlyPriceIdBrl = "price_yearly_brl"
+        });
+        _handler = new GetPlansQueryHandler(_userRepo, _geoLocationService, _stripeSettings, _priceService, _couponService, _logger);
+    }
+
+    private static User CreateTestUser()
+    {
+        return User.Create("Test User", "test@example.com").Value;
+    }
+
+    [Fact]
+    public async Task Handle_UserNotFound_ReturnsFailure()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        var query = new GetPlansQuery(UserId, null);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("User not found");
+        result.ErrorCode.Should().Be("USER_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task Handle_StripeError_ReturnsFailure()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns("US");
+
+        _priceService.GetAsync(
+            Arg.Any<string>(),
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .ThrowsAsync(new StripeException("Stripe error"));
+
+        var query = new GetPlansQuery(UserId, "1.2.3.4");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Payment service temporarily unavailable");
+    }
+
+    [Fact]
+    public async Task Handle_BrazilianUser_UsesBrlPriceIds()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns("BR");
+
+        var monthlyPrice = new Price { UnitAmount = 1990 };
+        var yearlyPrice = new Price { UnitAmount = 19900 };
+
+        _priceService.GetAsync(
+            "price_monthly_brl",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(monthlyPrice);
+
+        _priceService.GetAsync(
+            "price_yearly_brl",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(yearlyPrice);
+
+        var query = new GetPlansQuery(UserId, "200.100.50.1");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Currency.Should().Be("brl");
+        result.Value.Monthly.Currency.Should().Be("brl");
+        result.Value.Monthly.UnitAmount.Should().Be(1990);
+        result.Value.Yearly.UnitAmount.Should().Be(19900);
+    }
+
+    [Fact]
+    public async Task Handle_USUser_UsesUsdPriceIds()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns("US");
+
+        var monthlyPrice = new Price { UnitAmount = 499 };
+        var yearlyPrice = new Price { UnitAmount = 3999 };
+
+        _priceService.GetAsync(
+            "price_monthly_usd",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(monthlyPrice);
+
+        _priceService.GetAsync(
+            "price_yearly_usd",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(yearlyPrice);
+
+        var query = new GetPlansQuery(UserId, "8.8.8.8");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Currency.Should().Be("usd");
+        result.Value.Monthly.UnitAmount.Should().Be(499);
+        result.Value.Yearly.UnitAmount.Should().Be(3999);
+        result.Value.SavingsPercent.Should().BeGreaterThanOrEqualTo(0);
+    }
+}

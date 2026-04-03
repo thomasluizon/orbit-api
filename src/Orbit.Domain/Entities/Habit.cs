@@ -174,39 +174,7 @@ public class Habit : Entity
         do
         {
             var prev = DueDate;
-            // Preserve the original day-of-month/year before advancing, so monthly habits
-            // anchored on day 29/30/31 don't drift when a short month clamps them (e.g.,
-            // Jan 31 -> Feb 28 -> Mar 28 instead of the correct Mar 31).
-            var originalDay = DueDate.Day;
-
-            DueDate = (FrequencyUnit, FrequencyQuantity) switch
-            {
-                (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
-                (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
-                (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
-                (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
-                _ => DueDate
-            };
-
-            // Re-anchor monthly/yearly advances to the original day-of-month, clamped to the
-            // last day of the target month. This prevents drift when AddMonths/AddYears clamps
-            // (e.g., Jan 31 -> Feb 28 should re-anchor to Mar 31, not Mar 28).
-            if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
-            {
-                var daysInTargetMonth = DateTime.DaysInMonth(DueDate.Year, DueDate.Month);
-                var correctedDay = Math.Min(originalDay, daysInTargetMonth);
-                DueDate = new DateOnly(DueDate.Year, DueDate.Month, correctedDay);
-            }
-
-            // If Days are specified, find the next matching day
-            if (Days.Count > 0)
-            {
-                while (!Days.Contains(DueDate.DayOfWeek))
-                {
-                    DueDate = DueDate.AddDays(1);
-                }
-            }
-
+            DueDate = AdvanceDueDateByOneStep();
             if (DueDate == prev) break;
         } while (DueDate <= today);
 
@@ -226,31 +194,7 @@ public class Habit : Entity
         while (DueDate < today && !IsCompleted)
         {
             var prev = DueDate;
-            var originalDay = DueDate.Day;
-
-            DueDate = (FrequencyUnit, FrequencyQuantity) switch
-            {
-                (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
-                (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
-                (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
-                (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
-                _ => DueDate
-            };
-
-            // Re-anchor to original day-of-month to prevent drift on short months
-            if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
-            {
-                var daysInTargetMonth = DateTime.DaysInMonth(DueDate.Year, DueDate.Month);
-                var correctedDay = Math.Min(originalDay, daysInTargetMonth);
-                DueDate = new DateOnly(DueDate.Year, DueDate.Month, correctedDay);
-            }
-
-            if (Days.Count > 0)
-            {
-                while (!Days.Contains(DueDate.DayOfWeek))
-                    DueDate = DueDate.AddDays(1);
-            }
-
+            DueDate = AdvanceDueDateByOneStep();
             if (DueDate == prev) break;
 
             if (EndDate.HasValue && DueDate > EndDate.Value)
@@ -259,6 +203,43 @@ public class Habit : Entity
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Advances DueDate by one frequency step, re-anchoring for monthly/yearly drift
+    /// and snapping to the next matching day-of-week if Days are set.
+    /// </summary>
+    private DateOnly AdvanceDueDateByOneStep()
+    {
+        var originalDay = DueDate.Day;
+
+        var next = (FrequencyUnit, FrequencyQuantity) switch
+        {
+            (Enums.FrequencyUnit.Day, var q) => DueDate.AddDays(q!.Value),
+            (Enums.FrequencyUnit.Week, var q) => DueDate.AddDays(7 * q!.Value),
+            (Enums.FrequencyUnit.Month, var q) => DueDate.AddMonths(q!.Value),
+            (Enums.FrequencyUnit.Year, var q) => DueDate.AddYears(q!.Value),
+            _ => DueDate
+        };
+
+        // Re-anchor monthly/yearly advances to the original day-of-month, clamped to the
+        // last day of the target month. This prevents drift when AddMonths/AddYears clamps
+        // (e.g., Jan 31 -> Feb 28 should re-anchor to Mar 31, not Mar 28).
+        if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
+        {
+            var daysInTargetMonth = DateTime.DaysInMonth(next.Year, next.Month);
+            var correctedDay = Math.Min(originalDay, daysInTargetMonth);
+            next = new DateOnly(next.Year, next.Month, correctedDay);
+        }
+
+        // If Days are specified, find the next matching day
+        if (Days.Count > 0)
+        {
+            while (!Days.Contains(next.DayOfWeek))
+                next = next.AddDays(1);
+        }
+
+        return next;
     }
 
     /// <summary>
@@ -326,26 +307,40 @@ public class Habit : Entity
         if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure("Title is required.");
 
+        var validationError = ValidateUpdateParams(p);
+        if (validationError is not null)
+            return Result.Failure(validationError);
+
+        ApplyRequiredUpdates(p);
+        ApplyOptionalUpdates(p);
+
+        return Result.Success();
+    }
+
+    private string? ValidateUpdateParams(HabitUpdateParams p)
+    {
         var effectiveIsGeneral = p.IsGeneral ?? IsGeneral;
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
 
         var scheduleValidation = ValidateScheduleOptions(
             effectiveIsGeneral, effectiveIsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
         if (scheduleValidation is not null)
-            return Result.Failure(scheduleValidation);
+            return scheduleValidation;
 
         var effectiveDueEndTime = p.DueEndTime ?? DueEndTime;
         var effectiveDueTime = p.DueTime ?? DueTime;
         if (effectiveDueEndTime.HasValue && effectiveDueTime.HasValue && effectiveDueEndTime.Value <= effectiveDueTime.Value)
-            return Result.Failure("End time must be after start time.");
+            return "End time must be after start time.";
 
-        // Validate endDate if being set
-        if (p.EndDate.HasValue)
-        {
-            var effectiveDueDate = p.DueDate ?? DueDate;
-            if (p.EndDate.Value < effectiveDueDate)
-                return Result.Failure("End date must be on or after the start date.");
-        }
+        if (p.EndDate.HasValue && p.EndDate.Value < (p.DueDate ?? DueDate))
+            return "End date must be on or after the start date.";
+
+        return ValidateScheduledReminders(p.ScheduledReminders);
+    }
+
+    private void ApplyRequiredUpdates(HabitUpdateParams p)
+    {
+        var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
 
         Title = p.Title.Trim();
         Description = p.Description?.Trim();
@@ -353,18 +348,19 @@ public class Habit : Entity
         FrequencyQuantity = p.FrequencyQuantity;
         Days = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
         IsBadHabit = p.IsBadHabit;
+        DueTime = p.DueTime;
+        DueEndTime = p.DueEndTime;
 
+        if (p.DueDate is not null)
+            DueDate = p.DueDate.Value;
+    }
+
+    private void ApplyOptionalUpdates(HabitUpdateParams p)
+    {
         if (p.IsGeneral.HasValue)
             IsGeneral = p.IsGeneral.Value;
         if (p.IsFlexible.HasValue)
             IsFlexible = p.IsFlexible.Value;
-
-        if (p.DueDate is not null)
-            DueDate = p.DueDate.Value;
-
-        DueTime = p.DueTime;
-        DueEndTime = p.DueEndTime;
-
         if (p.ReminderEnabled.HasValue)
             ReminderEnabled = p.ReminderEnabled.Value;
         if (p.ReminderTimes is not null)
@@ -373,11 +369,6 @@ public class Habit : Entity
             SlipAlertEnabled = p.SlipAlertEnabled.Value;
         if (p.ChecklistItems is not null)
             ChecklistItems = p.ChecklistItems;
-
-        var reminderValidation = ValidateScheduledReminders(p.ScheduledReminders);
-        if (reminderValidation is not null)
-            return Result.Failure(reminderValidation);
-
         if (p.ScheduledReminders is not null)
             ScheduledReminders = p.ScheduledReminders;
 
@@ -385,8 +376,6 @@ public class Habit : Entity
             EndDate = null;
         else if (p.EndDate.HasValue)
             EndDate = p.EndDate.Value;
-
-        return Result.Success();
     }
 
     public void UpdateChecklist(IReadOnlyList<ChecklistItem> items) => ChecklistItems = items;

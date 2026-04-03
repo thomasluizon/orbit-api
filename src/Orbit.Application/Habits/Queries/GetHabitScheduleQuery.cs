@@ -371,31 +371,37 @@ public class GetHabitScheduleQueryHandler(
         DateOnly? dateTo,
         ILookup<Guid?, Habit> lookup)
     {
-        bool IsChildRelevant(Habit child)
+        return topLevel.Where(h => MatchesSearch(h, term, lookup, dateFrom, dateTo));
+    }
+
+    private static bool MatchesSearch(
+        Habit h, string term, ILookup<Guid?, Habit> lookup, DateOnly? dateFrom, DateOnly? dateTo)
+    {
+        if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
+        if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
+        if (h.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
+        return HasDescendantMatchingSearch(h.Id, lookup, term, dateFrom, dateTo);
+    }
+
+    private static bool HasDescendantMatchingSearch(
+        Guid parentId, ILookup<Guid?, Habit> lookup, string term, DateOnly? dateFrom, DateOnly? dateTo)
+    {
+        foreach (var child in lookup[parentId])
         {
-            if (child.IsCompleted) return false;
-            if (!dateFrom.HasValue || !dateTo.HasValue) return true;
-            return HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value).Count > 0
-                || (!child.IsBadHabit && !child.IsFlexible && child.FrequencyUnit == null && child.DueDate >= dateFrom.Value && child.DueDate <= dateTo.Value);
+            if (!IsChildRelevantForSearch(child, dateFrom, dateTo)) continue;
+            if (FuzzyMatcher.FuzzyContains(child.Title, term)) return true;
+            if (HasDescendantMatchingSearch(child.Id, lookup, term, dateFrom, dateTo)) return true;
         }
-        bool MatchesSearch(Habit h)
-        {
-            if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
-            if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
-            if (h.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
-            return HasDescendantMatchingSearch(h.Id, lookup, term);
-        }
-        bool HasDescendantMatchingSearch(Guid parentId, ILookup<Guid?, Habit> lkp, string t)
-        {
-            foreach (var child in lkp[parentId])
-            {
-                if (!IsChildRelevant(child)) continue;
-                if (FuzzyMatcher.FuzzyContains(child.Title, t)) return true;
-                if (HasDescendantMatchingSearch(child.Id, lkp, t)) return true;
-            }
-            return false;
-        }
-        return topLevel.Where(MatchesSearch);
+        return false;
+    }
+
+    private static bool IsChildRelevantForSearch(Habit child, DateOnly? dateFrom, DateOnly? dateTo)
+    {
+        if (child.IsCompleted) return false;
+        if (!dateFrom.HasValue || !dateTo.HasValue) return true;
+        return HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value).Count > 0
+            || (!child.IsBadHabit && !child.IsFlexible && child.FrequencyUnit == null
+                && child.DueDate >= dateFrom.Value && child.DueDate <= dateTo.Value);
     }
 
     private static IEnumerable<Habit> ApplyTagFilter(
@@ -466,11 +472,9 @@ public class GetHabitScheduleQueryHandler(
             matches.Add(new SearchMatchField("title", null));
         if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, ctx.Search))
             matches.Add(new SearchMatchField("description", null));
-        foreach (var tag in h.Tags)
-        {
-            if (FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search))
-                matches.Add(new SearchMatchField("tag", tag.Name));
-        }
+        matches.AddRange(h.Tags
+            .Where(tag => FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search))
+            .Select(tag => new SearchMatchField("tag", tag.Name)));
         AddChildSearchMatches(matches, h.Id, ctx);
         return matches.Count > 0 ? matches : null;
     }

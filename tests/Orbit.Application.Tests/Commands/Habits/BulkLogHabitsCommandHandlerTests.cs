@@ -19,7 +19,7 @@ public class BulkLogHabitsCommandHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly BulkLogHabitsCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();

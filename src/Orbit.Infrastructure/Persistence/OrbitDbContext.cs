@@ -9,6 +9,7 @@ namespace Orbit.Infrastructure.Persistence;
 
 public class OrbitDbContext : DbContext
 {
+    private const string JsonbColumnType = "jsonb";
     private readonly IEncryptionService? _encryptionService;
 
     public OrbitDbContext(DbContextOptions<OrbitDbContext> options, IEncryptionService? encryptionService = null)
@@ -88,7 +89,7 @@ public class OrbitDbContext : DbContext
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<ChecklistItem>>(v, (JsonSerializerOptions?)null) ?? new List<ChecklistItem>())
-                .HasColumnType("jsonb")
+                .HasColumnType(JsonbColumnType)
                 .HasDefaultValueSql("'[]'::jsonb")
                 .Metadata.SetValueComparer(
                     new ValueComparer<IReadOnlyList<ChecklistItem>>(
@@ -100,7 +101,7 @@ public class OrbitDbContext : DbContext
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<int>>(v, (JsonSerializerOptions?)null) ?? new List<int> { 15 })
-                .HasColumnType("jsonb")
+                .HasColumnType(JsonbColumnType)
                 .HasDefaultValueSql("'[15]'::jsonb")
                 .Metadata.SetValueComparer(
                     new ValueComparer<IReadOnlyList<int>>(
@@ -112,7 +113,7 @@ public class OrbitDbContext : DbContext
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(v, (JsonSerializerOptions?)null) ?? new List<ScheduledReminderTime>())
-                .HasColumnType("jsonb")
+                .HasColumnType(JsonbColumnType)
                 .HasDefaultValueSql("'[]'::jsonb")
                 .Metadata.SetValueComparer(
                     new ValueComparer<IReadOnlyList<ScheduledReminderTime>>(
@@ -266,7 +267,7 @@ public class OrbitDbContext : DbContext
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
-                .HasColumnType("jsonb")
+                .HasColumnType(JsonbColumnType)
                 .HasDefaultValueSql("'[]'::jsonb")
                 .Metadata.SetValueComparer(
                     new ValueComparer<IReadOnlyList<string>>(

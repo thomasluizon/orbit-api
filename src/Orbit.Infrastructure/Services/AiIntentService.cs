@@ -115,16 +115,14 @@ public sealed partial class AiIntentService(
     {
         try
         {
-            if (logger.IsEnabled(LogLevel.Information))
-                LogCallingAiWithTools(logger);
+            LogCallingAiWithTools(logger);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var completion = await aiClient.ChatClient.CompleteChatAsync(
                 _conversationMessages!, _conversationOptions!, cancellationToken);
 
             stopwatch.Stop();
-            if (logger.IsEnabled(LogLevel.Information))
-                LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
+            LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
             var result = completion.Value;
 
@@ -142,9 +140,8 @@ public sealed partial class AiIntentService(
                     })
                     .ToList();
 
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogAiReturnedToolCalls(logger, toolCalls.Count,
-                        string.Join(", ", toolCalls.Select(tc => tc.Name)));
+                LogAiReturnedToolCalls(logger, toolCalls.Count,
+                    string.Join(", ", toolCalls.Select(tc => tc.Name)));
 
                 return Result.Success(new AiResponse { ToolCalls = toolCalls });
             }
@@ -154,8 +151,7 @@ public sealed partial class AiIntentService(
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<AiResponse>("AI returned neither tool calls nor text.");
 
-            if (logger.IsEnabled(LogLevel.Information))
-                LogAiReturnedTextResponse(logger, text.Length);
+            LogAiReturnedTextResponse(logger, text.Length);
             return Result.Success(new AiResponse { TextMessage = text });
         }
         catch (JsonException ex)

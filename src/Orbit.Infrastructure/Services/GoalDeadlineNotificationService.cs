@@ -128,7 +128,7 @@ public partial class GoalDeadlineNotificationService(
         return anyChanges;
     }
 
-    private static string FormatDeadlineBody(Goal goal, int daysBefore, string lang)
+    internal static string FormatDeadlineBody(Goal goal, int daysBefore, string lang)
     {
         var isPt = lang.StartsWith("pt");
         var progressText = $"{goal.CurrentValue}/{goal.TargetValue} {goal.Unit}";

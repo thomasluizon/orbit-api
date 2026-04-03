@@ -50,91 +50,19 @@ public partial class BulkLogHabitsCommandHandler(
         for (int i = 0; i < request.Items.Count; i++)
         {
             var item = request.Items[i];
-            var habitId = item.HabitId;
             var targetDate = item.Date ?? today;
 
             try
             {
-                if (targetDate > today)
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Cannot log a future date."));
-                    continue;
-                }
-
-                if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Cannot log a date beyond the overdue window."));
-                    continue;
-                }
-
-                if (!habitMap.TryGetValue(habitId, out var habit))
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: ErrorMessages.HabitNotFound));
-                    continue;
-                }
-
-                // Validate schedule for recurring non-flexible habits
-                if (habit.FrequencyUnit is not null && !habit.IsFlexible
-                    && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: "Habit is not scheduled on this date."));
-                    continue;
-                }
-
-                // Skip if already logged for target date (no toggle -- just skip)
-                var alreadyLogged = habit.Logs.Any(l => l.Date == targetDate);
-                if (alreadyLogged)
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Success,
-                        HabitId: habitId));
-                    continue;
-                }
-
-                var shouldAdvanceDueDate = targetDate >= today;
-                var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
-                if (logResult.IsFailure)
-                {
-                    results.Add(new BulkLogItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        HabitId: habitId,
-                        Error: logResult.Error));
-                    continue;
-                }
-
-                await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
-
-                results.Add(new BulkLogItemResult(
-                    Index: i,
-                    Status: BulkItemStatus.Success,
-                    HabitId: habitId,
-                    LogId: logResult.Value.Id));
+                results.Add(await ProcessLogItem(i, item.HabitId, targetDate, today, habitMap, cancellationToken));
             }
             catch (Exception ex)
             {
-                LogBulkLogItemError(logger, ex, habitId);
+                LogBulkLogItemError(logger, ex, item.HabitId);
                 results.Add(new BulkLogItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,
-                    HabitId: habitId,
+                    HabitId: item.HabitId,
                     Error: "An error occurred processing this item"));
             }
         }
@@ -143,18 +71,59 @@ public partial class BulkLogHabitsCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Gamification: process each successfully logged habit
-        foreach (var item in results.Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
+        var loggedHabitIds = results
+            .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
+            .Select(r => r.HabitId);
+        foreach (var habitId in loggedHabitIds)
         {
             try
             {
-                await gamificationService.ProcessHabitLogged(request.UserId, item.HabitId, cancellationToken);
+                await gamificationService.ProcessHabitLogged(request.UserId, habitId, cancellationToken);
             }
-            catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, item.HabitId); }
+            catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, habitId); }
         }
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(new BulkLogResult(results));
+    }
+
+    private async Task<BulkLogItemResult> ProcessLogItem(
+        int index, Guid habitId, DateOnly targetDate, DateOnly today,
+        Dictionary<Guid, Habit> habitMap, CancellationToken cancellationToken)
+    {
+        if (targetDate > today)
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Cannot log a future date.");
+
+        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Cannot log a date beyond the overdue window.");
+
+        if (!habitMap.TryGetValue(habitId, out var habit))
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.HabitNotFound);
+
+        // Validate schedule for recurring non-flexible habits
+        if (habit.FrequencyUnit is not null && !habit.IsFlexible
+            && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: "Habit is not scheduled on this date.");
+
+        // Skip if already logged for target date (no toggle -- just skip)
+        if (habit.Logs.Any(l => l.Date == targetDate))
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
+
+        var shouldAdvanceDueDate = targetDate >= today;
+        var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
+        if (logResult.IsFailure)
+            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: logResult.Error);
+
+        await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
+
+        return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId,
+            LogId: logResult.Value.Id);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Error processing bulk item {HabitId}")]

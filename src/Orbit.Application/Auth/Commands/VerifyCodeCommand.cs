@@ -26,74 +26,91 @@ public partial class VerifyCodeCommandHandler(
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
+
+        var codeValidation = ValidateCode(email, request.Code);
+        if (codeValidation.IsFailure)
+            return Result.Failure<LoginResponse>(codeValidation.Error, codeValidation.ErrorCode!);
+
+        var findResult = await FindOrCreateUserAsync(email, request.Language, cancellationToken);
+        if (findResult.IsFailure)
+            return Result.Failure<LoginResponse>(findResult.Error);
+
+        var (user, isNewUser) = findResult.Value;
+
+        var wasReactivated = await HandlePostLoginAsync(user, isNewUser, request, cancellationToken);
+
+        var token = tokenService.GenerateToken(user.Id, user.Email);
+
+        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
+    }
+
+    private Result ValidateCode(string email, string code)
+    {
         var cacheKey = $"verify:{email}";
 
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure<LoginResponse>("Verification code expired or not found", ErrorCodes.CodeExpired);
+            return Result.Failure("Verification code expired or not found", ErrorCodes.CodeExpired);
 
-        // Check attempts
         if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
-            return Result.Failure<LoginResponse>("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
+            return Result.Failure("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
         }
 
-        // Validate code
         if (!CryptographicOperations.FixedTimeEquals(
             System.Text.Encoding.UTF8.GetBytes(entry.Code),
-            System.Text.Encoding.UTF8.GetBytes(request.Code)))
+            System.Text.Encoding.UTF8.GetBytes(code)))
         {
-            // Increment attempts
-            var updated = new VerificationEntry(entry.Code, entry.Attempts + 1, entry.CreatedAt);
-            var remaining = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - entry.CreatedAt);
-            if (remaining > TimeSpan.Zero)
-            {
-                cache.Set(cacheKey, updated, new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = remaining
-                });
-            }
-            return Result.Failure<LoginResponse>("Invalid verification code", ErrorCodes.InvalidVerificationCode);
+            RecordFailedAttempt(cacheKey, entry);
+            return Result.Failure("Invalid verification code", ErrorCodes.InvalidVerificationCode);
         }
 
-        // Code valid - remove from cache
         cache.Remove(cacheKey);
+        return Result.Success();
+    }
 
-        // Find or create user (tracked so deactivation cancellation persists)
+    private void RecordFailedAttempt(string cacheKey, VerificationEntry entry)
+    {
+        var updated = new VerificationEntry(entry.Code, entry.Attempts + 1, entry.CreatedAt);
+        var remaining = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - entry.CreatedAt);
+        if (remaining > TimeSpan.Zero)
+        {
+            cache.Set(cacheKey, updated, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = remaining
+            });
+        }
+    }
+
+    private async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
+        string email, string language, CancellationToken cancellationToken)
+    {
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Email == email,
             cancellationToken: cancellationToken);
 
-        var isNewUser = user is null;
+        if (user is not null)
+            return Result.Success((user, false));
 
-        if (user is null)
-        {
-            // Create new user with email prefix as name
-            var namePart = email.Split('@')[0];
-            var createResult = User.Create(namePart, email);
-            if (createResult.IsFailure)
-                return Result.Failure<LoginResponse>(createResult.Error);
+        var namePart = email.Split('@')[0];
+        var createResult = User.Create(namePart, email);
+        if (createResult.IsFailure)
+            return Result.Failure<(User, bool)>(createResult.Error);
 
-            user = createResult.Value;
-            user.SetLanguage(request.Language);
-            await userRepository.AddAsync(user, cancellationToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        user = createResult.Value;
+        user.SetLanguage(language);
+        await userRepository.AddAsync(user, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Process referral code for new users (fire and forget -- don't fail login)
+        return Result.Success((user, true));
+    }
+
+    private async Task<bool> HandlePostLoginAsync(
+        User user, bool isNewUser, VerifyCodeCommand request, CancellationToken cancellationToken)
+    {
         if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
-        {
-            try
-            {
-                await mediator.Send(new ProcessReferralCodeCommand(user.Id, request.ReferralCode), cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                LogReferralProcessingFailed(logger, ex, user.Id);
-            }
-        }
+            await ProcessReferralSafeAsync(user.Id, request.ReferralCode, cancellationToken);
 
-        // Cancel deactivation if user was deactivated
         var wasReactivated = false;
         if (user.IsDeactivated)
         {
@@ -102,26 +119,37 @@ public partial class VerifyCodeCommandHandler(
             wasReactivated = true;
         }
 
-        // Generate JWT
-        var token = tokenService.GenerateToken(user.Id, user.Email);
-
-        // Send welcome email for new users (fire and forget)
         if (isNewUser)
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await emailService.SendWelcomeEmailAsync(user.Email, user.Name, request.Language, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    LogWelcomeEmailFailed(logger, ex, user.Email);
-                }
-            }, CancellationToken.None);
-        }
+            SendWelcomeEmailInBackground(user.Email, user.Name, request.Language);
 
-        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
+        return wasReactivated;
+    }
+
+    private async Task ProcessReferralSafeAsync(Guid userId, string referralCode, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await mediator.Send(new ProcessReferralCodeCommand(userId, referralCode), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogReferralProcessingFailed(logger, ex, userId);
+        }
+    }
+
+    private void SendWelcomeEmailInBackground(string email, string name, string language)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await emailService.SendWelcomeEmailAsync(email, name, language, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                LogWelcomeEmailFailed(logger, ex, email);
+            }
+        }, CancellationToken.None);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]
