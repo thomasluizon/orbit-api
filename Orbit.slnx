@@ -6,6 +6,9 @@
     <Project Path="src/Orbit.Infrastructure/Orbit.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Orbit.Domain.Tests/Orbit.Domain.Tests.csproj" />
+    <Project Path="tests/Orbit.Application.Tests/Orbit.Application.Tests.csproj" />
+    <Project Path="tests/Orbit.Infrastructure.Tests/Orbit.Infrastructure.Tests.csproj" />
     <Project Path="tests/Orbit.IntegrationTests/Orbit.IntegrationTests.csproj" />
   </Folder>
 </Solution>
