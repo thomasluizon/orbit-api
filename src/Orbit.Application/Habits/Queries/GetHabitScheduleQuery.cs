@@ -87,6 +87,19 @@ public record GetHabitScheduleQuery(
     int PageSize = 50,
     bool IncludeGeneral = false) : IRequest<Result<PaginatedResponse<HabitScheduleItem>>>;
 
+/// <summary>
+/// Groups the parameters needed for mapping habits to schedule items,
+/// reducing parameter count on MapToScheduleItem and MapChildren (S107).
+/// </summary>
+internal record ScheduleMapContext(
+    ILookup<Guid?, Habit> ChildLookup,
+    bool IncludeAllChildren = false,
+    DateOnly? DateFrom = null,
+    DateOnly? DateTo = null,
+    DateOnly? ReferenceDate = null,
+    DateOnly? UserToday = null,
+    string? Search = null);
+
 public class GetHabitScheduleQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
@@ -124,10 +137,11 @@ public class GetHabitScheduleQueryHandler(
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
         var page = Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
 
+        var ctx = new ScheduleMapContext(lookup, IncludeAllChildren: true, Search: request.Search);
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, userToday: null, search: request.Search))
+            .Select(h => MapToScheduleItem(h, [], false, ctx))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
@@ -161,119 +175,34 @@ public class GetHabitScheduleQueryHandler(
             .ThenBy(h => h.CreatedAtUtc);
 
         topLevel = ApplyCommonFilters(topLevel, request, lookup);
-
-        // Frequency unit filter (only relevant for scheduled habits)
-        if (!string.IsNullOrWhiteSpace(request.FrequencyUnitFilter))
-        {
-            if (request.FrequencyUnitFilter.Equals("none", StringComparison.OrdinalIgnoreCase))
-                topLevel = topLevel.Where(h => h.FrequencyUnit == null);
-            else if (Enum.TryParse<FrequencyUnit>(request.FrequencyUnitFilter, true, out var unit))
-                topLevel = topLevel.Where(h => h.FrequencyUnit == unit);
-        }
+        topLevel = ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
         // No date range: return all habits without schedule computation (used by "all" view)
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
-        {
-            var allFiltered = topLevel.ToList();
-            var allTotalCount = allFiltered.Count;
-            var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);
-            var allPage = Math.Max(1, Math.Min(request.Page, Math.Max(1, allTotalPages)));
-
-            var allPagedItems = allFiltered
-                .Skip((allPage - 1) * request.PageSize)
-                .Take(request.PageSize)
-                .Select(h => MapToScheduleItem(h, [], false, lookup, includeAllChildren: true, referenceDate: today, userToday: today, search: request.Search))
-                .ToList();
-
-            return Result.Success(new PaginatedResponse<HabitScheduleItem>(
-                allPagedItems, allPage, request.PageSize, allTotalCount, allTotalPages));
-        }
+            return BuildNonDateResponse(topLevel, request, lookup, today);
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
 
         // Schedule-aware filtering: keep habits that have at least one scheduled date in range,
         // OR are overdue, OR have any descendant due in range
-        var filtered = new List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)>();
-
-        foreach (var habit in topLevel)
-        {
-            // Flexible habits that have met their window target should not appear
-            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
-                continue;
-
-            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
-            var isOverdue = false;
-
-            // One-time tasks: overdue if due date has passed
-            if (!habit.IsFlexible && habit.FrequencyUnit == null && request.IncludeOverdue && !habit.IsCompleted && !habit.IsBadHabit && habit.DueDate < dateFrom
-                && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom))
-            {
-                isOverdue = true;
-            }
-
-            // Recurring habits: overdue if a past occurrence was missed and habit is not due today
-            if (!isOverdue && !habit.IsFlexible && habit.FrequencyUnit != null
-                && request.IncludeOverdue && !habit.IsBadHabit
-                && !scheduledDates.Contains(dateFrom))
-            {
-                var qty = habit.FrequencyQuantity ?? 1;
-                var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
-
-                var lookbackStart = dateFrom.AddDays(-lookbackDays);
-                if (habit.DueDate > lookbackStart)
-                    lookbackStart = habit.DueDate;
-
-                var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, dateFrom.AddDays(-1));
-                var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
-
-                if (pastDates.Any(d => !logDates.Contains(d)))
-                {
-                    isOverdue = true;
-                }
-            }
-
-            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo);
-
-            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
-            {
-                filtered.Add((habit, scheduledDates, isOverdue));
-            }
-        }
+        var filtered = FilterScheduledHabits(topLevel, dateFrom, dateTo, request.IncludeOverdue, lookup);
 
         // Pagination
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
         var page = Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
 
+        var ctx = new ScheduleMapContext(lookup, DateFrom: dateFrom, DateTo: dateTo, ReferenceDate: dateFrom, UserToday: today, Search: request.Search);
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, lookup, dateFrom: dateFrom, dateTo: dateTo, referenceDate: dateFrom, userToday: today, search: request.Search))
+            .Select(x => MapToScheduleItem(x.habit, [], x.isOverdue, ctx))
             .ToList();
 
         // When IncludeGeneral is true, append general habits after the scheduled ones
         if (request.IncludeGeneral)
-        {
-            var generalHabits = await habitRepository.FindAsync(
-                h => h.UserId == request.UserId && h.IsGeneral,
-                q => q.Include(h => h.Tags)
-                      .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
-                      .Include(h => h.Goals),
-                cancellationToken);
-
-            var generalLookup = generalHabits.ToLookup(h => h.ParentHabitId);
-            var generalTopLevel = generalLookup[null]
-                .OrderBy(h => h.Position ?? int.MaxValue)
-                .ThenBy(h => h.CreatedAtUtc)
-                .ToList();
-
-            var generalItems = generalTopLevel
-                .Select(h => MapToScheduleItem(h, [], false, generalLookup, includeAllChildren: true, userToday: today, search: request.Search))
-                .ToList();
-
-            pagedItems.AddRange(generalItems);
-        }
+            await AppendGeneralHabits(pagedItems, request, logFrom, logTo, today, cancellationToken);
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,
@@ -283,89 +212,221 @@ public class GetHabitScheduleQueryHandler(
             totalPages));
     }
 
+    private static IEnumerable<Habit> ApplyFrequencyUnitFilter(
+        IEnumerable<Habit> habits, string? frequencyUnitFilter)
+    {
+        if (string.IsNullOrWhiteSpace(frequencyUnitFilter))
+            return habits;
+
+        if (frequencyUnitFilter.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return habits.Where(h => h.FrequencyUnit == null);
+
+        if (Enum.TryParse<FrequencyUnit>(frequencyUnitFilter, true, out var unit))
+            return habits.Where(h => h.FrequencyUnit == unit);
+
+        return habits;
+    }
+
+    private static Result<PaginatedResponse<HabitScheduleItem>> BuildNonDateResponse(
+        IEnumerable<Habit> topLevel,
+        GetHabitScheduleQuery request,
+        ILookup<Guid?, Habit> lookup,
+        DateOnly today)
+    {
+        var allFiltered = topLevel.ToList();
+        var allTotalCount = allFiltered.Count;
+        var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);
+        var allPage = Math.Max(1, Math.Min(request.Page, Math.Max(1, allTotalPages)));
+
+        var ctx = new ScheduleMapContext(lookup, IncludeAllChildren: true, ReferenceDate: today, UserToday: today, Search: request.Search);
+        var allPagedItems = allFiltered
+            .Skip((allPage - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(h => MapToScheduleItem(h, [], false, ctx))
+            .ToList();
+
+        return Result.Success(new PaginatedResponse<HabitScheduleItem>(
+            allPagedItems, allPage, request.PageSize, allTotalCount, allTotalPages));
+    }
+
+    private static List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)> FilterScheduledHabits(
+        IEnumerable<Habit> topLevel,
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        bool includeOverdue,
+        ILookup<Guid?, Habit> lookup)
+    {
+        var filtered = new List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)>();
+
+        foreach (var habit in topLevel)
+        {
+            // Flexible habits that have met their window target should not appear
+            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
+                continue;
+
+            var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
+            var isOverdue = DetermineOverdueStatus(habit, dateFrom, scheduledDates, includeOverdue);
+            var hasDescendantDue = HasAnyDescendantDue(habit.Id, lookup, dateFrom, dateTo);
+
+            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
+                filtered.Add((habit, scheduledDates, isOverdue));
+        }
+
+        return filtered;
+    }
+
+    /// <summary>
+    /// Determines whether a habit is overdue based on its type and schedule.
+    /// Handles both one-time tasks and recurring habits.
+    /// </summary>
+    private static bool DetermineOverdueStatus(
+        Habit habit, DateOnly dateFrom, List<DateOnly> scheduledDates, bool includeOverdue)
+    {
+        if (!includeOverdue || habit.IsFlexible || habit.IsBadHabit)
+            return false;
+
+        // One-time tasks: overdue if due date has passed
+        if (habit.FrequencyUnit == null)
+        {
+            return !habit.IsCompleted
+                && habit.DueDate < dateFrom
+                && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom);
+        }
+
+        // Recurring habits: overdue if a past occurrence was missed and habit is not due today
+        if (scheduledDates.Contains(dateFrom))
+            return false;
+
+        return HasMissedRecentOccurrence(habit, dateFrom);
+    }
+
+    /// <summary>
+    /// Checks whether a recurring habit has any missed occurrence in its lookback window.
+    /// </summary>
+    private static bool HasMissedRecentOccurrence(Habit habit, DateOnly dateFrom)
+    {
+        var qty = habit.FrequencyQuantity ?? 1;
+        var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
+
+        var lookbackStart = dateFrom.AddDays(-lookbackDays);
+        if (habit.DueDate > lookbackStart)
+            lookbackStart = habit.DueDate;
+
+        var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, dateFrom.AddDays(-1));
+        var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
+
+        return pastDates.Any(d => !logDates.Contains(d));
+    }
+
+    private async Task AppendGeneralHabits(
+        List<HabitScheduleItem> pagedItems,
+        GetHabitScheduleQuery request,
+        DateOnly logFrom,
+        DateOnly logTo,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        var generalHabits = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.IsGeneral,
+            q => q.Include(h => h.Tags)
+                  .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
+                  .Include(h => h.Goals),
+            cancellationToken);
+
+        var generalLookup = generalHabits.ToLookup(h => h.ParentHabitId);
+        var generalTopLevel = generalLookup[null]
+            .OrderBy(h => h.Position ?? int.MaxValue)
+            .ThenBy(h => h.CreatedAtUtc)
+            .ToList();
+
+        var ctx = new ScheduleMapContext(generalLookup, IncludeAllChildren: true, UserToday: today, Search: request.Search);
+        var generalItems = generalTopLevel
+            .Select(h => MapToScheduleItem(h, [], false, ctx))
+            .ToList();
+
+        pagedItems.AddRange(generalItems);
+    }
+
     private static IEnumerable<Habit> ApplyCommonFilters(
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup)
     {
         if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var term = request.Search.Trim();
-            var df = request.DateFrom;
-            var dt = request.DateTo;
-            bool IsChildRelevant(Habit child)
-            {
-                if (child.IsCompleted) return false;
-                if (!df.HasValue || !dt.HasValue) return true;
-                return HabitScheduleService.GetScheduledDates(child, df.Value, dt.Value).Count > 0
-                    || (!child.IsBadHabit && !child.IsFlexible && child.FrequencyUnit == null && child.DueDate >= df.Value && child.DueDate <= dt.Value);
-            }
-            bool MatchesSearch(Habit h)
-            {
-                if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
-                if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
-                if (h.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
-                return HasDescendantMatchingSearch(h.Id, lookup, term);
-            }
-            bool HasDescendantMatchingSearch(Guid parentId, ILookup<Guid?, Habit> lkp, string t)
-            {
-                foreach (var child in lkp[parentId])
-                {
-                    if (!IsChildRelevant(child)) continue;
-                    if (FuzzyMatcher.FuzzyContains(child.Title, t)) return true;
-                    if (HasDescendantMatchingSearch(child.Id, lkp, t)) return true;
-                }
-                return false;
-            }
-            topLevel = topLevel.Where(MatchesSearch);
-        }
+            topLevel = ApplySearchFilter(topLevel, request.Search.Trim(), request.DateFrom, request.DateTo, lookup);
 
         if (request.IsCompleted.HasValue)
             topLevel = topLevel.Where(h => h.IsCompleted == request.IsCompleted.Value);
 
         if (request.TagIds is { Count: > 0 })
-        {
-            var tagIdSet = request.TagIds.ToHashSet();
-            bool HasMatchingTag(Habit h) => h.Tags.Any(t => tagIdSet.Contains(t.Id));
-            bool HasDescendantWithTag(Guid parentId)
-            {
-                foreach (var child in lookup[parentId])
-                {
-                    if (HasMatchingTag(child)) return true;
-                    if (HasDescendantWithTag(child.Id)) return true;
-                }
-                return false;
-            }
-            topLevel = topLevel.Where(h => HasMatchingTag(h) || HasDescendantWithTag(h.Id));
-        }
+            topLevel = ApplyTagFilter(topLevel, request.TagIds, lookup);
 
         return topLevel;
+    }
+
+    private static IEnumerable<Habit> ApplySearchFilter(
+        IEnumerable<Habit> topLevel,
+        string term,
+        DateOnly? dateFrom,
+        DateOnly? dateTo,
+        ILookup<Guid?, Habit> lookup)
+    {
+        bool IsChildRelevant(Habit child)
+        {
+            if (child.IsCompleted) return false;
+            if (!dateFrom.HasValue || !dateTo.HasValue) return true;
+            return HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value).Count > 0
+                || (!child.IsBadHabit && !child.IsFlexible && child.FrequencyUnit == null && child.DueDate >= dateFrom.Value && child.DueDate <= dateTo.Value);
+        }
+        bool MatchesSearch(Habit h)
+        {
+            if (FuzzyMatcher.FuzzyContains(h.Title, term)) return true;
+            if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, term)) return true;
+            if (h.Tags.Any(t => FuzzyMatcher.FuzzyContains(t.Name, term))) return true;
+            return HasDescendantMatchingSearch(h.Id, lookup, term);
+        }
+        bool HasDescendantMatchingSearch(Guid parentId, ILookup<Guid?, Habit> lkp, string t)
+        {
+            foreach (var child in lkp[parentId])
+            {
+                if (!IsChildRelevant(child)) continue;
+                if (FuzzyMatcher.FuzzyContains(child.Title, t)) return true;
+                if (HasDescendantMatchingSearch(child.Id, lkp, t)) return true;
+            }
+            return false;
+        }
+        return topLevel.Where(MatchesSearch);
+    }
+
+    private static IEnumerable<Habit> ApplyTagFilter(
+        IEnumerable<Habit> topLevel,
+        IReadOnlyList<Guid> tagIds,
+        ILookup<Guid?, Habit> lookup)
+    {
+        var tagIdSet = tagIds.ToHashSet();
+        bool HasMatchingTag(Habit h) => h.Tags.Any(t => tagIdSet.Contains(t.Id));
+        bool HasDescendantWithTag(Guid parentId)
+        {
+            foreach (var child in lookup[parentId])
+            {
+                if (HasMatchingTag(child)) return true;
+                if (HasDescendantWithTag(child.Id)) return true;
+            }
+            return false;
+        }
+        return topLevel.Where(h => HasMatchingTag(h) || HasDescendantWithTag(h.Id));
     }
 
     private static HabitScheduleItem MapToScheduleItem(
         Habit h,
         List<DateOnly> scheduledDates,
         bool isOverdue,
-        ILookup<Guid?, Habit> lookup,
-        bool includeAllChildren = false,
-        DateOnly? dateFrom = null,
-        DateOnly? dateTo = null,
-        DateOnly? referenceDate = null,
-        DateOnly? userToday = null,
-        string? search = null)
+        ScheduleMapContext ctx)
     {
-        int? flexibleTarget = null;
-        int? flexibleCompleted = null;
-        if (h.IsFlexible && referenceDate.HasValue)
-        {
-            var totalTarget = h.FrequencyQuantity ?? 1;
-            var skipped = HabitScheduleService.GetSkippedInWindow(h, referenceDate.Value, h.Logs);
-            flexibleTarget = Math.Max(0, totalTarget - skipped);
-            flexibleCompleted = HabitScheduleService.GetCompletedInWindow(h, referenceDate.Value, h.Logs);
-        }
+        var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(h, ctx.ReferenceDate);
 
-        var instances = dateFrom.HasValue && dateTo.HasValue && userToday.HasValue
-            ? HabitScheduleService.GetInstances(h, dateFrom.Value, dateTo.Value, userToday.Value)
+        var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
+            ? HabitScheduleService.GetInstances(h, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
             : [];
 
         return new HabitScheduleItem(
@@ -376,39 +437,57 @@ public class GetHabitScheduleQueryHandler(
             scheduledDates, isOverdue,
             h.ReminderEnabled, h.ReminderTimes, h.ScheduledReminders, h.SlipAlertEnabled,
             h.ChecklistItems, MapTags(h), MapGoals(h),
-            MapChildren(h.Id, lookup, includeAllChildren, dateFrom, dateTo, referenceDate, userToday, search),
-            lookup[h.Id].Any(),
+            MapChildren(h.Id, ctx),
+            ctx.ChildLookup[h.Id].Any(),
             flexibleTarget, flexibleCompleted,
             instances,
-            ComputeSearchMatches(h, search, lookup, dateFrom, dateTo));
+            ComputeSearchMatches(h, ctx));
     }
 
-    private static List<SearchMatchField>? ComputeSearchMatches(
-        Habit h, string? search, ILookup<Guid?, Habit> lookup,
-        DateOnly? dateFrom = null, DateOnly? dateTo = null)
+    private static (int? Target, int? Completed) CalculateFlexibleProgress(
+        Habit h, DateOnly? referenceDate)
     {
-        if (string.IsNullOrWhiteSpace(search)) return null;
+        if (!h.IsFlexible || !referenceDate.HasValue)
+            return (null, null);
+
+        var totalTarget = h.FrequencyQuantity ?? 1;
+        var skipped = HabitScheduleService.GetSkippedInWindow(h, referenceDate.Value, h.Logs);
+        var target = Math.Max(0, totalTarget - skipped);
+        var completed = HabitScheduleService.GetCompletedInWindow(h, referenceDate.Value, h.Logs);
+        return (target, completed);
+    }
+
+    private static List<SearchMatchField>? ComputeSearchMatches(Habit h, ScheduleMapContext ctx)
+    {
+        if (string.IsNullOrWhiteSpace(ctx.Search)) return null;
+
         var matches = new List<SearchMatchField>();
-        if (FuzzyMatcher.FuzzyContains(h.Title, search))
+        if (FuzzyMatcher.FuzzyContains(h.Title, ctx.Search))
             matches.Add(new SearchMatchField("title", null));
-        if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, search))
+        if (h.Description != null && FuzzyMatcher.FuzzyContains(h.Description, ctx.Search))
             matches.Add(new SearchMatchField("description", null));
         foreach (var tag in h.Tags)
         {
-            if (FuzzyMatcher.FuzzyContains(tag.Name, search))
+            if (FuzzyMatcher.FuzzyContains(tag.Name, ctx.Search))
                 matches.Add(new SearchMatchField("tag", tag.Name));
         }
-        foreach (var child in lookup[h.Id])
+        AddChildSearchMatches(matches, h.Id, ctx);
+        return matches.Count > 0 ? matches : null;
+    }
+
+    private static void AddChildSearchMatches(
+        List<SearchMatchField> matches, Guid parentId, ScheduleMapContext ctx)
+    {
+        foreach (var child in ctx.ChildLookup[parentId])
         {
             if (child.IsCompleted) continue;
-            if (dateFrom.HasValue && dateTo.HasValue
-                && HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value).Count == 0
-                && (child.IsBadHabit || child.IsFlexible || child.FrequencyUnit != null || child.DueDate < dateFrom.Value || child.DueDate > dateTo.Value))
+            if (ctx.DateFrom.HasValue && ctx.DateTo.HasValue
+                && HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value).Count == 0
+                && (child.IsBadHabit || child.IsFlexible || child.FrequencyUnit != null || child.DueDate < ctx.DateFrom.Value || child.DueDate > ctx.DateTo.Value))
                 continue;
-            if (FuzzyMatcher.FuzzyContains(child.Title, search))
+            if (FuzzyMatcher.FuzzyContains(child.Title, ctx.Search!))
                 matches.Add(new SearchMatchField("child", child.Title));
         }
-        return matches.Count > 0 ? matches : null;
     }
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)
@@ -427,58 +506,48 @@ public class GetHabitScheduleQueryHandler(
         return false;
     }
 
-    private static List<HabitScheduleChildItem> MapChildren(
-        Guid parentId, ILookup<Guid?, Habit> lookup,
-        bool includeAll = false, DateOnly? dateFrom = null, DateOnly? dateTo = null,
-        DateOnly? referenceDate = null, DateOnly? userToday = null,
-        string? search = null)
+    private static List<HabitScheduleChildItem> MapChildren(Guid parentId, ScheduleMapContext ctx)
     {
-        var children = lookup[parentId];
+        var children = ctx.ChildLookup[parentId];
 
-        if (!includeAll && dateFrom.HasValue && dateTo.HasValue)
+        if (!ctx.IncludeAllChildren && ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
         {
-            var df = dateFrom.Value;
-            var dt = dateTo.Value;
+            var df = ctx.DateFrom.Value;
+            var dt = ctx.DateTo.Value;
             children = children
                 .Where(c => HabitScheduleService.GetScheduledDates(c, df, dt).Count > 0
                     || c.IsCompleted
                     || (!c.IsCompleted && !c.IsBadHabit && !c.IsFlexible && c.DueDate < df)
-                    || HasAnyDescendantDue(c.Id, lookup, df, dt)
+                    || HasAnyDescendantDue(c.Id, ctx.ChildLookup, df, dt)
                     || c.Logs.Any(l => l.Date >= df && l.Date <= dt));
         }
 
         return children
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
-            .Select(c =>
-            {
-                int? ft = null;
-                int? fc = null;
-                if (c.IsFlexible && referenceDate.HasValue)
-                {
-                    var childTotalTarget = c.FrequencyQuantity ?? 1;
-                    var childSkipped = HabitScheduleService.GetSkippedInWindow(c, referenceDate.Value, c.Logs);
-                    ft = Math.Max(0, childTotalTarget - childSkipped);
-                    fc = HabitScheduleService.GetCompletedInWindow(c, referenceDate.Value, c.Logs);
-                }
-                var isLoggedInRange = dateFrom.HasValue && dateTo.HasValue
-                    && c.Logs.Any(l => l.Date >= dateFrom.Value && l.Date <= dateTo.Value && l.Value > 0);
-
-                var instances = dateFrom.HasValue && dateTo.HasValue && userToday.HasValue
-                    ? HabitScheduleService.GetInstances(c, dateFrom.Value, dateTo.Value, userToday.Value)
-                    : [];
-
-                return new HabitScheduleChildItem(
-                    c.Id, c.Title, c.Description,
-                    c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
-                    c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
-                    c.Position, c.ChecklistItems, MapTags(c),
-                    MapChildren(c.Id, lookup, includeAll, dateFrom, dateTo, referenceDate, userToday, search),
-                    lookup[c.Id].Any(), ft, fc, isLoggedInRange,
-                    instances,
-                    ComputeSearchMatches(c, search, lookup, dateFrom, dateTo));
-            })
+            .Select(c => MapSingleChild(c, ctx))
             .ToList();
+    }
+
+    private static HabitScheduleChildItem MapSingleChild(Habit c, ScheduleMapContext ctx)
+    {
+        var (ft, fc) = CalculateFlexibleProgress(c, ctx.ReferenceDate);
+        var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue
+            && c.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
+
+        var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
+            ? HabitScheduleService.GetInstances(c, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
+            : [];
+
+        return new HabitScheduleChildItem(
+            c.Id, c.Title, c.Description,
+            c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
+            c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
+            c.Position, c.ChecklistItems, MapTags(c),
+            MapChildren(c.Id, ctx),
+            ctx.ChildLookup[c.Id].Any(), ft, fc, isLoggedInRange,
+            instances,
+            ComputeSearchMatches(c, ctx));
     }
 
     private static List<HabitTagItem> MapTags(Habit h) =>

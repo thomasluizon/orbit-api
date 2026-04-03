@@ -14,14 +14,14 @@ public class CreateGoalTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            title = new { type = "string", description = "Name of the goal" },
-            description = new { type = "string", description = "Optional description" },
+            title = new { type = JsonSchemaTypes.String, description = "Name of the goal" },
+            description = new { type = JsonSchemaTypes.String, description = "Optional description" },
             target_value = new { type = "number", description = "Target number to reach (default: 1)" },
-            unit = new { type = "string", description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
-            deadline = new { type = "string", description = "Optional deadline in YYYY-MM-DD format" }
+            unit = new { type = JsonSchemaTypes.String, description = "Unit of measurement (e.g., 'books', 'kg', 'dollars', 'goal')" },
+            deadline = new { type = JsonSchemaTypes.String, description = "Optional deadline in YYYY-MM-DD format" }
         },
         required = new[] { "title" }
     };

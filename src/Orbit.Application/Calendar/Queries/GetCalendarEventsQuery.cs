@@ -43,111 +43,11 @@ public partial class GetCalendarEventsQueryHandler(
 
         try
         {
-            var credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromAccessToken(accessToken);
-            var service = new CalendarService(new BaseClientService.Initializer
-            {
-                HttpClientInitializer = credential,
-                ApplicationName = "Orbit"
-            });
+            var service = CreateCalendarService(accessToken);
+            var events = await FetchCalendarEvents(service, cancellationToken);
+            var existingHabitFilter = await BuildExistingHabitFilter(request.UserId, cancellationToken);
 
-            var listRequest = service.Events.List("primary");
-            listRequest.SingleEvents = true;
-            listRequest.TimeMinDateTimeOffset = DateTimeOffset.UtcNow;
-            listRequest.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddDays(60);
-            listRequest.MaxResults = 250;
-            listRequest.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
-
-            var events = await listRequest.ExecuteAsync(cancellationToken);
-
-            // Load existing habits to hide already-imported events (by title + date)
-            var existingHabits = await habitRepository.FindAsync(
-                h => h.UserId == request.UserId, cancellationToken);
-            // Recurring habits: match by title only (DueDate advances, so exact date won't match)
-            var recurringHabitTitles = new HashSet<string>(
-                existingHabits.Where(h => h.FrequencyUnit is not null).Select(h => h.Title.Trim().ToLowerInvariant()));
-            // One-time habits: match by title + date + time
-            var oneTimeHabitKeys = existingHabits
-                .Where(h => h.FrequencyUnit is null)
-                .Select(h => (Title: h.Title.Trim().ToLowerInvariant(), Date: h.DueDate.ToString("yyyy-MM-dd"), Time: h.DueTime?.ToString("HH:mm") ?? ""))
-                .ToHashSet();
-
-            var items = new List<CalendarEventItem>();
-            var seenRecurringIds = new HashSet<string>();
-            var seenRecurringTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var masterRRuleCache = new Dictionary<string, string?>();
-            foreach (var ev in events.Items ?? [])
-            {
-                if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
-                var evTitle = ev.Summary.Trim();
-                var evTitleLower = evTitle.ToLowerInvariant();
-                var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
-                var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
-
-                // Skip if matching an existing recurring habit (title only)
-                if (recurringHabitTitles.Contains(evTitleLower)) continue;
-                // Skip if matching an existing one-time habit (title + date + time)
-                if (oneTimeHabitKeys.Contains((evTitleLower, startDate ?? "", startTime ?? ""))) continue;
-
-                // Deduplicate recurring instances: by RecurringEventId and by title
-                // (master event may have null RecurringEventId while instances have non-null)
-                if (ev.RecurringEventId is not null)
-                {
-                    if (!seenRecurringIds.Add(ev.RecurringEventId)) continue;
-                    if (!seenRecurringTitles.Add(evTitle)) continue;
-                }
-                else if (ev.Recurrence is not null && ev.Recurrence.Count > 0)
-                {
-                    // Master recurring event (has Recurrence rules but no RecurringEventId)
-                    if (!seenRecurringTitles.Add(evTitle)) continue;
-                }
-
-                var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
-                var isRecurring = ev.RecurringEventId is not null
-                    || (ev.Recurrence is not null && ev.Recurrence.Count > 0);
-
-                // Get RRULE: from own Recurrence (master event) or fetch from master for instances
-                string? rrule = null;
-                if (ev.Recurrence is not null)
-                {
-                    rrule = ev.Recurrence.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
-                }
-                else if (ev.RecurringEventId is not null)
-                {
-                    if (!masterRRuleCache.TryGetValue(ev.RecurringEventId, out rrule))
-                    {
-                        try
-                        {
-                            var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
-                            rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
-                        }
-                        catch (Exception ex) { LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId); rrule = null; }
-                        masterRRuleCache[ev.RecurringEventId] = rrule;
-                    }
-                }
-
-                var reminders = ev.Reminders?.Overrides?
-                    .Where(r => r.Minutes.HasValue)
-                    .Select(r => r.Minutes!.Value)
-                    .ToList() ?? [];
-
-                // Auto-add default reminder for timed events with no explicit reminders
-                if (reminders.Count == 0 && startTime is not null)
-                {
-                    reminders.Add(AppConstants.DefaultReminderMinutes);
-                }
-
-                items.Add(new CalendarEventItem(
-                    ev.Id,
-                    ev.Summary,
-                    ev.Description,
-                    startDate,
-                    startTime,
-                    endTime,
-                    isRecurring,
-                    rrule,
-                    reminders));
-            }
-
+            var items = await MapEventsToItems(events, existingHabitFilter, service, cancellationToken);
             return Result.Success(items);
         }
         catch (Google.GoogleApiException ex)
@@ -155,6 +55,170 @@ public partial class GetCalendarEventsQueryHandler(
             LogGoogleCalendarApiError(logger, ex, request.UserId);
             return Result.Failure<List<CalendarEventItem>>("Failed to fetch calendar events. Please try again.");
         }
+    }
+
+    private static CalendarService CreateCalendarService(string accessToken)
+    {
+        var credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromAccessToken(accessToken);
+        return new CalendarService(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "Orbit"
+        });
+    }
+
+    private static async Task<Google.Apis.Calendar.v3.Data.Events> FetchCalendarEvents(
+        CalendarService service, CancellationToken cancellationToken)
+    {
+        var listRequest = service.Events.List("primary");
+        listRequest.SingleEvents = true;
+        listRequest.TimeMinDateTimeOffset = DateTimeOffset.UtcNow;
+        listRequest.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddDays(60);
+        listRequest.MaxResults = 250;
+        listRequest.OrderBy = EventsResource.ListRequest.OrderByEnum.StartTime;
+
+        return await listRequest.ExecuteAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Holds pre-built sets for filtering out already-imported calendar events.
+    /// </summary>
+    private record ExistingHabitFilter(
+        HashSet<string> RecurringHabitTitles,
+        HashSet<(string Title, string Date, string Time)> OneTimeHabitKeys);
+
+    private async Task<ExistingHabitFilter> BuildExistingHabitFilter(
+        Guid userId, CancellationToken cancellationToken)
+    {
+        var existingHabits = await habitRepository.FindAsync(
+            h => h.UserId == userId, cancellationToken);
+
+        var recurringHabitTitles = new HashSet<string>(
+            existingHabits.Where(h => h.FrequencyUnit is not null)
+                .Select(h => h.Title.Trim().ToLowerInvariant()));
+
+        var oneTimeHabitKeys = existingHabits
+            .Where(h => h.FrequencyUnit is null)
+            .Select(h => (
+                Title: h.Title.Trim().ToLowerInvariant(),
+                Date: h.DueDate.ToString("yyyy-MM-dd"),
+                Time: h.DueTime?.ToString("HH:mm") ?? ""))
+            .ToHashSet();
+
+        return new ExistingHabitFilter(recurringHabitTitles, oneTimeHabitKeys);
+    }
+
+    private async Task<List<CalendarEventItem>> MapEventsToItems(
+        Google.Apis.Calendar.v3.Data.Events events,
+        ExistingHabitFilter filter,
+        CalendarService service,
+        CancellationToken cancellationToken)
+    {
+        var items = new List<CalendarEventItem>();
+        var seenRecurringIds = new HashSet<string>();
+        var seenRecurringTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var masterRRuleCache = new Dictionary<string, string?>();
+
+        foreach (var ev in events.Items ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
+
+            var evTitle = ev.Summary.Trim();
+            var evTitleLower = evTitle.ToLowerInvariant();
+            var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
+            var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
+
+            if (IsAlreadyImported(evTitleLower, startDate, startTime, filter))
+                continue;
+
+            if (IsDuplicateRecurring(ev, evTitle, seenRecurringIds, seenRecurringTitles))
+                continue;
+
+            var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
+            var isRecurring = ev.RecurringEventId is not null
+                || (ev.Recurrence is not null && ev.Recurrence.Count > 0);
+            var rrule = await ResolveRRule(ev, service, masterRRuleCache, cancellationToken);
+            var reminders = BuildReminders(ev, startTime);
+
+            items.Add(new CalendarEventItem(
+                ev.Id, ev.Summary, ev.Description,
+                startDate, startTime, endTime,
+                isRecurring, rrule, reminders));
+        }
+
+        return items;
+    }
+
+    private static bool IsAlreadyImported(
+        string titleLower, string? startDate, string? startTime,
+        ExistingHabitFilter filter)
+    {
+        if (filter.RecurringHabitTitles.Contains(titleLower))
+            return true;
+        if (filter.OneTimeHabitKeys.Contains((titleLower, startDate ?? "", startTime ?? "")))
+            return true;
+        return false;
+    }
+
+    private static bool IsDuplicateRecurring(
+        Google.Apis.Calendar.v3.Data.Event ev,
+        string evTitle,
+        HashSet<string> seenRecurringIds,
+        HashSet<string> seenRecurringTitles)
+    {
+        if (ev.RecurringEventId is not null)
+            return !seenRecurringIds.Add(ev.RecurringEventId) || !seenRecurringTitles.Add(evTitle);
+
+        if (ev.Recurrence is not null && ev.Recurrence.Count > 0)
+            return !seenRecurringTitles.Add(evTitle);
+
+        return false;
+    }
+
+    private async Task<string?> ResolveRRule(
+        Google.Apis.Calendar.v3.Data.Event ev,
+        CalendarService service,
+        Dictionary<string, string?> masterRRuleCache,
+        CancellationToken cancellationToken)
+    {
+        if (ev.Recurrence is not null)
+            return ev.Recurrence.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+
+        if (ev.RecurringEventId is null)
+            return null;
+
+        if (masterRRuleCache.TryGetValue(ev.RecurringEventId, out var cached))
+            return cached;
+
+        string? rrule;
+        try
+        {
+            var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
+            rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId);
+            rrule = null;
+        }
+
+        masterRRuleCache[ev.RecurringEventId] = rrule;
+        return rrule;
+    }
+
+    private static List<int> BuildReminders(
+        Google.Apis.Calendar.v3.Data.Event ev, string? startTime)
+    {
+        var reminders = ev.Reminders?.Overrides?
+            .Where(r => r.Minutes.HasValue)
+            .Select(r => r.Minutes!.Value)
+            .ToList() ?? [];
+
+        // Auto-add default reminder for timed events with no explicit reminders
+        if (reminders.Count == 0 && startTime is not null)
+            reminders.Add(AppConstants.DefaultReminderMinutes);
+
+        return reminders;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch master event RRULE for recurring event {EventId}")]

@@ -18,15 +18,15 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 
-        SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.ChecklistItems));
+        SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.Options != null ? x.Options.ChecklistItems : null));
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
             .When(x => x.FrequencyQuantity is not null);
 
-        SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
+        SharedHabitRules.AddDaysRules(this, x => x.Options != null ? x.Options.Days : null, x => x.FrequencyQuantity);
 
-        SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.ScheduledReminders));
+        SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
 
         RuleFor(x => x.TagIds)
             .Must(tags => tags is null || tags.Count <= AppConstants.MaxTagsPerHabit)

@@ -4,15 +4,17 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Interfaces;
 
+public record PromptBuildRequest(
+    IReadOnlyList<Habit> ActiveHabits,
+    IReadOnlyList<UserFact> UserFacts,
+    bool HasImage = false,
+    IReadOnlyList<RoutinePattern>? RoutinePatterns = null,
+    IReadOnlyList<Tag>? UserTags = null,
+    DateOnly? UserToday = null,
+    IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics = null,
+    IReadOnlyList<Goal>? ActiveGoals = null);
+
 public interface ISystemPromptBuilder
 {
-    string Build(
-        IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<UserFact> userFacts,
-        bool hasImage = false,
-        IReadOnlyList<RoutinePattern>? routinePatterns = null,
-        IReadOnlyList<Tag>? userTags = null,
-        DateOnly? userToday = null,
-        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null,
-        IReadOnlyList<Goal>? activeGoals = null);
+    string Build(PromptBuildRequest request);
 }

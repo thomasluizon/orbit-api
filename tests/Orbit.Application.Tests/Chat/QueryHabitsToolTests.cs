@@ -448,9 +448,9 @@ public class QueryHabitsToolTests
         bool isBadHabit = false, bool isGeneral = false,
         Guid? parentId = null)
     {
-        var habit = Habit.Create(UserId, title, freq, qty,
-            dueDate: dueDate, isBadHabit: isBadHabit, isGeneral: isGeneral,
-            parentHabitId: parentId).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, title, freq, qty,
+            DueDate: dueDate, IsBadHabit: isBadHabit, IsGeneral: isGeneral,
+            ParentHabitId: parentId)).Value;
         if (position.HasValue) habit.SetPosition(position.Value);
         return habit;
     }

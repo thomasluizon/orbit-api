@@ -85,7 +85,7 @@ public class PayGateServiceTests
 
         // Create 10 habits (at limit)
         var habits = Enumerable.Range(0, 10)
-            .Select(_ => Habit.Create(UserId, "h", FrequencyUnit.Day, 1).Value)
+            .Select(_ => Habit.Create(new HabitCreateParams(UserId, "h", FrequencyUnit.Day, 1)).Value)
             .ToList();
         _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(habits);

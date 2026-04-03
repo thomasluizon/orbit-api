@@ -80,102 +80,9 @@ public partial class BulkCreateHabitsCommandHandler(
         {
             for (int i = 0; i < request.Habits.Count; i++)
             {
-                var item = request.Habits[i];
-
-                try
-                {
-                    // Create parent habit
-                    var habitResult = Habit.Create(
-                        request.UserId,
-                        item.Title,
-                        item.FrequencyUnit,
-                        item.FrequencyQuantity,
-                        item.Description,
-                        item.Days,
-                        item.IsBadHabit,
-                        item.DueDate ?? userToday,
-                        dueTime: item.DueTime,
-                        dueEndTime: item.DueEndTime,
-                        reminderEnabled: item.ReminderEnabled,
-                        reminderTimes: item.ReminderTimes,
-                        isGeneral: item.IsGeneral,
-                        isFlexible: item.IsFlexible,
-                        scheduledReminders: item.ScheduledReminders,
-                        checklistItems: item.ChecklistItems);
-
-                    if (habitResult.IsFailure)
-                    {
-                        results.Add(new BulkCreateItemResult(
-                            Index: i,
-                            Status: BulkItemStatus.Failed,
-                            Title: item.Title,
-                            Error: habitResult.Error,
-                            Field: DetermineFieldFromError(habitResult.Error)));
-                        continue;
-                    }
-
-                    var parentHabit = habitResult.Value;
-
-                    // Explicitly add parent habit
-                    await habitRepository.AddAsync(parentHabit, cancellationToken);
-
-                    // Create child habits if any
-                    var subHabitFailed = false;
-                    if (item.SubHabits is { Count: > 0 })
-                    {
-                        foreach (var subItem in item.SubHabits)
-                        {
-                            // Sub-habits inherit parent frequency/dueDate when not specified
-                            var childResult = Habit.Create(
-                                request.UserId,
-                                subItem.Title,
-                                subItem.FrequencyUnit ?? item.FrequencyUnit,
-                                subItem.FrequencyQuantity ?? item.FrequencyQuantity,
-                                subItem.Description,
-                                subItem.Days ?? item.Days,
-                                subItem.IsBadHabit,
-                                subItem.DueDate ?? item.DueDate ?? userToday,
-                                parentHabitId: parentHabit.Id,
-                                isGeneral: item.IsGeneral,
-                                isFlexible: subItem.IsFlexible);
-
-                            if (childResult.IsFailure)
-                            {
-                                // Sub-habit creation failed - remove parent from tracking
-                                habitRepository.Remove(parentHabit);
-                                results.Add(new BulkCreateItemResult(
-                                    Index: i,
-                                    Status: BulkItemStatus.Failed,
-                                    Title: item.Title,
-                                    Error: $"Sub-habit '{subItem.Title}' failed: {childResult.Error}",
-                                    Field: "SubHabits"));
-                                subHabitFailed = true;
-                                break;
-                            }
-
-                            // Explicitly add child habit
-                            await habitRepository.AddAsync(childResult.Value, cancellationToken);
-                        }
-                    }
-
-                    if (subHabitFailed) continue;
-
-                    // Success
-                    results.Add(new BulkCreateItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Success,
-                        HabitId: parentHabit.Id,
-                        Title: parentHabit.Title));
-                }
-                catch (Exception ex)
-                {
-                    LogBulkCreateItemFailed(logger, ex, i);
-                    results.Add(new BulkCreateItemResult(
-                        Index: i,
-                        Status: BulkItemStatus.Failed,
-                        Title: item.Title,
-                        Error: "An error occurred processing this item"));
-                }
+                var itemResult = await CreateSingleHabit(
+                    request.UserId, request.Habits[i], i, userToday, cancellationToken);
+                results.Add(itemResult);
             }
 
             // Save all successful entities and commit
@@ -191,6 +98,93 @@ public partial class BulkCreateHabitsCommandHandler(
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 
         return Result.Success(new BulkCreateResult(results));
+    }
+
+    private async Task<BulkCreateItemResult> CreateSingleHabit(
+        Guid userId, BulkHabitItem item, int index, DateOnly userToday,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var habitResult = Habit.Create(new HabitCreateParams(
+                userId,
+                item.Title,
+                item.FrequencyUnit,
+                item.FrequencyQuantity,
+                item.Description,
+                Days: item.Days,
+                IsBadHabit: item.IsBadHabit,
+                DueDate: item.DueDate ?? userToday,
+                DueTime: item.DueTime,
+                DueEndTime: item.DueEndTime,
+                ReminderEnabled: item.ReminderEnabled,
+                ReminderTimes: item.ReminderTimes,
+                IsGeneral: item.IsGeneral,
+                IsFlexible: item.IsFlexible,
+                ScheduledReminders: item.ScheduledReminders,
+                ChecklistItems: item.ChecklistItems));
+
+            if (habitResult.IsFailure)
+            {
+                return new BulkCreateItemResult(
+                    Index: index,
+                    Status: BulkItemStatus.Failed,
+                    Title: item.Title,
+                    Error: habitResult.Error,
+                    Field: DetermineFieldFromError(habitResult.Error));
+            }
+
+            var parentHabit = habitResult.Value;
+            await habitRepository.AddAsync(parentHabit, cancellationToken);
+
+            // Create child habits if any
+            if (item.SubHabits is { Count: > 0 })
+            {
+                foreach (var subItem in item.SubHabits)
+                {
+                    var childResult = Habit.Create(new HabitCreateParams(
+                        userId,
+                        subItem.Title,
+                        subItem.FrequencyUnit ?? item.FrequencyUnit,
+                        subItem.FrequencyQuantity ?? item.FrequencyQuantity,
+                        subItem.Description,
+                        Days: subItem.Days ?? item.Days,
+                        IsBadHabit: subItem.IsBadHabit,
+                        DueDate: subItem.DueDate ?? item.DueDate ?? userToday,
+                        ParentHabitId: parentHabit.Id,
+                        IsGeneral: item.IsGeneral,
+                        IsFlexible: subItem.IsFlexible));
+
+                    if (childResult.IsFailure)
+                    {
+                        habitRepository.Remove(parentHabit);
+                        return new BulkCreateItemResult(
+                            Index: index,
+                            Status: BulkItemStatus.Failed,
+                            Title: item.Title,
+                            Error: $"Sub-habit '{subItem.Title}' failed: {childResult.Error}",
+                            Field: "SubHabits");
+                    }
+
+                    await habitRepository.AddAsync(childResult.Value, cancellationToken);
+                }
+            }
+
+            return new BulkCreateItemResult(
+                Index: index,
+                Status: BulkItemStatus.Success,
+                HabitId: parentHabit.Id,
+                Title: parentHabit.Title);
+        }
+        catch (Exception ex)
+        {
+            LogBulkCreateItemFailed(logger, ex, index);
+            return new BulkCreateItemResult(
+                Index: index,
+                Status: BulkItemStatus.Failed,
+                Title: item.Title,
+                Error: "An error occurred processing this item");
+        }
     }
 
     private static string? DetermineFieldFromError(string error)

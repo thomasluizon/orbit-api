@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
@@ -43,6 +44,7 @@ public class GoalTools(IMediator mediator)
     }
 
     [McpServerTool(Name = "create_goal"), Description("Create a new goal. Requires Pro subscription.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
     public async Task<string> CreateGoal(
         ClaimsPrincipal user,
         [Description("Goal title")] string title,
@@ -59,7 +61,7 @@ public class GoalTools(IMediator mediator)
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline) : null);
+            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -94,6 +96,7 @@ public class GoalTools(IMediator mediator)
     }
 
     [McpServerTool(Name = "update_goal"), Description("Update a goal's title, description, target value, unit, or deadline.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
     public async Task<string> UpdateGoal(
         ClaimsPrincipal user,
         [Description("The goal ID (GUID)")] string goalId,
@@ -112,7 +115,7 @@ public class GoalTools(IMediator mediator)
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline) : null);
+            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -264,5 +267,5 @@ public class GoalTools(IMediator mediator)
         return Guid.Parse(claim);
     }
 
-    private record GoalPositionDto(string Id, int Position);
+    private sealed record GoalPositionDto(string Id, int Position);
 }

@@ -40,7 +40,8 @@ public sealed partial class AiSummaryService(
 
         var prompt = BuildSummaryPrompt(scheduledHabits, overdueHabits, dateFrom, language);
 
-        LogGeneratingDailySummary(logger, dateFrom, language);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogGeneratingDailySummary(logger, dateFrom, language);
 
         try
         {
@@ -55,7 +56,8 @@ public sealed partial class AiSummaryService(
 
             var trimmed = StripMarkdownFences(text);
 
-            LogDailySummaryGenerated(logger, trimmed.Length);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogDailySummaryGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

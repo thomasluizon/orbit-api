@@ -17,7 +17,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetAiMemoryRequest([property: JsonRequired] bool Enabled);
     public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
-    public record SetWeekStartDayRequest(int WeekStartDay);
+    public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record SetColorSchemeRequest(string? ColorScheme);
 
@@ -43,7 +43,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetTimezoneCommand(HttpContext.GetUserId(), request.TimeZone);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogTimezoneChanged(logger, request.TimeZone, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -62,7 +62,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetAiMemoryCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogAiMemoryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -81,7 +81,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetAiSummaryCommand(HttpContext.GetUserId(), request.Enabled);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogAiSummaryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -100,7 +100,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetLanguageCommand(HttpContext.GetUserId(), request.Language);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogLanguageChanged(logger, request.Language, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -119,7 +119,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetWeekStartDayCommand(HttpContext.GetUserId(), request.WeekStartDay);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogWeekStartDayChanged(logger, request.WeekStartDay, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -138,7 +138,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetThemePreferenceCommand(HttpContext.GetUserId(), request.ThemePreference);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogThemePreferenceChanged(logger, request.ThemePreference, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -157,7 +157,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new SetColorSchemeCommand(HttpContext.GetUserId(), request.ColorScheme);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogColorSchemeChanged(logger, request.ColorScheme, HttpContext.GetUserId());
 
         return result.IsSuccess
@@ -185,7 +185,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var command = new ResetAccountCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsSuccess)
+        if (result.IsSuccess && logger.IsEnabled(LogLevel.Information))
             LogAccountReset(logger, HttpContext.GetUserId());
 
         return result.IsSuccess

@@ -43,7 +43,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             var validationResult = await imageValidation.ValidateAsync(image);
             if (validationResult.IsFailure)
             {
-                LogChatImageValidationFailed(logger, validationResult.Error);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogChatImageValidationFailed(logger, validationResult.Error);
                 return BadRequest(new { error = validationResult.Error });
             }
 
@@ -68,7 +69,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             }
             catch (JsonException ex)
             {
-                LogChatHistoryParseFailed(logger, ex, ex.Message);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogChatHistoryParseFailed(logger, ex, ex.Message);
                 return BadRequest(new { error = "Invalid chat history format" });
             }
         }

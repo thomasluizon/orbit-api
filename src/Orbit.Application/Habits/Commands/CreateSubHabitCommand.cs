@@ -5,7 +5,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -16,19 +15,10 @@ public record CreateSubHabitCommand(
     string? Description,
     FrequencyUnit? FrequencyUnit = null,
     int? FrequencyQuantity = null,
-    IReadOnlyList<System.DayOfWeek>? Days = null,
-    TimeOnly? DueTime = null,
-    TimeOnly? DueEndTime = null,
     bool IsBadHabit = false,
-    bool ReminderEnabled = false,
-    IReadOnlyList<int>? ReminderTimes = null,
-    bool SlipAlertEnabled = false,
-    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    IReadOnlyList<Guid>? TagIds = null,
-    DateOnly? EndDate = null,
-    bool IsFlexible = false,
     DateOnly? DueDate = null,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result<Guid>>;
+    HabitCommandOptions? Options = null,
+    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -64,26 +54,28 @@ public class CreateSubHabitCommandHandler(
         var childDueDate = request.DueDate
             ?? (parent.DueDate > userToday ? parent.DueDate : userToday);
 
-        var childResult = Habit.Create(
+        var opts = request.Options ?? new HabitCommandOptions();
+
+        var childResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
             request.FrequencyUnit ?? parent.FrequencyUnit,
             request.FrequencyQuantity ?? parent.FrequencyQuantity,
             request.Description,
-            days: request.Days,
-            isBadHabit: request.IsBadHabit,
-            dueDate: childDueDate,
-            dueTime: request.DueTime,
-            dueEndTime: request.DueEndTime,
-            parentHabitId: parent.Id,
-            reminderEnabled: request.ReminderEnabled,
-            reminderTimes: request.ReminderTimes,
-            slipAlertEnabled: request.SlipAlertEnabled,
-            checklistItems: request.ChecklistItems,
-            isGeneral: parent.IsGeneral,
-            isFlexible: request.IsFlexible,
-            endDate: request.EndDate,
-            scheduledReminders: request.ScheduledReminders);
+            Days: opts.Days,
+            IsBadHabit: request.IsBadHabit,
+            DueDate: childDueDate,
+            DueTime: opts.DueTime,
+            DueEndTime: opts.DueEndTime,
+            ParentHabitId: parent.Id,
+            ReminderEnabled: opts.ReminderEnabled,
+            ReminderTimes: opts.ReminderTimes,
+            SlipAlertEnabled: opts.SlipAlertEnabled,
+            ChecklistItems: opts.ChecklistItems,
+            IsGeneral: parent.IsGeneral,
+            IsFlexible: opts.IsFlexible,
+            EndDate: opts.EndDate,
+            ScheduledReminders: opts.ScheduledReminders));
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);

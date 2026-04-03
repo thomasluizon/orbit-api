@@ -55,7 +55,8 @@ public partial class AccountDeletionService(
         if (usersToDelete.Count == 0)
             return;
 
-        LogProcessingDeletions(logger, usersToDelete.Count);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogProcessingDeletions(logger, usersToDelete.Count);
 
         foreach (var user in usersToDelete)
         {
@@ -69,11 +70,13 @@ public partial class AccountDeletionService(
                     deleteContext.Users.Remove(userToDelete);
                     await deleteContext.SaveChangesAsync(ct);
                 }
-                LogAccountDeleted(logger, user.Id);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogAccountDeleted(logger, user.Id);
             }
             catch (Exception ex)
             {
-                LogAccountDeletionFailed(logger, ex, user.Id);
+                if (logger.IsEnabled(LogLevel.Error))
+                    LogAccountDeletionFailed(logger, ex, user.Id);
             }
         }
     }
@@ -93,7 +96,7 @@ public partial class AccountDeletionService(
             .Where(a => a.WeekStart < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        if (deletedReminders > 0 || deletedSlipAlerts > 0)
+        if ((deletedReminders > 0 || deletedSlipAlerts > 0) && logger.IsEnabled(LogLevel.Information))
             LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts);
     }
 

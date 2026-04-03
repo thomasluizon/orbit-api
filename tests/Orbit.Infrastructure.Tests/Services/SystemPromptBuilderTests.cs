@@ -17,7 +17,7 @@ public class SystemPromptBuilderTests
         DateOnly? userToday = null, IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
     {
         ISystemPromptBuilder builder = new SystemPromptBuilder();
-        return builder.Build(habits, facts, hasImage, userTags: userTags, userToday: userToday, habitMetrics: habitMetrics);
+        return builder.Build(new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday, HabitMetrics: habitMetrics));
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class SystemPromptBuilderTests
     public void Build_WithHabits_ListsHabitTitle()
     {
         // Arrange
-        var habit = Habit.Create(TestUserId, "Morning Run", FrequencyUnit.Day, 1).Value;
+        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1)).Value;
         var habits = new[] { habit };
         var facts = Array.Empty<UserFact>();
 
@@ -53,7 +53,7 @@ public class SystemPromptBuilderTests
     public void Build_WithMetrics_IncludesStreakInfo()
     {
         // Arrange
-        var habit = Habit.Create(TestUserId, "Meditation", FrequencyUnit.Day, 1).Value;
+        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Meditation", FrequencyUnit.Day, 1)).Value;
         var habits = new[] { habit };
         var facts = Array.Empty<UserFact>();
         var metrics = new Dictionary<Guid, HabitMetrics>

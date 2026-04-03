@@ -109,13 +109,14 @@ public sealed partial class DataEncryptionMigrationService(
             }
             catch (Exception ex)
             {
-                LogBatchFailed(logger, ex, entityName, offset);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogBatchFailed(logger, ex, entityName, offset);
                 hadErrors = true;
                 offset += BatchSize;
             }
         }
 
-        if (totalProcessed > 0)
+        if (totalProcessed > 0 && logger.IsEnabled(LogLevel.Information))
             LogEntitiesEncrypted(logger, totalProcessed, entityName);
 
         return !hadErrors;
@@ -157,13 +158,14 @@ public sealed partial class DataEncryptionMigrationService(
             }
             catch (Exception ex)
             {
-                LogUserFactsBatchFailed(logger, ex, offset);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogUserFactsBatchFailed(logger, ex, offset);
                 hadErrors = true;
                 offset += BatchSize;
             }
         }
 
-        if (totalProcessed > 0)
+        if (totalProcessed > 0 && logger.IsEnabled(LogLevel.Information))
             LogUserFactsEncrypted(logger, totalProcessed);
 
         return !hadErrors;

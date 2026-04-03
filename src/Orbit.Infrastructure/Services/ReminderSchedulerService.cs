@@ -97,43 +97,53 @@ public partial class ReminderSchedulerService(
 
         foreach (var habit in habits)
         {
-            if (!users.TryGetValue(habit.UserId, out var user)) continue;
+            anyChanges |= await ProcessSingleRelativeReminderAsync(
+                habit, users, loggedHabitIds, sentReminderSet, pushService, dbContext, ct);
+        }
 
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var userToday = DateOnly.FromDateTime(userNow);
-            var userTimeNow = TimeOnly.FromDateTime(userNow);
+        return anyChanges;
+    }
 
-            if (!HabitScheduleService.IsHabitDueOnDate(habit, userToday))
-                continue;
+    private async Task<bool> ProcessSingleRelativeReminderAsync(
+        Habit habit, Dictionary<Guid, User> users, HashSet<Guid> loggedHabitIds,
+        HashSet<(Guid HabitId, int MinutesBefore)> sentReminderSet,
+        IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
+    {
+        if (!users.TryGetValue(habit.UserId, out var user)) return false;
 
-            if (loggedHabitIds.Contains(habit.Id)) continue;
+        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var userToday = DateOnly.FromDateTime(userNow);
+        var userTimeNow = TimeOnly.FromDateTime(userNow);
 
-            foreach (var minutesBefore in habit.ReminderTimes)
-            {
-                var reminderTime = habit.DueTime!.Value.AddMinutes(-minutesBefore);
+        if (!HabitScheduleService.IsHabitDueOnDate(habit, userToday)) return false;
+        if (loggedHabitIds.Contains(habit.Id)) return false;
 
-                var diffMinutes = (userTimeNow - reminderTime).TotalMinutes;
-                if (diffMinutes < 0 || diffMinutes >= 1) continue;
+        var anyChanges = false;
 
-                if (sentReminderSet.Contains((habit.Id, minutesBefore))) continue;
+        foreach (var minutesBefore in habit.ReminderTimes)
+        {
+            var reminderTime = habit.DueTime!.Value.AddMinutes(-minutesBefore);
+            var diffMinutes = (userTimeNow - reminderTime).TotalMinutes;
+            if (diffMinutes < 0 || diffMinutes >= 1) continue;
+            if (sentReminderSet.Contains((habit.Id, minutesBefore))) continue;
 
-                var lang = user.Language ?? "en";
-                var minutesText = FormatReminderText(minutesBefore, lang);
+            var lang = user.Language ?? "en";
+            var minutesText = FormatReminderText(minutesBefore, lang);
 
-                await pushService.SendToUserAsync(habit.UserId, habit.Title, minutesText, "/", ct);
+            await pushService.SendToUserAsync(habit.UserId, habit.Title, minutesText, "/", ct);
 
-                var sentReminder = SentReminder.Create(habit.Id, userToday, minutesBefore);
-                await dbContext.SentReminders.AddAsync(sentReminder, ct);
+            var sentReminder = SentReminder.Create(habit.Id, userToday, minutesBefore);
+            await dbContext.SentReminders.AddAsync(sentReminder, ct);
 
-                var notification = Notification.Create(habit.UserId, habit.Title, minutesText, "/", habit.Id);
-                await dbContext.Notifications.AddAsync(notification, ct);
+            var notification = Notification.Create(habit.UserId, habit.Title, minutesText, "/", habit.Id);
+            await dbContext.Notifications.AddAsync(notification, ct);
 
-                sentReminderSet.Add((habit.Id, minutesBefore));
-                anyChanges = true;
+            sentReminderSet.Add((habit.Id, minutesBefore));
+            anyChanges = true;
 
+            if (logger.IsEnabled(LogLevel.Information))
                 LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
-            }
         }
 
         return anyChanges;
@@ -172,53 +182,69 @@ public partial class ReminderSchedulerService(
 
         foreach (var habit in habits)
         {
-            if (!users.TryGetValue(habit.UserId, out var user)) continue;
-
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var userToday = DateOnly.FromDateTime(userNow);
-            var userTomorrow = userToday.AddDays(1);
-            var userTimeNow = TimeOnly.FromDateTime(userNow);
-
-            var isDueToday = HabitScheduleService.IsHabitDueOnDate(habit, userToday);
-            var isDueTomorrow = HabitScheduleService.IsHabitDueOnDate(habit, userTomorrow);
-
-            foreach (var sr in habit.ScheduledReminders)
-            {
-                if (sr.When == ScheduledReminderWhen.SameDay && !isDueToday)
-                    continue;
-                if (sr.When == ScheduledReminderWhen.DayBefore && !isDueTomorrow)
-                    continue;
-                if (sr.When != ScheduledReminderWhen.SameDay && sr.When != ScheduledReminderWhen.DayBefore)
-                    continue;
-
-                // Check if current time matches (within 1-minute window)
-                var diffMinutes = (userTimeNow - sr.Time).TotalMinutes;
-                if (diffMinutes < 0 || diffMinutes >= 1) continue;
-
-                // Dedup: use the date the habit is due for, plus the reminder time
-                var dueDate = sr.When == ScheduledReminderWhen.SameDay ? userToday : userTomorrow;
-                if (sentScheduledSet.Contains((habit.Id, dueDate, sr.Time))) continue;
-
-                var lang = user.Language ?? "en";
-                var text = FormatScheduledReminderText(sr.When, lang);
-
-                await pushService.SendToUserAsync(habit.UserId, habit.Title, text, "/", ct);
-
-                var sentReminder = SentReminder.Create(habit.Id, dueDate, 0, sr.Time);
-                await dbContext.SentReminders.AddAsync(sentReminder, ct);
-
-                var notification = Notification.Create(habit.UserId, habit.Title, text, "/", habit.Id);
-                await dbContext.Notifications.AddAsync(notification, ct);
-
-                sentScheduledSet.Add((habit.Id, dueDate, sr.Time));
-                anyChanges = true;
-
-                LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
-            }
+            anyChanges |= await ProcessSingleScheduledReminderAsync(
+                habit, users, sentScheduledSet, pushService, dbContext, ct);
         }
 
         return anyChanges;
+    }
+
+    private async Task<bool> ProcessSingleScheduledReminderAsync(
+        Habit habit, Dictionary<Guid, User> users,
+        HashSet<(Guid HabitId, DateOnly Date, TimeOnly ReminderTimeUtc)> sentScheduledSet,
+        IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
+    {
+        if (!users.TryGetValue(habit.UserId, out var user)) return false;
+
+        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var userToday = DateOnly.FromDateTime(userNow);
+        var userTomorrow = userToday.AddDays(1);
+        var userTimeNow = TimeOnly.FromDateTime(userNow);
+
+        var isDueToday = HabitScheduleService.IsHabitDueOnDate(habit, userToday);
+        var isDueTomorrow = HabitScheduleService.IsHabitDueOnDate(habit, userTomorrow);
+
+        var anyChanges = false;
+
+        foreach (var sr in habit.ScheduledReminders)
+        {
+            if (!ShouldSendScheduledReminder(sr, isDueToday, isDueTomorrow, userTimeNow))
+                continue;
+
+            var dueDate = sr.When == ScheduledReminderWhen.SameDay ? userToday : userTomorrow;
+            if (sentScheduledSet.Contains((habit.Id, dueDate, sr.Time))) continue;
+
+            var lang = user.Language ?? "en";
+            var text = FormatScheduledReminderText(sr.When, lang);
+
+            await pushService.SendToUserAsync(habit.UserId, habit.Title, text, "/", ct);
+
+            var sentReminder = SentReminder.Create(habit.Id, dueDate, 0, sr.Time);
+            await dbContext.SentReminders.AddAsync(sentReminder, ct);
+
+            var notification = Notification.Create(habit.UserId, habit.Title, text, "/", habit.Id);
+            await dbContext.Notifications.AddAsync(notification, ct);
+
+            sentScheduledSet.Add((habit.Id, dueDate, sr.Time));
+            anyChanges = true;
+
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
+        }
+
+        return anyChanges;
+    }
+
+    private static bool ShouldSendScheduledReminder(
+        Domain.ValueObjects.ScheduledReminderTime sr, bool isDueToday, bool isDueTomorrow, TimeOnly userTimeNow)
+    {
+        if (sr.When == ScheduledReminderWhen.SameDay && !isDueToday) return false;
+        if (sr.When == ScheduledReminderWhen.DayBefore && !isDueTomorrow) return false;
+        if (sr.When != ScheduledReminderWhen.SameDay && sr.When != ScheduledReminderWhen.DayBefore) return false;
+
+        var diffMinutes = (userTimeNow - sr.Time).TotalMinutes;
+        return diffMinutes >= 0 && diffMinutes < 1;
     }
 
     private static string Pluralize(string singular, int count) => count > 1 ? singular + "s" : singular;

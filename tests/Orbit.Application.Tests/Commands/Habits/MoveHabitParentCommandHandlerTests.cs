@@ -24,9 +24,9 @@ public class MoveHabitParentCommandHandlerTests
 
     private static Habit CreateTestHabit(string title = "Test Habit")
     {
-        return Habit.Create(
+        return Habit.Create(new HabitCreateParams(
             UserId, title, FrequencyUnit.Day, 1,
-            dueDate: Today).Value;
+            DueDate: Today)).Value;
     }
 
     [Fact]

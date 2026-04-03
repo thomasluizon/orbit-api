@@ -47,7 +47,8 @@ public partial class GoogleTokenService(
             }
             catch (Exception ex)
             {
-                LogGoogleTokenRefreshFailed(logger, ex, user.Id);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogGoogleTokenRefreshFailed(logger, ex, user.Id);
             }
         }
 

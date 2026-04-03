@@ -10,12 +10,18 @@ namespace Orbit.Application.Referrals.Commands;
 
 public record CheckReferralCompletionCommand(Guid UserId) : IRequest<Result>;
 
+/// <summary>
+/// Groups repository dependencies for referral handling to reduce constructor parameter count (S107).
+/// </summary>
+public record ReferralRepositories(
+    IGenericRepository<User> UserRepository,
+    IGenericRepository<Referral> ReferralRepository,
+    IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<HabitLog> HabitLogRepository,
+    IGenericRepository<Notification> NotificationRepository);
+
 public partial class CheckReferralCompletionCommandHandler(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Referral> referralRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<Notification> notificationRepository,
+    ReferralRepositories repos,
     IPushNotificationService pushNotificationService,
     IReferralRewardService referralRewardService,
     IUnitOfWork unitOfWork,
@@ -23,7 +29,7 @@ public partial class CheckReferralCompletionCommandHandler(
 {
     public async Task<Result> Handle(CheckReferralCompletionCommand request, CancellationToken cancellationToken)
     {
-        var pendingReferrals = await referralRepository.FindAsync(
+        var pendingReferrals = await repos.ReferralRepository.FindAsync(
             r => r.ReferredUserId == request.UserId && r.Status == ReferralStatus.Pending,
             cancellationToken: cancellationToken);
 
@@ -31,14 +37,14 @@ public partial class CheckReferralCompletionCommandHandler(
         if (referral is null)
             return Result.Success();
 
-        var trackedReferral = await referralRepository.FindOneTrackedAsync(
+        var trackedReferral = await repos.ReferralRepository.FindOneTrackedAsync(
             r => r.Id == referral.Id,
             cancellationToken: cancellationToken);
 
         if (trackedReferral is null)
             return Result.Success();
 
-        var referredUser = await userRepository.FindOneTrackedAsync(
+        var referredUser = await repos.UserRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);
 
@@ -48,7 +54,7 @@ public partial class CheckReferralCompletionCommandHandler(
         if (DateTime.UtcNow > referredUser.CreatedAtUtc.AddDays(AppConstants.ReferralCompletionWindowDays))
             return Result.Success();
 
-        var userHabits = await habitRepository.FindAsync(
+        var userHabits = await repos.HabitRepository.FindAsync(
             h => h.UserId == request.UserId,
             cancellationToken: cancellationToken);
 
@@ -56,7 +62,7 @@ public partial class CheckReferralCompletionCommandHandler(
         if (habitIds.Count == 0)
             return Result.Success();
 
-        var userLogs = await habitLogRepository.FindAsync(
+        var userLogs = await repos.HabitLogRepository.FindAsync(
             l => habitIds.Contains(l.HabitId),
             cancellationToken: cancellationToken);
 
@@ -66,7 +72,7 @@ public partial class CheckReferralCompletionCommandHandler(
         trackedReferral.MarkCompleted();
 
         // Grant coupon to referrer
-        var referrer = await userRepository.FindOneTrackedAsync(
+        var referrer = await repos.UserRepository.FindOneTrackedAsync(
             u => u.Id == trackedReferral.ReferrerId,
             cancellationToken: cancellationToken);
 
@@ -133,7 +139,7 @@ public partial class CheckReferralCompletionCommandHandler(
 
         var (title, body) = GetNotificationContent(isReferrer, isPt, user.IsPro);
 
-        await notificationRepository.AddAsync(
+        await repos.NotificationRepository.AddAsync(
             Notification.Create(user.Id, title, body, "/profile"), cancellationToken);
 
         _ = Task.Run(async () =>

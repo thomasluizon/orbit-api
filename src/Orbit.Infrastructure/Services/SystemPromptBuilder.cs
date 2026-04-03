@@ -1,8 +1,5 @@
 using System.Text;
-using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.Models;
-using Orbit.Domain.ValueObjects;
 using Orbit.Infrastructure.Services.Prompts;
 using Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
 using Orbit.Infrastructure.Services.Prompts.Sections.Static;
@@ -40,17 +37,17 @@ public class SystemPromptBuilder : ISystemPromptBuilder
     }
 
     // ISystemPromptBuilder implementation
-    string ISystemPromptBuilder.Build(
-        IReadOnlyList<Habit> activeHabits,
-        IReadOnlyList<UserFact> userFacts,
-        bool hasImage,
-        IReadOnlyList<RoutinePattern>? routinePatterns,
-        IReadOnlyList<Tag>? userTags,
-        DateOnly? userToday,
-        IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics,
-        IReadOnlyList<Goal>? activeGoals)
+    string ISystemPromptBuilder.Build(PromptBuildRequest request)
     {
-        var context = new PromptContext(activeHabits, userFacts, hasImage, routinePatterns, userTags, userToday, habitMetrics, activeGoals);
+        var context = new PromptContext(
+            request.ActiveHabits,
+            request.UserFacts,
+            request.HasImage,
+            request.RoutinePatterns,
+            request.UserTags,
+            request.UserToday,
+            request.HabitMetrics,
+            request.ActiveGoals);
         return Build(context);
     }
 

@@ -1,11 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
+using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
-
-
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
@@ -19,64 +18,64 @@ public class UpdateHabitTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = "string", description = "ID of the habit to update" },
-            title = new { type = "string", description = "New title" },
-            description = new { type = "string", description = "New description", nullable = true },
+            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to update" },
+            title = new { type = JsonSchemaTypes.String, description = "New title" },
+            description = new { type = JsonSchemaTypes.String, description = "New description", nullable = true },
             frequency_unit = new
             {
-                type = "string",
+                type = JsonSchemaTypes.String,
                 description = "New recurrence unit. Set to null to convert to one-time task.",
                 nullable = true,
-                @enum = new[] { "Day", "Week", "Month", "Year" }
+                @enum = JsonSchemaTypes.FrequencyUnitEnum
             },
-            frequency_quantity = new { type = "integer", description = "New frequency quantity" },
+            frequency_quantity = new { type = JsonSchemaTypes.Integer, description = "New frequency quantity" },
             days = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "New weekday schedule",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             },
-            due_date = new { type = "string", description = "New due date (YYYY-MM-DD)" },
-            end_date = new { type = "string", description = "New end date (YYYY-MM-DD). Set to null to clear. Habit stops after this date.", nullable = true },
-            due_time = new { type = "string", description = "New due time (HH:mm). Set to null to clear.", nullable = true },
-            is_bad_habit = new { type = "boolean", description = "Whether this is a bad habit" },
-            is_flexible = new { type = "boolean", description = "True for window-based tracking. Cannot have days set." },
-            reminder_enabled = new { type = "boolean", description = "Enable or disable reminders" },
+            due_date = new { type = JsonSchemaTypes.String, description = "New due date (YYYY-MM-DD)" },
+            end_date = new { type = JsonSchemaTypes.String, description = "New end date (YYYY-MM-DD). Set to null to clear. Habit stops after this date.", nullable = true },
+            due_time = new { type = JsonSchemaTypes.String, description = "New due time (HH:mm). Set to null to clear.", nullable = true },
+            is_bad_habit = new { type = JsonSchemaTypes.Boolean, description = "Whether this is a bad habit" },
+            is_flexible = new { type = JsonSchemaTypes.Boolean, description = "True for window-based tracking. Cannot have days set." },
+            reminder_enabled = new { type = JsonSchemaTypes.Boolean, description = "Enable or disable reminders" },
             reminder_times = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "New reminder times (minutes before)",
-                items = new { type = "integer" }
+                items = new { type = JsonSchemaTypes.Integer }
             },
             checklist_items = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Replace checklist items",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        text = new { type = "string", description = "Checklist item text" },
-                        is_checked = new { type = "boolean", description = "Whether checked" }
+                        text = new { type = JsonSchemaTypes.String, description = "Checklist item text" },
+                        is_checked = new { type = JsonSchemaTypes.Boolean, description = "Whether checked" }
                     },
                     required = new[] { "text" }
                 }
             },
             scheduled_reminders = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Absolute-time reminders for habits WITHOUT a due_time. Use INSTEAD of reminder_times when no due_time is set.",
                 items = new
                 {
-                    type = "object",
+                    type = JsonSchemaTypes.Object,
                     properties = new
                     {
-                        when = new { type = "string", description = "day_before or same_day", @enum = new[] { "day_before", "same_day" } },
-                        time = new { type = "string", description = "HH:mm 24h format" }
+                        when = new { type = JsonSchemaTypes.String, description = "day_before or same_day", @enum = JsonSchemaTypes.ScheduledReminderWhenEnum },
+                        time = new { type = JsonSchemaTypes.String, description = "HH:mm 24h format" }
                     },
                     required = new[] { "when", "time" }
                 }
@@ -98,228 +97,128 @@ public class UpdateHabitTool(
         if (habit is null)
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
 
-        // Resolve each field: absent = keep existing, null = clear, value = update
-        var title = PropertyExists(args, "title")
-            ? GetString(args, "title") ?? habit.Title
-            : habit.Title;
+        var updateParams = ResolveUpdateParams(args, habit);
 
-        var description = PropertyExists(args, "description")
-            ? GetString(args, "description")
-            : habit.Description;
-
-        FrequencyUnit? frequencyUnit;
-        if (PropertyExists(args, "frequency_unit"))
-        {
-            var fuStr = GetString(args, "frequency_unit");
-            frequencyUnit = fuStr is not null && Enum.TryParse<FrequencyUnit>(fuStr, ignoreCase: true, out var fu)
-                ? fu
-                : null; // explicit null = make one-time
-        }
-        else
-        {
-            frequencyUnit = habit.FrequencyUnit;
-        }
-
-        var frequencyQuantity = PropertyExists(args, "frequency_quantity")
-            ? GetInt(args, "frequency_quantity") ?? habit.FrequencyQuantity
-            : habit.FrequencyQuantity;
-
-        IReadOnlyList<DayOfWeek>? days;
-        if (PropertyExists(args, "days"))
-        {
-            days = ParseDays(args);
-        }
-        else
-        {
-            days = habit.Days.ToList();
-        }
-
-        bool isBadHabit = PropertyExists(args, "is_bad_habit")
-            ? GetBool(args, "is_bad_habit") ?? habit.IsBadHabit
-            : habit.IsBadHabit;
-
-        DateOnly? dueDate = PropertyExists(args, "due_date")
-            ? ParseDateOnly(args, "due_date") ?? habit.DueDate
-            : habit.DueDate;
-
-        // due_time: absent = keep, null = clear, value = set
-        TimeOnly? dueTime;
-        if (PropertyExists(args, "due_time"))
-        {
-            var dtStr = GetString(args, "due_time");
-            dueTime = dtStr is not null ? ParseTimeOnly(dtStr) : null;
-        }
-        else
-        {
-            dueTime = habit.DueTime;
-        }
-
-        bool? reminderEnabled = PropertyExists(args, "reminder_enabled")
-            ? GetBool(args, "reminder_enabled")
-            : null;
-
-        IReadOnlyList<int>? reminderTimes = PropertyExists(args, "reminder_times")
-            ? ParseIntArray(args, "reminder_times")
-            : null;
-
-        IReadOnlyList<ChecklistItem>? checklistItems = PropertyExists(args, "checklist_items")
-            ? ParseChecklistItems(args)
-            : null;
-
-        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = PropertyExists(args, "scheduled_reminders")
-            ? ParseScheduledReminders(args)
-            : null;
-
-        bool? isFlexible = PropertyExists(args, "is_flexible")
-            ? GetBool(args, "is_flexible")
-            : null;
-
-        // end_date: absent = keep, null = clear, value = set
-        DateOnly? endDate = null;
-        bool? clearEndDate = null;
-        if (PropertyExists(args, "end_date"))
-        {
-            var edStr = GetString(args, "end_date");
-            if (edStr is null)
-                clearEndDate = true;
-            else
-                endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var ed) ? ed : null;
-        }
-
-        var result = habit.Update(
-            title,
-            description,
-            frequencyUnit,
-            frequencyQuantity,
-            days,
-            isBadHabit,
-            dueDate,
-            dueTime: dueTime,
-            reminderEnabled: reminderEnabled,
-            reminderTimes: reminderTimes,
-            checklistItems: checklistItems,
-            isFlexible: isFlexible,
-            endDate: endDate,
-            clearEndDate: clearEndDate,
-            scheduledReminders: scheduledReminders);
-
+        var result = habit.Update(updateParams);
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }
 
-    private static bool PropertyExists(JsonElement el, string prop) =>
-        el.TryGetProperty(prop, out _);
-
-    private static string? GetString(JsonElement el, string prop)
+    /// <summary>
+    /// Resolve each field: absent = keep existing, null = clear, value = update.
+    /// Extracted to reduce ExecuteAsync cognitive complexity.
+    /// </summary>
+    private static HabitUpdateParams ResolveUpdateParams(JsonElement args, Habit habit)
     {
-        if (el.TryGetProperty(prop, out var val))
+        var title = ResolveTitle(args, habit);
+        var description = ResolveDescription(args, habit);
+        var (frequencyUnit, frequencyQuantity) = ResolveFrequency(args, habit);
+        var days = ResolveDays(args, habit);
+        var isBadHabit = ResolveBoolField(args, "is_bad_habit", habit.IsBadHabit);
+        var dueDate = ResolveDueDate(args, habit);
+        var dueTime = ResolveDueTime(args, habit);
+        var (endDate, clearEndDate) = ResolveEndDate(args);
+
+        return new HabitUpdateParams(
+            title, description, frequencyUnit, frequencyQuantity, days, isBadHabit, dueDate,
+            DueTime: dueTime,
+            ReminderEnabled: ResolveOptionalBool(args, "reminder_enabled"),
+            ReminderTimes: ResolveOptionalArray(args, "reminder_times"),
+            ChecklistItems: ResolveOptionalChecklist(args),
+            IsFlexible: ResolveOptionalBool(args, "is_flexible"),
+            EndDate: endDate,
+            ClearEndDate: clearEndDate,
+            ScheduledReminders: ResolveOptionalScheduledReminders(args));
+    }
+
+    private static string ResolveTitle(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "title")
+            ? JsonArgumentParser.GetNullableString(args, "title") ?? habit.Title
+            : habit.Title;
+
+    private static string? ResolveDescription(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "description")
+            ? JsonArgumentParser.GetNullableString(args, "description")
+            : habit.Description;
+
+    private static (FrequencyUnit? Unit, int? Quantity) ResolveFrequency(JsonElement args, Habit habit)
+    {
+        FrequencyUnit? frequencyUnit;
+        if (JsonArgumentParser.PropertyExists(args, "frequency_unit"))
         {
-            if (val.ValueKind == JsonValueKind.String) return val.GetString();
-            if (val.ValueKind == JsonValueKind.Null) return null;
+            var fuStr = JsonArgumentParser.GetNullableString(args, "frequency_unit");
+            frequencyUnit = fuStr is not null && Enum.TryParse<FrequencyUnit>(fuStr, ignoreCase: true, out var fu)
+                ? fu
+                : null;
         }
-        return null;
-    }
-
-    private static int? GetInt(JsonElement el, string prop)
-    {
-        if (el.TryGetProperty(prop, out var val) && val.ValueKind == JsonValueKind.Number)
-            return val.GetInt32();
-        return null;
-    }
-
-    private static bool? GetBool(JsonElement el, string prop)
-    {
-        if (el.TryGetProperty(prop, out var val))
+        else
         {
-            if (val.ValueKind == JsonValueKind.True) return true;
-            if (val.ValueKind == JsonValueKind.False) return false;
+            frequencyUnit = habit.FrequencyUnit;
         }
-        return null;
+
+        var frequencyQuantity = JsonArgumentParser.PropertyExists(args, "frequency_quantity")
+            ? JsonArgumentParser.GetOptionalInt(args, "frequency_quantity") ?? habit.FrequencyQuantity
+            : habit.FrequencyQuantity;
+
+        return (frequencyUnit, frequencyQuantity);
     }
 
-    private static List<DayOfWeek>? ParseDays(JsonElement el)
+    private static IReadOnlyList<DayOfWeek>? ResolveDays(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "days")
+            ? JsonArgumentParser.ParseDays(args)
+            : habit.Days.ToList();
+
+    private static bool ResolveBoolField(JsonElement args, string prop, bool currentValue) =>
+        JsonArgumentParser.PropertyExists(args, prop)
+            ? JsonArgumentParser.GetOptionalBool(args, prop) ?? currentValue
+            : currentValue;
+
+    private static DateOnly? ResolveDueDate(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "due_date")
+            ? JsonArgumentParser.ParseDateOnly(args, "due_date") ?? habit.DueDate
+            : habit.DueDate;
+
+    private static TimeOnly? ResolveDueTime(JsonElement args, Habit habit)
     {
-        if (!el.TryGetProperty("days", out var daysEl) || daysEl.ValueKind != JsonValueKind.Array)
-            return null;
+        if (!JsonArgumentParser.PropertyExists(args, "due_time"))
+            return habit.DueTime;
 
-        var days = new List<DayOfWeek>();
-        foreach (var d in daysEl.EnumerateArray())
-        {
-            var dayStr = d.GetString();
-            if (dayStr is not null && Enum.TryParse<DayOfWeek>(dayStr, ignoreCase: true, out var day))
-                days.Add(day);
-        }
-        return days;
+        var dtStr = JsonArgumentParser.GetNullableString(args, "due_time");
+        return dtStr is not null ? JsonArgumentParser.ParseTimeOnlyFromString(dtStr) : null;
     }
 
-    private static DateOnly? ParseDateOnly(JsonElement el, string prop)
+    private static (DateOnly? EndDate, bool? ClearEndDate) ResolveEndDate(JsonElement args)
     {
-        var str = GetString(el, prop);
-        if (str is null) return null;
-        return DateOnly.TryParseExact(str, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+        if (!JsonArgumentParser.PropertyExists(args, "end_date"))
+            return (null, null);
+
+        var edStr = JsonArgumentParser.GetNullableString(args, "end_date");
+        if (edStr is null)
+            return (null, true);
+
+        var endDate = DateOnly.TryParseExact(edStr, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var ed) ? ed : (DateOnly?)null;
+        return (endDate, null);
     }
 
-    private static TimeOnly? ParseTimeOnly(string str) =>
-        TimeOnly.TryParse(str, CultureInfo.InvariantCulture, out var time) ? time : null;
+    private static bool? ResolveOptionalBool(JsonElement args, string prop) =>
+        JsonArgumentParser.PropertyExists(args, prop)
+            ? JsonArgumentParser.GetOptionalBool(args, prop)
+            : null;
 
-    private static List<int>? ParseIntArray(JsonElement el, string prop)
-    {
-        if (!el.TryGetProperty(prop, out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
-            return null;
+    private static IReadOnlyList<int>? ResolveOptionalArray(JsonElement args, string prop) =>
+        JsonArgumentParser.PropertyExists(args, prop)
+            ? JsonArgumentParser.ParseIntArray(args, prop)
+            : null;
 
-        var items = new List<int>();
-        foreach (var item in arrEl.EnumerateArray())
-        {
-            if (item.ValueKind == JsonValueKind.Number)
-                items.Add(item.GetInt32());
-        }
-        return items.Count > 0 ? items : null;
-    }
+    private static IReadOnlyList<ChecklistItem>? ResolveOptionalChecklist(JsonElement args) =>
+        JsonArgumentParser.PropertyExists(args, "checklist_items")
+            ? JsonArgumentParser.ParseChecklistItems(args)
+            : null;
 
-    private static List<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
-    {
-        if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var items = new List<ScheduledReminderTime>();
-        foreach (var item in arrEl.EnumerateArray())
-        {
-            var whenStr = GetString(item, "when");
-            var timeStr = GetString(item, "time");
-            if (whenStr is null || timeStr is null) continue;
-            if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
-            if (!TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var time)) continue;
-            items.Add(new ScheduledReminderTime(when, time));
-        }
-        return items.Count > 0 ? items : null;
-    }
-
-    private static bool ParseScheduledReminderWhen(string value, out ScheduledReminderWhen result)
-    {
-        result = value switch
-        {
-            "same_day" => ScheduledReminderWhen.SameDay,
-            "day_before" => ScheduledReminderWhen.DayBefore,
-            _ => default
-        };
-        return value is "same_day" or "day_before";
-    }
-
-    private static List<ChecklistItem>? ParseChecklistItems(JsonElement el)
-    {
-        if (!el.TryGetProperty("checklist_items", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var items = new List<ChecklistItem>();
-        foreach (var item in arrEl.EnumerateArray())
-        {
-            var text = GetString(item, "text");
-            if (string.IsNullOrWhiteSpace(text)) continue;
-            var isChecked = GetBool(item, "is_checked") ?? false;
-            items.Add(new ChecklistItem(text, isChecked));
-        }
-        return items.Count > 0 ? items : null;
-    }
+    private static IReadOnlyList<ScheduledReminderTime>? ResolveOptionalScheduledReminders(JsonElement args) =>
+        JsonArgumentParser.PropertyExists(args, "scheduled_reminders")
+            ? JsonArgumentParser.ParseScheduledReminders(args)
+            : null;
 }

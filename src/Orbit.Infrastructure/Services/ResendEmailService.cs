@@ -123,7 +123,8 @@ public partial class ResendEmailService(
                 var parts = pair.Split(':', 2);
                 if (parts.Length >= 1 && string.Equals(parts[0].Trim(), toNormalized, StringComparison.OrdinalIgnoreCase))
                 {
-                    LogSkippingTestEmail(logger, to, subject);
+                    if (logger.IsEnabled(LogLevel.Information))
+                        LogSkippingTestEmail(logger, to, subject);
                     return;
                 }
             }
@@ -145,12 +146,14 @@ public partial class ResendEmailService(
             var response = await client.PostAsync("/emails", content, cancellationToken);
             if (response.IsSuccessStatusCode)
             {
-                LogEmailSent(logger, to, subject);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogEmailSent(logger, to, subject);
             }
             else
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                LogEmailFailed(logger, to, response.StatusCode, body);
+                if (logger.IsEnabled(LogLevel.Error))
+                    LogEmailFailed(logger, to, response.StatusCode, body);
             }
         }
         catch (Exception ex)

@@ -28,7 +28,8 @@ public sealed partial class AiFactExtractionService(
             var facts = await aiClient.CompleteJsonAsync<ExtractedFacts>(prompt, temperature: 0.1, cancellationToken);
 
             stopwatch.Stop();
-            LogFactExtractionResponded(logger, stopwatch.ElapsedMilliseconds);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFactExtractionResponded(logger, stopwatch.ElapsedMilliseconds);
 
             if (facts is null)
             {
@@ -36,7 +37,8 @@ public sealed partial class AiFactExtractionService(
                 return Result.Success(new ExtractedFacts { Facts = [] });
             }
 
-            LogFactsExtracted(logger, facts.Facts.Count);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFactsExtracted(logger, facts.Facts.Count);
             return Result.Success(facts);
         }
         catch (System.Text.Json.JsonException ex)

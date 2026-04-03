@@ -137,7 +137,8 @@ public partial class SlipAlertSchedulerService(
 
         if (messageResult.IsFailure)
         {
-            LogSlipAlertMessageFailed(logger, habit.Id);
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogSlipAlertMessageFailed(logger, habit.Id);
             return false;
         }
 
@@ -148,7 +149,8 @@ public partial class SlipAlertSchedulerService(
         await RecordSentAlertAsync(habit, userNow, title, body, dbContext, ct);
 
         sentAlertHabitIds.Add(habit.Id);
-        LogSentSlipAlert(logger, habit.Id, habit.UserId);
+        if (logger.IsEnabled(LogLevel.Information))
+            LogSentSlipAlert(logger, habit.Id, habit.UserId);
         return true;
     }
 

@@ -88,7 +88,7 @@ public class DuplicateHabitCommandHandler(
 
     private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId)
     {
-        return Habit.Create(
+        return Habit.Create(new HabitCreateParams(
             source.UserId,
             source.Title,
             source.FrequencyUnit,
@@ -100,10 +100,10 @@ public class DuplicateHabitCommandHandler(
             source.DueTime,
             source.DueEndTime,
             parentHabitId,
-            checklistItems: source.ChecklistItems,
-            isGeneral: source.IsGeneral,
-            isFlexible: source.IsFlexible,
-            endDate: source.EndDate,
-            scheduledReminders: source.ScheduledReminders);
+            ChecklistItems: source.ChecklistItems,
+            IsGeneral: source.IsGeneral,
+            IsFlexible: source.IsFlexible,
+            EndDate: source.EndDate,
+            ScheduledReminders: source.ScheduledReminders));
     }
 }

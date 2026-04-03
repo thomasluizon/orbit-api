@@ -17,15 +17,15 @@ public class AssignTagsTool(
 
     public object GetParameterSchema() => new
     {
-        type = "object",
+        type = JsonSchemaTypes.Object,
         properties = new
         {
-            habit_id = new { type = "string", description = "ID of the habit to tag" },
+            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to tag" },
             tag_names = new
             {
-                type = "array",
+                type = JsonSchemaTypes.Array,
                 description = "Tag names to assign",
-                items = new { type = "string" }
+                items = new { type = JsonSchemaTypes.String }
             }
         },
         required = new[] { "habit_id", "tag_names" }

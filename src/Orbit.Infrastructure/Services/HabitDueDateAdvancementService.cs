@@ -83,7 +83,8 @@ public partial class HabitDueDateAdvancementService(
         if (advanced > 0)
         {
             await dbContext.SaveChangesAsync(ct);
-            LogDueDatesAdvanced(logger, advanced);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogDueDatesAdvanced(logger, advanced);
         }
     }
 

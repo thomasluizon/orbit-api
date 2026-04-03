@@ -36,7 +36,7 @@ public class GetHabitFullDetailQueryHandler(
                   .Include(h => h.Logs),
             cancellationToken);
 
-        var habit = habits.FirstOrDefault();
+        var habit = habits.Count > 0 ? habits[0] : null;
         if (habit is null)
             return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 

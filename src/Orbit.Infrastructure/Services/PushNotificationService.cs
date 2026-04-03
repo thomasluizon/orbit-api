@@ -58,7 +58,8 @@ public partial class PushNotificationService(
     {
         if (FirebaseMessaging.DefaultInstance is null)
         {
-            LogFcmNotInitialized(logger, subs.Count);
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogFcmNotInitialized(logger, subs.Count);
             return;
         }
 
@@ -73,19 +74,22 @@ public partial class PushNotificationService(
                     Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
                 };
                 await FirebaseMessaging.DefaultInstance.SendAsync(message, ct);
-                LogFcmPushSent(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogFcmPushSent(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
             }
             catch (FirebaseMessagingException ex) when (
                 ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
                 ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
                 ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
             {
-                LogFcmTokenStale(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogFcmTokenStale(logger, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
                 staleSubscriptions.Add(sub);
             }
             catch (Exception ex)
             {
-                LogFcmPushFailed(logger, ex, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogFcmPushFailed(logger, ex, sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...");
             }
         }
     }
@@ -121,21 +125,25 @@ public partial class PushNotificationService(
                     }
                 };
                 await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
-                LogWebPushSent(logger, sub.Endpoint);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogWebPushSent(logger, sub.Endpoint);
             }
             catch (PushServiceClientException ex)
                 when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
             {
-                LogWebPushSubscriptionGone(logger, sub.Endpoint);
+                if (logger.IsEnabled(LogLevel.Information))
+                    LogWebPushSubscriptionGone(logger, sub.Endpoint);
                 staleSubscriptions.Add(sub);
             }
             catch (PushServiceClientException ex)
             {
-                LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
             }
             catch (Exception ex)
             {
-                LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
             }
         }
     }
