@@ -1,6 +1,4 @@
-using System.Globalization;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -144,132 +142,140 @@ public class CreateHabitTool(
 
         var title = titleEl.GetString() ?? string.Empty;
 
-        // Check habit limit
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
         if (habitGate.IsFailure)
             return new ToolResult(false, Error: habitGate.Error);
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
-        // Parse optional fields
-        string? description = GetOptionalString(args, "description");
-        FrequencyUnit? frequencyUnit = ParseFrequencyUnit(args);
-        int? frequencyQuantity = GetOptionalInt(args, "frequency_quantity") ?? (frequencyUnit is not null ? 1 : null);
-        DateOnly dueDate = ParseDateOnly(args, "due_date") ?? today;
-        TimeOnly? dueTime = ParseTimeOnly(args, "due_time");
-        bool isBadHabit = GetOptionalBool(args, "is_bad_habit") ?? false;
-        bool isFlexible = GetOptionalBool(args, "is_flexible") ?? false;
-        bool slipAlertEnabled = GetOptionalBool(args, "slip_alert_enabled") ?? isBadHabit;
-        bool reminderEnabled = GetOptionalBool(args, "reminder_enabled") ?? false;
-        var reminderTimes = ParseIntArray(args, "reminder_times");
-        var days = ParseDays(args);
-        var checklistItems = ParseChecklistItems(args);
-        var scheduledReminders = ParseScheduledReminders(args);
-        DateOnly? endDate = ParseDateOnly(args, "end_date");
-
-        var habitResult = Habit.Create(
-            userId,
-            title,
-            frequencyUnit,
-            frequencyQuantity,
-            description,
-            days: days,
-            isBadHabit: isBadHabit,
-            dueDate: dueDate,
-            dueTime: dueTime,
-            reminderEnabled: reminderEnabled,
-            reminderTimes: reminderTimes,
-            slipAlertEnabled: slipAlertEnabled,
-            checklistItems: checklistItems,
-            isFlexible: isFlexible,
-            endDate: endDate,
-            scheduledReminders: scheduledReminders);
-
+        var habitResult = BuildParentHabit(args, userId, title, today);
         if (habitResult.IsFailure)
             return new ToolResult(false, Error: habitResult.Error);
 
         var habit = habitResult.Value;
 
-        // Handle inline sub-habits
-        if (args.TryGetProperty("sub_habits", out var subEl) && subEl.ValueKind == JsonValueKind.Array)
-        {
-            var subGate = await payGate.CanCreateSubHabits(userId, ct);
-            if (subGate.IsFailure)
-                return new ToolResult(false, Error: subGate.Error);
-
-            foreach (var sub in subEl.EnumerateArray())
-            {
-                var subTitle = GetOptionalString(sub, "title") ?? "Untitled";
-                var subFreqUnit = ParseFrequencyUnit(sub) ?? frequencyUnit;
-                var subFreqQty = GetOptionalInt(sub, "frequency_quantity") ?? frequencyQuantity;
-                var subDays = ParseDays(sub);
-                if (subDays is null || subDays.Count == 0)
-                    subDays = days;
-                var subDueDate = ParseDateOnly(sub, "due_date") ?? dueDate;
-                bool subIsBadHabit = GetOptionalBool(sub, "is_bad_habit") ?? false;
-                var subChecklistItems = ParseChecklistItems(sub);
-
-                var childResult = Habit.Create(
-                    userId,
-                    subTitle,
-                    subFreqUnit,
-                    subFreqQty,
-                    GetOptionalString(sub, "description"),
-                    days: subDays,
-                    isBadHabit: subIsBadHabit,
-                    dueDate: subDueDate,
-                    parentHabitId: habit.Id,
-                    checklistItems: subChecklistItems);
-
-                if (childResult.IsFailure)
-                    return new ToolResult(false, Error: childResult.Error);
-
-                await habitRepository.AddAsync(childResult.Value, ct);
-            }
-        }
+        var subError = await CreateInlineSubHabitsAsync(args, habit, userId, today, ct);
+        if (subError is not null)
+            return subError;
 
         await habitRepository.AddAsync(habit, ct);
-
-        // Assign tags
-        if (args.TryGetProperty("tag_names", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array)
-        {
-            var tagNames = new List<string>();
-            foreach (var t in tagsEl.EnumerateArray())
-            {
-                var name = t.GetString();
-                if (!string.IsNullOrWhiteSpace(name))
-                    tagNames.Add(name);
-            }
-
-            if (tagNames.Count > 0)
-                await AssignTagsToHabitAsync(habit, tagNames, userId, ct);
-        }
-
-        // Link goals
-        if (args.TryGetProperty("goal_ids", out var goalIdsEl) && goalIdsEl.ValueKind == JsonValueKind.Array)
-        {
-            var goalIds = new List<Guid>();
-            foreach (var g in goalIdsEl.EnumerateArray())
-            {
-                if (Guid.TryParse(g.GetString(), out var gid))
-                    goalIds.Add(gid);
-            }
-
-            if (goalIds.Count > 0)
-            {
-                var goals = await goalRepository.FindTrackedAsync(
-                    gl => goalIds.Contains(gl.Id) && gl.UserId == userId,
-                    ct);
-
-                foreach (var goal in goals)
-                    habit.AddGoal(goal);
-            }
-        }
-
-        // Save immediately so subsequent tool calls (e.g. create_sub_habit) can find this habit
+        await AssignTagsFromArgsAsync(args, habit, userId, ct);
+        await LinkGoalsFromArgsAsync(args, habit, userId, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
+    }
+
+    private static Domain.Common.Result<Habit> BuildParentHabit(
+        JsonElement args, Guid userId, string title, DateOnly today)
+    {
+        var frequencyUnit = JsonArgumentParser.ParseFrequencyUnit(args);
+        int? frequencyQuantity = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
+            ?? (frequencyUnit is not null ? 1 : null);
+        bool isBadHabit = JsonArgumentParser.GetOptionalBool(args, "is_bad_habit") ?? false;
+
+        return Habit.Create(new HabitCreateParams(
+            userId, title, frequencyUnit, frequencyQuantity,
+            JsonArgumentParser.GetOptionalString(args, "description"),
+            Days: JsonArgumentParser.ParseDays(args),
+            IsBadHabit: isBadHabit,
+            DueDate: JsonArgumentParser.ParseDateOnly(args, "due_date") ?? today,
+            DueTime: JsonArgumentParser.ParseTimeOnly(args, "due_time"),
+            ReminderEnabled: JsonArgumentParser.GetOptionalBool(args, "reminder_enabled") ?? false,
+            ReminderTimes: JsonArgumentParser.ParseIntArray(args, "reminder_times"),
+            SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(args, "slip_alert_enabled") ?? isBadHabit,
+            ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
+            IsFlexible: JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false,
+            EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date"),
+            ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(args)));
+    }
+
+    private async Task<ToolResult?> CreateInlineSubHabitsAsync(
+        JsonElement args, Habit parent, Guid userId, DateOnly parentDueDate, CancellationToken ct)
+    {
+        if (!args.TryGetProperty("sub_habits", out var subEl) || subEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var subGate = await payGate.CanCreateSubHabits(userId, ct);
+        if (subGate.IsFailure)
+            return new ToolResult(false, Error: subGate.Error);
+
+        var parentFreqUnit = JsonArgumentParser.ParseFrequencyUnit(args);
+        var parentFreqQty = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
+            ?? (parentFreqUnit is not null ? 1 : null);
+        var parentDays = JsonArgumentParser.ParseDays(args);
+
+        foreach (var sub in subEl.EnumerateArray())
+        {
+            var childResult = BuildChildHabit(sub, userId, parent.Id, parentFreqUnit, parentFreqQty, parentDays, parentDueDate);
+            if (childResult.IsFailure)
+                return new ToolResult(false, Error: childResult.Error);
+
+            await habitRepository.AddAsync(childResult.Value, ct);
+        }
+
+        return null;
+    }
+
+    private static Domain.Common.Result<Habit> BuildChildHabit(
+        JsonElement sub, Guid userId, Guid parentId,
+        FrequencyUnit? parentFreqUnit, int? parentFreqQty,
+        List<DayOfWeek>? parentDays, DateOnly parentDueDate)
+    {
+        var subDays = JsonArgumentParser.ParseDays(sub);
+        if (subDays is null || subDays.Count == 0)
+            subDays = parentDays;
+
+        return Habit.Create(new HabitCreateParams(
+            userId,
+            JsonArgumentParser.GetOptionalString(sub, "title") ?? "Untitled",
+            JsonArgumentParser.ParseFrequencyUnit(sub) ?? parentFreqUnit,
+            JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity") ?? parentFreqQty,
+            JsonArgumentParser.GetOptionalString(sub, "description"),
+            Days: subDays,
+            IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
+            DueDate: JsonArgumentParser.ParseDateOnly(sub, "due_date") ?? parentDueDate,
+            ParentHabitId: parentId,
+            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub)));
+    }
+
+    private async Task AssignTagsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)
+    {
+        if (!args.TryGetProperty("tag_names", out var tagsEl) || tagsEl.ValueKind != JsonValueKind.Array)
+            return;
+
+        var tagNames = new List<string>();
+        foreach (var t in tagsEl.EnumerateArray())
+        {
+            var name = t.GetString();
+            if (!string.IsNullOrWhiteSpace(name))
+                tagNames.Add(name);
+        }
+
+        if (tagNames.Count > 0)
+            await AssignTagsToHabitAsync(habit, tagNames, userId, ct);
+    }
+
+    private async Task LinkGoalsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)
+    {
+        if (!args.TryGetProperty("goal_ids", out var goalIdsEl) || goalIdsEl.ValueKind != JsonValueKind.Array)
+            return;
+
+        var goalIds = new List<Guid>();
+        foreach (var g in goalIdsEl.EnumerateArray())
+        {
+            if (Guid.TryParse(g.GetString(), out var gid))
+                goalIds.Add(gid);
+        }
+
+        if (goalIds.Count == 0)
+            return;
+
+        var goals = await goalRepository.FindTrackedAsync(
+            gl => goalIds.Contains(gl.Id) && gl.UserId == userId, ct);
+
+        foreach (var goal in goals)
+            habit.AddGoal(goal);
     }
 
     private async Task AssignTagsToHabitAsync(Habit habit, List<string> tagNames, Guid userId, CancellationToken ct)
@@ -301,123 +307,4 @@ public class CreateHabitTool(
 
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
-
-    private static string? GetOptionalString(JsonElement el, string prop)
-    {
-        if (el.TryGetProperty(prop, out var val) && val.ValueKind == JsonValueKind.String)
-            return val.GetString();
-        return null;
-    }
-
-    private static int? GetOptionalInt(JsonElement el, string prop)
-    {
-        if (el.TryGetProperty(prop, out var val) && val.ValueKind == JsonValueKind.Number)
-            return val.GetInt32();
-        return null;
-    }
-
-    private static bool? GetOptionalBool(JsonElement el, string prop)
-    {
-        if (el.TryGetProperty(prop, out var val))
-        {
-            if (val.ValueKind == JsonValueKind.True) return true;
-            if (val.ValueKind == JsonValueKind.False) return false;
-        }
-        return null;
-    }
-
-    private static FrequencyUnit? ParseFrequencyUnit(JsonElement el)
-    {
-        var str = GetOptionalString(el, "frequency_unit");
-        if (str is null) return null;
-        return Enum.TryParse<FrequencyUnit>(str, ignoreCase: true, out var unit) ? unit : null;
-    }
-
-    private static List<DayOfWeek>? ParseDays(JsonElement el)
-    {
-        if (!el.TryGetProperty("days", out var daysEl) || daysEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var days = new List<DayOfWeek>();
-        foreach (var d in daysEl.EnumerateArray())
-        {
-            var dayStr = d.GetString();
-            if (dayStr is not null && Enum.TryParse<DayOfWeek>(dayStr, ignoreCase: true, out var day))
-                days.Add(day);
-        }
-        return days.Count > 0 ? days : null;
-    }
-
-    private static DateOnly? ParseDateOnly(JsonElement el, string prop)
-    {
-        var str = GetOptionalString(el, prop);
-        if (str is null) return null;
-        return DateOnly.TryParseExact(str, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
-    }
-
-    private static TimeOnly? ParseTimeOnly(JsonElement el, string prop)
-    {
-        var str = GetOptionalString(el, prop);
-        if (str is null) return null;
-        return TimeOnly.TryParse(str, CultureInfo.InvariantCulture, out var time) ? time : null;
-    }
-
-    private static List<int>? ParseIntArray(JsonElement el, string prop)
-    {
-        if (!el.TryGetProperty(prop, out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var items = new List<int>();
-        foreach (var item in arrEl.EnumerateArray())
-        {
-            if (item.ValueKind == JsonValueKind.Number)
-                items.Add(item.GetInt32());
-        }
-        return items.Count > 0 ? items : null;
-    }
-
-    private static List<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
-    {
-        if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var items = new List<ScheduledReminderTime>();
-        foreach (var item in arrEl.EnumerateArray())
-        {
-            var whenStr = GetOptionalString(item, "when");
-            var timeStr = GetOptionalString(item, "time");
-            if (whenStr is null || timeStr is null) continue;
-            if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
-            if (!TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var time)) continue;
-            items.Add(new ScheduledReminderTime(when, time));
-        }
-        return items.Count > 0 ? items : null;
-    }
-
-    private static bool ParseScheduledReminderWhen(string value, out ScheduledReminderWhen result)
-    {
-        result = value switch
-        {
-            "same_day" => ScheduledReminderWhen.SameDay,
-            "day_before" => ScheduledReminderWhen.DayBefore,
-            _ => default
-        };
-        return value is "same_day" or "day_before";
-    }
-
-    private static List<ChecklistItem>? ParseChecklistItems(JsonElement el)
-    {
-        if (!el.TryGetProperty("checklist_items", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var items = new List<ChecklistItem>();
-        foreach (var item in arrEl.EnumerateArray())
-        {
-            var text = GetOptionalString(item, "text");
-            if (string.IsNullOrWhiteSpace(text)) continue;
-            var isChecked = GetOptionalBool(item, "is_checked") ?? false;
-            items.Add(new ChecklistItem(text, isChecked));
-        }
-        return items.Count > 0 ? items : null;
-    }
 }

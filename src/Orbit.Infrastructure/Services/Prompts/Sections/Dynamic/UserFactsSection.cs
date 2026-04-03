@@ -1,9 +1,18 @@
 using System.Text;
+using Orbit.Domain.Entities;
 
 namespace Orbit.Infrastructure.Services.Prompts.Sections.Dynamic;
 
 public class UserFactsSection : IPromptSection
 {
+    private static readonly (string Key, string Header)[] FactCategories =
+    [
+        ("preference", "**Preferences** (likes, dislikes, personal style):"),
+        ("routine", "**Routines** (schedules, patterns, recurring behaviors):"),
+        ("context", "**Context** (goals, life situation, background):"),
+        ("general", "**Other:**")
+    ];
+
     public int Order => 500;
     public bool ShouldInclude(PromptContext context) => true;
 
@@ -12,6 +21,7 @@ public class UserFactsSection : IPromptSection
         var sb = new StringBuilder();
         sb.AppendLine();
         sb.AppendLine("## What You Know About This User");
+
         if (context.UserFacts.Count == 0)
         {
             sb.AppendLine("(nothing yet - learn as you go)");
@@ -23,34 +33,12 @@ public class UserFactsSection : IPromptSection
                 .GroupBy(f => f.Category?.ToLowerInvariant() ?? "general")
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            if (grouped.TryGetValue("preference", out var preferences) && preferences.Count > 0)
+            foreach (var (key, header) in FactCategories)
             {
-                sb.AppendLine("**Preferences** (likes, dislikes, personal style):");
-                foreach (var fact in preferences)
-                    sb.AppendLine($"  - {fact.FactText}");
-            }
-
-            if (grouped.TryGetValue("routine", out var routines) && routines.Count > 0)
-            {
-                sb.AppendLine("**Routines** (schedules, patterns, recurring behaviors):");
-                foreach (var fact in routines)
-                    sb.AppendLine($"  - {fact.FactText}");
-            }
-
-            if (grouped.TryGetValue("context", out var contexts) && contexts.Count > 0)
-            {
-                sb.AppendLine("**Context** (goals, life situation, background):");
-                foreach (var fact in contexts)
-                    sb.AppendLine($"  - {fact.FactText}");
-            }
-
-            if (grouped.TryGetValue("general", out var general) && general.Count > 0)
-            {
-                sb.AppendLine("**Other:**");
-                foreach (var fact in general)
-                    sb.AppendLine($"  - {fact.FactText}");
+                AppendFactCategory(sb, grouped, key, header);
             }
         }
+
         sb.AppendLine();
         sb.AppendLine("""
             ### How to Use These Facts:
@@ -61,5 +49,17 @@ public class UserFactsSection : IPromptSection
             - When facts conflict with a user's request, gently acknowledge it (e.g., user says "I want to wake up at 5am" but facts say they work night shifts - ask if they're sure).
             """);
         return sb.ToString();
+    }
+
+    private static void AppendFactCategory(
+        StringBuilder sb, Dictionary<string, List<UserFact>> grouped,
+        string key, string header)
+    {
+        if (!grouped.TryGetValue(key, out var facts) || facts.Count == 0)
+            return;
+
+        sb.AppendLine(header);
+        foreach (var fact in facts)
+            sb.AppendLine($"  - {fact.FactText}");
     }
 }

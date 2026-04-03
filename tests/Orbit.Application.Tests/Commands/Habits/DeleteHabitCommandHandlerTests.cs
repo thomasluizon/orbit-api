@@ -25,9 +25,9 @@ public class DeleteHabitCommandHandlerTests
 
     private static Habit CreateTestHabit(Guid? userId = null)
     {
-        return Habit.Create(
+        return Habit.Create(new HabitCreateParams(
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
-            dueDate: Today).Value;
+            DueDate: Today)).Value;
     }
 
     [Fact]

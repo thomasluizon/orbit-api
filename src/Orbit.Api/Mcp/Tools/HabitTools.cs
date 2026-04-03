@@ -92,6 +92,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
     public async Task<string> CreateHabit(
         ClaimsPrincipal user,
         [Description("Name of the habit")] string title,
@@ -114,11 +115,12 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             description,
             freqUnit,
             frequencyQuantity,
-            DueDate: DateOnly.Parse(dueDate, CultureInfo.InvariantCulture),
             IsBadHabit: isBadHabit,
+            DueDate: DateOnly.Parse(dueDate, CultureInfo.InvariantCulture),
             IsGeneral: isGeneral,
-            IsFlexible: isFlexible,
-            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null);
+            Options: new HabitCommandOptions(
+                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
+                IsFlexible: isFlexible));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -127,6 +129,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     }
 
     [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Title is required (pass current title if unchanged). Only change fields you need to modify.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
     public async Task<string> UpdateHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
@@ -149,7 +152,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             freqUnit,
             frequencyQuantity,
             DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
-            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null);
+            Options: new UpdateHabitCommandOptions(
+                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -304,6 +308,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     }
 
     [McpServerTool(Name = "create_sub_habit"), Description("Create a sub-habit under an existing parent habit. Requires Pro subscription.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S107:Methods should not have too many parameters", Justification = "MCP SDK requires individual [Description]-annotated parameters for tool schema generation")]
     public async Task<string> CreateSubHabit(
         ClaimsPrincipal user,
         [Description("The parent habit ID (GUID)")] string parentHabitId,
@@ -327,10 +332,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             description,
             freqUnit,
             frequencyQuantity,
-            DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
             IsBadHabit: isBadHabit,
-            IsFlexible: isFlexible,
-            DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null);
+            DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
+            Options: new HabitCommandOptions(
+                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
+                IsFlexible: isFlexible));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess

@@ -82,59 +82,65 @@ public partial class GoalDeadlineNotificationService(
 
         foreach (var goal in goals)
         {
-            if (!users.TryGetValue(goal.UserId, out var user)) continue;
-
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-            var userToday = DateOnly.FromDateTime(userNow);
-
-            if (!goal.Deadline.HasValue) continue;
-
-            var daysUntilDeadline = goal.Deadline.Value.DayNumber - userToday.DayNumber;
-
-            foreach (var daysBefore in NotifyDaysBefore)
-            {
-                if (daysUntilDeadline != daysBefore) continue;
-
-                // Check if we already sent a notification for this goal + daysBefore.
-                // FUTURE: The Url field is being repurposed as a deduplication key here (notificationKey).
-                // This is a hack -- the Notification entity's Url field was designed to hold a navigation URL,
-                // not an opaque string identifier. This should be replaced with a proper SentGoalDeadlineNotification
-                // entity (similar to SentReminder/SentSlipAlert) that tracks (GoalId, DaysBefore) with a unique
-                // constraint, eliminating the need to abuse the Url column for dedup.
-                var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
-                if (sentKeys.Contains(notificationKey)) continue;
-
-                var lang = user.Language ?? "en";
-                var isPt = lang.StartsWith("pt");
-
-                var progressText = $"{goal.CurrentValue}/{goal.TargetValue} {goal.Unit}";
-                var body = daysBefore switch
-                {
-                    1 => isPt
-                        ? $"Sua meta termina amanhã - você está em {progressText}"
-                        : $"Your goal is due tomorrow - you're at {progressText}",
-                    _ => isPt
-                        ? $"Sua meta termina em {daysBefore} dias - você está em {progressText}"
-                        : $"Your goal is due in {daysBefore} days - you're at {progressText}"
-                };
-
-                await pushService.SendToUserAsync(goal.UserId, goal.Title, body, "/", ct);
-
-                var notification = Notification.Create(goal.UserId, goal.Title, body, notificationKey);
-                await dbContext.Notifications.AddAsync(notification, ct);
-
-                // Track in memory to prevent duplicate sends within the same scheduler tick
-                sentKeys.Add(notificationKey);
-                anyChanges = true;
-
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
-            }
+            anyChanges |= await ProcessGoalDeadlineAsync(goal, users, sentKeys, pushService, dbContext, ct);
         }
 
         if (anyChanges)
             await dbContext.SaveChangesAsync(ct);
+    }
+
+    private async Task<bool> ProcessGoalDeadlineAsync(
+        Goal goal, Dictionary<Guid, User> users, HashSet<string?> sentKeys,
+        IPushNotificationService pushService, OrbitDbContext dbContext, CancellationToken ct)
+    {
+        if (!users.TryGetValue(goal.UserId, out var user)) return false;
+        if (!goal.Deadline.HasValue) return false;
+
+        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var userToday = DateOnly.FromDateTime(userNow);
+        var daysUntilDeadline = goal.Deadline.Value.DayNumber - userToday.DayNumber;
+
+        var anyChanges = false;
+
+        foreach (var daysBefore in NotifyDaysBefore)
+        {
+            if (daysUntilDeadline != daysBefore) continue;
+
+            // FUTURE: The Url field is being repurposed as a deduplication key here (notificationKey).
+            // This should be replaced with a proper SentGoalDeadlineNotification entity.
+            var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
+            if (sentKeys.Contains(notificationKey)) continue;
+
+            var body = FormatDeadlineBody(goal, daysBefore, user.Language ?? "en");
+            await pushService.SendToUserAsync(goal.UserId, goal.Title, body, "/", ct);
+
+            var notification = Notification.Create(goal.UserId, goal.Title, body, notificationKey);
+            await dbContext.Notifications.AddAsync(notification, ct);
+
+            sentKeys.Add(notificationKey);
+            anyChanges = true;
+
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
+        }
+
+        return anyChanges;
+    }
+
+    private static string FormatDeadlineBody(Goal goal, int daysBefore, string lang)
+    {
+        var isPt = lang.StartsWith("pt");
+        var progressText = $"{goal.CurrentValue}/{goal.TargetValue} {goal.Unit}";
+        return daysBefore switch
+        {
+            1 => isPt
+                ? $"Sua meta termina amanhã - você está em {progressText}"
+                : $"Your goal is due tomorrow - you're at {progressText}",
+            _ => isPt
+                ? $"Sua meta termina em {daysBefore} dias - você está em {progressText}"
+                : $"Your goal is due in {daysBefore} days - you're at {progressText}"
+        };
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "GoalDeadlineNotificationService started")]

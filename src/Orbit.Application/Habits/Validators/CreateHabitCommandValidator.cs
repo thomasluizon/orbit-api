@@ -15,7 +15,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 
-        SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.ChecklistItems));
+        SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.Options != null ? x.Options.ChecklistItems : null));
 
         RuleFor(x => x.FrequencyQuantity)
             .GreaterThan(0)
@@ -26,7 +26,7 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithMessage("Frequency quantity is required when frequency unit is set")
             .When(x => x.FrequencyUnit is not null);
 
-        SharedHabitRules.AddDaysRules(this, x => x.Days, x => x.FrequencyQuantity);
+        SharedHabitRules.AddDaysRules(this, x => x.Options != null ? x.Options.Days : null, x => x.FrequencyQuantity);
 
         RuleFor(x => x.SubHabits)
             .Must(subs => subs is null || subs.Count <= AppConstants.MaxSubHabits)
@@ -42,14 +42,14 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             x => x.IsGeneral,
             x => x.FrequencyUnit,
             x => x.FrequencyQuantity,
-            x => x.Days);
+            x => x.Options != null ? x.Options.Days : null);
 
         RuleFor(x => x.IsBadHabit)
             .Equal(false)
             .When(x => x.IsGeneral)
             .WithMessage("General habits cannot be bad habits");
 
-        SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.ScheduledReminders));
+        SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
     }

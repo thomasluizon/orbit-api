@@ -73,6 +73,43 @@ public class CreateSubHabitTool(
 
         var title = titleEl.GetString() ?? string.Empty;
 
+        var (frequencyUnit, frequencyQuantity) = ParseScheduleOptions(args);
+        var days = JsonArgumentParser.ParseDays(args);
+        var (dueTime, dueEndTime) = ParseTimeOptions(args);
+        var (isBadHabit, reminderEnabled, slipAlertEnabled, isFlexible) = ParseBooleanFlags(args);
+        var reminderTimes = JsonArgumentParser.ParseIntArray(args, "reminder_times");
+        var dueDate = JsonArgumentParser.ParseDateOnly(args, "due_date");
+        var scheduledReminders = JsonArgumentParser.ParseScheduledReminders(args);
+        string? description = JsonArgumentParser.GetOptionalString(args, "description");
+
+        var result = await mediator.Send(
+            new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
+                userId,
+                parentHabitId,
+                title,
+                description,
+                frequencyUnit,
+                frequencyQuantity,
+                IsBadHabit: isBadHabit,
+                DueDate: dueDate,
+                Options: new Orbit.Application.Habits.Commands.HabitCommandOptions(
+                    Days: days,
+                    DueTime: dueTime,
+                    DueEndTime: dueEndTime,
+                    ReminderEnabled: reminderEnabled,
+                    ReminderTimes: reminderTimes,
+                    SlipAlertEnabled: slipAlertEnabled,
+                    IsFlexible: isFlexible,
+                    ScheduledReminders: scheduledReminders)), ct);
+
+        if (result.IsFailure)
+            return new ToolResult(false, Error: result.Error);
+
+        return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: title);
+    }
+
+    private static (FrequencyUnit? Unit, int? Quantity) ParseScheduleOptions(JsonElement args)
+    {
         FrequencyUnit? frequencyUnit = null;
         if (args.TryGetProperty("frequency_unit", out var fuEl) && fuEl.ValueKind == JsonValueKind.String
             && Enum.TryParse<FrequencyUnit>(fuEl.GetString(), ignoreCase: true, out var fu))
@@ -85,19 +122,11 @@ public class CreateSubHabitTool(
             frequencyQuantity = fqEl.GetInt32();
         frequencyQuantity ??= frequencyUnit is not null ? 1 : null;
 
-        IReadOnlyList<DayOfWeek>? days = null;
-        if (args.TryGetProperty("days", out var daysEl) && daysEl.ValueKind == JsonValueKind.Array)
-        {
-            var parsed = new List<DayOfWeek>();
-            foreach (var d in daysEl.EnumerateArray())
-            {
-                var dayStr = d.GetString();
-                if (dayStr is not null && Enum.TryParse<DayOfWeek>(dayStr, ignoreCase: true, out var day))
-                    parsed.Add(day);
-            }
-            if (parsed.Count > 0) days = parsed;
-        }
+        return (frequencyUnit, frequencyQuantity);
+    }
 
+    private static (TimeOnly? DueTime, TimeOnly? DueEndTime) ParseTimeOptions(JsonElement args)
+    {
         TimeOnly? dueTime = null;
         if (args.TryGetProperty("due_time", out var dtEl) && dtEl.ValueKind == JsonValueKind.String
             && TimeOnly.TryParse(dtEl.GetString(), CultureInfo.InvariantCulture, out var time))
@@ -112,87 +141,15 @@ public class CreateSubHabitTool(
             dueEndTime = endTime;
         }
 
-        string? description = null;
-        if (args.TryGetProperty("description", out var descEl) && descEl.ValueKind == JsonValueKind.String)
-            description = descEl.GetString();
+        return (dueTime, dueEndTime);
+    }
 
+    private static (bool IsBadHabit, bool ReminderEnabled, bool SlipAlertEnabled, bool IsFlexible) ParseBooleanFlags(JsonElement args)
+    {
         bool isBadHabit = args.TryGetProperty("is_bad_habit", out var ibhEl) && ibhEl.ValueKind == JsonValueKind.True;
         bool reminderEnabled = args.TryGetProperty("reminder_enabled", out var reEl) && reEl.ValueKind == JsonValueKind.True;
         bool slipAlertEnabled = args.TryGetProperty("slip_alert_enabled", out var saEl) && saEl.ValueKind == JsonValueKind.True;
         bool isFlexible = args.TryGetProperty("is_flexible", out var ifEl) && ifEl.ValueKind == JsonValueKind.True;
-
-        IReadOnlyList<int>? reminderTimes = null;
-        if (args.TryGetProperty("reminder_times", out var rtEl) && rtEl.ValueKind == JsonValueKind.Array)
-        {
-            var parsed = new List<int>();
-            foreach (var r in rtEl.EnumerateArray())
-            {
-                if (r.ValueKind == JsonValueKind.Number)
-                    parsed.Add(r.GetInt32());
-            }
-            if (parsed.Count > 0) reminderTimes = parsed;
-        }
-
-        DateOnly? dueDate = null;
-        if (args.TryGetProperty("due_date", out var ddEl) && ddEl.ValueKind == JsonValueKind.String)
-        {
-            if (DateOnly.TryParseExact(ddEl.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dd))
-                dueDate = dd;
-        }
-
-        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = null;
-        if (args.TryGetProperty("scheduled_reminders", out var srEl) && srEl.ValueKind == JsonValueKind.Array)
-        {
-            var parsed = new List<ScheduledReminderTime>();
-            foreach (var item in srEl.EnumerateArray())
-            {
-                string? whenStr = null;
-                string? timeStr = null;
-                if (item.TryGetProperty("when", out var wEl) && wEl.ValueKind == JsonValueKind.String)
-                    whenStr = wEl.GetString();
-                if (item.TryGetProperty("time", out var tEl) && tEl.ValueKind == JsonValueKind.String)
-                    timeStr = tEl.GetString();
-                if (whenStr is null || timeStr is null) continue;
-                if (!ParseScheduledReminderWhen(whenStr, out var when)) continue;
-                if (!TimeOnly.TryParse(timeStr, CultureInfo.InvariantCulture, out var reminderTime)) continue;
-                parsed.Add(new ScheduledReminderTime(when, reminderTime));
-            }
-            if (parsed.Count > 0) scheduledReminders = parsed;
-        }
-
-        var result = await mediator.Send(
-            new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
-                userId,
-                parentHabitId,
-                title,
-                description,
-                frequencyUnit,
-                frequencyQuantity,
-                days,
-                dueTime,
-                dueEndTime,
-                isBadHabit,
-                reminderEnabled,
-                reminderTimes,
-                slipAlertEnabled,
-                DueDate: dueDate,
-                IsFlexible: isFlexible,
-                ScheduledReminders: scheduledReminders), ct);
-
-        if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
-
-        return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: title);
-    }
-
-    private static bool ParseScheduledReminderWhen(string value, out ScheduledReminderWhen result)
-    {
-        result = value switch
-        {
-            "same_day" => ScheduledReminderWhen.SameDay,
-            "day_before" => ScheduledReminderWhen.DayBefore,
-            _ => default
-        };
-        return value is "same_day" or "day_before";
+        return (isBadHabit, reminderEnabled, slipAlertEnabled, isFlexible);
     }
 }

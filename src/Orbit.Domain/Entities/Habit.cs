@@ -6,6 +6,47 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Domain.Entities;
 
+public record HabitCreateParams(
+    Guid UserId,
+    string Title,
+    FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    string? Description = null,
+    IReadOnlyList<System.DayOfWeek>? Days = null,
+    bool IsBadHabit = false,
+    DateOnly? DueDate = null,
+    TimeOnly? DueTime = null,
+    TimeOnly? DueEndTime = null,
+    Guid? ParentHabitId = null,
+    bool ReminderEnabled = false,
+    IReadOnlyList<int>? ReminderTimes = null,
+    bool SlipAlertEnabled = false,
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    bool IsGeneral = false,
+    bool IsFlexible = false,
+    DateOnly? EndDate = null,
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
+
+public record HabitUpdateParams(
+    string Title,
+    string? Description,
+    FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    IReadOnlyList<System.DayOfWeek>? Days,
+    bool IsBadHabit,
+    DateOnly? DueDate,
+    TimeOnly? DueTime = null,
+    TimeOnly? DueEndTime = null,
+    bool? ReminderEnabled = null,
+    IReadOnlyList<int>? ReminderTimes = null,
+    bool? SlipAlertEnabled = null,
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    bool? IsGeneral = null,
+    bool? IsFlexible = null,
+    DateOnly? EndDate = null,
+    bool? ClearEndDate = null,
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
+
 public class Habit : Entity
 {
     public Guid UserId { get; private set; }
@@ -46,98 +87,54 @@ public class Habit : Entity
 
     private Habit() { }
 
-    public static Result<Habit> Create(
-        Guid userId,
-        string title,
-        FrequencyUnit? frequencyUnit,
-        int? frequencyQuantity,
-        string? description = null,
-        IReadOnlyList<System.DayOfWeek>? days = null,
-        bool isBadHabit = false,
-        DateOnly? dueDate = null,
-        TimeOnly? dueTime = null,
-        TimeOnly? dueEndTime = null,
-        Guid? parentHabitId = null,
-        bool reminderEnabled = false,
-        IReadOnlyList<int>? reminderTimes = null,
-        bool slipAlertEnabled = false,
-        IReadOnlyList<ChecklistItem>? checklistItems = null,
-        bool isGeneral = false,
-        bool isFlexible = false,
-        DateOnly? endDate = null,
-        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = null)
+    public static Result<Habit> Create(HabitCreateParams p)
     {
-        if (userId == Guid.Empty)
+        if (p.UserId == Guid.Empty)
             return Result.Failure<Habit>("User ID is required.");
 
-        if (string.IsNullOrWhiteSpace(title))
+        if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure<Habit>("Title is required.");
 
-        if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
-            return Result.Failure<Habit>("General habits cannot have a frequency.");
+        var scheduleValidation = ValidateScheduleOptions(
+            p.IsGeneral, p.IsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
+        if (scheduleValidation is not null)
+            return Result.Failure<Habit>(scheduleValidation);
 
-        if (isGeneral && isBadHabit)
-            return Result.Failure<Habit>("General habits cannot be bad habits.");
+        var dateValidation = ValidateDateOptions(
+            p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.IsGeneral, p.DueDate);
+        if (dateValidation is not null)
+            return Result.Failure<Habit>(dateValidation);
 
-        if (frequencyQuantity is not null && frequencyQuantity <= 0)
-            return Result.Failure<Habit>("Frequency quantity must be greater than 0.");
-
-        if (isFlexible && frequencyUnit is null)
-            return Result.Failure<Habit>("Flexible habits must have a frequency unit.");
-
-        if (isFlexible && days?.Count > 0)
-            return Result.Failure<Habit>("Flexible habits cannot have specific days set.");
-
-        if (days?.Count > 0 && frequencyQuantity != 1)
-            return Result.Failure<Habit>("Days can only be set when frequency quantity is 1.");
-
-        if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
-            return Result.Failure<Habit>("End time must be after start time.");
-
-        if (endDate.HasValue && frequencyUnit is null && !isGeneral)
-            return Result.Failure<Habit>("One-time tasks cannot have an end date.");
+        var reminderValidation = ValidateScheduledReminders(p.ScheduledReminders);
+        if (reminderValidation is not null)
+            return Result.Failure<Habit>(reminderValidation);
 
         // Note: fallback to UTC date is approximate -- used only for EndDate validation when
         // dueDate is null. The caller (CreateHabitCommand) resolves the correct local date,
         // so this path rarely fires and the 1-day drift is acceptable for a validation guard.
-        var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        if (endDate.HasValue && endDate.Value < effectiveDueDate)
-            return Result.Failure<Habit>("End date must be on or after the start date.");
-
-        if (scheduledReminders is not null && scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
-            return Result.Failure<Habit>($"A habit can have at most {DomainConstants.MaxScheduledReminders} scheduled reminders.");
-
-        if (scheduledReminders is not null)
-        {
-
-            var hasDuplicates = scheduledReminders
-                .GroupBy(sr => (sr.When, sr.Time))
-                .Any(g => g.Count() > 1);
-            if (hasDuplicates)
-                return Result.Failure<Habit>("Scheduled reminders must not contain duplicate entries.");
-        }
+        var effectiveDueDate = p.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         return Result.Success(new Habit
         {
-            UserId = userId,
-            Title = title.Trim(),
-            Description = description?.Trim(),
-            FrequencyUnit = frequencyUnit,
-            FrequencyQuantity = frequencyQuantity,
-            Days = isFlexible ? [] : (days?.ToList() ?? []),
-            IsBadHabit = isBadHabit,
-            IsGeneral = isGeneral,
-            IsFlexible = isFlexible,
+            UserId = p.UserId,
+            Title = p.Title.Trim(),
+            Description = p.Description?.Trim(),
+            FrequencyUnit = p.FrequencyUnit,
+            FrequencyQuantity = p.FrequencyQuantity,
+            Days = p.IsFlexible ? [] : (p.Days?.ToList() ?? []),
+            IsBadHabit = p.IsBadHabit,
+            IsGeneral = p.IsGeneral,
+            IsFlexible = p.IsFlexible,
             DueDate = effectiveDueDate,
-            DueTime = dueTime,
-            DueEndTime = dueEndTime,
-            ParentHabitId = parentHabitId,
-            ReminderEnabled = reminderEnabled,
-            ReminderTimes = reminderTimes ?? [15],
-            SlipAlertEnabled = slipAlertEnabled,
-            ChecklistItems = checklistItems ?? [],
-            ScheduledReminders = scheduledReminders ?? [],
-            EndDate = endDate,
+            DueTime = p.DueTime,
+            DueEndTime = p.DueEndTime,
+            ParentHabitId = p.ParentHabitId,
+            ReminderEnabled = p.ReminderEnabled,
+            ReminderTimes = p.ReminderTimes ?? [15],
+            SlipAlertEnabled = p.SlipAlertEnabled,
+            ChecklistItems = p.ChecklistItems ?? [],
+            ScheduledReminders = p.ScheduledReminders ?? [],
+            EndDate = p.EndDate,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -324,109 +321,70 @@ public class Habit : Entity
         return Result.Success(log);
     }
 
-    public Result Update(
-        string title,
-        string? description,
-        FrequencyUnit? frequencyUnit,
-        int? frequencyQuantity,
-        IReadOnlyList<System.DayOfWeek>? days,
-        bool isBadHabit,
-        DateOnly? dueDate,
-        TimeOnly? dueTime = null,
-        TimeOnly? dueEndTime = null,
-        bool? reminderEnabled = null,
-        IReadOnlyList<int>? reminderTimes = null,
-        bool? slipAlertEnabled = null,
-        IReadOnlyList<ChecklistItem>? checklistItems = null,
-        bool? isGeneral = null,
-        bool? isFlexible = null,
-        DateOnly? endDate = null,
-        bool? clearEndDate = null,
-        IReadOnlyList<ScheduledReminderTime>? scheduledReminders = null)
+    public Result Update(HabitUpdateParams p)
     {
-        if (string.IsNullOrWhiteSpace(title))
+        if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure("Title is required.");
 
-        var effectiveIsGeneral = isGeneral ?? IsGeneral;
-        if (effectiveIsGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
-            return Result.Failure("General habits cannot have a frequency.");
+        var effectiveIsGeneral = p.IsGeneral ?? IsGeneral;
+        var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
 
-        if (effectiveIsGeneral && isBadHabit)
-            return Result.Failure("General habits cannot be bad habits.");
+        var scheduleValidation = ValidateScheduleOptions(
+            effectiveIsGeneral, effectiveIsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
+        if (scheduleValidation is not null)
+            return Result.Failure(scheduleValidation);
 
-        if (frequencyQuantity is not null && frequencyQuantity <= 0)
-            return Result.Failure("Frequency quantity must be greater than 0.");
-
-        var effectiveIsFlexible = isFlexible ?? IsFlexible;
-
-        if (effectiveIsFlexible && frequencyUnit is null)
-            return Result.Failure("Flexible habits must have a frequency unit.");
-
-        if (effectiveIsFlexible && days?.Count > 0)
-            return Result.Failure("Flexible habits cannot have specific days set.");
-
-        if (!effectiveIsFlexible && days?.Count > 0 && frequencyQuantity != 1)
-            return Result.Failure("Days can only be set when frequency quantity is 1.");
-
-        var effectiveDueEndTime = dueEndTime ?? DueEndTime;
-        var effectiveDueTime = dueTime ?? DueTime;
+        var effectiveDueEndTime = p.DueEndTime ?? DueEndTime;
+        var effectiveDueTime = p.DueTime ?? DueTime;
         if (effectiveDueEndTime.HasValue && effectiveDueTime.HasValue && effectiveDueEndTime.Value <= effectiveDueTime.Value)
             return Result.Failure("End time must be after start time.");
 
         // Validate endDate if being set
-        if (endDate.HasValue)
+        if (p.EndDate.HasValue)
         {
-            var effectiveDueDate = dueDate ?? DueDate;
-            if (endDate.Value < effectiveDueDate)
+            var effectiveDueDate = p.DueDate ?? DueDate;
+            if (p.EndDate.Value < effectiveDueDate)
                 return Result.Failure("End date must be on or after the start date.");
         }
 
-        Title = title.Trim();
-        Description = description?.Trim();
-        FrequencyUnit = frequencyUnit;
-        FrequencyQuantity = frequencyQuantity;
-        Days = effectiveIsFlexible ? [] : (days?.ToList() ?? []);
-        IsBadHabit = isBadHabit;
+        Title = p.Title.Trim();
+        Description = p.Description?.Trim();
+        FrequencyUnit = p.FrequencyUnit;
+        FrequencyQuantity = p.FrequencyQuantity;
+        Days = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
+        IsBadHabit = p.IsBadHabit;
 
-        if (isGeneral.HasValue)
-            IsGeneral = isGeneral.Value;
-        if (isFlexible.HasValue)
-            IsFlexible = isFlexible.Value;
+        if (p.IsGeneral.HasValue)
+            IsGeneral = p.IsGeneral.Value;
+        if (p.IsFlexible.HasValue)
+            IsFlexible = p.IsFlexible.Value;
 
-        if (dueDate is not null)
-            DueDate = dueDate.Value;
+        if (p.DueDate is not null)
+            DueDate = p.DueDate.Value;
 
-        DueTime = dueTime;
-        DueEndTime = dueEndTime;
+        DueTime = p.DueTime;
+        DueEndTime = p.DueEndTime;
 
-        if (reminderEnabled.HasValue)
-            ReminderEnabled = reminderEnabled.Value;
-        if (reminderTimes is not null)
-            ReminderTimes = reminderTimes;
-        if (slipAlertEnabled.HasValue)
-            SlipAlertEnabled = slipAlertEnabled.Value;
-        if (checklistItems is not null)
-            ChecklistItems = checklistItems;
+        if (p.ReminderEnabled.HasValue)
+            ReminderEnabled = p.ReminderEnabled.Value;
+        if (p.ReminderTimes is not null)
+            ReminderTimes = p.ReminderTimes;
+        if (p.SlipAlertEnabled.HasValue)
+            SlipAlertEnabled = p.SlipAlertEnabled.Value;
+        if (p.ChecklistItems is not null)
+            ChecklistItems = p.ChecklistItems;
 
-        if (scheduledReminders is not null && scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
-            return Result.Failure($"A habit can have at most {DomainConstants.MaxScheduledReminders} scheduled reminders.");
+        var reminderValidation = ValidateScheduledReminders(p.ScheduledReminders);
+        if (reminderValidation is not null)
+            return Result.Failure(reminderValidation);
 
-        if (scheduledReminders is not null)
-        {
+        if (p.ScheduledReminders is not null)
+            ScheduledReminders = p.ScheduledReminders;
 
-            var hasDuplicates = scheduledReminders
-                .GroupBy(sr => (sr.When, sr.Time))
-                .Any(g => g.Count() > 1);
-            if (hasDuplicates)
-                return Result.Failure("Scheduled reminders must not contain duplicate entries.");
-
-            ScheduledReminders = scheduledReminders;
-        }
-
-        if (clearEndDate == true)
+        if (p.ClearEndDate == true)
             EndDate = null;
-        else if (endDate.HasValue)
-            EndDate = endDate.Value;
+        else if (p.EndDate.HasValue)
+            EndDate = p.EndDate.Value;
 
         return Result.Success();
     }
@@ -445,4 +403,68 @@ public class Habit : Entity
 
     public void RemoveGoal(Goal goal) => _goals.Remove(goal);
 
+    // --- Validation helpers ---
+
+    private static string? ValidateScheduleOptions(
+        bool isGeneral, bool isFlexible, bool isBadHabit,
+        FrequencyUnit? frequencyUnit, int? frequencyQuantity,
+        IReadOnlyList<System.DayOfWeek>? days)
+    {
+        if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
+            return "General habits cannot have a frequency.";
+
+        if (isGeneral && isBadHabit)
+            return "General habits cannot be bad habits.";
+
+        if (frequencyQuantity is not null && frequencyQuantity <= 0)
+            return "Frequency quantity must be greater than 0.";
+
+        if (isFlexible && frequencyUnit is null)
+            return "Flexible habits must have a frequency unit.";
+
+        if (isFlexible && days?.Count > 0)
+            return "Flexible habits cannot have specific days set.";
+
+        if (!isFlexible && days?.Count > 0 && frequencyQuantity != 1)
+            return "Days can only be set when frequency quantity is 1.";
+
+        return null;
+    }
+
+    private static string? ValidateDateOptions(
+        TimeOnly? dueTime, TimeOnly? dueEndTime,
+        DateOnly? endDate, FrequencyUnit? frequencyUnit,
+        bool isGeneral, DateOnly? dueDate)
+    {
+        if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
+            return "End time must be after start time.";
+
+        if (endDate.HasValue && frequencyUnit is null && !isGeneral)
+            return "One-time tasks cannot have an end date.";
+
+        var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        if (endDate.HasValue && endDate.Value < effectiveDueDate)
+            return "End date must be on or after the start date.";
+
+        return null;
+    }
+
+    private static string? ValidateScheduledReminders(
+        IReadOnlyList<ScheduledReminderTime>? scheduledReminders)
+    {
+        if (scheduledReminders is null)
+            return null;
+
+        if (scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
+            return $"A habit can have at most {DomainConstants.MaxScheduledReminders} scheduled reminders.";
+
+        var hasDuplicates = scheduledReminders
+            .GroupBy(sr => (sr.When, sr.Time))
+            .Any(g => g.Count() > 1);
+
+        if (hasDuplicates)
+            return "Scheduled reminders must not contain duplicate entries.";
+
+        return null;
+    }
 }

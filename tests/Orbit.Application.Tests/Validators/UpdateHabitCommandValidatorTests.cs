@@ -102,13 +102,13 @@ public class UpdateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             FrequencyQuantity = 2,
-            Days = new[] { DayOfWeek.Monday }
+            Options = new UpdateHabitCommandOptions(Days: new[] { DayOfWeek.Monday })
         };
 
         // Act
         var result = _validator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(x => x.Days);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
     }
 }

@@ -29,8 +29,9 @@ public class LogHabitCommandHandlerTests
 
     public LogHabitCommandHandlerTests()
     {
+        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
         _handler = new LogHabitCommandHandler(
-            _habitRepo, _habitLogRepo, _goalRepo, _userRepo, _userDateService, _gamificationService, _unitOfWork, _cache, _mediator, _logger);
+            repos, _userDateService, _gamificationService, _unitOfWork, _cache, _mediator, _logger);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -46,9 +47,9 @@ public class LogHabitCommandHandlerTests
 
     private static Habit CreateTestHabit(Guid? userId = null)
     {
-        return Habit.Create(
+        return Habit.Create(new HabitCreateParams(
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
-            dueDate: Today).Value;
+            DueDate: Today)).Value;
     }
 
     [Fact]

@@ -27,10 +27,10 @@ public class CheckReferralCompletionCommandHandlerTests
 
     public CheckReferralCompletionCommandHandlerTests()
     {
+        var repos = new ReferralRepositories(
+            _userRepo, _referralRepo, _habitRepo, _habitLogRepo, _notificationRepo);
         _handler = new CheckReferralCompletionCommandHandler(
-            _userRepo, _referralRepo, _habitRepo, _habitLogRepo,
-            _notificationRepo, _pushNotification,
-            _referralReward, _unitOfWork,
+            repos, _pushNotification, _referralReward, _unitOfWork,
             Substitute.For<ILogger<CheckReferralCompletionCommandHandler>>());
 
         _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -102,7 +102,7 @@ public class CheckReferralCompletionCommandHandlerTests
         var habits = Enumerable.Range(0, habitCount)
             .Select(_ =>
             {
-                var habit = Habit.Create(userId, "Test Habit", FrequencyUnit.Day, 1).Value;
+                var habit = Habit.Create(new HabitCreateParams(userId, "Test Habit", FrequencyUnit.Day, 1)).Value;
                 return habit;
             })
             .ToList();

@@ -46,6 +46,14 @@ builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
 builder.Services.AddScoped<IAppConfigService, AppConfigService>();
 builder.Services.AddScoped<IUserDateService, UserDateService>();
 builder.Services.AddScoped<IPayGateService, Orbit.Application.Common.PayGateService>();
+builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationRepositories>(sp =>
+    new Orbit.Application.Gamification.Services.GamificationRepositories(
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
 builder.Services.AddScoped<IGamificationService, GamificationService>();
 builder.Services.AddScoped<Orbit.Domain.Interfaces.IGoogleTokenService, GoogleTokenService>();
 
@@ -109,6 +117,13 @@ builder.Services.Configure<VapidSettings>(
 builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
     .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 builder.Services.AddScoped<IReferralRewardService, StripeCouponRewardService>();
+builder.Services.AddScoped<Orbit.Application.Referrals.Commands.ReferralRepositories>(sp =>
+    new Orbit.Application.Referrals.Commands.ReferralRepositories(
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Referral>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
 builder.Services.AddHostedService<ReminderSchedulerService>();
 builder.Services.AddHostedService<GoalDeadlineNotificationService>();
 builder.Services.AddHostedService<SlipAlertSchedulerService>();
@@ -226,6 +241,27 @@ builder.Services.AddMemoryCache();
 
 // --- Validation ---
 builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
+
+// --- Handler Parameter Objects (S107 fix: reduce constructor parameter count) ---
+builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitRepositories>(sp =>
+    new Orbit.Application.Habits.Commands.LogHabitRepositories(
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>()));
+
+// --- Chat Handler Parameter Objects ---
+builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatAiDependencies>(sp =>
+    new Orbit.Application.Chat.Commands.ChatAiDependencies(
+        sp.GetRequiredService<IAiIntentService>(),
+        sp.GetRequiredService<AiToolRegistry>(),
+        sp.GetRequiredService<ISystemPromptBuilder>()));
+builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatDataDependencies>(sp =>
+    new Orbit.Application.Chat.Commands.ChatDataDependencies(
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
+        sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>()));
 
 // --- MediatR ---
 builder.Services.AddMediatR(cfg =>

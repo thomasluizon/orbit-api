@@ -17,14 +17,14 @@ public class HabitScheduleServiceTests
         IReadOnlyList<DayOfWeek>? days = null,
         bool isFlexible = false)
     {
-        var result = Habit.Create(
+        var result = Habit.Create(new HabitCreateParams(
             UserId,
             "Test Habit",
             unit,
             qty,
-            dueDate: dueDate ?? Anchor,
-            days: days,
-            isFlexible: isFlexible);
+            DueDate: dueDate ?? Anchor,
+            Days: days,
+            IsFlexible: isFlexible));
 
         return result.Value;
     }
@@ -277,32 +277,32 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_AfterEndDate_False()
     {
-        var habit = Habit.Create(UserId, "Test", FrequencyUnit.Day, 1,
-            dueDate: Anchor, endDate: new DateOnly(2025, 1, 10)).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+            DueDate: Anchor, EndDate: new DateOnly(2025, 1, 10))).Value;
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 11)).Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_OnEndDate_True()
     {
-        var habit = Habit.Create(UserId, "Test", FrequencyUnit.Day, 1,
-            dueDate: Anchor, endDate: new DateOnly(2025, 1, 10)).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+            DueDate: Anchor, EndDate: new DateOnly(2025, 1, 10))).Value;
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 10)).Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_BeforeEndDate_True()
     {
-        var habit = Habit.Create(UserId, "Test", FrequencyUnit.Day, 1,
-            dueDate: Anchor, endDate: new DateOnly(2025, 1, 10)).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+            DueDate: Anchor, EndDate: new DateOnly(2025, 1, 10))).Value;
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 8)).Should().BeTrue();
     }
 
     [Fact]
     public void GetScheduledDates_RespectsEndDate()
     {
-        var habit = Habit.Create(UserId, "Test", FrequencyUnit.Day, 1,
-            dueDate: Anchor, endDate: new DateOnly(2025, 1, 8)).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Test", FrequencyUnit.Day, 1,
+            DueDate: Anchor, EndDate: new DateOnly(2025, 1, 8))).Value;
         var dates = HabitScheduleService.GetScheduledDates(habit, new DateOnly(2025, 1, 6), new DateOnly(2025, 1, 10));
         dates.Should().HaveCount(3);
         dates.Should().NotContain(new DateOnly(2025, 1, 9));

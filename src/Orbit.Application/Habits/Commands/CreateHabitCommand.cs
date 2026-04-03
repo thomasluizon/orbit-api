@@ -6,7 +6,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -16,22 +15,13 @@ public record CreateHabitCommand(
     string? Description,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
-    IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
     IReadOnlyList<string>? SubHabits = null,
     DateOnly? DueDate = null,
-    TimeOnly? DueTime = null,
-    TimeOnly? DueEndTime = null,
-    bool ReminderEnabled = false,
-    IReadOnlyList<int>? ReminderTimes = null,
-    bool SlipAlertEnabled = false,
-    IReadOnlyList<Guid>? TagIds = null,
-    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     bool IsGeneral = false,
-    DateOnly? EndDate = null,
-    bool IsFlexible = false,
-    IReadOnlyList<Guid>? GoalIds = null,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result<Guid>>;
+    HabitCommandOptions? Options = null,
+    IReadOnlyList<Guid>? TagIds = null,
+    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result<Guid>>;
 
 public partial class CreateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -60,25 +50,26 @@ public partial class CreateHabitCommandHandler(
         }
 
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var opts = request.Options ?? new HabitCommandOptions();
 
-        var habitResult = Habit.Create(
+        var habitResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
             request.FrequencyUnit,
             request.FrequencyQuantity,
             request.Description,
-            request.Days,
-            request.IsBadHabit,
-            dueDate,
-            dueTime: request.DueTime,
-            dueEndTime: request.DueEndTime,
-            reminderEnabled: request.ReminderEnabled,
-            reminderTimes: request.ReminderTimes,
-            slipAlertEnabled: request.SlipAlertEnabled,
-            checklistItems: request.ChecklistItems,
-            isGeneral: request.IsGeneral,
-            isFlexible: request.IsFlexible,
-            scheduledReminders: request.ScheduledReminders);
+            Days: opts.Days,
+            IsBadHabit: request.IsBadHabit,
+            DueDate: dueDate,
+            DueTime: opts.DueTime,
+            DueEndTime: opts.DueEndTime,
+            ReminderEnabled: opts.ReminderEnabled,
+            ReminderTimes: opts.ReminderTimes,
+            SlipAlertEnabled: opts.SlipAlertEnabled,
+            ChecklistItems: opts.ChecklistItems,
+            IsGeneral: request.IsGeneral,
+            IsFlexible: opts.IsFlexible,
+            ScheduledReminders: opts.ScheduledReminders));
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -89,15 +80,15 @@ public partial class CreateHabitCommandHandler(
         {
             foreach (var subTitle in request.SubHabits)
             {
-                var childResult = Habit.Create(
+                var childResult = Habit.Create(new HabitCreateParams(
                     request.UserId,
                     subTitle,
                     request.FrequencyUnit,
                     request.FrequencyQuantity,
-                    dueDate: request.DueDate ?? dueDate,
-                    parentHabitId: habit.Id,
-                    isGeneral: request.IsGeneral,
-                    endDate: request.EndDate);
+                    DueDate: request.DueDate ?? dueDate,
+                    ParentHabitId: habit.Id,
+                    IsGeneral: request.IsGeneral,
+                    EndDate: opts.EndDate));
 
                 if (childResult.IsFailure)
                     return Result.Failure<Guid>(childResult.Error);

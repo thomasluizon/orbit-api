@@ -34,9 +34,9 @@ public class UpdateHabitCommandHandlerTests
 
     private static Habit CreateTestHabit(Guid? userId = null)
     {
-        return Habit.Create(
+        return Habit.Create(new HabitCreateParams(
             userId ?? UserId, "Original Title", FrequencyUnit.Day, 1,
-            dueDate: Today).Value;
+            DueDate: Today)).Value;
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class UpdateHabitCommandHandlerTests
 
         var command = new UpdateHabitCommand(
             UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
-            DueTime: new TimeOnly(14, 30));
+            Options: new UpdateHabitCommandOptions(DueTime: new TimeOnly(14, 30)));
 
         var result = await _handler.Handle(command, CancellationToken.None);
 

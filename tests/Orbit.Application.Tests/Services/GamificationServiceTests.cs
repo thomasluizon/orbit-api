@@ -28,9 +28,10 @@ public class GamificationServiceTests
 
     public GamificationServiceTests()
     {
+        var repos = new GamificationRepositories(
+            _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo);
         _sut = new GamificationService(
-            _userRepo, _habitRepo, _habitLogRepo, _goalRepo,
-            _achievementRepo, _notificationRepo, _pushService, _userDateService, _unitOfWork,
+            repos, _pushService, _userDateService, _unitOfWork,
             Substitute.For<ILogger<GamificationService>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -53,9 +54,9 @@ public class GamificationServiceTests
 
     private static Habit CreateTestHabit(Guid? userId = null, bool isBadHabit = false)
     {
-        var habit = Habit.Create(
+        var habit = Habit.Create(new HabitCreateParams(
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
-            dueDate: Today, isBadHabit: isBadHabit).Value;
+            DueDate: Today, IsBadHabit: isBadHabit)).Value;
 
         // Backdate CreatedAtUtc so HabitMetricsCalculator generates expected dates
         // covering Today (the test's fixed date, not the actual DateTime.UtcNow)
@@ -71,7 +72,7 @@ public class GamificationServiceTests
     private static Habit CreateDailyHabitWithStreak(int streakDays)
     {
         var startDate = Today.AddDays(-(streakDays - 1));
-        var habit = Habit.Create(UserId, "Daily", FrequencyUnit.Day, 1, dueDate: startDate).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Daily", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
 
         // HabitMetricsCalculator uses CreatedAtUtc as the earliest boundary for expected dates.
         // Since Create() sets it to DateTime.UtcNow (today), we need to backdate it.
@@ -88,8 +89,8 @@ public class GamificationServiceTests
     private static Habit CreateHabitWithNLogs(int logCount)
     {
         var startDate = Today.AddDays(-(logCount + 5));
-        var habit = Habit.Create(UserId, "Habit with logs", FrequencyUnit.Day, 1,
-            dueDate: startDate).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit with logs", FrequencyUnit.Day, 1,
+            DueDate: startDate)).Value;
 
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
 

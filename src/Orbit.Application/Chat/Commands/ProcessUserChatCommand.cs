@@ -35,17 +35,29 @@ public record ActionResult(
 
 public enum ActionStatus { Success, Failed, Suggestion }
 
+/// <summary>
+/// Groups AI-related dependencies to reduce constructor parameter count (S107).
+/// </summary>
+public record ChatAiDependencies(
+    IAiIntentService IntentService,
+    AiToolRegistry ToolRegistry,
+    ISystemPromptBuilder PromptBuilder);
+
+/// <summary>
+/// Groups data repository dependencies to reduce constructor parameter count (S107).
+/// </summary>
+public record ChatDataDependencies(
+    IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<User> UserRepository,
+    IGenericRepository<UserFact> UserFactRepository,
+    IGenericRepository<Tag> TagRepository);
+
 public partial class ProcessUserChatCommandHandler(
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<User> userRepository,
-    IGenericRepository<UserFact> userFactRepository,
-    IGenericRepository<Tag> tagRepository,
-    IAiIntentService aiIntentService,
+    ChatDataDependencies data,
+    ChatAiDependencies ai,
     IUserDateService userDateService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
-    AiToolRegistry toolRegistry,
-    ISystemPromptBuilder systemPromptBuilder,
     IServiceScopeFactory serviceScopeFactory,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
@@ -62,12 +74,12 @@ public partial class ProcessUserChatCommandHandler(
         LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var activeHabits = await habitRepository.FindAsync(
+        var activeHabits = await data.HabitRepository.FindAsync(
             h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
             cancellationToken);
 
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
         // Check AI message limits
@@ -78,12 +90,12 @@ public partial class ProcessUserChatCommandHandler(
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)
         {
-            userFacts = await userFactRepository.FindAsync(
+            userFacts = await data.UserFactRepository.FindAsync(
                 f => f.UserId == request.UserId,
                 cancellationToken);
         }
 
-        var userTags = await tagRepository.FindAsync(
+        var userTags = await data.TagRepository.FindAsync(
             t => t.UserId == request.UserId,
             cancellationToken);
 
@@ -93,12 +105,12 @@ public partial class ProcessUserChatCommandHandler(
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
 
         // 2. Build slim system prompt (habit index only, details fetched via read tools)
-        var systemPrompt = systemPromptBuilder.Build(
+        var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(
             activeHabits, userFacts,
-            hasImage: request.ImageData is not null,
-            routinePatterns: null, userTags, userToday, habitMetrics: null);
+            HasImage: request.ImageData is not null,
+            UserTags: userTags, UserToday: userToday));
 
-        var tools = toolRegistry.GetAll();
+        var tools = ai.ToolRegistry.GetAll();
         var toolDeclarations = tools.Select(t => (object)new
         {
             name = t.Name,
@@ -110,7 +122,7 @@ public partial class ProcessUserChatCommandHandler(
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var response = await aiIntentService.SendWithToolsAsync(
+        var response = await ai.IntentService.SendWithToolsAsync(
             request.Message,
             systemPrompt,
             toolDeclarations,
@@ -210,7 +222,7 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         // Send results back to the AI for next iteration or final message
-        var continueResult = await aiIntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
+        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
         if (continueResult.IsFailure)
         {
             LogContinueWithToolResultsFailed(logger, continueResult.Error);
@@ -229,7 +241,7 @@ public partial class ProcessUserChatCommandHandler(
         Guid userId,
         CancellationToken cancellationToken)
     {
-        var tool = toolRegistry.GetTool(call.Name);
+        var tool = ai.ToolRegistry.GetTool(call.Name);
         if (tool is null)
         {
             LogUnknownToolRequested(logger, call.Name);

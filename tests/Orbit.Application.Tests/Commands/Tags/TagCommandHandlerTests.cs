@@ -144,7 +144,7 @@ public class TagCommandHandlerTests
     public async Task AssignTags_Valid_AssignsAndSaves()
     {
         var tag = Tag.Create(UserId, "Health", "#00ff00").Value;
-        var habit = Habit.Create(UserId, "Exercise", FrequencyUnit.Day, 1, dueDate: Today).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
 
         _appConfigService.GetAsync("MaxTagsPerHabit", 5, Arg.Any<CancellationToken>())
             .Returns(5);

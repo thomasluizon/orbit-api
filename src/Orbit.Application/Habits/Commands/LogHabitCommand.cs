@@ -27,11 +27,17 @@ public record LogHabitCommand(
     string? Note = null,
     DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>;
 
+/// <summary>
+/// Groups repository dependencies for habit logging to reduce constructor parameter count (S107).
+/// </summary>
+public record LogHabitRepositories(
+    IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<HabitLog> HabitLogRepository,
+    IGenericRepository<Goal> GoalRepository,
+    IGenericRepository<User> UserRepository);
+
 public partial class LogHabitCommandHandler(
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<Goal> goalRepository,
-    IGenericRepository<User> userRepository,
+    LogHabitRepositories repos,
     IUserDateService userDateService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
@@ -41,7 +47,7 @@ public partial class LogHabitCommandHandler(
 {
     public async Task<Result<LogHabitResponse>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
     {
-        var habit = await habitRepository.FindOneTrackedAsync(
+        var habit = await repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
             q => q.Include(h => h.Logs).Include(h => h.Goals),
             cancellationToken);
@@ -73,7 +79,7 @@ public partial class LogHabitCommandHandler(
         }
 
         // Load user for streak info
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
 
         // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
         // Only match completion logs (Value > 0) to prevent toggle from removing skip logs (Value == 0)
@@ -84,7 +90,7 @@ public partial class LogHabitCommandHandler(
             if (unlogResult.IsFailure)
                 return Result.Failure<LogHabitResponse>(unlogResult.Error);
 
-            habitLogRepository.Remove(unlogResult.Value);
+            repos.HabitLogRepository.Remove(unlogResult.Value);
 
             // Decrement linked goal progress
             var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
@@ -105,7 +111,7 @@ public partial class LogHabitCommandHandler(
         if (user is not null)
         {
             // Use AnyAsync for efficient EXISTS query instead of loading full entities
-            isFirstCompletionToday = !await habitRepository.AnyAsync(
+            isFirstCompletionToday = !await repos.HabitRepository.AnyAsync(
                 h => h.UserId == request.UserId && h.Logs.Any(l => l.Date == targetDate && l.Value > 0),
                 cancellationToken);
         }
@@ -117,7 +123,7 @@ public partial class LogHabitCommandHandler(
         if (logResult.IsFailure)
             return Result.Failure<LogHabitResponse>(logResult.Error);
 
-        await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
+        await repos.HabitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
         // Increment linked goal progress
         var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
@@ -164,7 +170,7 @@ public partial class LogHabitCommandHandler(
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
 
         // Load all linked goals in a single query instead of one per goal
-        var trackedGoals = await goalRepository.FindTrackedAsync(
+        var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id), ct);
 
         var updates = new List<LinkedGoalUpdate>();

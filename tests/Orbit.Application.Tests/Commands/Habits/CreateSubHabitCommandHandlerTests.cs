@@ -39,9 +39,9 @@ public class CreateSubHabitCommandHandlerTests
 
     private static Habit CreateParentHabit()
     {
-        return Habit.Create(
+        return Habit.Create(new HabitCreateParams(
             UserId, "Parent Habit", FrequencyUnit.Day, 1,
-            dueDate: Today).Value;
+            DueDate: Today)).Value;
     }
 
     [Fact]
@@ -110,9 +110,9 @@ public class CreateSubHabitCommandHandlerTests
 
         // Create a chain: grandparent -> parent (depth = 1, maxDepth - 1 = 1, so blocked)
         var grandparent = CreateParentHabit();
-        var parent = Habit.Create(
+        var parent = Habit.Create(new HabitCreateParams(
             UserId, "Child", FrequencyUnit.Day, 1,
-            dueDate: Today, parentHabitId: grandparent.Id).Value;
+            DueDate: Today, ParentHabitId: grandparent.Id)).Value;
 
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

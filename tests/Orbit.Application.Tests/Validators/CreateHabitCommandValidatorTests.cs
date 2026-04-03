@@ -118,14 +118,14 @@ public class CreateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             FrequencyQuantity = 2,
-            Days = new[] { DayOfWeek.Monday }
+            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday })
         };
 
         // Act
         var result = _validator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(x => x.Days);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
     }
 
     [Fact]
@@ -135,14 +135,14 @@ public class CreateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             FrequencyQuantity = 1,
-            Days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday }
+            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday })
         };
 
         // Act
         var result = _validator.TestValidate(command);
 
         // Assert
-        result.ShouldNotHaveValidationErrorFor(x => x.Days);
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
     }
 
     [Fact]
@@ -192,15 +192,16 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            ScheduledReminders = new List<ScheduledReminderTime>
-            {
-                new(DayBefore, new TimeOnly(20, 0)),
-                new(SameDay, new TimeOnly(9, 0))
-            }
+            Options = new HabitCommandOptions(
+                ScheduledReminders: new List<ScheduledReminderTime>
+                {
+                    new(DayBefore, new TimeOnly(20, 0)),
+                    new(SameDay, new TimeOnly(9, 0))
+                })
         };
 
         var result = _validator.TestValidate(command);
-        result.ShouldNotHaveValidationErrorFor(x => x.ScheduledReminders);
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
     }
 
     [Fact]
@@ -208,13 +209,14 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            ScheduledReminders = Enumerable.Range(0, 6)
-                .Select(i => new ScheduledReminderTime(SameDay, new TimeOnly(8 + i, 0)))
-                .ToList()
+            Options = new HabitCommandOptions(
+                ScheduledReminders: Enumerable.Range(0, 6)
+                    .Select(i => new ScheduledReminderTime(SameDay, new TimeOnly(8 + i, 0)))
+                    .ToList())
         };
 
         var result = _validator.TestValidate(command);
-        result.ShouldHaveValidationErrorFor(x => x.ScheduledReminders);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
     }
 
     [Fact]
@@ -222,14 +224,15 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            ScheduledReminders = new List<ScheduledReminderTime>
-            {
-                new((ScheduledReminderWhen)999, new TimeOnly(9, 0))
-            }
+            Options = new HabitCommandOptions(
+                ScheduledReminders: new List<ScheduledReminderTime>
+                {
+                    new((ScheduledReminderWhen)999, new TimeOnly(9, 0))
+                })
         };
 
         var result = _validator.TestValidate(command);
-        result.ShouldHaveValidationErrorFor(x => x.ScheduledReminders);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
     }
 
     [Fact]
@@ -237,23 +240,24 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            ScheduledReminders = new List<ScheduledReminderTime>
-            {
-                new(SameDay, new TimeOnly(9, 0)),
-                new(SameDay, new TimeOnly(9, 0))
-            }
+            Options = new HabitCommandOptions(
+                ScheduledReminders: new List<ScheduledReminderTime>
+                {
+                    new(SameDay, new TimeOnly(9, 0)),
+                    new(SameDay, new TimeOnly(9, 0))
+                })
         };
 
         var result = _validator.TestValidate(command);
-        result.ShouldHaveValidationErrorFor(x => x.ScheduledReminders);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
     }
 
     [Fact]
     public void Validate_NullScheduledReminders_NoError()
     {
-        var command = ValidCommand() with { ScheduledReminders = null };
+        var command = ValidCommand();
 
         var result = _validator.TestValidate(command);
-        result.ShouldNotHaveValidationErrorFor(x => x.ScheduledReminders);
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
     }
 }

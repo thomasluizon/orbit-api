@@ -8,13 +8,19 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Gamification.Services;
 
+/// <summary>
+/// Groups repository dependencies for gamification to reduce constructor parameter count (S107).
+/// </summary>
+public record GamificationRepositories(
+    IGenericRepository<User> UserRepository,
+    IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<HabitLog> HabitLogRepository,
+    IGenericRepository<Goal> GoalRepository,
+    IGenericRepository<UserAchievement> AchievementRepository,
+    IGenericRepository<Notification> NotificationRepository);
+
 public partial class GamificationService(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<Goal> goalRepository,
-    IGenericRepository<UserAchievement> achievementRepository,
-    IGenericRepository<Notification> notificationRepository,
+    GamificationRepositories repos,
     IPushNotificationService pushService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
@@ -22,7 +28,7 @@ public partial class GamificationService(
 {
     public async Task<HabitLogGamificationResult?> ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default)
     {
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null || !user.HasProAccess) return null;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
@@ -32,7 +38,7 @@ public partial class GamificationService(
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
         // --- Load all user habits with logs ONCE (reused across streak, volume, perfect-day, perfect-week checks) ---
-        var allUserHabits = await habitRepository.FindAsync(
+        var allUserHabits = await repos.HabitRepository.FindAsync(
             h => h.UserId == userId,
             q => q.Include(h => h.Logs),
             ct);
@@ -94,7 +100,7 @@ public partial class GamificationService(
 
         // Persist new achievements
         foreach (var (entity, _) in newAchievements)
-            await achievementRepository.AddAsync(entity, ct);
+            await repos.AchievementRepository.AddAsync(entity, ct);
 
         // Check level up
         UpdateLevel(user);
@@ -118,7 +124,7 @@ public partial class GamificationService(
 
     public async Task ProcessHabitCreated(Guid userId, CancellationToken ct = default)
     {
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null || !user.HasProAccess) return;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
@@ -128,13 +134,13 @@ public partial class GamificationService(
         // First Orbit: first habit created
         if (!earned.Contains(AchievementDefinitions.FirstOrbit))
         {
-            var habitCount = await habitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
+            var habitCount = await repos.HabitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
             if (habitCount == 1)
                 TryGrant(AchievementDefinitions.FirstOrbit, user, earned, newAchievements);
         }
 
         foreach (var (entity, _) in newAchievements)
-            await achievementRepository.AddAsync(entity, ct);
+            await repos.AchievementRepository.AddAsync(entity, ct);
 
         UpdateLevel(user);
 
@@ -152,14 +158,14 @@ public partial class GamificationService(
 
     public async Task ProcessGoalCreated(Guid userId, CancellationToken ct = default)
     {
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null || !user.HasProAccess) return;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
         var previousLevel = user.Level;
 
-        var goalCount = await goalRepository.CountAsync(g => g.UserId == userId, ct);
+        var goalCount = await repos.GoalRepository.CountAsync(g => g.UserId == userId, ct);
 
         // Mission Control: first goal
         if (!earned.Contains(AchievementDefinitions.MissionControl) && goalCount == 1)
@@ -170,7 +176,7 @@ public partial class GamificationService(
             TryGrant(AchievementDefinitions.GoalSetter, user, earned, newAchievements);
 
         foreach (var (entity, _) in newAchievements)
-            await achievementRepository.AddAsync(entity, ct);
+            await repos.AchievementRepository.AddAsync(entity, ct);
 
         UpdateLevel(user);
 
@@ -188,7 +194,7 @@ public partial class GamificationService(
 
     public async Task ProcessGoalCompleted(Guid userId, CancellationToken ct = default)
     {
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null || !user.HasProAccess) return;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
@@ -198,7 +204,7 @@ public partial class GamificationService(
         // 100 XP for goal completion
         user.AddXp(100);
 
-        var completedGoals = await goalRepository.CountAsync(
+        var completedGoals = await repos.GoalRepository.CountAsync(
             g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
 
         // Goal Crusher: first completed goal
@@ -214,7 +220,7 @@ public partial class GamificationService(
             TryGrant(AchievementDefinitions.DreamMaker, user, earned, newAchievements);
 
         foreach (var (entity, _) in newAchievements)
-            await achievementRepository.AddAsync(entity, ct);
+            await repos.AchievementRepository.AddAsync(entity, ct);
 
         UpdateLevel(user);
 
@@ -234,7 +240,7 @@ public partial class GamificationService(
 
     private async Task<HashSet<string>> LoadEarnedAchievementIds(Guid userId, CancellationToken ct)
     {
-        var earned = await achievementRepository.FindAsync(a => a.UserId == userId, ct);
+        var earned = await repos.AchievementRepository.FindAsync(a => a.UserId == userId, ct);
         return earned.Select(a => a.AchievementId).ToHashSet();
     }
 
@@ -377,7 +383,7 @@ public partial class GamificationService(
 
         // Load recent logs only -- 90 days is more than enough to detect 10 qualifying entries
         var cutoff = DateTime.UtcNow.AddDays(-90);
-        var allLogs = await habitLogRepository.FindAsync(
+        var allLogs = await repos.HabitLogRepository.FindAsync(
             l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= cutoff, ct);
 
         if (checkEarly)
@@ -420,7 +426,7 @@ public partial class GamificationService(
         if (habitIds.Count == 0) return;
 
         // Check for any logs in the 7 days before today (not including today)
-        var recentLogs = await habitLogRepository.FindAsync(
+        var recentLogs = await repos.HabitLogRepository.FindAsync(
             l => habitIds.Contains(l.HabitId) && l.Date >= sevenDaysAgo && l.Date < today, ct);
 
         if (recentLogs.Count == 0)
@@ -503,7 +509,7 @@ public partial class GamificationService(
         var body = $"{description} (+{achievement.XpReward} XP)";
 
         var notification = Notification.Create(userId, title, body);
-        await notificationRepository.AddAsync(notification, ct);
+        await repos.NotificationRepository.AddAsync(notification, ct);
 
         try
         {
@@ -528,7 +534,7 @@ public partial class GamificationService(
             : $"You've reached {newLevel.Title}! Keep going!";
 
         var notification = Notification.Create(userId, title, body);
-        await notificationRepository.AddAsync(notification, ct);
+        await repos.NotificationRepository.AddAsync(notification, ct);
 
         try
         {

@@ -5,9 +5,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
-using System.Linq.Expressions;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -18,21 +16,12 @@ public record UpdateHabitCommand(
     string? Description,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
-    IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
     DateOnly? DueDate = null,
-    TimeOnly? DueTime = null,
-    TimeOnly? DueEndTime = null,
-    bool? ReminderEnabled = null,
-    IReadOnlyList<int>? ReminderTimes = null,
-    bool? SlipAlertEnabled = null,
-    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     bool? IsGeneral = null,
-    DateOnly? EndDate = null,
     bool? ClearEndDate = null,
-    bool? IsFlexible = null,
-    IReadOnlyList<Guid>? GoalIds = null,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null) : IRequest<Result>;
+    UpdateHabitCommandOptions? Options = null,
+    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -56,31 +45,33 @@ public class UpdateHabitCommandHandler(
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
-        var result = habit.Update(
+        var opts = request.Options ?? new UpdateHabitCommandOptions();
+
+        var result = habit.Update(new HabitUpdateParams(
             request.Title,
             request.Description,
             request.FrequencyUnit,
             request.FrequencyQuantity,
-            request.Days,
+            opts.Days,
             request.IsBadHabit,
             request.DueDate,
-            dueTime: request.DueTime,
-            dueEndTime: request.DueEndTime,
-            reminderEnabled: request.ReminderEnabled,
-            reminderTimes: request.ReminderTimes,
-            slipAlertEnabled: request.SlipAlertEnabled,
-            checklistItems: request.ChecklistItems,
-            isGeneral: request.IsGeneral,
-            isFlexible: request.IsFlexible,
-            endDate: request.EndDate,
-            clearEndDate: request.ClearEndDate,
-            scheduledReminders: request.ScheduledReminders);
+            DueTime: opts.DueTime,
+            DueEndTime: opts.DueEndTime,
+            ReminderEnabled: opts.ReminderEnabled,
+            ReminderTimes: opts.ReminderTimes,
+            SlipAlertEnabled: opts.SlipAlertEnabled,
+            ChecklistItems: opts.ChecklistItems,
+            IsGeneral: request.IsGeneral,
+            IsFlexible: opts.IsFlexible,
+            EndDate: opts.EndDate,
+            ClearEndDate: request.ClearEndDate,
+            ScheduledReminders: opts.ScheduledReminders));
 
         if (result.IsFailure)
             return result;
 
         // If dueTime changed, clear today's sent reminders so they re-trigger
-        if (request.DueTime.HasValue)
+        if (opts.DueTime.HasValue)
         {
             var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
             var existing = await sentReminderRepository.FindAsync(
