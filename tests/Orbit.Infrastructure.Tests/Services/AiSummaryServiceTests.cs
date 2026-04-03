@@ -230,6 +230,180 @@ public class AiSummaryServiceTests
         result.Should().Contain("Overdue3");
     }
 
+    // ── BuildSummaryPrompt with various habit types ──
+
+    [Fact]
+    public void BuildSummaryPrompt_EmptyHabitList_ShowsNoHabitsScheduled()
+    {
+        var result = InvokeBuildSummaryPrompt([], [], Today, "en");
+
+        result.Should().Contain("(no habits scheduled)");
+        result.Should().Contain("0/0 habits completed");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_ContainsRulesSection()
+    {
+        var habits = new List<Habit> { CreateHabit("Walk") };
+        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en");
+
+        result.Should().Contain("Rules:");
+        result.Should().Contain("2-3 short sentences");
+        result.Should().Contain("Do NOT use markdown");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_UpperCaseLanguage_StillMapsCorrectly()
+    {
+        var habits = new List<Habit> { CreateHabit("Test") };
+
+        // "PT-BR" should still map since the switch lowercases it
+        var result = InvokeBuildSummaryPrompt(habits, [], Today, "PT-BR");
+
+        result.Should().Contain("Brazilian Portuguese");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_EmptyLanguageString_DefaultsToEnglish()
+    {
+        var habits = new List<Habit> { CreateHabit("Test") };
+        var result = InvokeBuildSummaryPrompt(habits, [], Today, "");
+
+        result.Should().Contain("English");
+    }
+
+    // ── BuildHabitSection with completed habits ──
+
+    [Fact]
+    public void BuildHabitSection_MultipleParentsNoChildren_ListsAllPending()
+    {
+        var habits = new List<Habit>
+        {
+            CreateHabit("Yoga"),
+            CreateHabit("Read"),
+            CreateHabit("Cook"),
+        };
+
+        var result = InvokeBuildHabitSection(habits);
+
+        result.Should().Contain("Yoga (pending)");
+        result.Should().Contain("Read (pending)");
+        result.Should().Contain("Cook (pending)");
+    }
+
+    [Fact]
+    public void BuildHabitSection_ParentWithMultipleChildrenGroups_ShowsAllHierarchies()
+    {
+        var parent1 = CreateHabit("Workout");
+        var child1a = CreateHabit("Push-ups", parentId: parent1.Id);
+        var child1b = CreateHabit("Sit-ups", parentId: parent1.Id);
+
+        var parent2 = CreateHabit("Study");
+        var child2a = CreateHabit("Math", parentId: parent2.Id);
+
+        var result = InvokeBuildHabitSection([parent1, child1a, child1b, parent2, child2a]);
+
+        result.Should().Contain("Workout (pending, 0/2 sub-tasks done)");
+        result.Should().Contain("Study (pending, 0/1 sub-tasks done)");
+        result.Should().Contain("Push-ups (pending)");
+        result.Should().Contain("Sit-ups (pending)");
+        result.Should().Contain("Math (pending)");
+    }
+
+    // ── BuildSummaryPrompt with overdue section only ──
+
+    [Fact]
+    public void BuildSummaryPrompt_OnlyOverdueHabits_ScheduledSectionEmpty()
+    {
+        var overdue = new List<Habit> { CreateHabit("Overdue Task") };
+
+        var result = InvokeBuildSummaryPrompt([], overdue, Today, "en");
+
+        result.Should().Contain("(no habits scheduled)");
+        result.Should().Contain("Overdue Task");
+        result.Should().NotContain("(none)");
+    }
+
+    // ── StripMarkdownFences edge cases ──
+
+    [Fact]
+    public void StripMarkdownFences_OnlyFences_ReturnsEmpty()
+    {
+        var text = "```\n```";
+        var result = AiSummaryService.StripMarkdownFences(text);
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void StripMarkdownFences_FencesWithExtraBlankLines_StripsAndTrims()
+    {
+        var text = "```\n\nContent with blanks\n\n```";
+        var result = AiSummaryService.StripMarkdownFences(text);
+        result.Should().Contain("Content with blanks");
+    }
+
+    [Fact]
+    public void StripMarkdownFences_InlineFences_NotStripped()
+    {
+        // Inline code fences (single backtick) should not be affected
+        var text = "Use `code` for inline formatting";
+        var result = AiSummaryService.StripMarkdownFences(text);
+        result.Should().Be(text);
+    }
+
+    [Fact]
+    public void StripMarkdownFences_FencesWithJsonLanguage_Stripped()
+    {
+        var text = "```json\n{\"key\": \"value\"}\n```";
+        var result = AiSummaryService.StripMarkdownFences(text);
+        result.Should().Be("{\"key\": \"value\"}");
+    }
+
+    // ── BuildSummaryPrompt date formatting ──
+
+    [Fact]
+    public void BuildSummaryPrompt_NewYearsDay_FormatsDateCorrectly()
+    {
+        var habits = new List<Habit> { CreateHabit("Celebrate") };
+        var date = new DateOnly(2026, 1, 1);
+
+        var result = InvokeBuildSummaryPrompt(habits, [], date, "en");
+
+        result.Should().Contain("January 1, 2026");
+    }
+
+    // ── BuildSummaryPrompt progress counts ──
+
+    [Fact]
+    public void BuildSummaryPrompt_AllHabitsPresent_ShowsCorrectTotal()
+    {
+        var habits = new List<Habit>
+        {
+            CreateHabit("A"),
+            CreateHabit("B"),
+            CreateHabit("C"),
+            CreateHabit("D"),
+            CreateHabit("E"),
+        };
+
+        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en");
+
+        result.Should().Contain("0/5 habits completed");
+    }
+
+    // ── BuildHabitSection indent verification ──
+
+    [Fact]
+    public void BuildHabitSection_Children_IndentedWithTwoSpaces()
+    {
+        var parent = CreateHabit("Parent");
+        var child = CreateHabit("Child", parentId: parent.Id);
+
+        var result = InvokeBuildHabitSection([parent, child]);
+
+        result.Should().Contain("  - Child (pending)");
+    }
+
     // ── Helpers ──
 
     private static Habit CreateHabit(

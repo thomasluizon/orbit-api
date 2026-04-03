@@ -116,9 +116,289 @@ public class UpdateHabitToolTests
         result.Error.Should().Contain("habit_id is required");
     }
 
+    // ── Update days ──
+
+    [Fact]
+    public async Task UpdateDays_ChangesDaySchedule()
+    {
+        var habit = CreateHabit("Gym", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "days": ["Monday", "Wednesday", "Friday"]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.Days.Should().Contain(DayOfWeek.Monday);
+        habit.Days.Should().Contain(DayOfWeek.Wednesday);
+        habit.Days.Should().Contain(DayOfWeek.Friday);
+    }
+
+    // ── Update due time ──
+
+    [Fact]
+    public async Task UpdateDueTime_ChangesTime()
+    {
+        var habit = CreateHabit("Meditate", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": "07:30"}""");
+
+        result.Success.Should().BeTrue();
+        habit.DueTime.Should().Be(new TimeOnly(7, 30));
+    }
+
+    [Fact]
+    public async Task ClearDueTime_SetsToNull()
+    {
+        var habit = CreateHabitWithTime("Meditate", FrequencyUnit.Day, 1, new TimeOnly(8, 0));
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": null}""");
+
+        result.Success.Should().BeTrue();
+        habit.DueTime.Should().BeNull();
+    }
+
+    // ── Update checklist ──
+
+    [Fact]
+    public async Task UpdateChecklist_ReplacesChecklistItems()
+    {
+        var habit = CreateHabit("Morning", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "checklist_items": [
+                {"text": "New item 1"},
+                {"text": "New item 2", "is_checked": true}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.ChecklistItems.Should().HaveCount(2);
+        habit.ChecklistItems[0].Text.Should().Be("New item 1");
+        habit.ChecklistItems[1].IsChecked.Should().BeTrue();
+    }
+
+    // ── Update reminder times ──
+
+    [Fact]
+    public async Task UpdateReminderTimes_ChangesReminders()
+    {
+        var habit = CreateHabit("Meds", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "reminder_enabled": true,
+            "reminder_times": [5, 30, 60]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.ReminderEnabled.Should().BeTrue();
+        habit.ReminderTimes.Should().BeEquivalentTo([5, 30, 60]);
+    }
+
+    // ── Update description ──
+
+    [Fact]
+    public async Task UpdateDescription_ChangesDescription()
+    {
+        var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "description": "At least 30 minutes"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Description.Should().Be("At least 30 minutes");
+    }
+
+    [Fact]
+    public async Task ClearDescription_SetsToNull()
+    {
+        var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "description": null}""");
+
+        result.Success.Should().BeTrue();
+        habit.Description.Should().BeNull();
+    }
+
+    // ── Toggle bad habit ──
+
+    [Fact]
+    public async Task ToggleBadHabit_SetsIsBadHabit()
+    {
+        var habit = CreateHabit("Smoking", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "is_bad_habit": true}""");
+
+        result.Success.Should().BeTrue();
+        habit.IsBadHabit.Should().BeTrue();
+    }
+
+    // ── Toggle flexible ──
+
+    [Fact]
+    public async Task ToggleFlexible_SetsIsFlexible()
+    {
+        var habit = CreateHabit("Yoga", FrequencyUnit.Week, 3);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "is_flexible": true}""");
+
+        result.Success.Should().BeTrue();
+        habit.IsFlexible.Should().BeTrue();
+    }
+
+    // ── End date operations ──
+
+    [Fact]
+    public async Task SetEndDate_UpdatesEndDate()
+    {
+        var habit = CreateHabit("Challenge", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": "2026-12-31"}""");
+
+        result.Success.Should().BeTrue();
+        habit.EndDate.Should().Be(new DateOnly(2026, 12, 31));
+    }
+
+    [Fact]
+    public async Task ClearEndDate_SetsToNull()
+    {
+        var habit = CreateHabit("Challenge", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""");
+
+        result.Success.Should().BeTrue();
+        habit.EndDate.Should().BeNull();
+    }
+
+    // ── Update due date ──
+
+    [Fact]
+    public async Task UpdateDueDate_ChangesDueDate()
+    {
+        var habit = CreateHabit("Task", null, null);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_date": "2026-06-15"}""");
+
+        result.Success.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2026, 6, 15));
+    }
+
+    // ── Scheduled reminders ──
+
+    [Fact]
+    public async Task UpdateScheduledReminders_ReplacesReminders()
+    {
+        var habit = CreateHabit("Appointment", null, null);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "scheduled_reminders": [
+                {"when": "same_day", "time": "09:00"},
+                {"when": "day_before", "time": "18:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.ScheduledReminders.Should().HaveCount(2);
+    }
+
+    // ── No changes provided ──
+
+    [Fact]
+    public async Task NoFieldsProvided_KeepsAllExistingValues()
+    {
+        var habit = CreateHabit("Original", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Title.Should().Be("Original");
+        habit.FrequencyUnit.Should().Be(FrequencyUnit.Day);
+        habit.FrequencyQuantity.Should().Be(1);
+    }
+
+    // ── Multiple fields at once ──
+
+    [Fact]
+    public async Task UpdateMultipleFields_AllFieldsChange()
+    {
+        var habit = CreateHabit("Old Title", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "title": "New Title",
+            "description": "New desc",
+            "frequency_unit": "Week",
+            "frequency_quantity": 2,
+            "is_bad_habit": true,
+            "due_date": "2026-05-01",
+            "due_time": "10:00",
+            "reminder_enabled": true,
+            "reminder_times": [15],
+            "checklist_items": [{"text": "Item 1"}]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.Title.Should().Be("New Title");
+        habit.Description.Should().Be("New desc");
+        habit.FrequencyUnit.Should().Be(FrequencyUnit.Week);
+        habit.FrequencyQuantity.Should().Be(2);
+        habit.IsBadHabit.Should().BeTrue();
+        habit.DueDate.Should().Be(new DateOnly(2026, 5, 1));
+        habit.DueTime.Should().Be(new TimeOnly(10, 0));
+        habit.ReminderEnabled.Should().BeTrue();
+        habit.ReminderTimes.Should().BeEquivalentTo([15]);
+        habit.ChecklistItems.Should().HaveCount(1);
+    }
+
+    // ── Absent optional fields are preserved ──
+
+    [Fact]
+    public async Task AbsentDueTime_PreservesExisting()
+    {
+        var habit = CreateHabitWithTime("Meditate", FrequencyUnit.Day, 1, new TimeOnly(6, 0));
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "title": "Meditate Daily"}""");
+
+        result.Success.Should().BeTrue();
+        habit.DueTime.Should().Be(new TimeOnly(6, 0));
+    }
+
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
+    }
+
+    private static Habit CreateHabitWithTime(string title, FrequencyUnit? freq, int? qty, TimeOnly dueTime)
+    {
+        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today, DueTime: dueTime)).Value;
     }
 
     private void SetupHabitFound(Habit habit)

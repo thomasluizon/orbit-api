@@ -1,7 +1,9 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
@@ -56,5 +58,148 @@ public class GetCalendarEventsQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Google Calendar not connected");
+    }
+
+    [Fact]
+    public async Task Handle_UserNotFound_UsesCorrectErrorCode()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        var query = new GetCalendarEventsQuery(UserId);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.UserNotFound);
+        result.ErrorCode.Should().Be(ErrorCodes.UserNotFound);
+    }
+
+    [Fact]
+    public async Task Handle_NoGoogleToken_DoesNotSaveChanges()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>()).Returns((string?)null);
+
+        var query = new GetCalendarEventsQuery(UserId);
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ValidToken_PersistsRefreshedToken()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
+            .Returns("valid-access-token");
+
+        // Setup habits repo for the filter (empty)
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+
+        var query = new GetCalendarEventsQuery(UserId);
+
+        // This will fail at Google API call (since we can't mock the CalendarService),
+        // but we can verify SaveChanges was called before the Google API call.
+        // The handler calls SaveChangesAsync right after getting the token.
+        try
+        {
+            await _handler.Handle(query, CancellationToken.None);
+        }
+        catch
+        {
+            // Expected: Google API call will fail in test environment
+        }
+
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UserNotFound_DoesNotCallTokenService()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        var query = new GetCalendarEventsQuery(UserId);
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _googleTokenService.DidNotReceive()
+            .GetValidAccessTokenAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoGoogleToken_ErrorMessageGuidesUser()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>()).Returns((string?)null);
+
+        var query = new GetCalendarEventsQuery(UserId);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.Error.Should().Contain("sign in with Google");
+    }
+
+    // --- CalendarEventItem record tests ---
+
+    [Fact]
+    public void CalendarEventItem_Properties_SetCorrectly()
+    {
+        var item = new CalendarEventItem(
+            "evt_123", "Team Meeting", "Weekly sync",
+            "2026-04-03", "14:00", "15:00",
+            true, "RRULE:FREQ=WEEKLY;BYDAY=FR",
+            [15, 30]);
+
+        item.Id.Should().Be("evt_123");
+        item.Title.Should().Be("Team Meeting");
+        item.Description.Should().Be("Weekly sync");
+        item.StartDate.Should().Be("2026-04-03");
+        item.StartTime.Should().Be("14:00");
+        item.EndTime.Should().Be("15:00");
+        item.IsRecurring.Should().BeTrue();
+        item.RecurrenceRule.Should().Be("RRULE:FREQ=WEEKLY;BYDAY=FR");
+        item.Reminders.Should().Equal(15, 30);
+    }
+
+    [Fact]
+    public void CalendarEventItem_NonRecurring_PropertiesCorrect()
+    {
+        var item = new CalendarEventItem(
+            "evt_456", "Doctor Appointment", null,
+            "2026-04-10", "09:00", "10:00",
+            false, null, []);
+
+        item.IsRecurring.Should().BeFalse();
+        item.RecurrenceRule.Should().BeNull();
+        item.Description.Should().BeNull();
+        item.Reminders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalendarEventItem_AllDayEvent_NoTimes()
+    {
+        var item = new CalendarEventItem(
+            "evt_789", "Holiday", null,
+            "2026-04-25", null, null,
+            false, null, []);
+
+        item.StartTime.Should().BeNull();
+        item.EndTime.Should().BeNull();
+    }
+
+    // --- GetCalendarEventsQuery record test ---
+
+    [Fact]
+    public void GetCalendarEventsQuery_RecordEquality()
+    {
+        var id = Guid.NewGuid();
+        var q1 = new GetCalendarEventsQuery(id);
+        var q2 = new GetCalendarEventsQuery(id);
+
+        q1.Should().Be(q2);
+        q1.UserId.Should().Be(id);
     }
 }
