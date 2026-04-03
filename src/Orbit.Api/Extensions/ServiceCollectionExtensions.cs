@@ -368,7 +368,7 @@ public static class ServiceCollectionExtensions
         return builder;
     }
 
-    private static void InitializeFirebase(IConfiguration configuration)
+    private static void InitializeFirebase(ConfigurationManager configuration)
     {
         var firebaseCredJson = configuration["Firebase:CredentialsJson"];
         if (!string.IsNullOrEmpty(firebaseCredJson))

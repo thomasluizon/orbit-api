@@ -97,7 +97,7 @@ public static class WebApplicationExtensions
                     var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
                     var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
                     context.Response.StatusCode = 401;
-                    context.Response.Headers["WWW-Authenticate"] = $"Bearer resource_metadata=\"{resourceUrl}\"";
+                    context.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{resourceUrl}\"";
                     return;
                 }
                 context.User = authResult.Principal!;

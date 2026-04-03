@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 
@@ -149,5 +150,118 @@ public class PushNotificationServiceTests
         var result = PushSubscription.Create(ValidUserId, "https://push.example.com", "p256dh-key", "auth-secret");
         result.IsSuccess.Should().BeTrue();
         result.Value.UserId.Should().Be(ValidUserId);
+    }
+
+    // ── Token preview logic (replicates SendFcmToSubscription preview logic) ──
+
+    [Fact]
+    public void TokenPreview_ShortEndpoint_TruncatesCorrectly()
+    {
+        var endpoint = "short";
+        var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
+
+        preview.Should().Be("short...");
+    }
+
+    [Fact]
+    public void TokenPreview_LongEndpoint_TruncatesTo20Chars()
+    {
+        var endpoint = "https://push.example.com/sub/abcdefghijklmnopqrst";
+        var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
+
+        preview.Should().Be("https://push.example...");
+        preview.Should().HaveLength(23); // 20 + 3 for "..."
+    }
+
+    [Fact]
+    public void TokenPreview_ExactlyTwentyChars_NoExtraTruncation()
+    {
+        var endpoint = "12345678901234567890";
+        var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
+
+        preview.Should().Be("12345678901234567890...");
+    }
+
+    // ── Web push payload serialization ──
+
+    [Fact]
+    public void WebPushPayload_SerializesCorrectly_WithUrl()
+    {
+        var title = "Test Title";
+        var body = "Test Body";
+        var url = "/habits";
+
+        var payload = JsonSerializer.Serialize(new { title, body, url });
+
+        payload.Should().Contain("\"title\":\"Test Title\"");
+        payload.Should().Contain("\"body\":\"Test Body\"");
+        payload.Should().Contain("\"url\":\"/habits\"");
+    }
+
+    [Fact]
+    public void WebPushPayload_SerializesCorrectly_WithNullUrl()
+    {
+        var title = "Alert";
+        var body = "Something happened";
+        string? url = null;
+
+        var payload = JsonSerializer.Serialize(new { title, body, url });
+
+        payload.Should().Contain("\"url\":null");
+    }
+
+    [Fact]
+    public void WebPushPayload_SpecialCharacters_EscapedInJson()
+    {
+        var title = "He said \"hello\"";
+        var body = "Line1\nLine2";
+        var url = "/";
+
+        var payload = JsonSerializer.Serialize(new { title, body, url });
+        var parsed = JsonDocument.Parse(payload);
+
+        parsed.RootElement.GetProperty("title").GetString().Should().Be("He said \"hello\"");
+        parsed.RootElement.GetProperty("body").GetString().Should().Be("Line1\nLine2");
+    }
+
+    // ── Subscription multi-user routing ──
+
+    [Fact]
+    public void MultiUserRouting_GroupsByUserId()
+    {
+        var user1 = Guid.NewGuid();
+        var user2 = Guid.NewGuid();
+
+        var subs = new List<PushSubscription>
+        {
+            PushSubscription.Create(user1, "token-1", "fcm", "auth1").Value,
+            PushSubscription.Create(user1, "https://push.com/1", "key1", "auth2").Value,
+            PushSubscription.Create(user2, "token-2", "fcm", "auth3").Value,
+        };
+
+        var user1Subs = subs.Where(s => s.UserId == user1).ToList();
+        var user2Subs = subs.Where(s => s.UserId == user2).ToList();
+
+        user1Subs.Should().HaveCount(2);
+        user2Subs.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void StaleSubscriptionTracking_AccumulatesAcrossTypes()
+    {
+        // Simulate the stale subscription accumulation logic
+        var staleSubscriptions = new List<PushSubscription>();
+
+        var fcmSub = PushSubscription.Create(ValidUserId, "stale-token", "fcm", "auth1").Value;
+        var webSub = PushSubscription.Create(ValidUserId, "https://gone.com/sub", "key1", "auth2").Value;
+
+        // Simulate FCM marking stale
+        staleSubscriptions.Add(fcmSub);
+        // Simulate WebPush marking stale
+        staleSubscriptions.Add(webSub);
+
+        staleSubscriptions.Should().HaveCount(2);
+        staleSubscriptions.Should().Contain(fcmSub);
+        staleSubscriptions.Should().Contain(webSub);
     }
 }

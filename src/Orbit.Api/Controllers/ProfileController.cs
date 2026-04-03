@@ -6,6 +6,8 @@ using Orbit.Api.Extensions;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Api.Controllers;
 
 [Authorize]

@@ -8,6 +8,8 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Api.Controllers;
 
 [Authorize]

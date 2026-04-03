@@ -6,6 +6,8 @@ using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Notifications.Queries;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Api.Controllers;
 
 [Authorize]

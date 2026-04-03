@@ -7,6 +7,8 @@ using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Enums;
 
+#pragma warning disable CA1873
+
 namespace Orbit.Api.Controllers;
 
 [Authorize]

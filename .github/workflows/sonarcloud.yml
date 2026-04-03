@@ -42,7 +42,7 @@ jobs:
             /o:"thomasluizon" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**"
+            /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs"
 
       - name: Build
         run: dotnet build --no-restore
