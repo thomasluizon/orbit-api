@@ -47,7 +47,7 @@ public record HabitUpdateParams(
     bool? ClearEndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
 
-public class Habit : Entity
+public class Habit : Entity, ITimestamped, ISoftDeletable
 {
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
@@ -69,6 +69,9 @@ public class Habit : Entity
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
     public ICollection<System.DayOfWeek> Days { get; private set; } = [];
 
     public Guid? ParentHabitId { get; private set; }
@@ -166,6 +169,7 @@ public class Habit : Entity
                 ChecklistItems = ChecklistItems.Select(i => i with { IsChecked = false }).ToList();
         }
 
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
     }
 
@@ -183,6 +187,8 @@ public class Habit : Entity
         {
             IsCompleted = true;
         }
+
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -203,6 +209,8 @@ public class Habit : Entity
                 break;
             }
         }
+
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -257,6 +265,7 @@ public class Habit : Entity
             _ => today
         };
         DueDate = windowEnd.AddDays(1);
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 
     /// <summary>
@@ -265,6 +274,7 @@ public class Habit : Entity
     public void PostponeTo(DateOnly date)
     {
         DueDate = date;
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 
     public Result<HabitLog> SkipFlexible(DateOnly date)
@@ -278,6 +288,7 @@ public class Habit : Entity
         // Create a skip log (Value = 0 distinguishes from completion logs which use Value = 1)
         var log = HabitLog.Create(Id, date, 0, null);
         _logs.Add(log);
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
     }
 
@@ -299,6 +310,7 @@ public class Habit : Entity
             DueDate = date;
         }
 
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success(log);
     }
 
@@ -314,6 +326,7 @@ public class Habit : Entity
         ApplyRequiredUpdates(p);
         ApplyOptionalUpdates(p);
 
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 
@@ -378,11 +391,30 @@ public class Habit : Entity
             EndDate = p.EndDate.Value;
     }
 
-    public void UpdateChecklist(IReadOnlyList<ChecklistItem> items) => ChecklistItems = items;
+    public void UpdateChecklist(IReadOnlyList<ChecklistItem> items)
+    {
+        ChecklistItems = items;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 
-    public void SetPosition(int? position) => Position = position;
+    public void SetPosition(int? position)
+    {
+        Position = position;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 
-    public void SetParentHabitId(Guid? parentHabitId) => ParentHabitId = parentHabitId;
+    public void SetParentHabitId(Guid? parentHabitId)
+    {
+        ParentHabitId = parentHabitId;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 
     public void AddTag(Tag tag) { if (!_tags.Contains(tag)) _tags.Add(tag); }
 

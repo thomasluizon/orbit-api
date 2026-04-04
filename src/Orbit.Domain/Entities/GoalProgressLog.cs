@@ -2,12 +2,13 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class GoalProgressLog : Entity
+public class GoalProgressLog : Entity, ITimestamped
 {
     public Guid GoalId { get; private set; }
     public decimal Value { get; private set; }
     public decimal PreviousValue { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public string? Note { get; private set; }
 
     private GoalProgressLog() { }
@@ -20,7 +21,8 @@ public class GoalProgressLog : Entity
             PreviousValue = previousValue,
             Value = newValue,
             Note = note?.Trim(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
         };
     }
 }

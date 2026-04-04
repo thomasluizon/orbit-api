@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
@@ -36,6 +37,8 @@ public class OrbitDbContext : DbContext
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<ChecklistTemplate> ChecklistTemplates => Set<ChecklistTemplate>();
+    public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
+    public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +69,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<Habit>(entity =>
         {
             entity.HasIndex(h => h.UserId);
+            entity.HasIndex(h => new { h.UserId, h.IsDeleted });
+            entity.HasQueryFilter(h => !h.IsDeleted);
 
             entity.HasMany(h => h.Logs)
                 .WithOne()
@@ -171,6 +176,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<Tag>(entity =>
         {
             entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
+            entity.HasIndex(t => new { t.UserId, t.IsDeleted });
+            entity.HasQueryFilter(t => !t.IsDeleted);
 
             entity.HasMany(t => t.Habits)
                 .WithMany(h => h.Tags)
@@ -205,6 +212,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<Goal>(entity =>
         {
             entity.HasIndex(g => g.UserId);
+            entity.HasIndex(g => new { g.UserId, g.IsDeleted });
+            entity.HasQueryFilter(g => !g.IsDeleted);
 
             entity.HasMany(g => g.ProgressLogs)
                 .WithOne()
@@ -302,6 +311,57 @@ public class OrbitDbContext : DbContext
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<string>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
         });
+
+        modelBuilder.Entity<AppFeatureFlag>(entity =>
+        {
+            entity.HasKey(f => f.Key);
+            entity.Property(f => f.Key).HasMaxLength(100);
+            entity.Property(f => f.Description).HasMaxLength(500);
+            entity.Property(f => f.PlanRequirement).HasMaxLength(50);
+
+            // TODO: Run EF migration after adding AppFeatureFlag entity and seed data:
+            //   dotnet ef migrations add AddOfflineSyncSupport --project src/Orbit.Infrastructure --startup-project src/Orbit.Api
+            //   dotnet ef database update --project src/Orbit.Infrastructure --startup-project src/Orbit.Api
+            // Seed data uses anonymous types for deterministic values (required by EF Core HasData).
+            entity.HasData(
+                new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "push_notifications", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Push notification reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "scheduled_reminders", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Custom scheduled reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "slip_alerts", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Slip detection alerts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "checklist_templates", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Reusable checklist templates", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "habit_duplication", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Duplicate habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "bulk_operations", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Bulk create/delete/log habits", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "calendar_integration", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Google Calendar integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) });
+        });
+
+        modelBuilder.Entity<ContentBlock>(entity =>
+        {
+            entity.HasIndex(cb => new { cb.Key, cb.Locale }).IsUnique();
+            entity.Property(cb => cb.Key).HasMaxLength(100);
+            entity.Property(cb => cb.Locale).HasMaxLength(10);
+            entity.Property(cb => cb.Category).HasMaxLength(50);
+            // TODO: Run EF migration after adding ContentBlock entity
+        });
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<ITimestamped>())
+        {
+            if (entry.State is EntityState.Modified or EntityState.Added)
+            {
+                entry.Entity.UpdatedAtUtc = now;
+            }
+        }
+
+        return base.SaveChangesAsync(cancellationToken);
     }
 
     private static string SerializeDays(ICollection<System.DayOfWeek> days)

@@ -3,7 +3,7 @@ using Orbit.Domain.Enums;
 
 namespace Orbit.Domain.Entities;
 
-public class Goal : Entity
+public class Goal : Entity, ITimestamped, ISoftDeletable
 {
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
@@ -15,7 +15,10 @@ public class Goal : Entity
     public DateOnly? Deadline { get; private set; }
     public int Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAtUtc { get; private set; }
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
 
     private readonly List<GoalProgressLog> _progressLogs = [];
     public IReadOnlyCollection<GoalProgressLog> ProgressLogs => _progressLogs.AsReadOnly();
@@ -25,6 +28,13 @@ public class Goal : Entity
 
     public void AddHabit(Habit habit) { if (!_habits.Contains(habit)) _habits.Add(habit); }
     public void RemoveHabit(Habit habit) => _habits.Remove(habit);
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 
     private Goal() { }
 
@@ -80,6 +90,7 @@ public class Goal : Entity
             CompletedAtUtc = DateTime.UtcNow;
         }
 
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 
@@ -111,12 +122,14 @@ public class Goal : Entity
             CompletedAtUtc = null;
         }
 
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 
     public Result UpdatePosition(int position)
     {
         Position = position;
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 
@@ -127,6 +140,7 @@ public class Goal : Entity
 
         Status = GoalStatus.Completed;
         CompletedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 
@@ -137,6 +151,7 @@ public class Goal : Entity
 
         Status = GoalStatus.Abandoned;
         CompletedAtUtc = null;
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 
@@ -147,6 +162,7 @@ public class Goal : Entity
 
         Status = GoalStatus.Active;
         CompletedAtUtc = null;
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 }

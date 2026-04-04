@@ -23,7 +23,7 @@ public class DeleteTagCommandHandler(
         if (tag is null)
             return Result.Failure(ErrorMessages.TagNotFound, ErrorCodes.TagNotFound);
 
-        tagRepository.Remove(tag);
+        tag.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

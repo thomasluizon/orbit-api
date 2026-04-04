@@ -2,13 +2,14 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class HabitLog : Entity
+public class HabitLog : Entity, ITimestamped
 {
     public Guid HabitId { get; private set; }
     public DateOnly Date { get; private set; }
     public decimal Value { get; private set; }
     public string? Note { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
     private HabitLog() { }
 
@@ -20,7 +21,8 @@ public class HabitLog : Entity
             Date = date,
             Value = value,
             Note = note?.Trim(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
         };
     }
 }

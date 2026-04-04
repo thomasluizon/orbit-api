@@ -27,7 +27,7 @@ public class DeleteHabitCommandHandler(
         if (habit.UserId != request.UserId)
             return Result.Failure(ErrorMessages.NoPermission, ErrorCodes.NoPermission);
 
-        habitRepository.Remove(habit);
+        habit.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

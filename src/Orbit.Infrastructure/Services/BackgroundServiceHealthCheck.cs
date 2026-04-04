@@ -13,7 +13,8 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["GoalDeadlineNotification"] = TimeSpan.FromMinutes(90),
         ["SlipAlertScheduler"] = TimeSpan.FromMinutes(15),
         ["HabitDueDateAdvancement"] = TimeSpan.FromMinutes(90),
-        ["AccountDeletion"] = TimeSpan.FromHours(72)
+        ["AccountDeletion"] = TimeSpan.FromHours(72),
+        ["SyncCleanup"] = TimeSpan.FromHours(48)
     };
 
     public static void RecordTick(string serviceName)
