@@ -264,6 +264,13 @@ public partial class User : Entity
         LastActiveDate = today;
     }
 
+    public void SetStreakState(int currentStreak, int longestStreak, DateOnly? lastActiveDate)
+    {
+        CurrentStreak = Math.Max(0, currentStreak);
+        LongestStreak = Math.Max(CurrentStreak, longestStreak);
+        LastActiveDate = lastActiveDate;
+    }
+
     /// <summary>
     /// Resets all user profile fields to their default state while preserving
     /// identity, preferences, and subscription data.

@@ -56,6 +56,7 @@ public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
     ChatAiDependencies ai,
     IUserDateService userDateService,
+    IUserStreakService userStreakService,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IServiceScopeFactory serviceScopeFactory,
@@ -164,6 +165,11 @@ public partial class ProcessUserChatCommandHandler(
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (RequiresStreakRecalculation(allActionResults))
+        {
+            await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         saveStopwatch.Stop();
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
@@ -327,6 +333,11 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         return text;
+    }
+
+    private static bool RequiresStreakRecalculation(IEnumerable<ActionResult> actionResults)
+    {
+        return actionResults.Any(action => action.Status == ActionStatus.Success && action.Type is "LogHabit" or "BulkLogHabits" or "DeleteHabit");
     }
 
     /// <summary>

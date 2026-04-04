@@ -23,6 +23,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IAiIntentService _aiIntentService = Substitute.For<IAiIntentService>();
     private readonly ISystemPromptBuilder _promptBuilder = Substitute.For<ISystemPromptBuilder>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
@@ -38,12 +39,14 @@ public class ProcessUserChatCommandHandlerTests
         var dataDeps = new ChatDataDependencies(_habitRepo, _userRepo, _userFactRepo, _tagRepo);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, _userDateService, _payGate, _unitOfWork, _scopeFactory, _logger);
+            dataDeps, aiDeps, _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _logger);
     }
 
     public ProcessUserChatCommandHandlerTests()
     {
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(1, 1, Today));
         _promptBuilder.Build(Arg.Any<PromptBuildRequest>()).Returns("system prompt");
 
         _habitRepo.FindAsync(

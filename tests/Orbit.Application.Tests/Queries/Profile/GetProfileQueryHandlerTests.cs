@@ -125,7 +125,7 @@ public class GetProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.StreakFreezesAvailable.Should().Be(2);
+        result.Value.StreakFreezesAvailable.Should().Be(3);
     }
 
     [Fact]
@@ -138,7 +138,8 @@ public class GetProfileQueryHandlerTests
         var recentFreezes = new List<StreakFreeze>
         {
             StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-5))
+            StreakFreeze.Create(UserId, Today.AddDays(-5)),
+            StreakFreeze.Create(UserId, Today.AddDays(-10))
         };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),

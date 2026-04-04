@@ -53,9 +53,6 @@ public partial class GamificationService(
         var xp = 10 + metrics.CurrentStreak;
         user.AddXp(xp);
 
-        // Update global user streak (idempotent per day via LastActiveDate guard)
-        user.UpdateStreak(today);
-
         // --- Liftoff (first completion) ---
         if (!earned.Contains(AchievementDefinitions.Liftoff))
         {

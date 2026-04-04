@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Commands.Habits;
@@ -13,6 +14,7 @@ namespace Orbit.Application.Tests.Commands.Habits;
 public class BulkDeleteHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly BulkDeleteHabitsCommandHandler _handler;
@@ -21,7 +23,9 @@ public class BulkDeleteHabitsCommandHandlerTests
 
     public BulkDeleteHabitsCommandHandlerTests()
     {
-        _handler = new BulkDeleteHabitsCommandHandler(_habitRepo, _unitOfWork, _cache);
+        _handler = new BulkDeleteHabitsCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _cache);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(0, 0, null));
     }
 
     [Fact]
@@ -43,7 +47,7 @@ public class BulkDeleteHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(2);
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
         _habitRepo.Received(2).Remove(Arg.Any<Habit>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
     }
 

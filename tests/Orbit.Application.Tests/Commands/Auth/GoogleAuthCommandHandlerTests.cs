@@ -6,8 +6,10 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
@@ -15,7 +17,7 @@ public class GoogleAuthCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly ITokenService _tokenService = Substitute.For<ITokenService>();
+    private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly FakeHttpMessageHandler _httpHandler = new();
@@ -34,11 +36,11 @@ public class GoogleAuthCommandHandlerTests
         httpFactory.CreateClient("Supabase").Returns(httpClient);
 
         _handler = new GoogleAuthCommandHandler(
-            _userRepo, _unitOfWork, _tokenService, httpFactory, _emailService, _mediator,
+            _userRepo, _unitOfWork, _authSessionService, httpFactory, _emailService, _mediator,
             Substitute.For<ILogger<GoogleAuthCommandHandler>>());
 
-        _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
-            .Returns("jwt-token");
+        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
     }
 
     [Fact]

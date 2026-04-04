@@ -20,7 +20,8 @@ public class JwtTokenServiceTests
             SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
             Issuer = "test-issuer",
             Audience = "test-audience",
-            ExpiryHours = 168
+            ExpiryHours = 168,
+            ExpiryMinutes = 15
         };
 
         _sut = new JwtTokenService(Options.Create(_settings));
@@ -92,7 +93,9 @@ public class JwtTokenServiceTests
         // Assert
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
-        var expectedExpiry = beforeGeneration.AddHours(_settings.ExpiryHours);
+        var expectedExpiry = _settings.ExpiryMinutes > 0
+            ? beforeGeneration.AddMinutes(_settings.ExpiryMinutes)
+            : beforeGeneration.AddHours(_settings.ExpiryHours);
 
         jwt.ValidTo.Should().BeCloseTo(expectedExpiry, TimeSpan.FromSeconds(5));
     }

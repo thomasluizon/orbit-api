@@ -8,6 +8,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Commands.Habits;
@@ -17,6 +18,7 @@ public class BulkLogHabitsCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -28,11 +30,13 @@ public class BulkLogHabitsCommandHandlerTests
     public BulkLogHabitsCommandHandlerTests()
     {
         _handler = new BulkLogHabitsCommandHandler(
-            _habitRepo, _habitLogRepo, _userDateService, _gamificationService, _unitOfWork, _cache,
+            _habitRepo, _habitLogRepo, _userDateService, _userStreakService, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(1, 1, Today));
     }
 
     [Fact]
@@ -56,7 +60,7 @@ public class BulkLogHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(2);
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
         await _habitLogRepo.Received(2).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

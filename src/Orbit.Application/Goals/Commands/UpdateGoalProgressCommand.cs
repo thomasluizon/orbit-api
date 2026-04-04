@@ -15,8 +15,6 @@ public record UpdateGoalProgressCommand(
 public class UpdateGoalProgressCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
-    IGenericRepository<User> userRepository,
-    IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<UpdateGoalProgressCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalProgressCommand request, CancellationToken cancellationToken)
@@ -34,14 +32,6 @@ public class UpdateGoalProgressCommandHandler(
 
         var result = goal.UpdateProgress(request.NewValue);
         if (result.IsFailure) return result;
-
-        // Update user streak (goal progress counts toward daily streak)
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
-        if (user is not null)
-        {
-            var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-            user.UpdateStreak(today);
-        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();

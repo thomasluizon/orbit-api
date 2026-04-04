@@ -16,7 +16,7 @@ public record GoogleAuthCommand(string AccessToken, string Language = "en", stri
 public partial class GoogleAuthCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
-    ITokenService tokenService,
+    IAuthSessionService authSessionService,
     IHttpClientFactory httpClientFactory,
     IEmailService emailService,
     IMediator mediator,
@@ -41,9 +41,17 @@ public partial class GoogleAuthCommandHandler(
         if (wasReactivated || request.GoogleAccessToken is not null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var token = tokenService.GenerateToken(user.Id, user.Email);
+        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
+        if (sessionResult.IsFailure)
+            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode!);
 
-        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
+        return Result.Success(new LoginResponse(
+            user.Id,
+            sessionResult.Value.AccessToken,
+            user.Name,
+            user.Email,
+            wasReactivated,
+            sessionResult.Value.RefreshToken));
     }
 
     private async Task<Result<(string Email, string Name)>> ValidateGoogleTokenAsync(

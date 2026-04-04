@@ -13,6 +13,7 @@ public record DeleteHabitCommand(
 
 public class DeleteHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IUserStreakService userStreakService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<DeleteHabitCommand, Result>
 {
@@ -27,6 +28,8 @@ public class DeleteHabitCommandHandler(
             return Result.Failure(ErrorMessages.NoPermission, ErrorCodes.NoPermission);
 
         habitRepository.Remove(habit);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);

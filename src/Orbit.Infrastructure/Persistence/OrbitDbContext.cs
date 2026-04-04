@@ -33,11 +33,14 @@ public class OrbitDbContext : DbContext
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<ChecklistTemplate> ChecklistTemplates => Set<ChecklistTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var usePostgresArrayColumns = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
         // --- Encryption Value Converters ---
         EncryptionValueConverter? encConverter = null;
         NullableEncryptionValueConverter? nullableEncConverter = null;
@@ -74,16 +77,32 @@ public class OrbitDbContext : DbContext
                 .HasForeignKey(h => h.ParentHabitId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.Property(h => h.Days)
-                .HasConversion(
-                    v => v.ToList(),
-                    v => v.ToList())
-                .HasColumnType("text[]")
-                .Metadata.SetValueComparer(
-                    new ValueComparer<ICollection<System.DayOfWeek>>(
-                        (l1, l2) => l1!.SequenceEqual(l2!),
-                        c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
-                        c => c.ToList()));
+            if (usePostgresArrayColumns)
+            {
+                entity.Property(h => h.Days)
+                    .HasConversion(
+                        v => v.ToList(),
+                        v => v.ToList())
+                    .HasColumnType("text[]")
+                    .Metadata.SetValueComparer(
+                        new ValueComparer<ICollection<System.DayOfWeek>>(
+                            (l1, l2) => l1!.SequenceEqual(l2!),
+                            c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                            c => c.ToList()));
+            }
+            else
+            {
+                entity.Property(h => h.Days)
+                    .HasConversion(
+                        v => SerializeDays(v),
+                        v => DeserializeDays(v))
+                    .HasColumnType("text")
+                    .Metadata.SetValueComparer(
+                        new ValueComparer<ICollection<System.DayOfWeek>>(
+                            (l1, l2) => l1!.SequenceEqual(l2!),
+                            c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                            c => c.ToList()));
+            }
 
             entity.Property(h => h.ChecklistItems)
                 .HasConversion(
@@ -234,6 +253,14 @@ public class OrbitDbContext : DbContext
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<UserSession>(entity =>
+        {
+            entity.HasIndex(s => s.TokenHash).IsUnique();
+            entity.HasIndex(s => s.UserId);
+            entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(s => s.TokenHash).HasMaxLength(128);
+        });
+
         modelBuilder.Entity<ApiKey>(entity =>
         {
             entity.HasIndex(k => k.KeyPrefix);
@@ -275,5 +302,16 @@ public class OrbitDbContext : DbContext
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<string>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
         });
+    }
+
+    private static string SerializeDays(ICollection<System.DayOfWeek> days)
+    {
+        return JsonSerializer.Serialize(days.Select(day => (int)day).ToList(), (JsonSerializerOptions?)null);
+    }
+
+    private static List<System.DayOfWeek> DeserializeDays(string value)
+    {
+        var days = JsonSerializer.Deserialize<List<int>>(value, (JsonSerializerOptions?)null);
+        return days?.Select(day => (System.DayOfWeek)day).ToList() ?? new List<System.DayOfWeek>();
     }
 }

@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
+        builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
             new GamificationRepositories(
@@ -50,6 +51,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
+        builder.Services.AddScoped<IAuthSessionService, AuthSessionService>();
 
         return builder;
     }

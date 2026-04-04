@@ -44,8 +44,6 @@ public class GetProfileQueryHandler(
     IUserDateService userDateService,
     IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
-    private const int MaxFreezesPerMonth = 2;
-
     public async Task<Result<ProfileResponse>> Handle(GetProfileQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
@@ -63,7 +61,7 @@ public class GetProfileQueryHandler(
         var recentFreezes = await streakFreezeRepository.FindAsync(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
             cancellationToken);
-        var freezesAvailable = Math.Max(0, MaxFreezesPerMonth - recentFreezes.Count);
+        var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - recentFreezes.Count);
 
         return Result.Success(new ProfileResponse(
             user.Name,

@@ -5,12 +5,14 @@ using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Habits;
 
 public class DeleteHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly DeleteHabitCommandHandler _handler;
@@ -20,7 +22,9 @@ public class DeleteHabitCommandHandlerTests
 
     public DeleteHabitCommandHandlerTests()
     {
-        _handler = new DeleteHabitCommandHandler(_habitRepo, _unitOfWork, _cache);
+        _handler = new DeleteHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _cache);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(0, 0, null));
     }
 
     private static Habit CreateTestHabit(Guid? userId = null)
@@ -43,7 +47,7 @@ public class DeleteHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _habitRepo.Received(1).Remove(habit);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

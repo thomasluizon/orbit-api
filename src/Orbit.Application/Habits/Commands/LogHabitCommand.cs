@@ -39,6 +39,7 @@ public record LogHabitRepositories(
 public partial class LogHabitCommandHandler(
     LogHabitRepositories repos,
     IUserDateService userDateService,
+    IUserStreakService userStreakService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
@@ -106,12 +107,14 @@ public partial class LogHabitCommandHandler(
         var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        var streakState = await userStreakService.RecalculateAsync(habit.UserId, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
         return Result.Success(new LogHabitResponse(
             unlogResult.Value.Id,
             IsFirstCompletionToday: false,
-            CurrentStreak: user?.CurrentStreak ?? 0,
+            CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: unlogGoalUpdates));
     }
 
@@ -133,12 +136,11 @@ public partial class LogHabitCommandHandler(
 
         var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
 
-        if (user is not null)
-            user.UpdateStreak(targetDate);
-
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        var streakState = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
 
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
@@ -147,7 +149,7 @@ public partial class LogHabitCommandHandler(
         return Result.Success(new LogHabitResponse(
             logResult.Value.Id,
             isFirstCompletionToday,
-            CurrentStreak: user?.CurrentStreak ?? 0,
+            CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalUpdates,
             XpEarned: gamificationResult?.XpEarned,
             NewAchievementIds: gamificationResult?.NewAchievementIds));

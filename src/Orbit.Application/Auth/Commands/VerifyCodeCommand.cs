@@ -18,7 +18,7 @@ public partial class VerifyCodeCommandHandler(
     IMemoryCache cache,
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
-    ITokenService tokenService,
+    IAuthSessionService authSessionService,
     IEmailService emailService,
     IMediator mediator,
     ILogger<VerifyCodeCommandHandler> logger) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
@@ -39,9 +39,17 @@ public partial class VerifyCodeCommandHandler(
 
         var wasReactivated = await HandlePostLoginAsync(user, isNewUser, request, cancellationToken);
 
-        var token = tokenService.GenerateToken(user.Id, user.Email);
+        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
+        if (sessionResult.IsFailure)
+            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode!);
 
-        return Result.Success(new LoginResponse(user.Id, token, user.Name, user.Email, wasReactivated));
+        return Result.Success(new LoginResponse(
+            user.Id,
+            sessionResult.Value.AccessToken,
+            user.Name,
+            user.Email,
+            wasReactivated,
+            sessionResult.Value.RefreshToken));
     }
 
     private Result ValidateCode(string email, string code)

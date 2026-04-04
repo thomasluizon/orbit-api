@@ -21,6 +21,7 @@ public record BulkDeleteItemResult(
 
 public class BulkDeleteHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IUserStreakService userStreakService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<BulkDeleteHabitsCommand, Result<BulkDeleteResult>>
 {
@@ -59,6 +60,11 @@ public class BulkDeleteHabitsCommandHandler(
             }
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            if (results.Any(r => r.Status == BulkItemStatus.Success))
+            {
+                await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
             await unitOfWork.CommitTransactionAsync(cancellationToken);
         }
         catch
