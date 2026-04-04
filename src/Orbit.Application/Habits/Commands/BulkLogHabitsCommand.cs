@@ -29,6 +29,7 @@ public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService,
+    IUserStreakService userStreakService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
@@ -69,6 +70,8 @@ public partial class BulkLogHabitsCommandHandler(
 
         // Save all successful logs once
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (results.Any(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
+            await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
 
         // Gamification: process each successfully logged habit
         var loggedHabitIds = results
@@ -82,6 +85,8 @@ public partial class BulkLogHabitsCommandHandler(
             }
             catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, habitId); }
         }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
 

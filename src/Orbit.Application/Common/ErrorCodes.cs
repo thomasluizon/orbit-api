@@ -37,4 +37,5 @@ public static class ErrorCodes
     public const string TooManyAttempts = "TOO_MANY_ATTEMPTS";
     public const string InvalidGoogleToken = "INVALID_GOOGLE_TOKEN";
     public const string PayGate = "PAY_GATE";
+    public const string InvalidSession = "INVALID_SESSION";
 }

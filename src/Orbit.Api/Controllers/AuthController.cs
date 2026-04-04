@@ -17,6 +17,8 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
     public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
     public record GoogleAuthRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
     public record ConfirmDeletionRequest(string Code);
+    public record RefreshSessionRequest(string RefreshToken);
+    public record LogoutSessionRequest(string RefreshToken);
 
     [HttpPost("send-code")]
     [EnableRateLimiting("auth")]
@@ -78,6 +80,46 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
         }
 
         LogGoogleAuthFailed(logger, result.Error);
+        return Unauthorized(new { error = result.Error });
+    }
+
+    [HttpPost("refresh")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Refresh(
+        [FromBody] RefreshSessionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new RefreshSessionCommand(request.RefreshToken);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            LogSessionRefreshed(logger);
+            return Ok(result.Value);
+        }
+
+        LogSessionRefreshFailed(logger, result.Error);
+        return Unauthorized(new { error = result.Error });
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Logout(
+        [FromBody] LogoutSessionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new LogoutSessionCommand(request.RefreshToken);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            LogSessionRevoked(logger);
+            return Ok(new { message = "Logged out" });
+        }
+
+        LogSessionRevocationFailed(logger, result.Error);
         return Unauthorized(new { error = result.Error });
     }
 
@@ -152,5 +194,17 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "User logged in via Google")]
     private static partial void LogUserLoggedInViaGoogle(ILogger logger);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Session refreshed")]
+    private static partial void LogSessionRefreshed(ILogger logger);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Session refresh failed: {Error}")]
+    private static partial void LogSessionRefreshFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Session revoked")]
+    private static partial void LogSessionRevoked(ILogger logger);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}")]
+    private static partial void LogSessionRevocationFailed(ILogger logger, string? error);
 
 }

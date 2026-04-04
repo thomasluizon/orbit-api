@@ -24,7 +24,10 @@ public class JwtTokenService(IOptions<JwtSettings> options) : ITokenService
                 new Claim(ClaimTypes.Email, email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             ]),
-            Expires = DateTime.UtcNow.AddHours(_settings.ExpiryHours),
+            Expires = DateTime.UtcNow.Add(
+                _settings.ExpiryMinutes > 0
+                    ? TimeSpan.FromMinutes(_settings.ExpiryMinutes)
+                    : TimeSpan.FromHours(_settings.ExpiryHours)),
             Issuer = _settings.Issuer,
             Audience = _settings.Audience,
             SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256)

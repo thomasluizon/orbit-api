@@ -5,8 +5,10 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
@@ -15,7 +17,7 @@ public class VerifyCodeCommandHandlerTests
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly ITokenService _tokenService = Substitute.For<ITokenService>();
+    private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly VerifyCodeCommandHandler _handler;
@@ -25,11 +27,11 @@ public class VerifyCodeCommandHandlerTests
     public VerifyCodeCommandHandlerTests()
     {
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _tokenService, _emailService, _mediator,
+            _cache, _userRepo, _unitOfWork, _authSessionService, _emailService, _mediator,
             Substitute.For<ILogger<VerifyCodeCommandHandler>>());
 
-        _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
-            .Returns("jwt-token");
+        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
     }
 
     [Fact]

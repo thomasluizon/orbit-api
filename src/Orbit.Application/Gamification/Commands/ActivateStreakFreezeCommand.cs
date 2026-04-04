@@ -19,11 +19,10 @@ public class ActivateStreakFreezeCommandHandler(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Habit> habitRepository,
+    IUserStreakService userStreakService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<ActivateStreakFreezeCommand, Result<StreakFreezeResponse>>
 {
-    private const int MaxFreezesPerMonth = 3;
-
     public async Task<Result<StreakFreezeResponse>> Handle(ActivateStreakFreezeCommand request, CancellationToken cancellationToken)
     {
         var user = await userRepository.FindOneTrackedAsync(
@@ -33,10 +32,14 @@ public class ActivateStreakFreezeCommandHandler(
         if (user is null)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
+        var existingStreak = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
+        if (existingStreak is null)
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         // Validate streak > 0
-        if (user.CurrentStreak <= 0)
+        if (existingStreak.CurrentStreak <= 0)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoActiveStreak, ErrorCodes.NoActiveStreak);
 
         // Check if user already logged a habit today
@@ -67,23 +70,22 @@ public class ActivateStreakFreezeCommandHandler(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
             cancellationToken);
 
-        if (recentFreezes.Count >= MaxFreezesPerMonth)
+        if (recentFreezes.Count >= AppConstants.MaxStreakFreezesPerMonth)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable, ErrorCodes.StreakFreezeNotAvailable);
 
         // Create freeze
         var freeze = StreakFreeze.Create(request.UserId, today);
         await streakFreezeRepository.AddAsync(freeze, cancellationToken);
 
-        // Preserve streak by bridging the gap
-        user.ApplyStreakFreeze(today);
-
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var updatedStreak = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var freezesRemaining = MaxFreezesPerMonth - (recentFreezes.Count + 1);
+        var freezesRemaining = AppConstants.MaxStreakFreezesPerMonth - (recentFreezes.Count + 1);
 
         return Result.Success(new StreakFreezeResponse(
             freezesRemaining,
             today,
-            user.CurrentStreak));
+            updatedStreak?.CurrentStreak ?? 0));
     }
 }

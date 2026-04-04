@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Gamification.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Models;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -14,6 +15,7 @@ public class ActivateStreakFreezeCommandHandlerTests
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ActivateStreakFreezeCommandHandler _handler;
@@ -24,7 +26,7 @@ public class ActivateStreakFreezeCommandHandlerTests
     public ActivateStreakFreezeCommandHandlerTests()
     {
         _handler = new ActivateStreakFreezeCommandHandler(
-            _userRepo, _streakFreezeRepo, _habitLogRepo, _habitRepo, _userDateService, _unitOfWork);
+            _userRepo, _streakFreezeRepo, _habitLogRepo, _habitRepo, _userStreakService, _userDateService, _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
@@ -68,6 +70,8 @@ public class ActivateStreakFreezeCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(0, 0, null));
 
         var command = new ActivateStreakFreezeCommand(UserId);
 
@@ -87,6 +91,8 @@ public class ActivateStreakFreezeCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(5, 5, Today.AddDays(-1)));
 
         // User has no habits (no need to check logs)
         _habitRepo.FindAsync(
@@ -120,6 +126,8 @@ public class ActivateStreakFreezeCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(5, 5, Today.AddDays(-1)));
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -161,6 +169,10 @@ public class ActivateStreakFreezeCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(
+                new UserStreakState(5, 5, Today.AddDays(-1)),
+                new UserStreakState(5, 5, Today));
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -184,6 +196,6 @@ public class ActivateStreakFreezeCommandHandlerTests
         result.Value.FreezesRemainingThisMonth.Should().Be(2);
 
         await _streakFreezeRepo.Received(1).AddAsync(Arg.Any<StreakFreeze>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

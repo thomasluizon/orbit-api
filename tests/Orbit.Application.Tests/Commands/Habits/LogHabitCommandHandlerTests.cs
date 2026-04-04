@@ -7,6 +7,7 @@ using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Commands.Habits;
@@ -18,6 +19,7 @@ public class LogHabitCommandHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -32,10 +34,12 @@ public class LogHabitCommandHandlerTests
     {
         var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
         _handler = new LogHabitCommandHandler(
-            repos, _userDateService, _gamificationService, _unitOfWork, _cache, _mediator, _logger);
+            repos, _userDateService, _userStreakService, _gamificationService, _unitOfWork, _cache, _mediator, _logger);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(1, 1, Today));
 
         // Return a valid user by default for streak tracking
         var user = User.Create("Test", "test@test.com").Value;
@@ -72,7 +76,7 @@ public class LogHabitCommandHandlerTests
         await _habitLogRepo.Received(1).AddAsync(
             Arg.Is<HabitLog>(l => l.HabitId == habit.Id),
             Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -95,7 +99,7 @@ public class LogHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _habitLogRepo.Received(1).Remove(Arg.Any<HabitLog>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -255,7 +259,7 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

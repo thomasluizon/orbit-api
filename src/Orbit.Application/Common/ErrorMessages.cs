@@ -30,4 +30,5 @@ public static class ErrorMessages
     public const string NotEnoughCoins = "Not enough coins.";
     public const string SubjectRequired = "Subject is required";
     public const string MessageRequired = "Message is required";
+    public const string InvalidSession = "Invalid or expired session.";
 }

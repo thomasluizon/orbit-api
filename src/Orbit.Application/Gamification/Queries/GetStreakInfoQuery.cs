@@ -23,8 +23,6 @@ public class GetStreakInfoQueryHandler(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
 {
-    private const int MaxFreezesPerMonth = 3;
-
     public async Task<Result<StreakInfoResponse>> Handle(GetStreakInfoQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
@@ -41,7 +39,7 @@ public class GetStreakInfoQueryHandler(
 
         var isFrozenToday = recentFreezes.Any(sf => sf.UsedOnDate == today);
         var freezesUsed = recentFreezes.Count;
-        var freezesAvailable = Math.Max(0, MaxFreezesPerMonth - freezesUsed);
+        var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - freezesUsed);
         var recentFreezeDates = recentFreezes
             .Select(sf => sf.UsedOnDate)
             .OrderByDescending(d => d)
@@ -53,7 +51,7 @@ public class GetStreakInfoQueryHandler(
             user.LastActiveDate,
             freezesUsed,
             freezesAvailable,
-            MaxFreezesPerMonth,
+            AppConstants.MaxStreakFreezesPerMonth,
             isFrozenToday,
             recentFreezeDates));
     }
