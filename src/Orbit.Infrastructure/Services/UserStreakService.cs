@@ -64,11 +64,20 @@ public class UserStreakService(
             if (!freezeDateSet.Contains(date))
                 continue;
 
-            currentStreak = lastActiveDate == date.AddDays(-1)
-                ? currentStreak
-                : 0;
-
-            lastActiveDate = date;
+            // A freeze preserves the streak if it is adjacent to the last active date
+            // OR bridges exactly a 1-day gap (the missed day the freeze is meant to cover).
+            if (lastActiveDate.HasValue
+                && (date.DayNumber - lastActiveDate.Value.DayNumber) <= 2)
+            {
+                // Streak preserved -- do not increment
+                lastActiveDate = date;
+            }
+            else
+            {
+                // Gap too large for a single freeze to bridge
+                currentStreak = 0;
+                lastActiveDate = date;
+            }
         }
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
