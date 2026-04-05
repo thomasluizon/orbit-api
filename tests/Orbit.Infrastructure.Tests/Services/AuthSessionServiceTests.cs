@@ -32,8 +32,8 @@ public class AuthSessionServiceTests
                 SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",
                 Issuer = "test-issuer",
                 Audience = "test-audience",
-                ExpiryMinutes = 15,
-                RefreshExpiryDays = 30
+                ExpiryMinutes = 0,
+                RefreshExpiryDays = 90
             }));
     }
 
