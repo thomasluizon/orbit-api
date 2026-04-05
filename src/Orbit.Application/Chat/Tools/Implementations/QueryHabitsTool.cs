@@ -146,8 +146,8 @@ public class QueryHabitsTool(
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
                 && (!f.Date.HasValue || (!h.IsGeneral && (f.IncludeOverdue ? h.DueDate <= f.Date.Value : h.DueDate == f.Date.Value)))
-                && (f.Search == null || h.Title.Contains(f.Search, StringComparison.OrdinalIgnoreCase))
-                && (f.Tag == null || h.Tags.Any(t => t.Name.Contains(f.Tag, StringComparison.OrdinalIgnoreCase))),
+                && (f.Search == null || h.Title.ToLower().Contains(f.Search!.ToLower()))
+                && (f.Tag == null || h.Tags.Any(t => t.Name.ToLower().Contains(f.Tag!.ToLower()))),
             includeMetrics
                 ? q => q.Include(h => h.Tags).Include(h => h.Logs)
                 : q => q.Include(h => h.Tags),

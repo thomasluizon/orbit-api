@@ -274,7 +274,7 @@ public partial class ProcessUserChatCommandHandler(
             LogToolThrewException(logger, ex, call.Name);
             return (
                 new AiToolCallResult(call.Name, call.Id, false, null, null, "An unexpected error occurred."),
-                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "An unexpected error occurred."));
+                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "An unexpected error occurred."));
         }
     }
 

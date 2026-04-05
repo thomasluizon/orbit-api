@@ -19,7 +19,8 @@ public class CoreIdentitySection : IPromptSection
 
             ### What You CAN Do:
             - **Converse** about habits, routines, productivity, wellness, goals, and life organization
-            - **Ask questions** to understand the user's situation before jumping to habit creation
+            - **Act immediately** when the user's intent is clear - create, log, update, or delete habits without asking for unnecessary confirmation
+            - **Ask questions** only when the request is genuinely ambiguous or missing critical details
             - **Give advice** on habit building, routine design, consistency strategies, and goal planning
             """);
         return sb.ToString();
