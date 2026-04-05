@@ -52,7 +52,7 @@ public class BulkDeleteHabitsCommandHandler(
                     continue;
                 }
 
-                habitRepository.Remove(habit);
+                habit.SoftDelete();
                 results.Add(new BulkDeleteItemResult(
                     Index: i,
                     Status: BulkItemStatus.Success,

@@ -2,12 +2,13 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class ChecklistTemplate : Entity
+public class ChecklistTemplate : Entity, ITimestamped
 {
     public Guid UserId { get; private set; }
     public string Name { get; private set; } = null!;
     public IReadOnlyList<string> Items { get; private set; } = [];
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
     private ChecklistTemplate() { }
 
@@ -30,7 +31,8 @@ public class ChecklistTemplate : Entity
             UserId = userId,
             Name = name.Trim(),
             Items = items.Select(i => i.Trim()).Where(i => !string.IsNullOrEmpty(i)).ToList(),
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
         });
     }
 
@@ -47,6 +49,7 @@ public class ChecklistTemplate : Entity
 
         Name = name.Trim();
         Items = items.Select(i => i.Trim()).Where(i => !string.IsNullOrEmpty(i)).ToList();
+        UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }
 }

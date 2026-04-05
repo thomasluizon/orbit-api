@@ -2,7 +2,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class Notification : Entity
+public class Notification : Entity, ITimestamped
 {
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
@@ -11,6 +11,7 @@ public class Notification : Entity
     public Guid? HabitId { get; private set; }
     public bool IsRead { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
     private Notification() { }
 
@@ -24,9 +25,14 @@ public class Notification : Entity
             Url = url,
             HabitId = habitId,
             IsRead = false,
-            CreatedAtUtc = DateTime.UtcNow
+            CreatedAtUtc = DateTime.UtcNow,
+            UpdatedAtUtc = DateTime.UtcNow
         };
     }
 
-    public void MarkAsRead() => IsRead = true;
+    public void MarkAsRead()
+    {
+        IsRead = true;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
 }

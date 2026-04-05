@@ -21,7 +21,7 @@ public class JwtTokenServiceTests
             Issuer = "test-issuer",
             Audience = "test-audience",
             ExpiryHours = 168,
-            ExpiryMinutes = 15
+            ExpiryMinutes = 0
         };
 
         _sut = new JwtTokenService(Options.Create(_settings));

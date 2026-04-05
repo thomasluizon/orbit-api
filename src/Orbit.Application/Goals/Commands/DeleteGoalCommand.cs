@@ -23,7 +23,7 @@ public class DeleteGoalCommandHandler(
         if (goal is null)
             return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
 
-        goalRepository.Remove(goal);
+        goal.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

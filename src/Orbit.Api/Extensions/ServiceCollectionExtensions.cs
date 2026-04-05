@@ -242,6 +242,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
         builder.Services.AddHostedService<DataEncryptionMigrationService>();
+        builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
 
         // Health Checks
