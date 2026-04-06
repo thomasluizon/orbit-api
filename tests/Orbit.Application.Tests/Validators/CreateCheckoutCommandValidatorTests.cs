@@ -11,6 +11,7 @@ public class CreateCheckoutCommandValidatorTests
     private static CreateCheckoutCommand ValidCommand() => new(
         UserId: Guid.NewGuid(),
         Interval: "monthly",
+        CountryCode: null,
         IpAddress: null);
 
     [Fact]

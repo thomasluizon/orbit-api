@@ -9,7 +9,7 @@ using Stripe;
 
 namespace Orbit.Application.Subscriptions.Queries;
 
-public record GetPlansQuery(Guid UserId, string? IpAddress) : IRequest<Result<PlansResponse>>;
+public record GetPlansQuery(Guid UserId, string? CountryCode, string? IpAddress) : IRequest<Result<PlansResponse>>;
 
 public partial class GetPlansQueryHandler(
     IGenericRepository<User> userRepository,
@@ -27,7 +27,8 @@ public partial class GetPlansQueryHandler(
         if (user is null)
             return Result.Failure<PlansResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
-        var countryCode = await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
+        var countryCode = NormalizeCountryCode(request.CountryCode)
+            ?? await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
         var isBrazil = countryCode == "BR";
 
         var monthlyPriceId = isBrazil ? _settings.MonthlyPriceIdBrl : _settings.MonthlyPriceIdUsd;
@@ -79,4 +80,15 @@ public partial class GetPlansQueryHandler(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to fetch plans from Stripe")]
     private static partial void LogFetchPlansFailed(ILogger logger, Exception ex);
+
+    private static string? NormalizeCountryCode(string? countryCode)
+    {
+        if (string.IsNullOrWhiteSpace(countryCode))
+            return null;
+
+        var normalized = countryCode.Trim().ToUpperInvariant();
+        return normalized.Length == 2 && normalized.All(char.IsLetter)
+            ? normalized
+            : null;
+    }
 }

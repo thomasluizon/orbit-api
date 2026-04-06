@@ -20,7 +20,11 @@ public partial class SubscriptionController(IMediator mediator, ILogger<Subscrip
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateCheckout([FromBody] CreateCheckoutRequest request, CancellationToken cancellationToken)
     {
-        var command = new CreateCheckoutCommand(HttpContext.GetUserId(), request.Interval, HttpContext.Connection.RemoteIpAddress?.ToString());
+        var command = new CreateCheckoutCommand(
+            HttpContext.GetUserId(),
+            request.Interval,
+            HttpContext.GetClientCountryCode(),
+            HttpContext.GetClientIpAddress());
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(v => Ok(v));
     }
@@ -68,7 +72,10 @@ public partial class SubscriptionController(IMediator mediator, ILogger<Subscrip
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetPlans(CancellationToken cancellationToken)
     {
-        var query = new GetPlansQuery(HttpContext.GetUserId(), HttpContext.Connection.RemoteIpAddress?.ToString());
+        var query = new GetPlansQuery(
+            HttpContext.GetUserId(),
+            HttpContext.GetClientCountryCode(),
+            HttpContext.GetClientIpAddress());
         var result = await mediator.Send(query, cancellationToken);
         return result.ToPayGateAwareResult(v => Ok(v));
     }

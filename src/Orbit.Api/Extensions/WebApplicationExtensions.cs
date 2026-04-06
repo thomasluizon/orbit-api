@@ -23,7 +23,9 @@ public static class WebApplicationExtensions
         app.UseForwardedHeaders(new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-            ForwardLimit = 1
+            ForwardLimit = 1,
+            KnownIPNetworks = { },
+            KnownProxies = { }
         });
 
         if (app.Environment.IsProduction())

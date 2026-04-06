@@ -58,7 +58,7 @@ public class CreateCheckoutCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new Session { Url = "https://checkout.stripe.com/session_123" });
 
-        var command = new CreateCheckoutCommand(UserId, "monthly", "1.2.3.4");
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, "1.2.3.4");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -70,7 +70,6 @@ public class CreateCheckoutCommandHandlerTests
     public async Task Handle_NewStripeCustomer_CreatesCustomerFirst()
     {
         var user = User.Create("Test", "test@example.com").Value;
-        // No StripeCustomerId
         SetupExistingUser(user);
 
         _customerService.CreateAsync(
@@ -85,7 +84,7 @@ public class CreateCheckoutCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new Session { Url = "https://checkout.stripe.com/session_456" });
 
-        var command = new CreateCheckoutCommand(UserId, "monthly", null);
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -100,8 +99,7 @@ public class CreateCheckoutCommandHandlerTests
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
-        // FindOneTrackedAsync returns null by default
-        var command = new CreateCheckoutCommand(UserId, "monthly", null);
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -115,7 +113,7 @@ public class CreateCheckoutCommandHandlerTests
         var user = User.Create("Test", "test@example.com").Value;
         SetupExistingUser(user);
 
-        var command = new CreateCheckoutCommand(UserId, "weekly", null);
+        var command = new CreateCheckoutCommand(UserId, "weekly", null, null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -139,7 +137,7 @@ public class CreateCheckoutCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new Session { Url = "https://checkout.stripe.com/br_session" });
 
-        var command = new CreateCheckoutCommand(UserId, "yearly", "200.100.50.1");
+        var command = new CreateCheckoutCommand(UserId, "yearly", null, "200.100.50.1");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -163,12 +161,38 @@ public class CreateCheckoutCommandHandlerTests
             Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeException("API error"));
 
-        var command = new CreateCheckoutCommand(UserId, "monthly", null);
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("temporarily unavailable");
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitBrazilCountry_UsesBrlPriceIdWithoutGeoLookup()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetStripeCustomerId("cus_br_header");
+        SetupExistingUser(user);
+
+        _sessionService.CreateAsync(
+            Arg.Any<SessionCreateOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new Session { Url = "https://checkout.stripe.com/br_header" });
+
+        var command = new CreateCheckoutCommand(UserId, "monthly", "BR", "10.0.0.1");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _sessionService.Received(1).CreateAsync(
+            Arg.Is<SessionCreateOptions>(o => o.LineItems[0].Price == "price_monthly_brl"),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>());
+        await _geoLocationService.DidNotReceive()
+            .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     private void SetupExistingUser(User user)

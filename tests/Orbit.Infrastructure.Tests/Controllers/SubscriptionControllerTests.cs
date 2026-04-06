@@ -74,6 +74,42 @@ public class SubscriptionControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task CreateCheckout_UsesForwardedGeoHeaders()
+    {
+        _controller.HttpContext.Request.Headers["X-Forwarded-For"] = "203.0.113.10, 10.0.0.1";
+        _controller.HttpContext.Request.Headers["CF-IPCountry"] = "br";
+        _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(CheckoutResponse)!));
+
+        var request = new SubscriptionController.CreateCheckoutRequest("month");
+        await _controller.CreateCheckout(request, CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateCheckoutCommand>(command =>
+                command.CountryCode == "BR" &&
+                command.IpAddress == "203.0.113.10"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateCheckout_UsesForwardedCountryAndIp()
+    {
+        _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(CheckoutResponse)!));
+
+        _controller.HttpContext.Request.Headers["CF-IPCountry"] = "br";
+        _controller.HttpContext.Request.Headers["X-Forwarded-For"] = "201.10.20.30, 10.0.0.1";
+
+        var request = new SubscriptionController.CreateCheckoutRequest("month");
+
+        await _controller.CreateCheckout(request, CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateCheckoutCommand>(c => c.CountryCode == "BR" && c.IpAddress == "201.10.20.30"),
+            Arg.Any<CancellationToken>());
+    }
+
     // --- CreatePortal ---
 
     [Fact]
@@ -172,6 +208,37 @@ public class SubscriptionControllerTests
 
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task GetPlans_UsesRemoteIpWhenForwardedHeadersMissing()
+    {
+        _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(PlansResponse)!));
+
+        await _controller.GetPlans(CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<GetPlansQuery>(query =>
+                query.CountryCode is null &&
+                query.IpAddress == "127.0.0.1"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetPlans_UsesForwardedCountryAndIp()
+    {
+        _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(PlansResponse)!));
+
+        _controller.HttpContext.Request.Headers["X-Vercel-IP-Country"] = "br";
+        _controller.HttpContext.Request.Headers["CF-Connecting-IP"] = "177.55.44.33";
+
+        await _controller.GetPlans(CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<GetPlansQuery>(q => q.CountryCode == "BR" && q.IpAddress == "177.55.44.33"),
+            Arg.Any<CancellationToken>());
     }
 
     // --- ClaimAdReward ---

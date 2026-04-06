@@ -10,7 +10,7 @@ using Stripe.Checkout;
 
 namespace Orbit.Application.Subscriptions.Commands;
 
-public record CreateCheckoutCommand(Guid UserId, string Interval, string? IpAddress) : IRequest<Result<CheckoutResponse>>;
+public record CreateCheckoutCommand(Guid UserId, string Interval, string? CountryCode, string? IpAddress) : IRequest<Result<CheckoutResponse>>;
 
 public partial class CreateCheckoutCommandHandler(
     IGenericRepository<User> userRepository,
@@ -29,7 +29,8 @@ public partial class CreateCheckoutCommandHandler(
         if (user is null)
             return Result.Failure<CheckoutResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
-        var countryCode = await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
+        var countryCode = NormalizeCountryCode(request.CountryCode)
+            ?? await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
         var isBrazil = countryCode == "BR";
 
         var allowedIntervals = new[] { "monthly", "yearly" };
@@ -100,4 +101,15 @@ public partial class CreateCheckoutCommandHandler(
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Stripe API error during checkout for user {UserId}")]
     private static partial void LogStripeCheckoutError(ILogger logger, Exception ex, Guid userId);
+
+    private static string? NormalizeCountryCode(string? countryCode)
+    {
+        if (string.IsNullOrWhiteSpace(countryCode))
+            return null;
+
+        var normalized = countryCode.Trim().ToUpperInvariant();
+        return normalized.Length == 2 && normalized.All(char.IsLetter)
+            ? normalized
+            : null;
+    }
 }

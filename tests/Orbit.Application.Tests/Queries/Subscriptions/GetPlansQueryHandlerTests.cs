@@ -45,7 +45,7 @@ public class GetPlansQueryHandlerTests
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var query = new GetPlansQuery(UserId, null);
+        var query = new GetPlansQuery(UserId, null, null);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -68,7 +68,7 @@ public class GetPlansQueryHandlerTests
             Arg.Any<CancellationToken>())
             .ThrowsAsync(new StripeException("Stripe error"));
 
-        var query = new GetPlansQuery(UserId, "1.2.3.4");
+        var query = new GetPlansQuery(UserId, null, "1.2.3.4");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -100,7 +100,7 @@ public class GetPlansQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(yearlyPrice);
 
-        var query = new GetPlansQuery(UserId, "200.100.50.1");
+        var query = new GetPlansQuery(UserId, null, "200.100.50.1");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -135,7 +135,7 @@ public class GetPlansQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(yearlyPrice);
 
-        var query = new GetPlansQuery(UserId, "8.8.8.8");
+        var query = new GetPlansQuery(UserId, null, "8.8.8.8");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -144,5 +144,38 @@ public class GetPlansQueryHandlerTests
         result.Value.Monthly.UnitAmount.Should().Be(499);
         result.Value.Yearly.UnitAmount.Should().Be(3999);
         result.Value.SavingsPercent.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitBrazilCountry_UsesBrlPriceIdsWithoutGeoLookup()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var monthlyPrice = new Price { UnitAmount = 1990 };
+        var yearlyPrice = new Price { UnitAmount = 19900 };
+
+        _priceService.GetAsync(
+            "price_monthly_brl",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(monthlyPrice);
+
+        _priceService.GetAsync(
+            "price_yearly_brl",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(yearlyPrice);
+
+        var query = new GetPlansQuery(UserId, "br", "10.0.0.1");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Currency.Should().Be("brl");
+        await _geoLocationService.DidNotReceive()
+            .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 }

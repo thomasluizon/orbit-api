@@ -20,38 +20,38 @@ public class GeoLocationServiceTests
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_NullIp_ReturnsUS()
+    public async Task GetCountryCodeAsync_NullIp_ReturnsUnknownCountry()
     {
         var result = await _sut.GetCountryCodeAsync(null);
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_EmptyIp_ReturnsUS()
+    public async Task GetCountryCodeAsync_EmptyIp_ReturnsUnknownCountry()
     {
         var result = await _sut.GetCountryCodeAsync("");
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_WhitespaceIp_ReturnsUS()
+    public async Task GetCountryCodeAsync_WhitespaceIp_ReturnsUnknownCountry()
     {
         var result = await _sut.GetCountryCodeAsync("   ");
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_Localhost_ReturnsUS()
+    public async Task GetCountryCodeAsync_Localhost_ReturnsUnknownCountry()
     {
         var result = await _sut.GetCountryCodeAsync("127.0.0.1");
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_IPv6Localhost_ReturnsUS()
+    public async Task GetCountryCodeAsync_IPv6Localhost_ReturnsUnknownCountry()
     {
         var result = await _sut.GetCountryCodeAsync("::1");
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
@@ -66,34 +66,42 @@ public class GeoLocationServiceTests
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_ApiFailure_ReturnsUS()
+    public async Task GetCountryCodeAsync_ApiFailure_ReturnsUnknownCountry()
     {
         _handler.StatusCode = HttpStatusCode.InternalServerError;
 
         var result = await _sut.GetCountryCodeAsync("200.100.50.25");
 
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_EmptyResponseBody_ReturnsUS()
+    public async Task GetCountryCodeAsync_EmptyResponseBody_ReturnsUnknownCountry()
     {
         _handler.ResponseBody = "  ";
         _handler.StatusCode = HttpStatusCode.OK;
 
         var result = await _sut.GetCountryCodeAsync("200.100.50.25");
 
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
     }
 
     [Fact]
-    public async Task GetCountryCodeAsync_HttpException_ReturnsUS()
+    public async Task GetCountryCodeAsync_HttpException_ReturnsUnknownCountry()
     {
         _handler.ExceptionToThrow = new HttpRequestException("Network error");
 
         var result = await _sut.GetCountryCodeAsync("200.100.50.25");
 
-        result.Should().Be("US");
+        result.Should().Be("ZZ");
+    }
+
+    [Fact]
+    public async Task GetCountryCodeAsync_PrivateIp_ReturnsUnknownCountry()
+    {
+        var result = await _sut.GetCountryCodeAsync("10.0.0.25");
+
+        result.Should().Be("ZZ");
     }
 
     [Fact]
