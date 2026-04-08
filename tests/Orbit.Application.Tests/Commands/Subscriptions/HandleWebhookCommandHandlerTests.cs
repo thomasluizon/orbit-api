@@ -478,7 +478,7 @@ public class HandleWebhookCommandHandlerTests
         var payload = $"{timestamp}.{eventJson}";
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(WebhookSecret));
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
-        var hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        var hex = Convert.ToHexStringLower(hash);
         var signature = $"t={timestamp},v1={hex}";
 
         return (eventJson, signature);

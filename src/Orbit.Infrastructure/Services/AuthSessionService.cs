@@ -19,7 +19,7 @@ public class AuthSessionService(
 {
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
-    public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken)
+    public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken = default)
     {
         var refreshToken = GenerateRefreshToken();
         var sessionResult = UserSession.Create(
@@ -38,7 +38,7 @@ public class AuthSessionService(
             refreshToken));
     }
 
-    public async Task<Result<SessionTokens>> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken)
+    public async Task<Result<SessionTokens>> RefreshSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         var nowUtc = DateTime.UtcNow;
         var tokenHash = HashToken(refreshToken);
@@ -67,7 +67,7 @@ public class AuthSessionService(
             newRefreshToken));
     }
 
-    public async Task<Result> RevokeSessionAsync(string refreshToken, CancellationToken cancellationToken)
+    public async Task<Result> RevokeSessionAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
         var tokenHash = HashToken(refreshToken);
         var session = await userSessionRepository.FindOneTrackedAsync(

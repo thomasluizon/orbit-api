@@ -220,7 +220,7 @@ public class SubscriptionControllerTests
 
         await _mediator.Received(1).Send(
             Arg.Is<GetPlansQuery>(query =>
-                query.CountryCode is null &&
+                query.CountryCode == null &&
                 query.IpAddress == "127.0.0.1"),
             Arg.Any<CancellationToken>());
     }

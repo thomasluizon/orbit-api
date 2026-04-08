@@ -92,6 +92,26 @@ public class AuthSessionServiceTests
     }
 
     [Fact]
+    public async Task RefreshSessionAsync_UserNotFound_ReturnsFailure()
+    {
+        var userId = Guid.NewGuid();
+        var existingToken = "refresh-token";
+        var session = UserSession.Create(userId, Hash(existingToken), DateTime.UtcNow.AddDays(7)).Value;
+
+        _userSessionRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<UserSession, bool>>>(),
+            Arg.Any<Func<IQueryable<UserSession>, IQueryable<UserSession>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(session);
+        _userRepository.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        var result = await _sut.RefreshSessionAsync(existingToken, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INVALID_SESSION");
+    }
+
+    [Fact]
     public async Task RevokeSessionAsync_MarksSessionRevoked()
     {
         var session = UserSession.Create(Guid.NewGuid(), Hash("refresh-token"), DateTime.UtcNow.AddDays(7)).Value;
@@ -107,6 +127,21 @@ public class AuthSessionServiceTests
         result.IsSuccess.Should().BeTrue();
         session.RevokedAtUtc.Should().NotBeNull();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RevokeSessionAsync_MissingSession_ReturnsFailure()
+    {
+        _userSessionRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<UserSession, bool>>>(),
+            Arg.Any<Func<IQueryable<UserSession>, IQueryable<UserSession>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((UserSession?)null);
+
+        var result = await _sut.RevokeSessionAsync("missing-token", CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INVALID_SESSION");
     }
 
     private static string Hash(string token)

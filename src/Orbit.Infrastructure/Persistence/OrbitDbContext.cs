@@ -53,125 +53,10 @@ public class OrbitDbContext : DbContext
             encConverter = new EncryptionValueConverter(_encryptionService);
             nullableEncConverter = new NullableEncryptionValueConverter(_encryptionService);
         }
-
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.HasIndex(u => u.Email).IsUnique();
-            entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
-
-            if (nullableEncConverter is not null)
-            {
-                entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
-                entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
-            }
-        });
-
-        modelBuilder.Entity<Habit>(entity =>
-        {
-            entity.HasIndex(h => h.UserId);
-            entity.HasIndex(h => new { h.UserId, h.IsDeleted });
-            entity.HasQueryFilter(h => !h.IsDeleted);
-
-            entity.HasMany(h => h.Logs)
-                .WithOne()
-                .HasForeignKey(l => l.HabitId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(h => h.Children)
-                .WithOne()
-                .HasForeignKey(h => h.ParentHabitId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            if (usePostgresArrayColumns)
-            {
-                entity.Property(h => h.Days)
-                    .HasConversion(
-                        v => v.ToList(),
-                        v => v.ToList())
-                    .HasColumnType("text[]")
-                    .Metadata.SetValueComparer(
-                        new ValueComparer<ICollection<System.DayOfWeek>>(
-                            (l1, l2) => l1!.SequenceEqual(l2!),
-                            c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
-                            c => c.ToList()));
-            }
-            else
-            {
-                entity.Property(h => h.Days)
-                    .HasConversion(
-                        v => SerializeDays(v),
-                        v => DeserializeDays(v))
-                    .HasColumnType("text")
-                    .Metadata.SetValueComparer(
-                        new ValueComparer<ICollection<System.DayOfWeek>>(
-                            (l1, l2) => l1!.SequenceEqual(l2!),
-                            c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
-                            c => c.ToList()));
-            }
-
-            entity.Property(h => h.ChecklistItems)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<ChecklistItem>>(v, (JsonSerializerOptions?)null) ?? new List<ChecklistItem>())
-                .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[]'::jsonb")
-                .Metadata.SetValueComparer(
-                    new ValueComparer<IReadOnlyList<ChecklistItem>>(
-                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
-                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
-                        c => JsonSerializer.Deserialize<List<ChecklistItem>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
-
-            entity.Property(h => h.ReminderTimes)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<int>>(v, (JsonSerializerOptions?)null) ?? new List<int> { 15 })
-                .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[15]'::jsonb")
-                .Metadata.SetValueComparer(
-                    new ValueComparer<IReadOnlyList<int>>(
-                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
-                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
-                        c => JsonSerializer.Deserialize<List<int>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
-
-            entity.Property(h => h.ScheduledReminders)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(v, (JsonSerializerOptions?)null) ?? new List<ScheduledReminderTime>())
-                .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[]'::jsonb")
-                .Metadata.SetValueComparer(
-                    new ValueComparer<IReadOnlyList<ScheduledReminderTime>>(
-                        (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
-                        c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
-                        c => JsonSerializer.Deserialize<List<ScheduledReminderTime>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
-
-            if (encConverter is not null && nullableEncConverter is not null)
-            {
-                entity.Property(h => h.Title).HasConversion(encConverter).HasColumnType("text");
-                entity.Property(h => h.Description).HasConversion(nullableEncConverter).HasColumnType("text");
-            }
-        });
-
-        modelBuilder.Entity<HabitLog>(entity =>
-        {
-            entity.HasIndex(l => new { l.HabitId, l.Date });
-
-            if (nullableEncConverter is not null)
-            {
-                entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
-            }
-        });
-
-        modelBuilder.Entity<UserFact>(entity =>
-        {
-            entity.HasIndex(f => new { f.UserId, f.IsDeleted });
-            entity.HasQueryFilter(f => !f.IsDeleted);
-
-            if (encConverter is not null)
-            {
-                entity.Property(f => f.FactText).HasConversion(encConverter).HasColumnType("text");
-            }
-        });
+        ConfigureUserEntity(modelBuilder, nullableEncConverter);
+        ConfigureHabitEntity(modelBuilder, usePostgresArrayColumns, encConverter, nullableEncConverter);
+        ConfigureHabitLogEntity(modelBuilder, nullableEncConverter);
+        ConfigureUserFactEntity(modelBuilder, encConverter);
 
         modelBuilder.Entity<Tag>(entity =>
         {
@@ -209,39 +94,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
         });
 
-        modelBuilder.Entity<Goal>(entity =>
-        {
-            entity.HasIndex(g => g.UserId);
-            entity.HasIndex(g => new { g.UserId, g.IsDeleted });
-            entity.HasQueryFilter(g => !g.IsDeleted);
-
-            entity.HasMany(g => g.ProgressLogs)
-                .WithOne()
-                .HasForeignKey(l => l.GoalId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(g => g.Habits)
-                .WithMany(h => h.Goals)
-                .UsingEntity("HabitGoals",
-                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey(nameof(Habit) + nameof(Habit.Id)).OnDelete(DeleteBehavior.Cascade),
-                    r => r.HasOne(typeof(Goal)).WithMany().HasForeignKey(nameof(Goal) + nameof(Goal.Id)).OnDelete(DeleteBehavior.Cascade));
-
-            if (encConverter is not null && nullableEncConverter is not null)
-            {
-                entity.Property(g => g.Title).HasConversion(encConverter).HasColumnType("text");
-                entity.Property(g => g.Description).HasConversion(nullableEncConverter).HasColumnType("text");
-            }
-        });
-
-        modelBuilder.Entity<GoalProgressLog>(entity =>
-        {
-            entity.HasIndex(l => l.GoalId);
-
-            if (nullableEncConverter is not null)
-            {
-                entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
-            }
-        });
+        ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
+        ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
 
         modelBuilder.Entity<Referral>(entity =>
         {
@@ -350,6 +204,171 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private static void ConfigureUserEntity(ModelBuilder modelBuilder, NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.HasIndex(u => u.Email).IsUnique();
+            entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
+
+            if (nullableEncConverter is null)
+                return;
+
+            entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
+            entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
+        });
+    }
+
+    private void ConfigureHabitEntity(
+        ModelBuilder modelBuilder,
+        bool usePostgresArrayColumns,
+        EncryptionValueConverter? encConverter,
+        NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<Habit>(entity =>
+        {
+            entity.HasIndex(h => h.UserId);
+            entity.HasIndex(h => new { h.UserId, h.IsDeleted });
+            entity.HasQueryFilter(h => !h.IsDeleted);
+
+            entity.HasMany(h => h.Logs)
+                .WithOne()
+                .HasForeignKey(l => l.HabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(h => h.Children)
+                .WithOne()
+                .HasForeignKey(h => h.ParentHabitId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            ConfigureHabitDaysProperty(entity, usePostgresArrayColumns);
+
+            entity.Property(h => h.ChecklistItems)
+                .HasConversion(
+                    v => SerializeJson(v),
+                    v => DeserializeJson(v, new List<ChecklistItem>()))
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<ChecklistItem>());
+
+            entity.Property(h => h.ReminderTimes)
+                .HasConversion(
+                    v => SerializeJson(v),
+                    v => DeserializeJson(v, new List<int> { 15 }))
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql("'[15]'::jsonb")
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<int>());
+
+            entity.Property(h => h.ScheduledReminders)
+                .HasConversion(
+                    v => SerializeJson(v),
+                    v => DeserializeJson(v, new List<ScheduledReminderTime>()))
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<ScheduledReminderTime>());
+
+            if (encConverter is null || nullableEncConverter is null)
+                return;
+
+            entity.Property(h => h.Title).HasConversion(encConverter).HasColumnType("text");
+            entity.Property(h => h.Description).HasConversion(nullableEncConverter).HasColumnType("text");
+        });
+    }
+
+    private static void ConfigureHabitDaysProperty(
+        Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<Habit> entity,
+        bool usePostgresArrayColumns)
+    {
+        var property = entity.Property(h => h.Days);
+
+        if (usePostgresArrayColumns)
+        {
+            property.HasConversion(
+                    v => v.ToList(),
+                    v => v.ToList())
+                .HasColumnType("text[]");
+        }
+        else
+        {
+            property.HasConversion(
+                    v => SerializeDays(v),
+                    v => DeserializeDays(v))
+                .HasColumnType("text");
+        }
+
+        property.Metadata.SetValueComparer(CreateDayOfWeekCollectionComparer());
+    }
+
+    private static void ConfigureHabitLogEntity(ModelBuilder modelBuilder, NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<HabitLog>(entity =>
+        {
+            entity.HasIndex(l => new { l.HabitId, l.Date });
+
+            if (nullableEncConverter is null)
+                return;
+
+            entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
+        });
+    }
+
+    private static void ConfigureUserFactEntity(ModelBuilder modelBuilder, EncryptionValueConverter? encConverter)
+    {
+        modelBuilder.Entity<UserFact>(entity =>
+        {
+            entity.HasIndex(f => new { f.UserId, f.IsDeleted });
+            entity.HasQueryFilter(f => !f.IsDeleted);
+
+            if (encConverter is null)
+                return;
+
+            entity.Property(f => f.FactText).HasConversion(encConverter).HasColumnType("text");
+        });
+    }
+
+    private static void ConfigureGoalEntity(
+        ModelBuilder modelBuilder,
+        EncryptionValueConverter? encConverter,
+        NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<Goal>(entity =>
+        {
+            entity.HasIndex(g => g.UserId);
+            entity.HasIndex(g => new { g.UserId, g.IsDeleted });
+            entity.HasQueryFilter(g => !g.IsDeleted);
+
+            entity.HasMany(g => g.ProgressLogs)
+                .WithOne()
+                .HasForeignKey(l => l.GoalId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(g => g.Habits)
+                .WithMany(h => h.Goals)
+                .UsingEntity("HabitGoals",
+                    l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey(nameof(Habit) + nameof(Habit.Id)).OnDelete(DeleteBehavior.Cascade),
+                    r => r.HasOne(typeof(Goal)).WithMany().HasForeignKey(nameof(Goal) + nameof(Goal.Id)).OnDelete(DeleteBehavior.Cascade));
+
+            if (encConverter is null || nullableEncConverter is null)
+                return;
+
+            entity.Property(g => g.Title).HasConversion(encConverter).HasColumnType("text");
+            entity.Property(g => g.Description).HasConversion(nullableEncConverter).HasColumnType("text");
+        });
+    }
+
+    private static void ConfigureGoalProgressLogEntity(ModelBuilder modelBuilder, NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<GoalProgressLog>(entity =>
+        {
+            entity.HasIndex(l => l.GoalId);
+
+            if (nullableEncConverter is null)
+                return;
+
+            entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
+        });
+    }
+
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -369,9 +388,35 @@ public class OrbitDbContext : DbContext
         return JsonSerializer.Serialize(days.Select(day => (int)day).ToList(), (JsonSerializerOptions?)null);
     }
 
+    private static string SerializeJson<T>(T value)
+    {
+        return JsonSerializer.Serialize(value, (JsonSerializerOptions?)null);
+    }
+
+    private static List<T> DeserializeJson<T>(string value, List<T> fallback)
+    {
+        return JsonSerializer.Deserialize<List<T>>(value, (JsonSerializerOptions?)null) ?? fallback;
+    }
+
     private static List<System.DayOfWeek> DeserializeDays(string value)
     {
         var days = JsonSerializer.Deserialize<List<int>>(value, (JsonSerializerOptions?)null);
         return days?.Select(day => (System.DayOfWeek)day).ToList() ?? new List<System.DayOfWeek>();
+    }
+
+    private static ValueComparer<ICollection<System.DayOfWeek>> CreateDayOfWeekCollectionComparer()
+    {
+        return new ValueComparer<ICollection<System.DayOfWeek>>(
+            (left, right) => left!.SequenceEqual(right!),
+            collection => collection.Aggregate(0, (hash, day) => HashCode.Combine(hash, day.GetHashCode())),
+            collection => collection.ToList());
+    }
+
+    private static ValueComparer<IReadOnlyList<T>> CreateReadOnlyListComparer<T>()
+    {
+        return new ValueComparer<IReadOnlyList<T>>(
+            (left, right) => SerializeJson(left) == SerializeJson(right),
+            collection => SerializeJson(collection).GetHashCode(),
+            collection => DeserializeJson(SerializeJson(collection), new List<T>()));
     }
 }

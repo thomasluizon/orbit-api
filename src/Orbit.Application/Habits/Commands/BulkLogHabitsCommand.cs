@@ -25,19 +25,25 @@ public record BulkLogItemResult(
     Guid? LogId = null,
     string? Error = null);
 
+/// <summary>
+/// Groups supporting services for bulk habit logging to reduce constructor parameter count (S107).
+/// </summary>
+public record BulkLogServices(
+    IUserDateService UserDateService,
+    IUserStreakService UserStreakService,
+    IGamificationService GamificationService);
+
 public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
-    IUserDateService userDateService,
-    IUserStreakService userStreakService,
-    IGamificationService gamificationService,
+    BulkLogServices services,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<BulkLogHabitsCommandHandler> logger) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
 {
     public async Task<Result<BulkLogResult>> Handle(BulkLogHabitsCommand request, CancellationToken cancellationToken)
     {
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
 
         // Batch-load all requested habits in a single query instead of one per item (N+1)
@@ -71,7 +77,7 @@ public partial class BulkLogHabitsCommandHandler(
         // Save all successful logs once
         await unitOfWork.SaveChangesAsync(cancellationToken);
         if (results.Any(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
-            await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
+            await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
 
         // Gamification: process each successfully logged habit
         var loggedHabitIds = results
@@ -81,7 +87,7 @@ public partial class BulkLogHabitsCommandHandler(
         {
             try
             {
-                await gamificationService.ProcessHabitLogged(request.UserId, habitId, cancellationToken);
+                await services.GamificationService.ProcessHabitLogged(request.UserId, habitId, cancellationToken);
             }
             catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, habitId); }
         }

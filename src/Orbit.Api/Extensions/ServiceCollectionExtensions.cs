@@ -139,6 +139,17 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>()));
+        builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitServices>(sp =>
+            new Orbit.Application.Habits.Commands.LogHabitServices(
+                sp.GetRequiredService<IUserDateService>(),
+                sp.GetRequiredService<IUserStreakService>(),
+                sp.GetRequiredService<IGamificationService>(),
+                sp.GetRequiredService<MediatR.IMediator>()));
+        builder.Services.AddScoped<Orbit.Application.Habits.Commands.BulkLogServices>(sp =>
+            new Orbit.Application.Habits.Commands.BulkLogServices(
+                sp.GetRequiredService<IUserDateService>(),
+                sp.GetRequiredService<IUserStreakService>(),
+                sp.GetRequiredService<IGamificationService>()));
 
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.CreateHabitRepositories>(sp =>
             new Orbit.Application.Habits.Commands.CreateHabitRepositories(
@@ -157,6 +168,13 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>()));
+        builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatExecutionDependencies>(sp =>
+            new Orbit.Application.Chat.Commands.ChatExecutionDependencies(
+                sp.GetRequiredService<IUserDateService>(),
+                sp.GetRequiredService<IUserStreakService>(),
+                sp.GetRequiredService<IPayGateService>(),
+                sp.GetRequiredService<IUnitOfWork>(),
+                sp.GetRequiredService<IServiceScopeFactory>()));
 
         return builder;
     }

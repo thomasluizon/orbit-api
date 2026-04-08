@@ -24,6 +24,46 @@ public class UserStreakServiceTests
     }
 
     [Fact]
+    public async Task RecalculateAsync_UserNotFound_ReturnsNull()
+    {
+        _userRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((User?)null);
+
+        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RecalculateAsync_NoHabits_ResetsStreakState()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetStreakState(5, 7, new DateOnly(2026, 4, 3));
+
+        _userRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+        _habitRepository.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>());
+        _streakFreezeRepository.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<StreakFreeze, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>());
+
+        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.CurrentStreak.Should().Be(0);
+        result.LongestStreak.Should().Be(0);
+        result.LastActiveDate.Should().BeNull();
+        user.CurrentStreak.Should().Be(0);
+        user.LongestStreak.Should().Be(0);
+    }
+
+    [Fact]
     public async Task RecalculateAsync_CompletionsAndFreeze_PreservesAndContinuesStreak()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
