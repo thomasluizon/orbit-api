@@ -37,9 +37,11 @@ public class ProcessUserChatCommandHandlerTests
         var toolRegistry = new AiToolRegistry(tools);
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder);
         var dataDeps = new ChatDataDependencies(_habitRepo, _userRepo, _userFactRepo, _tagRepo);
+        var executionDeps = new ChatExecutionDependencies(
+            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory);
 
         return new ProcessUserChatCommandHandler(
-            dataDeps, aiDeps, _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _logger);
+            dataDeps, aiDeps, executionDeps, _logger);
     }
 
     public ProcessUserChatCommandHandlerTests()

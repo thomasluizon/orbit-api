@@ -29,8 +29,9 @@ public class BulkLogHabitsCommandHandlerTests
 
     public BulkLogHabitsCommandHandlerTests()
     {
+        var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService);
         _handler = new BulkLogHabitsCommandHandler(
-            _habitRepo, _habitLogRepo, _userDateService, _userStreakService, _gamificationService, _unitOfWork, _cache,
+            _habitRepo, _habitLogRepo, services, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

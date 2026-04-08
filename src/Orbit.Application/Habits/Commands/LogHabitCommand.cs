@@ -36,14 +36,20 @@ public record LogHabitRepositories(
     IGenericRepository<Goal> GoalRepository,
     IGenericRepository<User> UserRepository);
 
+/// <summary>
+/// Groups supporting services for habit logging to reduce constructor parameter count (S107).
+/// </summary>
+public record LogHabitServices(
+    IUserDateService UserDateService,
+    IUserStreakService UserStreakService,
+    IGamificationService GamificationService,
+    IMediator Mediator);
+
 public partial class LogHabitCommandHandler(
     LogHabitRepositories repos,
-    IUserDateService userDateService,
-    IUserStreakService userStreakService,
-    IGamificationService gamificationService,
+    LogHabitServices services,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
-    IMediator mediator,
     ILogger<LogHabitCommandHandler> logger) : IRequestHandler<LogHabitCommand, Result<LogHabitResponse>>
 {
     public async Task<Result<LogHabitResponse>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
@@ -59,7 +65,7 @@ public partial class LogHabitCommandHandler(
         if (habit.UserId != request.UserId)
             return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned, ErrorCodes.HabitNotOwned);
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var targetDate = request.Date ?? today;
 
         var dateValidation = ValidateTargetDate(habit, targetDate, today);
@@ -71,7 +77,7 @@ public partial class LogHabitCommandHandler(
         // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-            return await HandleUnlogAsync(habit, targetDate, user, cancellationToken);
+            return await HandleUnlogAsync(habit, targetDate, cancellationToken);
 
         return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
     }
@@ -96,7 +102,7 @@ public partial class LogHabitCommandHandler(
     }
 
     private async Task<Result<LogHabitResponse>> HandleUnlogAsync(
-        Habit habit, DateOnly targetDate, User? user, CancellationToken cancellationToken)
+        Habit habit, DateOnly targetDate, CancellationToken cancellationToken)
     {
         var unlogResult = habit.Unlog(targetDate);
         if (unlogResult.IsFailure)
@@ -107,7 +113,7 @@ public partial class LogHabitCommandHandler(
         var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        var streakState = await userStreakService.RecalculateAsync(habit.UserId, cancellationToken);
+        var streakState = await services.UserStreakService.RecalculateAsync(habit.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
@@ -137,7 +143,7 @@ public partial class LogHabitCommandHandler(
         var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        var streakState = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
+        var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
 
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -160,7 +166,7 @@ public partial class LogHabitCommandHandler(
     {
         try
         {
-            return await gamificationService.ProcessHabitLogged(userId, habitId, cancellationToken);
+            return await services.GamificationService.ProcessHabitLogged(userId, habitId, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -173,7 +179,7 @@ public partial class LogHabitCommandHandler(
     {
         try
         {
-            await mediator.Send(new CheckReferralCompletionCommand(userId), cancellationToken);
+            await services.Mediator.Send(new CheckReferralCompletionCommand(userId), cancellationToken);
         }
         catch (Exception ex)
         {

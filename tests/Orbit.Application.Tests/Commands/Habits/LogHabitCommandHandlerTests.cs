@@ -33,8 +33,9 @@ public class LogHabitCommandHandlerTests
     public LogHabitCommandHandlerTests()
     {
         var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
+        var services = new LogHabitServices(_userDateService, _userStreakService, _gamificationService, _mediator);
         _handler = new LogHabitCommandHandler(
-            repos, _userDateService, _userStreakService, _gamificationService, _unitOfWork, _cache, _mediator, _logger);
+            repos, services, _unitOfWork, _cache, _logger);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);

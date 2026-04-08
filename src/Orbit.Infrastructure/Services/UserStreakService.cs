@@ -10,7 +10,7 @@ public class UserStreakService(
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository) : IUserStreakService
 {
-    public async Task<UserStreakState?> RecalculateAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<UserStreakState?> RecalculateAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == userId,

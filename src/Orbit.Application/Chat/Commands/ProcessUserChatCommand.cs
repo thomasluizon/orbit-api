@@ -52,14 +52,20 @@ public record ChatDataDependencies(
     IGenericRepository<UserFact> UserFactRepository,
     IGenericRepository<Tag> TagRepository);
 
+/// <summary>
+/// Groups workflow services to reduce constructor parameter count (S107).
+/// </summary>
+public record ChatExecutionDependencies(
+    IUserDateService UserDateService,
+    IUserStreakService UserStreakService,
+    IPayGateService PayGateService,
+    IUnitOfWork UnitOfWork,
+    IServiceScopeFactory ServiceScopeFactory);
+
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
     ChatAiDependencies ai,
-    IUserDateService userDateService,
-    IUserStreakService userStreakService,
-    IPayGateService payGate,
-    IUnitOfWork unitOfWork,
-    IServiceScopeFactory serviceScopeFactory,
+    ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private const int MaxToolIterations = 5;
@@ -84,7 +90,7 @@ public partial class ProcessUserChatCommandHandler(
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
 
         // Check AI message limits
-        var messageGate = await payGate.CanSendAiMessage(request.UserId, cancellationToken);
+        var messageGate = await execution.PayGateService.CanSendAiMessage(request.UserId, cancellationToken);
         if (messageGate.IsFailure)
             return messageGate.PropagateError<ChatResponse>();
 
@@ -100,7 +106,7 @@ public partial class ProcessUserChatCommandHandler(
             t => t.UserId == request.UserId,
             cancellationToken);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
@@ -164,11 +170,11 @@ public partial class ProcessUserChatCommandHandler(
         LogSavingChanges(logger);
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
         if (RequiresStreakRecalculation(allActionResults))
         {
-            await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await execution.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
+            await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         saveStopwatch.Stop();
@@ -357,7 +363,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             try
             {
-                using var scope = serviceScopeFactory.CreateScope();
+                using var scope = execution.ServiceScopeFactory.CreateScope();
                 var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var bgUserRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<User>>();
                 var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessUserChatCommandHandler>>();
