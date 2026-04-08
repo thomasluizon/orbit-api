@@ -46,7 +46,7 @@ public class DeleteHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _habitRepo.Received(1).Remove(habit);
+        habit.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -62,7 +62,7 @@ public class DeleteHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("Habit not found.");
-        _habitRepo.DidNotReceive().Remove(Arg.Any<Habit>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -79,6 +79,6 @@ public class DeleteHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("You don't have permission to delete this habit.");
-        _habitRepo.DidNotReceive().Remove(Arg.Any<Habit>());
+        habit.IsDeleted.Should().BeFalse();
     }
 }

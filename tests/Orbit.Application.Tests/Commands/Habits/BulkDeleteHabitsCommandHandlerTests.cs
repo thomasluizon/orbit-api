@@ -46,7 +46,8 @@ public class BulkDeleteHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().HaveCount(2);
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
-        _habitRepo.Received(2).Remove(Arg.Any<Habit>());
+        habit1.IsDeleted.Should().BeTrue();
+        habit2.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
     }
@@ -70,6 +71,7 @@ public class BulkDeleteHabitsCommandHandlerTests
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         result.Value.Results[1].Status.Should().Be(BulkItemStatus.Failed);
         result.Value.Results[1].Error.Should().Contain("not found");
+        habit1.IsDeleted.Should().BeTrue();
     }
 
     [Fact]
@@ -86,7 +88,7 @@ public class BulkDeleteHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Failed));
-        _habitRepo.DidNotReceive().Remove(Arg.Any<Habit>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

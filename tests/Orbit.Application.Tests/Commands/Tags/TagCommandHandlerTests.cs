@@ -116,7 +116,7 @@ public class TagCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _tagRepo.Received(1).Remove(tag);
+        tag.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -136,6 +136,7 @@ public class TagCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("Tag not found.");
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     // ----- AssignTags -----
