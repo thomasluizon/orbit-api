@@ -206,17 +206,25 @@ public partial class GetCalendarEventsQueryHandler(
         return rrule;
     }
 
-    private static List<int> BuildReminders(
+    internal static List<int> BuildReminders(
         Google.Apis.Calendar.v3.Data.Event ev, string? startTime)
     {
         var reminders = ev.Reminders?.Overrides?
             .Where(r => r.Minutes.HasValue)
             .Select(r => r.Minutes!.Value)
+            .Distinct()
             .ToList() ?? [];
 
-        // Auto-add default reminder for timed events with no explicit reminders
-        if (reminders.Count == 0 && startTime is not null)
+        if (startTime is null)
+            return reminders;
+
+        // Auto-add the current default for timed events with no explicit reminders.
+        if (reminders.Count == 0)
             reminders.Add(AppConstants.DefaultReminderMinutes);
+
+        // Timed imported events should always include an at-time reminder.
+        if (!reminders.Contains(0))
+            reminders.Add(0);
 
         return reminders;
     }
