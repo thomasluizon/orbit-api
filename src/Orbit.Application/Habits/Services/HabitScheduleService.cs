@@ -79,6 +79,34 @@ public static class HabitScheduleService
     }
 
     /// <summary>
+    /// Returns the union of all scheduled dates across a set of habits within [from, to].
+    /// Excludes habits that do not contribute to the user-wide streak:
+    ///   - bad habits (no "must do" expectation)
+    ///   - general habits (no schedule)
+    ///   - flexible habits (window-based)
+    ///   - one-time tasks already completed
+    ///   - soft-deleted habits
+    /// </summary>
+    public static HashSet<DateOnly> GetUnionScheduledDates(
+        IEnumerable<Habit> habits, DateOnly from, DateOnly to)
+    {
+        var union = new HashSet<DateOnly>();
+        foreach (var habit in habits)
+        {
+            if (habit.IsDeleted) continue;
+            if (habit.IsBadHabit) continue;
+            if (habit.IsGeneral) continue;
+            if (habit.IsFlexible) continue;
+            // One-time tasks already completed no longer contribute expected dates going forward
+            if (habit.FrequencyUnit is null && habit.IsCompleted) continue;
+
+            foreach (var date in GetScheduledDates(habit, from, to))
+                union.Add(date);
+        }
+        return union;
+    }
+
+    /// <summary>
     /// Checks if a recurring habit has at least one missed past occurrence (before today, no log).
     /// Used to allow logging overdue recurring habits on today's date.
     /// </summary>

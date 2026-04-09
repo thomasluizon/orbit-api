@@ -73,6 +73,14 @@ public partial class BulkCreateHabitsCommandHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
 
+        // Compute the starting root position so all created parents get contiguous 0..N-1 (or max+1..) positions.
+        var existingRoots = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.ParentHabitId == null && !h.IsDeleted,
+            cancellationToken);
+        var rootPositionCursor = existingRoots.Count == 0
+            ? 0
+            : existingRoots.Max(h => h.Position ?? -1) + 1;
+
         // Use transaction so partial failures don't leave orphaned habits
         await unitOfWork.BeginTransactionAsync(cancellationToken);
 
@@ -81,7 +89,7 @@ public partial class BulkCreateHabitsCommandHandler(
             for (int i = 0; i < request.Habits.Count; i++)
             {
                 var itemResult = await CreateSingleHabit(
-                    request.UserId, request.Habits[i], i, userToday, cancellationToken);
+                    request.UserId, request.Habits[i], i, userToday, rootPositionCursor + i, cancellationToken);
                 results.Add(itemResult);
             }
 
@@ -101,7 +109,7 @@ public partial class BulkCreateHabitsCommandHandler(
     }
 
     private async Task<BulkCreateItemResult> CreateSingleHabit(
-        Guid userId, BulkHabitItem item, int index, DateOnly userToday,
+        Guid userId, BulkHabitItem item, int index, DateOnly userToday, int rootPosition,
         CancellationToken cancellationToken)
     {
         try
@@ -122,7 +130,8 @@ public partial class BulkCreateHabitsCommandHandler(
                 IsGeneral: item.IsGeneral,
                 IsFlexible: item.IsFlexible,
                 ScheduledReminders: item.ScheduledReminders,
-                ChecklistItems: item.ChecklistItems));
+                ChecklistItems: item.ChecklistItems,
+                Position: rootPosition));
 
             if (habitResult.IsFailure)
             {
@@ -140,6 +149,7 @@ public partial class BulkCreateHabitsCommandHandler(
             // Create child habits if any
             if (item.SubHabits is { Count: > 0 })
             {
+                var subPositionCursor = 0;
                 foreach (var subItem in item.SubHabits)
                 {
                     var childResult = Habit.Create(new HabitCreateParams(
@@ -153,7 +163,8 @@ public partial class BulkCreateHabitsCommandHandler(
                         DueDate: subItem.DueDate ?? item.DueDate ?? userToday,
                         ParentHabitId: parentHabit.Id,
                         IsGeneral: item.IsGeneral,
-                        IsFlexible: subItem.IsFlexible));
+                        IsFlexible: subItem.IsFlexible,
+                        Position: subPositionCursor++));
 
                     if (childResult.IsFailure)
                     {

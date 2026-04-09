@@ -56,6 +56,14 @@ public class CreateSubHabitCommandHandler(
 
         var opts = request.Options ?? new HabitCommandOptions();
 
+        // Compute next position within this parent's children.
+        var siblings = await habitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.ParentHabitId == request.ParentHabitId && !h.IsDeleted,
+            cancellationToken);
+        var nextPosition = siblings.Count == 0
+            ? 0
+            : siblings.Max(h => h.Position ?? -1) + 1;
+
         var childResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
@@ -75,7 +83,8 @@ public class CreateSubHabitCommandHandler(
             IsGeneral: parent.IsGeneral,
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
-            ScheduledReminders: opts.ScheduledReminders));
+            ScheduledReminders: opts.ScheduledReminders,
+            Position: nextPosition));
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);

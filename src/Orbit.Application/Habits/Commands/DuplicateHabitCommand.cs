@@ -43,8 +43,14 @@ public class DuplicateHabitCommandHandler(
             if (!canCreateSub.IsSuccess) return canCreateSub.PropagateError<Guid>();
         }
 
+        // Compute next position for root copy within its parent group.
+        var rootSiblings = allHabits.Where(h => h.ParentHabitId == original.ParentHabitId && !h.IsDeleted).ToList();
+        var nextRootPosition = rootSiblings.Count == 0
+            ? 0
+            : rootSiblings.Max(h => h.Position ?? -1) + 1;
+
         // Duplicate the root habit
-        var rootCopy = CloneHabit(original, original.ParentHabitId);
+        var rootCopy = CloneHabit(original, original.ParentHabitId, nextRootPosition);
         if (rootCopy.IsFailure)
             return Result.Failure<Guid>(rootCopy.Error);
 
@@ -71,9 +77,10 @@ public class DuplicateHabitCommandHandler(
         IGenericRepository<Habit> repository,
         CancellationToken cancellationToken)
     {
+        var childPosition = 0;
         foreach (var child in childLookup[originalParentId])
         {
-            var childCopy = CloneHabit(child, newParentId);
+            var childCopy = CloneHabit(child, newParentId, childPosition++);
             if (childCopy.IsFailure) continue;
 
             await repository.AddAsync(childCopy.Value, cancellationToken);
@@ -86,7 +93,7 @@ public class DuplicateHabitCommandHandler(
         }
     }
 
-    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId)
+    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId, int position)
     {
         return Habit.Create(new HabitCreateParams(
             source.UserId,
@@ -104,6 +111,7 @@ public class DuplicateHabitCommandHandler(
             IsGeneral: source.IsGeneral,
             IsFlexible: source.IsFlexible,
             EndDate: source.EndDate,
-            ScheduledReminders: source.ScheduledReminders));
+            ScheduledReminders: source.ScheduledReminders,
+            Position: position));
     }
 }

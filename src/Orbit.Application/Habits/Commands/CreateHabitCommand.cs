@@ -56,6 +56,14 @@ public partial class CreateHabitCommandHandler(
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var opts = request.Options ?? new HabitCommandOptions();
 
+        // Assign explicit Position = (max sibling root position) + 1 so new habits never enter as NULL.
+        var siblings = await repos.HabitRepository.FindAsync(
+            h => h.UserId == request.UserId && h.ParentHabitId == null && !h.IsDeleted,
+            cancellationToken);
+        var nextPosition = siblings.Count == 0
+            ? 0
+            : siblings.Max(h => h.Position ?? -1) + 1;
+
         var habitResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
@@ -73,7 +81,8 @@ public partial class CreateHabitCommandHandler(
             ChecklistItems: opts.ChecklistItems,
             IsGeneral: request.IsGeneral,
             IsFlexible: opts.IsFlexible,
-            ScheduledReminders: opts.ScheduledReminders));
+            ScheduledReminders: opts.ScheduledReminders,
+            Position: nextPosition));
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);
@@ -103,6 +112,7 @@ public partial class CreateHabitCommandHandler(
         if (request.SubHabits is not { Count: > 0 })
             return Result.Success();
 
+        var subPosition = 0;
         foreach (var subTitle in request.SubHabits)
         {
             var childResult = Habit.Create(new HabitCreateParams(
@@ -113,7 +123,8 @@ public partial class CreateHabitCommandHandler(
                 DueDate: request.DueDate ?? dueDate,
                 ParentHabitId: parentId,
                 IsGeneral: request.IsGeneral,
-                EndDate: opts.EndDate));
+                EndDate: opts.EndDate,
+                Position: subPosition++));
 
             if (childResult.IsFailure)
                 return Result.Failure(childResult.Error);

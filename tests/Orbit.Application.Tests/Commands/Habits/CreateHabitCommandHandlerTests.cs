@@ -59,6 +59,40 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_FirstRootHabit_AssignsPositionZero()
+    {
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>());
+
+        var command = new CreateHabitCommand(UserId, "First", null, FrequencyUnit.Day, 1);
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _habitRepo.Received().AddAsync(
+            Arg.Is<Habit>(h => h.Position == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ExistingRootHabits_AssignsMaxPositionPlusOne()
+    {
+        var existing1 = Habit.Create(new HabitCreateParams(UserId, "A", FrequencyUnit.Day, 1, DueDate: Today, Position: 0)).Value;
+        var existing2 = Habit.Create(new HabitCreateParams(UserId, "B", FrequencyUnit.Day, 1, DueDate: Today, Position: 5)).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { existing1, existing2 });
+
+        var command = new CreateHabitCommand(UserId, "New", null, FrequencyUnit.Day, 1);
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _habitRepo.Received().AddAsync(
+            Arg.Is<Habit>(h => h.Title == "New" && h.Position == 6),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WithSubHabits_CreatesParentAndChildren()
     {
         var command = new CreateHabitCommand(
