@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Google.Apis.Calendar.v3.Data;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Common;
@@ -201,5 +202,81 @@ public class GetCalendarEventsQueryHandlerTests
 
         q1.Should().Be(q2);
         q1.UserId.Should().Be(id);
+    }
+
+    [Fact]
+    public void BuildReminders_TimedEventWithoutExplicitReminders_AddsDefaultAndAtTime()
+    {
+        var result = GetCalendarEventsQueryHandler.BuildReminders(new Event(), "09:00");
+
+        result.Should().Equal(AppConstants.DefaultReminderMinutes, 0);
+    }
+
+    [Fact]
+    public void BuildReminders_TimedEventWithExplicitReminders_PreservesThemAndAddsAtTime()
+    {
+        var ev = new Event
+        {
+            Reminders = new Event.RemindersData
+            {
+                Overrides =
+                [
+                    new EventReminder { Minutes = 30 },
+                    new EventReminder { Minutes = 15 }
+                ]
+            }
+        };
+
+        var result = GetCalendarEventsQueryHandler.BuildReminders(ev, "09:00");
+
+        result.Should().Equal(30, 15, 0);
+    }
+
+    [Fact]
+    public void BuildReminders_TimedEventWithExistingAtTime_DoesNotDuplicateZero()
+    {
+        var ev = new Event
+        {
+            Reminders = new Event.RemindersData
+            {
+                Overrides =
+                [
+                    new EventReminder { Minutes = 15 },
+                    new EventReminder { Minutes = 0 },
+                    new EventReminder { Minutes = 15 }
+                ]
+            }
+        };
+
+        var result = GetCalendarEventsQueryHandler.BuildReminders(ev, "09:00");
+
+        result.Should().Equal(15, 0);
+    }
+
+    [Fact]
+    public void BuildReminders_AllDayEventWithoutExplicitReminders_RemainsEmpty()
+    {
+        var result = GetCalendarEventsQueryHandler.BuildReminders(new Event(), null);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BuildReminders_AllDayEventWithExplicitReminders_PreservesThem()
+    {
+        var ev = new Event
+        {
+            Reminders = new Event.RemindersData
+            {
+                Overrides =
+                [
+                    new EventReminder { Minutes = 60 }
+                ]
+            }
+        };
+
+        var result = GetCalendarEventsQueryHandler.BuildReminders(ev, null);
+
+        result.Should().Equal(60);
     }
 }
