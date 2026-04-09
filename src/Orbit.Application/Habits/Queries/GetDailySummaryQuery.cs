@@ -39,7 +39,13 @@ public class GetDailySummaryQueryHandler(
         if (!user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>("AI summary is disabled.");
 
-        var cacheKey = CacheKey(request.UserId, request.DateFrom, request.Language);
+        // The backend is authoritative about the user's language: prefer the persisted
+        // profile language, fall back to the request-supplied value, finally English.
+        var effectiveLanguage = !string.IsNullOrWhiteSpace(user.Language)
+            ? user.Language!
+            : (!string.IsNullOrWhiteSpace(request.Language) ? request.Language : "en");
+
+        var cacheKey = CacheKey(request.UserId, request.DateFrom, effectiveLanguage);
 
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
         {
@@ -55,7 +61,7 @@ public class GetDailySummaryQueryHandler(
             request.DateFrom,
             request.DateTo,
             request.IncludeOverdue,
-            request.Language,
+            effectiveLanguage,
             cancellationToken);
 
         if (summaryResult.IsFailure)

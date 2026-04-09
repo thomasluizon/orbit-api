@@ -25,7 +25,8 @@ public record HabitCreateParams(
     bool IsGeneral = false,
     bool IsFlexible = false,
     DateOnly? EndDate = null,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    int? Position = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -138,6 +139,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             ChecklistItems = p.ChecklistItems ?? [],
             ScheduledReminders = p.ScheduledReminders ?? [],
             EndDate = p.EndDate,
+            Position = p.Position,
             CreatedAtUtc = DateTime.UtcNow
         });
     }

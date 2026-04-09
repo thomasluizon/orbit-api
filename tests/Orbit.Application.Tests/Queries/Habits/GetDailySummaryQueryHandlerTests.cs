@@ -158,4 +158,97 @@ public class GetDailySummaryQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("AI service unavailable");
     }
+
+    [Fact]
+    public async Task Handle_UsesUserProfileLanguage_WhenRequestLanguageDiffers()
+    {
+        var user = CreateTestUser();
+        user.SetLanguage("pt-BR");
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "pt-BR",
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Resumo em portugues"));
+
+        // Request supplies "en" but the DB-persisted profile language is "pt-BR".
+        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _summaryService.Received(1).GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "pt-BR",
+            Arg.Any<CancellationToken>());
+        await _summaryService.DidNotReceive().GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "en",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FallsBackToRequestLanguage_WhenUserLanguageEmpty()
+    {
+        var user = CreateTestUser(); // Language is null by default
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "pt-BR",
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Resumo"));
+
+        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "pt-BR");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _summaryService.Received(1).GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "pt-BR",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FallsBackToEnglish_WhenBothEmpty()
+    {
+        var user = CreateTestUser();
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "en",
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Summary"));
+
+        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _summaryService.Received(1).GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, false, "en",
+            Arg.Any<CancellationToken>());
+    }
 }

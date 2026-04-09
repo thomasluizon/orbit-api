@@ -1,3 +1,5 @@
+using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -8,7 +10,8 @@ public class UserStreakService(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<StreakFreeze> streakFreezeRepository) : IUserStreakService
+    IGenericRepository<StreakFreeze> streakFreezeRepository,
+    IUserDateService userDateService) : IUserStreakService
 {
     public async Task<UserStreakState?> RecalculateAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -20,26 +23,126 @@ public class UserStreakService(
 
         var habits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToHashSet();
-        var completionDates = habitIds.Count == 0
-            ? []
+
+        var completionDateSet = habitIds.Count == 0
+            ? new HashSet<DateOnly>()
             : (await habitLogRepository.FindAsync(
                 l => habitIds.Contains(l.HabitId) && l.Value > 0,
                 cancellationToken))
                 .Select(log => log.Date)
-                .Distinct()
-                .ToList();
+                .ToHashSet();
 
-        var freezeDates = (await streakFreezeRepository.FindAsync(
+        var freezeDateSet = (await streakFreezeRepository.FindAsync(
             sf => sf.UserId == userId,
             cancellationToken))
             .Select(freeze => freeze.UsedOnDate)
-            .Distinct()
+            .ToHashSet();
+
+        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+
+        // Determine which habits contribute to the user-wide expected timeline.
+        var contributingHabits = habits
+            .Where(h => !h.IsDeleted && !h.IsBadHabit && !h.IsGeneral && !h.IsFlexible)
+            .Where(h => !(h.FrequencyUnit is null && h.IsCompleted))
             .ToList();
 
-        var completionDateSet = completionDates.ToHashSet();
-        var freezeDateSet = freezeDates.ToHashSet();
-        var orderedDates = completionDates
-            .Concat(freezeDates)
+        // If the user has no recurring (non-bad, non-flexible, non-general) habits at all,
+        // fall back to calendar-day adjacency so brand-new users aren't penalized.
+        var hasRecurring = contributingHabits.Any(h => h.FrequencyUnit is not null);
+        if (!hasRecurring)
+        {
+            return CalendarFallback(user, completionDateSet, freezeDateSet);
+        }
+
+        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+        // Build expected-date timeline from all contributing habits.
+        var expectedDates = HabitScheduleService.GetUnionScheduledDates(
+            contributingHabits, lookbackStart, userToday);
+
+        // Current streak: walk backwards from today (or yesterday if today not yet logged).
+        var currentStreak = 0;
+        DateOnly? lastActiveDate = null;
+
+        // Start from today only if user logged something today; otherwise tolerate today.
+        var cursor = userToday;
+        if (!completionDateSet.Contains(cursor))
+            cursor = cursor.AddDays(-1);
+
+        while (cursor >= lookbackStart)
+        {
+            var isExpected = expectedDates.Contains(cursor);
+            if (!isExpected)
+            {
+                // Day had nothing scheduled; skip without affecting streak.
+                cursor = cursor.AddDays(-1);
+                continue;
+            }
+
+            if (completionDateSet.Contains(cursor))
+            {
+                currentStreak++;
+                lastActiveDate ??= cursor;
+                cursor = cursor.AddDays(-1);
+                continue;
+            }
+
+            if (freezeDateSet.Contains(cursor))
+            {
+                // Freeze preserves streak across a missed expected day.
+                lastActiveDate ??= cursor;
+                cursor = cursor.AddDays(-1);
+                continue;
+            }
+
+            // Missed expected day without a freeze -- stop.
+            break;
+        }
+
+        // Longest streak: walk the full expected timeline forward and track the longest run.
+        var longestStreak = ComputeLongestStreak(expectedDates, completionDateSet, freezeDateSet);
+        if (currentStreak > longestStreak) longestStreak = currentStreak;
+
+        user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
+        return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
+    }
+
+    private static int ComputeLongestStreak(
+        HashSet<DateOnly> expectedDates,
+        HashSet<DateOnly> completionDateSet,
+        HashSet<DateOnly> freezeDateSet)
+    {
+        if (expectedDates.Count == 0) return 0;
+
+        var ordered = expectedDates.OrderBy(d => d).ToList();
+        var longest = 0;
+        var run = 0;
+        foreach (var date in ordered)
+        {
+            if (completionDateSet.Contains(date))
+            {
+                run++;
+                if (run > longest) longest = run;
+            }
+            else if (freezeDateSet.Contains(date))
+            {
+                // Freeze preserves the run without incrementing.
+                continue;
+            }
+            else
+            {
+                run = 0;
+            }
+        }
+        return longest;
+    }
+
+    private static UserStreakState CalendarFallback(
+        User user,
+        HashSet<DateOnly> completionDateSet,
+        HashSet<DateOnly> freezeDateSet)
+    {
+        var orderedDates = completionDateSet
+            .Concat(freezeDateSet)
             .Distinct()
             .OrderBy(date => date)
             .ToList();
@@ -55,33 +158,27 @@ public class UserStreakService(
                 currentStreak = lastActiveDate == date.AddDays(-1)
                     ? currentStreak + 1
                     : 1;
-
                 lastActiveDate = date;
-                longestStreak = Math.Max(longestStreak, currentStreak);
+                if (currentStreak > longestStreak) longestStreak = currentStreak;
                 continue;
             }
 
             if (!freezeDateSet.Contains(date))
                 continue;
 
-            // A freeze preserves the streak if it is adjacent to the last active date
-            // OR bridges exactly a 1-day gap (the missed day the freeze is meant to cover).
             if (lastActiveDate.HasValue
                 && (date.DayNumber - lastActiveDate.Value.DayNumber) <= 2)
             {
-                // Streak preserved -- do not increment
                 lastActiveDate = date;
             }
             else
             {
-                // Gap too large for a single freeze to bridge
                 currentStreak = 0;
                 lastActiveDate = date;
             }
         }
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
-
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 }
