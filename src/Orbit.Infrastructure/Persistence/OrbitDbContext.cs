@@ -19,6 +19,12 @@ public class OrbitDbContext : DbContext
         _encryptionService = encryptionService;
     }
 
+    /// <summary>
+    /// Indicates whether this context was constructed with an encryption service.
+    /// Used by tests to distinguish cached model variants.
+    /// </summary>
+    public bool HasEncryptionService => _encryptionService is not null;
+
     public DbSet<User> Users => Set<User>();
     public DbSet<Habit> Habits => Set<Habit>();
     public DbSet<HabitLog> HabitLogs => Set<HabitLog>();

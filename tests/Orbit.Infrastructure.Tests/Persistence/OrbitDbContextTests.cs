@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -60,11 +62,25 @@ public class OrbitDbContextTests
 
     private static OrbitDbContext CreateContext(IEncryptionService? encryptionService = null)
     {
+        // EF Core caches the compiled model per DbContext type by default. Since these
+        // tests build the model differently based on whether an encryption service is
+        // injected, we replace the model cache key factory so each configuration gets
+        // its own cached model and tests don't leak state through ordering.
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ReplaceService<IModelCacheKeyFactory, EncryptionAwareModelCacheKeyFactory>()
             .Options;
 
         return new OrbitDbContext(options, encryptionService);
+    }
+
+    private sealed class EncryptionAwareModelCacheKeyFactory : IModelCacheKeyFactory
+    {
+        public object Create(DbContext context, bool designTime)
+        {
+            var hasEncryption = context is OrbitDbContext orbit && orbit.HasEncryptionService;
+            return (context.GetType(), hasEncryption, designTime);
+        }
     }
 
     private static OrbitDbContext CreatePostgresContext()
