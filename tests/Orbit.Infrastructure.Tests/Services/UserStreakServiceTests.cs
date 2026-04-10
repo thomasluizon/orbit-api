@@ -51,6 +51,15 @@ public class UserStreakServiceTests
             .Returns(habits.SelectMany(h => h.Logs).ToList());
     }
 
+    /// <summary>
+    /// Backdates CreatedAtUtc so historical schedule calculation includes dates before today.
+    /// </summary>
+    private static void BackdateCreation(Habit habit, DateOnly date)
+    {
+        var prop = typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!;
+        prop.SetValue(habit, date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+    }
+
     private void SetupFreezes(List<StreakFreeze> freezes)
     {
         _streakFreezeRepository.FindAsync(
@@ -98,6 +107,7 @@ public class UserStreakServiceTests
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
+        BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
         habit.Log(new DateOnly(2026, 4, 2), advanceDueDate: false);
@@ -130,6 +140,7 @@ public class UserStreakServiceTests
             UserId, "Work", FrequencyUnit.Day, 1,
             Days: weekdays,
             DueDate: new DateOnly(2026, 4, 6))).Value;
+        BackdateCreation(habit, new DateOnly(2026, 4, 6));
 
         // Log Mon-Fri (week 1) and Mon (week 2) -- weekend untouched
         habit.Log(new DateOnly(2026, 4, 6), advanceDueDate: false);  // Mon
@@ -155,6 +166,7 @@ public class UserStreakServiceTests
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
+        BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
         // Missed April 3 (expected, no log, no freeze)
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
@@ -178,10 +190,12 @@ public class UserStreakServiceTests
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var daily = Habit.Create(new HabitCreateParams(UserId, "Water", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 6))).Value;
+        BackdateCreation(daily, new DateOnly(2026, 4, 6));
         var weekdayHabit = Habit.Create(new HabitCreateParams(
             UserId, "Work", FrequencyUnit.Day, 1,
             Days: new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday },
             DueDate: new DateOnly(2026, 4, 6))).Value;
+        BackdateCreation(weekdayHabit, new DateOnly(2026, 4, 6));
 
         // Log water every day, weekday habit on weekdays only. Covers everything -> streak continuous.
         foreach (var d in Enumerable.Range(0, 7))
@@ -207,6 +221,7 @@ public class UserStreakServiceTests
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
+        BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
         habit.Log(new DateOnly(2026, 4, 2), advanceDueDate: false);
