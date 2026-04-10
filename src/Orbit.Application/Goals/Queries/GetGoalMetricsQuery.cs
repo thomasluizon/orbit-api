@@ -17,10 +17,11 @@ public class GetGoalMetricsQueryHandler(
 {
     public async Task<Result<GoalMetrics>> Handle(GetGoalMetricsQuery request, CancellationToken cancellationToken)
     {
+        var logCutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-365);
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= logCutoff)),
             cancellationToken);
 
         if (goal is null)

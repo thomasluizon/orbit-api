@@ -231,6 +231,12 @@ public partial class OAuthController(
         if (entry is null)
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
 
+        // Revoke any existing "Claude.ai" keys for this user to prevent unbounded accumulation
+        var existingKeys = await apiKeyRepository.FindTrackedAsync(
+            k => k.UserId == entry.UserId && k.Name == "Claude.ai", ct);
+        foreach (var existing in existingKeys)
+            existing.Revoke();
+
         // Create an API key for this user (name: "Claude.ai", no Pro gate)
         var keyResult = ApiKey.Create(entry.UserId, "Claude.ai");
         if (keyResult.IsFailure)

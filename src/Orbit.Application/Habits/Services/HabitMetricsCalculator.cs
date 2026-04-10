@@ -106,7 +106,8 @@ public static class HabitMetricsCalculator
 
         var streak = 0;
 
-        foreach (var date in expectedDates.OrderByDescending(d => d))
+        // expectedDates are already in descending order from the generator methods
+        foreach (var date in expectedDates)
         {
             var isLogged = logDates.Contains(date);
 
@@ -141,7 +142,8 @@ public static class HabitMetricsCalculator
         var maxStreak = 0;
         var currentStreak = 0;
 
-        foreach (var date in expectedDates.OrderByDescending(d => d))
+        // expectedDates are already in descending order from the generator methods
+        foreach (var date in expectedDates)
         {
             var isLogged = logDates.Contains(date);
             var breaksStreak = habit.IsBadHabit ? isLogged : !isLogged;
