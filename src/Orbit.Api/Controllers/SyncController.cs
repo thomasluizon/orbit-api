@@ -173,7 +173,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             }
             catch (Exception ex)
             {
-                results.Add(new SyncMutationResult(i, "failed", ex.Message));
+                LogMutationFailed(logger, i, mutation.Entity, mutation.Action, ex);
+                results.Add(new SyncMutationResult(i, "failed", "Mutation failed"));
                 failed++;
             }
         }
@@ -271,4 +272,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Sync batch processed for user {UserId}: {Processed} succeeded, {Failed} failed")]
     private static partial void LogSyncBatch(ILogger logger, Guid userId, int processed, int failed);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Sync mutation {Index} failed for entity {Entity} action {Action}")]
+    private static partial void LogMutationFailed(ILogger logger, int index, string entity, string action, Exception ex);
 }

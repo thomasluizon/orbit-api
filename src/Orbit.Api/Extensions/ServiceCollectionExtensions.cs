@@ -343,7 +343,14 @@ public static class ServiceCollectionExtensions
 
         // Exception Handling
         builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
-        builder.Services.AddProblemDetails();
+        builder.Services.AddProblemDetails(options =>
+        {
+            options.CustomizeProblemDetails = ctx =>
+            {
+                ctx.ProblemDetails.Extensions.Remove("exception");
+                ctx.ProblemDetails.Detail = null;
+            };
+        });
 
         // OpenAPI + Scalar
         builder.Services.AddOpenApi(options =>
@@ -358,8 +365,8 @@ public static class ServiceCollectionExtensions
     {
         // NOTE: IMemoryCache-backed rate limiting is not shared across replicas.
         // For multi-replica deployments, replace with a distributed store (e.g., Redis).
-        // Disabled in non-Production to avoid breaking integration tests.
-        if (builder.Environment.IsProduction())
+        // Disabled in Development to avoid breaking integration tests.
+        if (!builder.Environment.IsDevelopment())
         {
             builder.Services.AddRateLimiter(options =>
             {

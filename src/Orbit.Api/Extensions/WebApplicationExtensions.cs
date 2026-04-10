@@ -28,7 +28,7 @@ public static class WebApplicationExtensions
             KnownProxies = { }
         });
 
-        if (app.Environment.IsProduction())
+        if (!app.Environment.IsDevelopment())
             app.UseRateLimiter();
 
         if (app.Environment.IsDevelopment())
