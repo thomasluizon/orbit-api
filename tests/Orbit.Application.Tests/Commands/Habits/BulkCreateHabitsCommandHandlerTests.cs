@@ -13,6 +13,7 @@ namespace Orbit.Application.Tests.Commands.Habits;
 public class BulkCreateHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -25,7 +26,7 @@ public class BulkCreateHabitsCommandHandlerTests
     public BulkCreateHabitsCommandHandlerTests()
     {
         _handler = new BulkCreateHabitsCommandHandler(
-            _habitRepo, _payGate, _userDateService, _unitOfWork, _cache,
+            _habitRepo, _suggestionRepo, _payGate, _userDateService, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>());
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())

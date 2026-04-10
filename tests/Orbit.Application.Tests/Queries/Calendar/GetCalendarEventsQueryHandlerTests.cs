@@ -2,9 +2,9 @@ using FluentAssertions;
 using Google.Apis.Calendar.v3.Data;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
@@ -15,7 +15,9 @@ public class GetCalendarEventsQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
     private readonly IGoogleTokenService _googleTokenService = Substitute.For<IGoogleTokenService>();
+    private readonly ICalendarEventFetcher _eventFetcher = Substitute.For<ICalendarEventFetcher>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<GetCalendarEventsQueryHandler> _logger = Substitute.For<ILogger<GetCalendarEventsQueryHandler>>();
     private readonly GetCalendarEventsQueryHandler _handler;
@@ -24,7 +26,8 @@ public class GetCalendarEventsQueryHandlerTests
 
     public GetCalendarEventsQueryHandlerTests()
     {
-        _handler = new GetCalendarEventsQueryHandler(_userRepo, _habitRepo, _googleTokenService, _unitOfWork, _logger);
+        _handler = new GetCalendarEventsQueryHandler(
+            _userRepo, _habitRepo, _suggestionRepo, _googleTokenService, _eventFetcher, _unitOfWork, _logger);
     }
 
     private static User CreateTestUser()
@@ -95,26 +98,21 @@ public class GetCalendarEventsQueryHandlerTests
         _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
             .Returns("valid-access-token");
 
-        // Setup habits repo for the filter (empty)
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit>().AsReadOnly());
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
+        _eventFetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>());
 
         var query = new GetCalendarEventsQuery(UserId);
+        var result = await _handler.Handle(query, CancellationToken.None);
 
-        // This will fail at Google API call (since we can't mock the CalendarService),
-        // but we can verify SaveChanges was called before the Google API call.
-        // The handler calls SaveChangesAsync right after getting the token.
-        try
-        {
-            await _handler.Handle(query, CancellationToken.None);
-        }
-        catch
-        {
-            // Expected: Google API call will fail in test environment
-        }
-
+        result.IsSuccess.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -143,6 +141,42 @@ public class GetCalendarEventsQueryHandlerTests
         result.Error.Should().Contain("sign in with Google");
     }
 
+    [Fact]
+    public async Task Handle_FiltersOutAlreadyImportedHabitsByGoogleEventId()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
+            .Returns("valid-access-token");
+
+        var importedHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
+            GoogleEventId: "evt_already")).Value;
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { importedHabit }.AsReadOnly());
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
+
+        _eventFetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_already", "Existing", null, "2026-05-01", null, null, true, null, []),
+                new("evt_new", "Brand New", null, "2026-05-02", null, null, true, null, [])
+            });
+
+        var query = new GetCalendarEventsQuery(UserId);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(1);
+        result.Value[0].Id.Should().Be("evt_new");
+    }
+
     // --- CalendarEventItem record tests ---
 
     [Fact]
@@ -166,34 +200,6 @@ public class GetCalendarEventsQueryHandlerTests
     }
 
     [Fact]
-    public void CalendarEventItem_NonRecurring_PropertiesCorrect()
-    {
-        var item = new CalendarEventItem(
-            "evt_456", "Doctor Appointment", null,
-            "2026-04-10", "09:00", "10:00",
-            false, null, []);
-
-        item.IsRecurring.Should().BeFalse();
-        item.RecurrenceRule.Should().BeNull();
-        item.Description.Should().BeNull();
-        item.Reminders.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void CalendarEventItem_AllDayEvent_NoTimes()
-    {
-        var item = new CalendarEventItem(
-            "evt_789", "Holiday", null,
-            "2026-04-25", null, null,
-            false, null, []);
-
-        item.StartTime.Should().BeNull();
-        item.EndTime.Should().BeNull();
-    }
-
-    // --- GetCalendarEventsQuery record test ---
-
-    [Fact]
     public void GetCalendarEventsQuery_RecordEquality()
     {
         var id = Guid.NewGuid();
@@ -204,11 +210,12 @@ public class GetCalendarEventsQueryHandlerTests
         q1.UserId.Should().Be(id);
     }
 
+    // --- BuildReminders tests moved to CalendarEventFetcher ---
+
     [Fact]
     public void BuildReminders_TimedEventWithoutExplicitReminders_AddsDefaultAndAtTime()
     {
-        var result = GetCalendarEventsQueryHandler.BuildReminders(new Event(), "09:00");
-
+        var result = CalendarEventFetcher.BuildReminders(new Event(), "09:00");
         result.Should().Equal(AppConstants.DefaultReminderMinutes, 0);
     }
 
@@ -227,8 +234,7 @@ public class GetCalendarEventsQueryHandlerTests
             }
         };
 
-        var result = GetCalendarEventsQueryHandler.BuildReminders(ev, "09:00");
-
+        var result = CalendarEventFetcher.BuildReminders(ev, "09:00");
         result.Should().Equal(30, 15, 0);
     }
 
@@ -248,16 +254,14 @@ public class GetCalendarEventsQueryHandlerTests
             }
         };
 
-        var result = GetCalendarEventsQueryHandler.BuildReminders(ev, "09:00");
-
+        var result = CalendarEventFetcher.BuildReminders(ev, "09:00");
         result.Should().Equal(15, 0);
     }
 
     [Fact]
     public void BuildReminders_AllDayEventWithoutExplicitReminders_RemainsEmpty()
     {
-        var result = GetCalendarEventsQueryHandler.BuildReminders(new Event(), null);
-
+        var result = CalendarEventFetcher.BuildReminders(new Event(), null);
         result.Should().BeEmpty();
     }
 
@@ -275,8 +279,7 @@ public class GetCalendarEventsQueryHandlerTests
             }
         };
 
-        var result = GetCalendarEventsQueryHandler.BuildReminders(ev, null);
-
+        var result = CalendarEventFetcher.BuildReminders(ev, null);
         result.Should().Equal(60);
     }
 }

@@ -50,6 +50,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
+        builder.Services.AddScoped<Orbit.Application.Calendar.Services.ICalendarEventFetcher, Orbit.Application.Calendar.Services.CalendarEventFetcher>();
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthSessionService, AuthSessionService>();
 
@@ -261,6 +263,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
         builder.Services.AddHostedService<DataEncryptionMigrationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
+        builder.Services.AddHostedService<CalendarAutoSyncService>();
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
 
         // Health Checks

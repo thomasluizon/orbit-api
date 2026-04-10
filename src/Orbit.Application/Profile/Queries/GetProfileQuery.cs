@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Queries;
@@ -34,7 +35,10 @@ public record ProfileResponse(
     int CurrentStreak,
     int StreakFreezesAvailable,
     string? ThemePreference,
-    string? ColorScheme);
+    string? ColorScheme,
+    bool GoogleCalendarAutoSyncEnabled,
+    GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
+    DateTime? GoogleCalendarLastSyncedAt);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -92,6 +96,9 @@ public class GetProfileQueryHandler(
             user.CurrentStreak,
             freezesAvailable,
             user.ThemePreference,
-            user.ColorScheme));
+            user.ColorScheme,
+            user.GoogleCalendarAutoSyncEnabled,
+            user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
+            user.GoogleCalendarLastSyncedAt));
     }
 }

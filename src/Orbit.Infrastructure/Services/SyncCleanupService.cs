@@ -15,6 +15,7 @@ public partial class SyncCleanupService(
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan RetentionPeriod = TimeSpan.FromDays(30);
+    private static readonly TimeSpan SuggestionRetentionPeriod = TimeSpan.FromDays(14);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -97,6 +98,18 @@ public partial class SyncCleanupService(
         {
             dbContext.UserFacts.RemoveRange(deletedFacts);
             totalPurged += deletedFacts.Count;
+        }
+
+        // Purge abandoned calendar sync suggestions (14 days, not imported)
+        var suggestionCutoff = DateTime.UtcNow - SuggestionRetentionPeriod;
+        var abandonedSuggestions = await dbContext.GoogleCalendarSyncSuggestions
+            .Where(s => s.DiscoveredAtUtc < suggestionCutoff && s.ImportedAtUtc == null)
+            .ToListAsync(ct);
+
+        if (abandonedSuggestions.Count > 0)
+        {
+            dbContext.GoogleCalendarSyncSuggestions.RemoveRange(abandonedSuggestions);
+            totalPurged += abandonedSuggestions.Count;
         }
 
         if (totalPurged > 0)
