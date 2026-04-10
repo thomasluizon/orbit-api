@@ -28,7 +28,7 @@ public class ProfileToolsTests
     {
         var profile = new ProfileResponse(
             "Thomas", "thomas@example.com", "America/Sao_Paulo",
-            true, true, true, "pt-BR", "Pro", true, false, null, null,
+            true, true, true, true, "pt-BR", "Pro", true, false, null, null,
             5, 100, false, false, null, false, 1, 500, 5, "Achiever",
             0, 10, 2, null, null,
             false, GoogleCalendarAutoSyncStatus.Idle, null);

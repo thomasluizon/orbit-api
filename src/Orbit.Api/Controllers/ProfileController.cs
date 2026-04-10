@@ -178,6 +178,28 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
+    [HttpPut("tour")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompleteTour(CancellationToken cancellationToken)
+    {
+        var command = new CompleteTourCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+    }
+
+    [HttpDelete("tour")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ResetTour(CancellationToken cancellationToken)
+    {
+        var command = new ResetTourCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+    }
+
     [HttpPost("reset")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -16,6 +16,7 @@ public partial class User : Entity
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
     public bool HasCompletedOnboarding { get; private set; } = false;
+    public bool HasCompletedTour { get; private set; } = false;
     public string? Language { get; private set; }
     public UserPlan Plan { get; private set; } = UserPlan.Free;
     public string? StripeCustomerId { get; private set; }
@@ -132,6 +133,10 @@ public partial class User : Entity
     }
 
     public void CompleteOnboarding() => HasCompletedOnboarding = true;
+
+    public void CompleteTour() => HasCompletedTour = true;
+
+    public void ResetTour() => HasCompletedTour = false;
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
 
@@ -330,6 +335,7 @@ public partial class User : Entity
     public void ResetAccount()
     {
         HasCompletedOnboarding = false;
+        HasCompletedTour = false;
         TotalXp = 0;
         Level = 1;
         CurrentStreak = 0;
