@@ -123,75 +123,60 @@ public partial class GamificationService(
 
     public async Task ProcessHabitCreated(Guid userId, CancellationToken ct = default)
     {
-        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return;
-
-        var earned = await LoadEarnedAchievementIds(userId, ct);
-        var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
-        var previousLevel = user.Level;
-
-        // First Orbit: first habit created
-        if (!earned.Contains(AchievementDefinitions.FirstOrbit))
+        await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
-            var habitCount = await repos.HabitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
-            if (habitCount == 1)
-                TryGrant(AchievementDefinitions.FirstOrbit, user, earned, newAchievements);
-        }
-
-        foreach (var (entity, _) in newAchievements)
-            await repos.AchievementRepository.AddAsync(entity, ct);
-
-        UpdateLevel(user);
-
-        foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, user.Language, ct);
-
-        if (user.Level > previousLevel)
-        {
-            var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
-        }
-
-        await unitOfWork.SaveChangesAsync(ct);
+            if (!earned.Contains(AchievementDefinitions.FirstOrbit))
+            {
+                var habitCount = await repos.HabitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
+                if (habitCount == 1)
+                    TryGrant(AchievementDefinitions.FirstOrbit, user, earned, newAchievements);
+            }
+        }, ct);
     }
 
     public async Task ProcessGoalCreated(Guid userId, CancellationToken ct = default)
     {
-        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return;
-
-        var earned = await LoadEarnedAchievementIds(userId, ct);
-        var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
-        var previousLevel = user.Level;
-
-        var goalCount = await repos.GoalRepository.CountAsync(g => g.UserId == userId, ct);
-
-        // Mission Control: first goal
-        if (!earned.Contains(AchievementDefinitions.MissionControl) && goalCount == 1)
-            TryGrant(AchievementDefinitions.MissionControl, user, earned, newAchievements);
-
-        // Goal Setter: 3 goals
-        if (!earned.Contains(AchievementDefinitions.GoalSetter) && goalCount >= 3)
-            TryGrant(AchievementDefinitions.GoalSetter, user, earned, newAchievements);
-
-        foreach (var (entity, _) in newAchievements)
-            await repos.AchievementRepository.AddAsync(entity, ct);
-
-        UpdateLevel(user);
-
-        foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, user.Language, ct);
-
-        if (user.Level > previousLevel)
+        await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
-            var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
-        }
+            var goalCount = await repos.GoalRepository.CountAsync(g => g.UserId == userId, ct);
 
-        await unitOfWork.SaveChangesAsync(ct);
+            if (!earned.Contains(AchievementDefinitions.MissionControl) && goalCount == 1)
+                TryGrant(AchievementDefinitions.MissionControl, user, earned, newAchievements);
+
+            if (!earned.Contains(AchievementDefinitions.GoalSetter) && goalCount >= 3)
+                TryGrant(AchievementDefinitions.GoalSetter, user, earned, newAchievements);
+        }, ct);
     }
 
     public async Task ProcessGoalCompleted(Guid userId, CancellationToken ct = default)
+    {
+        await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
+        {
+            user.AddXp(100);
+
+            var completedGoals = await repos.GoalRepository.CountAsync(
+                g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
+
+            if (!earned.Contains(AchievementDefinitions.GoalCrusher) && completedGoals == 1)
+                TryGrant(AchievementDefinitions.GoalCrusher, user, earned, newAchievements);
+
+            if (!earned.Contains(AchievementDefinitions.Overachiever) && completedGoals >= 5)
+                TryGrant(AchievementDefinitions.Overachiever, user, earned, newAchievements);
+
+            if (!earned.Contains(AchievementDefinitions.DreamMaker) && completedGoals >= 10)
+                TryGrant(AchievementDefinitions.DreamMaker, user, earned, newAchievements);
+        }, ct);
+    }
+
+    /// <summary>
+    /// Template method that handles the common gamification scaffold:
+    /// load user, check Pro, load earned achievements, run domain-specific checks,
+    /// persist achievements, update level, send notifications, save changes.
+    /// </summary>
+    private async Task ProcessGamificationEventAsync(
+        Guid userId,
+        Func<User, HashSet<string>, List<(UserAchievement Entity, AchievementDefinition Definition)>, Task> checkAchievements,
+        CancellationToken ct)
     {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
         if (user is null || !user.HasProAccess) return;
@@ -200,23 +185,7 @@ public partial class GamificationService(
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
         var previousLevel = user.Level;
 
-        // 100 XP for goal completion
-        user.AddXp(100);
-
-        var completedGoals = await repos.GoalRepository.CountAsync(
-            g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
-
-        // Goal Crusher: first completed goal
-        if (!earned.Contains(AchievementDefinitions.GoalCrusher) && completedGoals == 1)
-            TryGrant(AchievementDefinitions.GoalCrusher, user, earned, newAchievements);
-
-        // Overachiever: 5 completed goals
-        if (!earned.Contains(AchievementDefinitions.Overachiever) && completedGoals >= 5)
-            TryGrant(AchievementDefinitions.Overachiever, user, earned, newAchievements);
-
-        // Dream Maker: 10 completed goals
-        if (!earned.Contains(AchievementDefinitions.DreamMaker) && completedGoals >= 10)
-            TryGrant(AchievementDefinitions.DreamMaker, user, earned, newAchievements);
+        await checkAchievements(user, earned, newAchievements);
 
         foreach (var (entity, _) in newAchievements)
             await repos.AchievementRepository.AddAsync(entity, ct);
@@ -488,7 +457,7 @@ public partial class GamificationService(
 
     private async Task SendAchievementNotification(Guid userId, AchievementDefinition achievement, string? language, CancellationToken ct)
     {
-        var isPt = language?.StartsWith("pt") == true;
+        var isPt = LocaleHelper.IsPortuguese(language);
         string name, description;
 
         if (isPt && AchievementTranslationsPt.TryGetValue(achievement.Id, out var pt))
@@ -522,7 +491,7 @@ public partial class GamificationService(
 
     private async Task SendLevelUpNotification(Guid userId, LevelDefinition newLevel, string? language, CancellationToken ct)
     {
-        var isPt = language?.StartsWith("pt") == true;
+        var isPt = LocaleHelper.IsPortuguese(language);
         var title = isPt
             ? $"Subiu de nível! Agora você está no nível {newLevel.Level}"
             : $"Level Up! You're now Level {newLevel.Level}";

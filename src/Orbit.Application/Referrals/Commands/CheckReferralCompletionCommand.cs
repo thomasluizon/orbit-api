@@ -135,7 +135,7 @@ public partial class CheckReferralCompletionCommandHandler(
 
     private async Task SendNotification(User user, bool isReferrer, CancellationToken cancellationToken)
     {
-        var isPt = user.Language?.StartsWith("pt") == true;
+        var isPt = LocaleHelper.IsPortuguese(user.Language);
 
         var (title, body) = GetNotificationContent(isReferrer, isPt, user.IsPro);
 

@@ -70,7 +70,7 @@ public partial class HandleWebhookCommandHandler(
                     break;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
             return Result.Failure("Error processing webhook event");

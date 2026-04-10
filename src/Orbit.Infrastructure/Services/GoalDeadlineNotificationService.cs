@@ -130,7 +130,7 @@ public partial class GoalDeadlineNotificationService(
 
     internal static string FormatDeadlineBody(Goal goal, int daysBefore, string lang)
     {
-        var isPt = lang.StartsWith("pt");
+        var isPt = LocaleHelper.IsPortuguese(lang);
         var progressText = $"{goal.CurrentValue}/{goal.TargetValue} {goal.Unit}";
         return daysBefore switch
         {

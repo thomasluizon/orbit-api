@@ -251,7 +251,7 @@ public partial class ReminderSchedulerService(
 
     private static string FormatReminderText(int minutesBefore, string lang)
     {
-        var isPt = lang.StartsWith("pt");
+        var isPt = LocaleHelper.IsPortuguese(lang);
         return minutesBefore switch
         {
             0 => isPt ? "Agora" : "Due now",
@@ -269,7 +269,7 @@ public partial class ReminderSchedulerService(
 
     private static string FormatScheduledReminderText(ScheduledReminderWhen when, string lang)
     {
-        var isPt = lang.StartsWith("pt");
+        var isPt = LocaleHelper.IsPortuguese(lang);
         return when switch
         {
             ScheduledReminderWhen.SameDay => isPt ? "Para hoje" : "Due today",

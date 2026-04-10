@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -73,11 +74,7 @@ public sealed partial class AiSummaryService(
         DateOnly date,
         string language)
     {
-        var languageName = language.ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var languageName = LocaleHelper.GetAiLanguageName(language);
 
         var habitSection = BuildHabitSection(scheduledHabits);
 

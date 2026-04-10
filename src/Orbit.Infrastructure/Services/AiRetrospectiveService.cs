@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -58,17 +59,12 @@ public sealed partial class AiRetrospectiveService(
         string period,
         string language)
     {
-        var languageName = language.ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var languageName = LocaleHelper.GetAiLanguageName(language);
 
-        var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = language.ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => ("Destaques", "Oportunidades Perdidas", "Tendências", "Sugestão"),
-            _ => ("Highlights", "Missed Opportunities", "Trends", "Suggestion")
-        };
+        var isPt = LocaleHelper.IsPortuguese(language);
+        var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = isPt
+            ? ("Destaques", "Oportunidades Perdidas", "Tend\u00eancias", "Sugest\u00e3o")
+            : ("Highlights", "Missed Opportunities", "Trends", "Suggestion");
 
         var totalDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
         var (habitSection, totalCompletions, totalScheduled, badHabitSlips) =
