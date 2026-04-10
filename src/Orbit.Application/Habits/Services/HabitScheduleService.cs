@@ -107,6 +107,90 @@ public static class HabitScheduleService
     }
 
     /// <summary>
+    /// Like <see cref="GetUnionScheduledDates"/> but uses each habit's CreatedAtUtc as
+    /// the earliest possible date instead of the current DueDate. This is necessary for
+    /// historical streak calculation because DueDate advances forward on each completion,
+    /// making past dates invisible to the normal schedule check.
+    /// </summary>
+    public static HashSet<DateOnly> GetUnionScheduledDatesForStreak(
+        IEnumerable<Habit> habits, DateOnly from, DateOnly to, TimeZoneInfo userTimeZone)
+    {
+        var union = new HashSet<DateOnly>();
+        foreach (var habit in habits)
+        {
+            if (habit.IsDeleted) continue;
+            if (habit.IsBadHabit) continue;
+            if (habit.IsGeneral) continue;
+            if (habit.IsFlexible) continue;
+            if (habit.FrequencyUnit is null && habit.IsCompleted) continue;
+
+            var habitStart = DateOnly.FromDateTime(
+                TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, userTimeZone));
+            var effectiveFrom = from < habitStart ? habitStart : from;
+
+            foreach (var date in GetHistoricalScheduledDates(habit, effectiveFrom, to, habitStart))
+                union.Add(date);
+        }
+        return union;
+    }
+
+    /// <summary>
+    /// Like <see cref="IsHabitDueOnDate"/> but uses a provided creation date as the
+    /// earliest anchor instead of DueDate. DueDate is still used for frequency modulo
+    /// alignment but does NOT gate historical dates.
+    /// </summary>
+    public static bool IsHabitHistoricallyDueOnDate(Habit habit, DateOnly target, DateOnly habitCreationDate)
+    {
+        if (habit.EndDate.HasValue && target > habit.EndDate.Value)
+            return false;
+
+        if (habit.IsFlexible)
+        {
+            if (habit.FrequencyUnit is null) return false;
+            return target >= habitCreationDate;
+        }
+
+        var anchor = habit.DueDate;
+        var unit = habit.FrequencyUnit;
+        var qty = habit.FrequencyQuantity ?? 1;
+
+        if (unit is null)
+            return target == habit.DueDate;
+
+        // Use creation date as floor instead of DueDate
+        if (target < habitCreationDate) return false;
+
+        if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
+            return false;
+
+        return unit switch
+        {
+            FrequencyUnit.Day => qty == 1 || TrueMod(target.DayNumber - anchor.DayNumber, qty) == 0,
+            FrequencyUnit.Week => target.DayOfWeek == anchor.DayOfWeek && TrueMod(WeekDiff(target, anchor), qty) == 0,
+            FrequencyUnit.Month => IsMonthlyMatch(target, anchor, qty),
+            FrequencyUnit.Year => IsYearlyMatch(target, anchor, qty),
+            _ => false
+        };
+    }
+
+    private static List<DateOnly> GetHistoricalScheduledDates(
+        Habit habit, DateOnly from, DateOnly to, DateOnly habitCreationDate)
+    {
+        if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
+            to = from.AddDays(AppConstants.MaxRangeDays);
+
+        var dates = new List<DateOnly>();
+        var current = from;
+        while (current <= to)
+        {
+            if (IsHabitHistoricallyDueOnDate(habit, current, habitCreationDate))
+                dates.Add(current);
+            current = current.AddDays(1);
+        }
+        return dates;
+    }
+
+    /// <summary>
     /// Checks if a recurring habit has at least one missed past occurrence (before today, no log).
     /// Used to allow logging overdue recurring habits on today's date.
     /// </summary>
