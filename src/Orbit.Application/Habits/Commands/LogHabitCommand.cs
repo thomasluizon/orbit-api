@@ -79,7 +79,7 @@ public partial class LogHabitCommandHandler(
         // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-            return await HandleUnlogAsync(habit, targetDate, cancellationToken);
+            return await HandleUnlogAsync(habit, targetDate, today, cancellationToken);
 
         return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
     }
@@ -104,7 +104,7 @@ public partial class LogHabitCommandHandler(
     }
 
     private async Task<Result<LogHabitResponse>> HandleUnlogAsync(
-        Habit habit, DateOnly targetDate, CancellationToken cancellationToken)
+        Habit habit, DateOnly targetDate, DateOnly today, CancellationToken cancellationToken)
     {
         var unlogResult = habit.Unlog(targetDate);
         if (unlogResult.IsFailure)
@@ -112,7 +112,7 @@ public partial class LogHabitCommandHandler(
 
         repos.HabitLogRepository.Remove(unlogResult.Value);
 
-        var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, targetDate, cancellationToken);
+        var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var streakState = await services.UserStreakService.RecalculateAsync(habit.UserId, cancellationToken);

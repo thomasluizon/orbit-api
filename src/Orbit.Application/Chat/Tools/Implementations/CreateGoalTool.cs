@@ -11,7 +11,7 @@ public class CreateGoalTool(
     IUnitOfWork unitOfWork) : IAiTool
 {
     public string Name => "create_goal";
-    public string Description => "Create a new goal to track progress toward a target. Goals can have a target value and unit (e.g., 'read 12 books', 'lose 5 kg'). If the user doesn't specify a target, use target_value=1 and unit='goal'. Use when user wants to track measurable long-term progress. Use type='Streak' to create a streak goal that tracks the habit's consecutive day streak.";
+    public string Description => "Create a new goal to track progress toward a target. Goals can have a target value and unit (e.g., 'read 12 books', 'lose 5 kg'). If the user doesn't specify a target, use target_value=1 and unit='goal'. Use when user wants to track measurable long-term progress. Use goal_type='Streak' to create a streak goal that tracks the habit's consecutive day streak.";
 
     public object GetParameterSchema() => new
     {

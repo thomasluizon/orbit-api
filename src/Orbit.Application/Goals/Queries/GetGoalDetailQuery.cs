@@ -47,11 +47,15 @@ public class GetGoalDetailQueryHandler(
 
             if (syncedDate is null || syncedDate < userToday)
             {
-                var primaryHabit = goal.Habits.FirstOrDefault();
-                if (primaryHabit is not null)
+                var streakHabits = goal.Habits.ToList();
+                if (streakHabits.Count > 0)
                 {
-                    var metrics = HabitMetricsCalculator.Calculate(primaryHabit, userToday);
-                    goal.SyncStreakProgress(metrics.CurrentStreak);
+                    // Use minimum streak across all linked habits so a broken streak
+                    // on any habit resets the goal (deterministic for multi-link scenarios).
+                    var minStreak = streakHabits
+                        .Select(h => HabitMetricsCalculator.Calculate(h, userToday).CurrentStreak)
+                        .Min();
+                    goal.SyncStreakProgress(minStreak);
                     await unitOfWork.SaveChangesAsync(cancellationToken);
                 }
             }
