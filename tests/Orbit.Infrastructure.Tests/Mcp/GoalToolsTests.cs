@@ -30,7 +30,7 @@ public class GoalToolsTests
     {
         var goals = new List<GoalDto>
         {
-            new(Guid.NewGuid(), "Run 100km", null, 100, 25, "km", GoalStatus.Active,
+            new(Guid.NewGuid(), "Run 100km", null, 100, 25, "km", GoalStatus.Active, GoalType.Standard,
                 null, 0, DateTime.UtcNow, null, 25m, [], "On Track")
         };
         var paginated = new PaginatedResponse<GoalDto>(goals, 1, 50, 1, 1);
@@ -72,7 +72,7 @@ public class GoalToolsTests
         var goalId = Guid.NewGuid();
         var detail = new GoalDetailDto(
             goalId, "Read 12 books", "One per month", 12, 3, "books",
-            GoalStatus.Active, new DateOnly(2026, 12, 31), 0,
+            GoalStatus.Active, GoalType.Standard, new DateOnly(2026, 12, 31), 0,
             DateTime.UtcNow, null, 25m, [], []);
 
         _mediator.Send(Arg.Any<GetGoalByIdQuery>(), Arg.Any<CancellationToken>())

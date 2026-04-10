@@ -18,6 +18,7 @@ public record GoalDto(
     decimal CurrentValue,
     string Unit,
     GoalStatus Status,
+    GoalType Type,
     DateOnly? Deadline,
     int Position,
     DateTime CreatedAtUtc,
@@ -69,7 +70,7 @@ public class GetGoalsQueryHandler(
 
     private static GoalDto MapToDto(Goal g, DateOnly userToday) => new(
         g.Id, g.Title, g.Description, g.TargetValue, g.CurrentValue,
-        g.Unit, g.Status, g.Deadline, g.Position, g.CreatedAtUtc, g.CompletedAtUtc,
+        g.Unit, g.Status, g.Type, g.Deadline, g.Position, g.CreatedAtUtc, g.CompletedAtUtc,
         g.TargetValue > 0 ? Math.Min(100, Math.Round(g.CurrentValue / g.TargetValue * 100, 1)) : 0,
         g.Habits.Select(h => new LinkedHabitDto(h.Id, h.Title)).ToList(),
         ComputeSimpleTrackingStatus(g, userToday));

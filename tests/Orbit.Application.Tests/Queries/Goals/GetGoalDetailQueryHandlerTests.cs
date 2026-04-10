@@ -11,6 +11,7 @@ public class GetGoalDetailQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetGoalDetailQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -19,7 +20,7 @@ public class GetGoalDetailQueryHandlerTests
 
     public GetGoalDetailQueryHandlerTests()
     {
-        _handler = new GetGoalDetailQueryHandler(_goalRepo, _userDateService);
+        _handler = new GetGoalDetailQueryHandler(_goalRepo, _userDateService, _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 

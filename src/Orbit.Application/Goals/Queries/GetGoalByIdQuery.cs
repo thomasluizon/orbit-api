@@ -22,6 +22,7 @@ public record GoalDetailDto(
     decimal CurrentValue,
     string Unit,
     GoalStatus Status,
+    GoalType Type,
     DateOnly? Deadline,
     int Position,
     DateTime CreatedAtUtc,
@@ -62,7 +63,7 @@ public class GetGoalByIdQueryHandler(
 
         return Result.Success(new GoalDetailDto(
             goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.CurrentValue,
-            goal.Unit, goal.Status, goal.Deadline, goal.Position, goal.CreatedAtUtc,
+            goal.Unit, goal.Status, goal.Type, goal.Deadline, goal.Position, goal.CreatedAtUtc,
             goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits));
     }
 }
