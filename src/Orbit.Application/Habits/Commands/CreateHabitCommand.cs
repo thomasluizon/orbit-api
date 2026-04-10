@@ -56,6 +56,13 @@ public partial class CreateHabitCommandHandler(
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var opts = request.Options ?? new HabitCommandOptions();
 
+        // If specific days are set, advance DueDate to the next matching day
+        if (opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
+        {
+            while (!opts.Days.Contains(dueDate.DayOfWeek))
+                dueDate = dueDate.AddDays(1);
+        }
+
         // Assign explicit Position = (max sibling root position) + 1 so new habits never enter as NULL.
         var siblings = await repos.HabitRepository.FindAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == null && !h.IsDeleted,

@@ -299,6 +299,46 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithDays_SetsDueDateToNextMatchingDay()
+    {
+        // Today is Friday 2026-03-20; Days = Saturday, Sunday
+        // DueDate should advance to Saturday 2026-03-21
+        var options = new HabitCommandOptions(
+            Days: new[] { DayOfWeek.Saturday, DayOfWeek.Sunday });
+
+        var command = new CreateHabitCommand(
+            UserId, "Weekend Habit", null, FrequencyUnit.Week, 1,
+            Options: options);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.DueDate == new DateOnly(2026, 3, 21)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithDays_IncludingToday_KeepsTodayAsDueDate()
+    {
+        // Today is Friday 2026-03-20; Days includes Friday
+        // DueDate should stay as today
+        var options = new HabitCommandOptions(
+            Days: new[] { DayOfWeek.Friday, DayOfWeek.Saturday });
+
+        var command = new CreateHabitCommand(
+            UserId, "Friday Habit", null, FrequencyUnit.Week, 1,
+            Options: options);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.DueDate == Today),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_SubHabitWithInvalidTitle_ReturnsFailure()
     {
         var command = new CreateHabitCommand(
