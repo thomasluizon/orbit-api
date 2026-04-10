@@ -19,10 +19,10 @@ public class PayGateService(
             return Result.Success();
 
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
-        var activeHabits = await habitRepository.FindAsync(
+        var activeHabitCount = await habitRepository.CountAsync(
             h => h.UserId == userId, ct);
 
-        if (activeHabits.Count + count > maxHabits)
+        if (activeHabitCount + count > maxHabits)
             return Result.PayGateFailure($"You've reached the {maxHabits} habit limit on the free plan. Upgrade to Pro for unlimited habits.");
 
         return Result.Success();

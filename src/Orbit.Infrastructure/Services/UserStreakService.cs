@@ -21,24 +21,25 @@ public class UserStreakService(
         if (user is null)
             return null;
 
+        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
         var habits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToHashSet();
 
         var completionDateSet = habitIds.Count == 0
             ? new HashSet<DateOnly>()
             : (await habitLogRepository.FindAsync(
-                l => habitIds.Contains(l.HabitId) && l.Value > 0,
+                l => habitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
                 cancellationToken))
                 .Select(log => log.Date)
                 .ToHashSet();
 
         var freezeDateSet = (await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == userId,
+            sf => sf.UserId == userId && sf.UsedOnDate >= lookbackStart,
             cancellationToken))
             .Select(freeze => freeze.UsedOnDate)
             .ToHashSet();
-
-        var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
 
         // Determine which habits contribute to the user-wide expected timeline.
         var contributingHabits = habits
@@ -54,7 +55,6 @@ public class UserStreakService(
             return CalendarFallback(user, completionDateSet, freezeDateSet);
         }
 
-        var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
         // Build expected-date timeline using historical schedule (anchored on CreatedAtUtc,
         // not DueDate) so that past dates remain visible after DueDate advances.
         var userTimeZone = user.TimeZone is not null

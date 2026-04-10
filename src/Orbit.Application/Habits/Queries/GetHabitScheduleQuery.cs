@@ -98,7 +98,26 @@ internal record ScheduleMapContext(
     DateOnly? DateTo = null,
     DateOnly? ReferenceDate = null,
     DateOnly? UserToday = null,
-    string? Search = null);
+    string? Search = null,
+    Dictionary<Guid, List<DateOnly>>? ScheduledDatesCache = null)
+{
+    /// <summary>
+    /// Returns cached scheduled dates for a habit, computing and caching on first access.
+    /// Falls back to direct computation when no cache or no date range is available.
+    /// </summary>
+    public List<DateOnly> GetScheduledDates(Habit habit)
+    {
+        if (ScheduledDatesCache is null || !DateFrom.HasValue || !DateTo.HasValue)
+            return HabitScheduleService.GetScheduledDates(habit, DateFrom ?? default, DateTo ?? default);
+
+        if (!ScheduledDatesCache.TryGetValue(habit.Id, out var dates))
+        {
+            dates = HabitScheduleService.GetScheduledDates(habit, DateFrom.Value, DateTo.Value);
+            ScheduledDatesCache[habit.Id] = dates;
+        }
+        return dates;
+    }
+}
 
 public class GetHabitScheduleQueryHandler(
     IGenericRepository<Habit> habitRepository,
@@ -193,7 +212,12 @@ public class GetHabitScheduleQueryHandler(
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
         var page = Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
 
-        var ctx = new ScheduleMapContext(lookup, DateFrom: dateFrom, DateTo: dateTo, ReferenceDate: dateFrom, UserToday: today, Search: request.Search);
+        var scheduledDatesCache = new Dictionary<Guid, List<DateOnly>>();
+        // Seed the cache with dates already computed during filtering
+        foreach (var item in filtered)
+            scheduledDatesCache[item.habit.Id] = item.scheduledDates;
+
+        var ctx = new ScheduleMapContext(lookup, DateFrom: dateFrom, DateTo: dateTo, ReferenceDate: dateFrom, UserToday: today, Search: request.Search, ScheduledDatesCache: scheduledDatesCache);
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -486,7 +510,7 @@ public class GetHabitScheduleQueryHandler(
         {
             if (child.IsCompleted) continue;
             if (ctx.DateFrom.HasValue && ctx.DateTo.HasValue
-                && HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value).Count == 0
+                && ctx.GetScheduledDates(child).Count == 0
                 && (child.IsBadHabit || child.IsFlexible || child.FrequencyUnit != null || child.DueDate < ctx.DateFrom.Value || child.DueDate > ctx.DateTo.Value))
                 continue;
             if (FuzzyMatcher.FuzzyContains(child.Title, ctx.Search!))
@@ -519,7 +543,7 @@ public class GetHabitScheduleQueryHandler(
             var df = ctx.DateFrom.Value;
             var dt = ctx.DateTo.Value;
             children = children
-                .Where(c => HabitScheduleService.GetScheduledDates(c, df, dt).Count > 0
+                .Where(c => ctx.GetScheduledDates(c).Count > 0
                     || c.IsCompleted
                     || (!c.IsCompleted && !c.IsBadHabit && !c.IsFlexible && c.DueDate < df)
                     || HasAnyDescendantDue(c.Id, ctx.ChildLookup, df, dt)

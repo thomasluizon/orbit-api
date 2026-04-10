@@ -62,11 +62,11 @@ public partial class CheckReferralCompletionCommandHandler(
         if (habitIds.Count == 0)
             return Result.Success();
 
-        var userLogs = await repos.HabitLogRepository.FindAsync(
+        var logCount = await repos.HabitLogRepository.CountAsync(
             l => habitIds.Contains(l.HabitId),
-            cancellationToken: cancellationToken);
+            cancellationToken);
 
-        if (userLogs.Count < AppConstants.ReferralCompletionThreshold)
+        if (logCount < AppConstants.ReferralCompletionThreshold)
             return Result.Success();
 
         trackedReferral.MarkCompleted();
