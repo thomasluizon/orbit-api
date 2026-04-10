@@ -5,6 +5,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
@@ -17,6 +18,7 @@ public record SkipHabitCommand(
 public class SkipHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
+    IGenericRepository<Goal> goalRepository,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<SkipHabitCommand, Result>
@@ -25,7 +27,7 @@ public class SkipHabitCommandHandler(
     {
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs),
+            q => q.Include(h => h.Logs).Include(h => h.Goals),
             cancellationToken);
 
         if (habit is null)
@@ -77,6 +79,25 @@ public class SkipHabitCommandHandler(
         else
         {
             habit.AdvanceDueDate(targetDate);
+        }
+
+        // Sync streak goals linked to this habit
+        if (habit.Goals.Count > 0)
+        {
+            var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
+            var trackedGoals = await goalRepository.FindTrackedAsync(
+                g => goalIds.Contains(g.Id), cancellationToken);
+
+            var streakGoals = trackedGoals
+                .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
+                .ToList();
+
+            if (streakGoals.Count > 0)
+            {
+                var metrics = HabitMetricsCalculator.Calculate(habit, today);
+                foreach (var streakGoal in streakGoals)
+                    streakGoal.SyncStreakProgress(metrics.CurrentStreak);
+            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

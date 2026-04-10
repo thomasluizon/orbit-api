@@ -7,7 +7,9 @@ using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Habits.Commands;
 
@@ -77,7 +79,7 @@ public partial class LogHabitCommandHandler(
         // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-            return await HandleUnlogAsync(habit, targetDate, cancellationToken);
+            return await HandleUnlogAsync(habit, targetDate, today, cancellationToken);
 
         return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
     }
@@ -102,7 +104,7 @@ public partial class LogHabitCommandHandler(
     }
 
     private async Task<Result<LogHabitResponse>> HandleUnlogAsync(
-        Habit habit, DateOnly targetDate, CancellationToken cancellationToken)
+        Habit habit, DateOnly targetDate, DateOnly today, CancellationToken cancellationToken)
     {
         var unlogResult = habit.Unlog(targetDate);
         if (unlogResult.IsFailure)
@@ -110,7 +112,7 @@ public partial class LogHabitCommandHandler(
 
         repos.HabitLogRepository.Remove(unlogResult.Value);
 
-        var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, cancellationToken);
+        var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var streakState = await services.UserStreakService.RecalculateAsync(habit.UserId, cancellationToken);
@@ -140,7 +142,7 @@ public partial class LogHabitCommandHandler(
 
         await repos.HabitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
-        var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, cancellationToken);
+        var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
@@ -187,7 +189,7 @@ public partial class LogHabitCommandHandler(
         }
     }
 
-    private async Task<IReadOnlyList<LinkedGoalUpdate>?> UpdateLinkedGoalProgress(Habit habit, decimal delta, CancellationToken ct)
+    private async Task<IReadOnlyList<LinkedGoalUpdate>?> UpdateLinkedGoalProgress(Habit habit, decimal delta, DateOnly today, CancellationToken ct)
     {
         if (habit.Goals.Count == 0) return null;
 
@@ -197,12 +199,24 @@ public partial class LogHabitCommandHandler(
         var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id), ct);
 
+        HabitMetrics? metrics = null;
+
         var updates = new List<LinkedGoalUpdate>();
         foreach (var trackedGoal in trackedGoals)
         {
-            var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
-            trackedGoal.UpdateProgress(newValue);
-            updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, newValue, trackedGoal.TargetValue));
+            if (trackedGoal.Type == GoalType.Streak && trackedGoal.Status == GoalStatus.Active)
+            {
+                // Compute streak lazily (once per call) since all streak goals share the same habit
+                metrics ??= HabitMetricsCalculator.Calculate(habit, today);
+                trackedGoal.SyncStreakProgress(metrics.CurrentStreak);
+                updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, metrics.CurrentStreak, trackedGoal.TargetValue));
+            }
+            else if (trackedGoal.Status == GoalStatus.Active)
+            {
+                var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
+                trackedGoal.UpdateProgress(newValue);
+                updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, newValue, trackedGoal.TargetValue));
+            }
         }
 
         return updates;

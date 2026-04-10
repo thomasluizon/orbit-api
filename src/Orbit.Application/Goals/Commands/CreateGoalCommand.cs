@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Goals.Commands;
@@ -14,7 +15,8 @@ public record CreateGoalCommand(
     decimal TargetValue,
     string Unit,
     DateOnly? Deadline,
-    int Position = 0) : IRequest<Result<Guid>>;
+    int Position = 0,
+    GoalType Type = GoalType.Standard) : IRequest<Result<Guid>>;
 
 public partial class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
@@ -36,7 +38,8 @@ public partial class CreateGoalCommandHandler(
             request.Unit,
             request.Description,
             request.Deadline,
-            request.Position);
+            request.Position,
+            request.Type);
 
         if (goalResult.IsFailure)
             return Result.Failure<Guid>(goalResult.Error);

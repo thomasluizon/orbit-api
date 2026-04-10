@@ -15,6 +15,7 @@ public class SkipHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -26,7 +27,7 @@ public class SkipHabitCommandHandlerTests
     public SkipHabitCommandHandlerTests()
     {
         _handler = new SkipHabitCommandHandler(
-            _habitRepo, _habitLogRepo, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _habitLogRepo, _goalRepo, _userDateService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);

@@ -55,9 +55,13 @@ public class UserStreakService(
         }
 
         var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-        // Build expected-date timeline from all contributing habits.
-        var expectedDates = HabitScheduleService.GetUnionScheduledDates(
-            contributingHabits, lookbackStart, userToday);
+        // Build expected-date timeline using historical schedule (anchored on CreatedAtUtc,
+        // not DueDate) so that past dates remain visible after DueDate advances.
+        var userTimeZone = user.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
+        var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
+            contributingHabits, lookbackStart, userToday, userTimeZone);
 
         // Current streak: walk backwards from today (or yesterday if today not yet logged).
         var currentStreak = 0;

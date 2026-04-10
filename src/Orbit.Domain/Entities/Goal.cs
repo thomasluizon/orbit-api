@@ -12,11 +12,13 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public decimal CurrentValue { get; private set; }
     public string Unit { get; private set; } = null!;
     public GoalStatus Status { get; private set; }
+    public GoalType Type { get; private set; }
     public DateOnly? Deadline { get; private set; }
     public int Position { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? StreakSyncedAtUtc { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
 
@@ -45,7 +47,8 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         string unit,
         string? description = null,
         DateOnly? deadline = null,
-        int position = 0)
+        int position = 0,
+        GoalType type = GoalType.Standard)
     {
         if (userId == Guid.Empty)
             return Result.Failure<Goal>("User ID is required.");
@@ -68,6 +71,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
             CurrentValue = 0,
             Unit = unit.Trim(),
             Status = GoalStatus.Active,
+            Type = type,
             Deadline = deadline,
             Position = position,
             CreatedAtUtc = DateTime.UtcNow
@@ -83,6 +87,27 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
             return Result.Failure("Progress value cannot be negative.");
 
         CurrentValue = newValue;
+
+        if (CurrentValue >= TargetValue)
+        {
+            Status = GoalStatus.Completed;
+            CompletedAtUtc = DateTime.UtcNow;
+        }
+
+        UpdatedAtUtc = DateTime.UtcNow;
+        return Result.Success();
+    }
+
+    public Result SyncStreakProgress(int currentStreak)
+    {
+        if (Type != GoalType.Streak)
+            return Result.Failure("Cannot sync streak on a non-streak goal.");
+
+        if (Status != GoalStatus.Active)
+            return Result.Failure("Cannot update progress on a non-active goal.");
+
+        CurrentValue = currentStreak;
+        StreakSyncedAtUtc = DateTime.UtcNow;
 
         if (CurrentValue >= TargetValue)
         {

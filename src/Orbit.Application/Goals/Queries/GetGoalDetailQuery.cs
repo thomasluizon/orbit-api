@@ -2,8 +2,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -19,7 +21,8 @@ public record GetGoalDetailQuery(
 
 public class GetGoalDetailQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IUserDateService userDateService) : IRequestHandler<GetGoalDetailQuery, Result<GoalDetailWithMetricsResponse>>
+    IUserDateService userDateService,
+    IUnitOfWork unitOfWork) : IRequestHandler<GetGoalDetailQuery, Result<GoalDetailWithMetricsResponse>>
 {
     public async Task<Result<GoalDetailWithMetricsResponse>> Handle(GetGoalDetailQuery request, CancellationToken cancellationToken)
     {
@@ -32,6 +35,31 @@ public class GetGoalDetailQueryHandler(
 
         if (goal is null)
             return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
+        // Passive streak sync: update streak progress if this is a streak goal and hasn't been synced today
+        if (goal.Type == GoalType.Streak && goal.Status == GoalStatus.Active)
+        {
+            var syncedDate = goal.StreakSyncedAtUtc.HasValue
+                ? DateOnly.FromDateTime(goal.StreakSyncedAtUtc.Value)
+                : (DateOnly?)null;
+
+            if (syncedDate is null || syncedDate < userToday)
+            {
+                var streakHabits = goal.Habits.ToList();
+                if (streakHabits.Count > 0)
+                {
+                    // Use minimum streak across all linked habits so a broken streak
+                    // on any habit resets the goal (deterministic for multi-link scenarios).
+                    var minStreak = streakHabits
+                        .Select(h => HabitMetricsCalculator.Calculate(h, userToday).CurrentStreak)
+                        .Min();
+                    goal.SyncStreakProgress(minStreak);
+                    await unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+            }
+        }
 
         // Build detail DTO (same as GetGoalByIdQueryHandler)
         var progressPercentage = goal.TargetValue > 0
@@ -49,13 +77,12 @@ public class GetGoalDetailQueryHandler(
 
         var detail = new GoalDetailDto(
             goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.CurrentValue,
-            goal.Unit, goal.Status, goal.Deadline, goal.Position, goal.CreatedAtUtc,
+            goal.Unit, goal.Status, goal.Type, goal.Deadline, goal.Position, goal.CreatedAtUtc,
             goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits);
 
         // Build metrics
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var metrics = GoalMetricsCalculator.Calculate(goal, userToday);
+        var goalMetrics = GoalMetricsCalculator.Calculate(goal, userToday);
 
-        return Result.Success(new GoalDetailWithMetricsResponse(detail, metrics));
+        return Result.Success(new GoalDetailWithMetricsResponse(detail, goalMetrics));
     }
 }

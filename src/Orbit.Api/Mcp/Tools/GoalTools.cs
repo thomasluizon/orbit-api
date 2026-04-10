@@ -52,16 +52,22 @@ public class GoalTools(IMediator mediator)
         [Description("Unit of measurement (e.g., km, books, hours)")] string unit,
         [Description("Optional description")] string? description = null,
         [Description("Optional deadline in YYYY-MM-DD format")] string? deadline = null,
+        [Description("Goal type: Standard (default) or Streak")] string type = "Standard",
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
+        var goalType = Enum.TryParse<GoalType>(type, ignoreCase: true, out var parsedType)
+            ? parsedType
+            : GoalType.Standard;
+
         var command = new CreateGoalCommand(
             userId,
             title,
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null);
+            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null,
+            Type: goalType);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
