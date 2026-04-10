@@ -12,7 +12,8 @@ namespace Orbit.Application.Habits.Commands;
 
 public record BulkCreateHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkHabitItem> Habits) : IRequest<Result<BulkCreateResult>>;
+    IReadOnlyList<BulkHabitItem> Habits,
+    bool FromSyncReview = false) : IRequest<Result<BulkCreateResult>>;
 
 public record BulkHabitItem(
     string Title,
@@ -31,7 +32,8 @@ public record BulkHabitItem(
     DateOnly? EndDate = null,
     bool IsFlexible = false,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
-    IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+    IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+    string? GoogleEventId = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -47,6 +49,7 @@ public enum BulkItemStatus { Success, Failed }
 
 public partial class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
     IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
@@ -95,6 +98,13 @@ public partial class BulkCreateHabitsCommandHandler(
 
             // Save all successful entities and commit
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            if (request.FromSyncReview)
+            {
+                await MarkSyncSuggestionsImported(request.UserId, results, cancellationToken);
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
             await unitOfWork.CommitTransactionAsync(cancellationToken);
         }
         catch
@@ -131,7 +141,8 @@ public partial class BulkCreateHabitsCommandHandler(
                 IsFlexible: item.IsFlexible,
                 ScheduledReminders: item.ScheduledReminders,
                 ChecklistItems: item.ChecklistItems,
-                Position: rootPosition));
+                Position: rootPosition,
+                GoogleEventId: item.GoogleEventId));
 
             if (habitResult.IsFailure)
             {
@@ -207,6 +218,44 @@ public partial class BulkCreateHabitsCommandHandler(
         if (error.Contains("days", StringComparison.OrdinalIgnoreCase))
             return "Days";
         return null;
+    }
+
+    private async Task MarkSyncSuggestionsImported(
+        Guid userId,
+        List<BulkCreateItemResult> results,
+        CancellationToken cancellationToken)
+    {
+        var createdHabitIds = results
+            .Where(r => r.Status == BulkItemStatus.Success && r.HabitId is not null)
+            .Select(r => r.HabitId!.Value)
+            .ToList();
+
+        if (createdHabitIds.Count == 0)
+            return;
+
+        // Look up which habits have GoogleEventIds and map them back to suggestions
+        var createdHabits = await habitRepository.FindAsync(
+            h => createdHabitIds.Contains(h.Id) && h.GoogleEventId != null,
+            cancellationToken);
+
+        var habitsByEventId = createdHabits
+            .Where(h => h.GoogleEventId is not null)
+            .ToDictionary(h => h.GoogleEventId!, h => h.Id);
+
+        if (habitsByEventId.Count == 0)
+            return;
+
+        var eventIds = habitsByEventId.Keys.ToList();
+        var suggestions = await suggestionRepository.FindAsync(
+            s => s.UserId == userId && eventIds.Contains(s.GoogleEventId) && s.ImportedAtUtc == null,
+            cancellationToken);
+
+        var now = DateTime.UtcNow;
+        foreach (var suggestion in suggestions)
+        {
+            if (habitsByEventId.TryGetValue(suggestion.GoogleEventId, out var habitId))
+                suggestion.MarkImported(habitId, now);
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "BulkCreate item {Index} failed")]

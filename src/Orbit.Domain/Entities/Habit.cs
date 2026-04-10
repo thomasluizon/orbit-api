@@ -26,7 +26,8 @@ public record HabitCreateParams(
     bool IsFlexible = false,
     DateOnly? EndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
-    int? Position = null);
+    int? Position = null,
+    string? GoogleEventId = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -69,6 +70,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public IReadOnlyList<ScheduledReminderTime> ScheduledReminders { get; private set; } = [];
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
+    public string? GoogleEventId { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; private set; }
@@ -140,6 +142,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             ScheduledReminders = p.ScheduledReminders ?? [],
             EndDate = p.EndDate,
             Position = p.Position,
+            GoogleEventId = p.GoogleEventId,
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -402,6 +405,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public void SetPosition(int? position)
     {
         Position = position;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Assigns or updates the Google Calendar master event ID used by auto-sync dedupe.
+    /// Used both at creation time from the sync review flow and by the one-time
+    /// reconciliation pass that backfills pre-existing manually-imported habits.
+    /// </summary>
+    public void SetGoogleEventId(string? googleEventId)
+    {
+        GoogleEventId = googleEventId;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 

@@ -6,6 +6,7 @@ using Orbit.Api.Mcp.Tools;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -29,7 +30,8 @@ public class ProfileToolsTests
             "Thomas", "thomas@example.com", "America/Sao_Paulo",
             true, true, true, "pt-BR", "Pro", true, false, null, null,
             5, 100, false, false, null, false, 1, 500, 5, "Achiever",
-            0, 10, 2, null, null);
+            0, 10, 2, null, null,
+            false, GoogleCalendarAutoSyncStatus.Idle, null);
 
         _mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(profile));

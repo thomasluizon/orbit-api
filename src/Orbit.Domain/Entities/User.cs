@@ -30,6 +30,11 @@ public partial class User : Entity
     public bool HasImportedCalendar { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
     public string? GoogleRefreshToken { get; private set; }
+    public bool GoogleCalendarAutoSyncEnabled { get; private set; }
+    public GoogleCalendarAutoSyncStatus? GoogleCalendarAutoSyncStatus { get; private set; }
+    public DateTime? GoogleCalendarLastSyncedAt { get; private set; }
+    public string? GoogleCalendarLastSyncError { get; private set; }
+    public DateTime? GoogleCalendarSyncReconciledAt { get; private set; }
     public bool IsDeactivated { get; private set; }
     public DateTime? DeactivatedAt { get; private set; }
     public DateTime? ScheduledDeletionAt { get; private set; }
@@ -186,6 +191,53 @@ public partial class User : Entity
 
     public void MarkCalendarImported() => HasImportedCalendar = true;
 
+    public Result EnableCalendarAutoSync()
+    {
+        if (!HasProAccess)
+            return Result.Failure("Upgrade to Pro to enable calendar auto-sync.", "calendar.autoSync.proRequired");
+
+        if (GoogleAccessToken is null)
+            return Result.Failure("Connect Google Calendar first.", "calendar.autoSync.notConnected");
+
+        GoogleCalendarAutoSyncEnabled = true;
+        GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.Idle;
+        GoogleCalendarLastSyncError = null;
+        return Result.Success();
+    }
+
+    public void DisableCalendarAutoSync()
+    {
+        GoogleCalendarAutoSyncEnabled = false;
+        GoogleCalendarLastSyncError = null;
+    }
+
+    public void MarkCalendarSyncReconnectRequired(string error)
+    {
+        GoogleCalendarAutoSyncEnabled = false;
+        GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.ReconnectRequired;
+        GoogleCalendarLastSyncError = error;
+        GoogleAccessToken = null;
+        GoogleRefreshToken = null;
+    }
+
+    public void MarkCalendarSyncSuccess(DateTime utcNow)
+    {
+        GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.Idle;
+        GoogleCalendarLastSyncedAt = utcNow;
+        GoogleCalendarLastSyncError = null;
+    }
+
+    public void MarkCalendarSyncTransientError(string error)
+    {
+        GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.TransientError;
+        GoogleCalendarLastSyncError = error;
+    }
+
+    public void MarkCalendarSyncReconciled(DateTime utcNow)
+    {
+        GoogleCalendarSyncReconciledAt = utcNow;
+    }
+
     public void Deactivate(DateTime scheduledDeletion)
     {
         IsDeactivated = true;
@@ -291,5 +343,10 @@ public partial class User : Entity
         HasImportedCalendar = false;
         GoogleAccessToken = null;
         GoogleRefreshToken = null;
+        GoogleCalendarAutoSyncEnabled = false;
+        GoogleCalendarAutoSyncStatus = null;
+        GoogleCalendarLastSyncedAt = null;
+        GoogleCalendarLastSyncError = null;
+        GoogleCalendarSyncReconciledAt = null;
     }
 }

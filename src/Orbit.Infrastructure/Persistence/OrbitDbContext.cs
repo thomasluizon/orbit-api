@@ -45,6 +45,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ChecklistTemplate> ChecklistTemplates => Set<ChecklistTemplate>();
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
+    public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -63,6 +64,7 @@ public class OrbitDbContext : DbContext
         ConfigureHabitEntity(modelBuilder, usePostgresArrayColumns, encConverter, nullableEncConverter);
         ConfigureHabitLogEntity(modelBuilder, nullableEncConverter);
         ConfigureUserFactEntity(modelBuilder, encConverter);
+        ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
 
         modelBuilder.Entity<Tag>(entity =>
         {
@@ -217,11 +219,46 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
 
+            entity.Property(u => u.GoogleCalendarAutoSyncStatus)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.Property(u => u.GoogleCalendarLastSyncError).HasMaxLength(500);
+
+            entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastSyncedAt })
+                .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
+
             if (nullableEncConverter is null)
                 return;
 
             entity.Property(u => u.GoogleAccessToken).HasConversion(nullableEncConverter).HasColumnType("text");
             entity.Property(u => u.GoogleRefreshToken).HasConversion(nullableEncConverter).HasColumnType("text");
+        });
+    }
+
+    private static void ConfigureGoogleCalendarSyncSuggestionEntity(
+        ModelBuilder modelBuilder,
+        EncryptionValueConverter? encConverter,
+        NullableEncryptionValueConverter? nullableEncConverter)
+    {
+        modelBuilder.Entity<GoogleCalendarSyncSuggestion>(entity =>
+        {
+            entity.HasIndex(s => s.UserId);
+            entity.HasIndex(s => new { s.UserId, s.GoogleEventId }).IsUnique();
+            entity.HasIndex(s => new { s.UserId, s.DismissedAtUtc, s.ImportedAtUtc });
+
+            entity.Property(s => s.GoogleEventId).HasMaxLength(256).IsRequired();
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            if (encConverter is null || nullableEncConverter is null)
+                return;
+
+            entity.Property(s => s.Title).HasConversion(encConverter).HasColumnType("text");
+            entity.Property(s => s.RawEventJson).HasConversion(encConverter).HasColumnType("text");
         });
     }
 
@@ -236,6 +273,11 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(h => h.UserId);
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasQueryFilter(h => !h.IsDeleted);
+
+            entity.Property(h => h.GoogleEventId).HasMaxLength(256);
+            entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
+                .HasFilter("\"GoogleEventId\" IS NOT NULL")
+                .IsUnique();
 
             entity.HasMany(h => h.Logs)
                 .WithOne()
