@@ -18,7 +18,7 @@ public class AiSlipAlertMessageServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
-    // ── GenerateFallback ──
+    // -- GenerateFallback --
 
     [Fact]
     public void GenerateFallback_English_ReturnsEnglishMessage()
@@ -66,7 +66,7 @@ public class AiSlipAlertMessageServiceTests
         result.Value.Title.Should().Contain("Doom scrolling");
     }
 
-    // ── Additional GenerateFallback tests ──
+    // -- Additional GenerateFallback tests --
 
     [Fact]
     public void GenerateFallback_English_BodyMentionsSlipping()
@@ -115,7 +115,7 @@ public class AiSlipAlertMessageServiceTests
         result.Value.Title.Should().Contain(longTitle);
     }
 
-    // ── Response parsing logic (replicating the lines-split from GenerateMessageAsync) ──
+    // -- Response parsing logic (replicating the lines-split from GenerateMessageAsync) --
 
     [Fact]
     public void ResponseParsing_TwoLines_ReturnsBothParts()
@@ -172,7 +172,7 @@ public class AiSlipAlertMessageServiceTests
         lines[1].Should().Be("Body line 1");
     }
 
-    // ── Language detection logic (replicating the prompt construction) ──
+    // -- Language detection logic (replicating the prompt construction) --
 
     [Theory]
     [InlineData("en", "English")]
@@ -194,7 +194,7 @@ public class AiSlipAlertMessageServiceTests
         languageName.Should().Be(expected);
     }
 
-    // ── Time context formatting ──
+    // -- Time context formatting --
 
     [Fact]
     public void TimeContext_WithPeakHour_IncludesTimeAndDay()
@@ -222,7 +222,64 @@ public class AiSlipAlertMessageServiceTests
         timeContext.Should().Contain("Saturdays");
     }
 
-    // ── Helpers ──
+    // -- Fallback with Portuguese variant --
+
+    [Fact]
+    public void GenerateFallback_PortugueseBR_TitleContainsFiqueAtento()
+    {
+        var result = InvokeGenerateFallback("Procrastinar", "pt-BR");
+        result.Value.Title.Should().StartWith("Fique atento:");
+    }
+
+    [Theory]
+    [InlineData("pt-br")]
+    [InlineData("pt-BR")]
+    [InlineData("PT-BR")]
+    [InlineData("pt")]
+    [InlineData("PT")]
+    public void GenerateFallback_AllPortugueseVariants_ReturnPortuguese(string lang)
+    {
+        var result = InvokeGenerateFallback("Test", lang);
+        result.Value.Title.Should().Contain("Fique atento");
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("EN")]
+    [InlineData("fr")]
+    [InlineData("de")]
+    [InlineData("ja")]
+    public void GenerateFallback_NonPortuguese_ReturnEnglish(string lang)
+    {
+        var result = InvokeGenerateFallback("Test", lang);
+        result.Value.Title.Should().Contain("Heads up");
+    }
+
+    // -- Response parsing with edge cases --
+
+    [Fact]
+    public void ResponseParsing_TrailingNewlines_TrimmedCorrectly()
+    {
+        var text = "Title here\nBody text\n\n";
+        var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        lines.Should().HaveCount(2);
+        lines[0].Should().Be("Title here");
+        lines[1].Should().Be("Body text");
+    }
+
+    [Fact]
+    public void ResponseParsing_LeadingNewlines_TrimmedCorrectly()
+    {
+        var text = "\n\nTitle\nBody";
+        var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        lines.Should().HaveCount(2);
+        lines[0].Should().Be("Title");
+        lines[1].Should().Be("Body");
+    }
+
+    // -- Helpers --
 
     private static Result<(string Title, string Body)> InvokeGenerateFallback(string habitTitle, string language)
     {
