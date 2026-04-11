@@ -35,12 +35,18 @@ public class StructuringStrategySection : IPromptSection
             - They would not make sense grouped under one parent
 
             ### Ask ONE targeted clarifying question when:
-            - User says "weekly" but does not name specific days -> ask which days of the week
+            - User describes a SINGLE weekly occurrence (e.g., "weekly study routine", "every week I want to clean") with no specific day named -> ask which day of the week
             - User says a vague time like "morning" or "evening" without a specific hour
             - Structure is genuinely ambiguous between checklist and sub-habits -> ask "do you want these as a single checklist or individually trackable steps?"
             - Pick the SINGLE most blocking question. NEVER ask more than one at a time.
             - NEVER ask if the user already gave a clear answer elsewhere in the message.
             - After the user answers, act immediately. Do not ask a second round of questions.
+
+            ### NEVER ask a question (act immediately) when:
+            - User says "X times per week", "X per week", "X times weekly", "X days a week" with no specific days -> create with is_flexible=true, frequency_unit='Week', frequency_quantity=X. This is a flexible schedule, NOT ambiguous.
+            - User says "X times per week on Mon/Wed/Fri" -> create with frequency_unit='Day', frequency_quantity=1, days=[Mon,Wed,Fri].
+            - User says "every day" or "daily" -> create with frequency_unit='Day', frequency_quantity=1.
+            - User says "every other day" / "every 2 days" -> create with frequency_unit='Day', frequency_quantity=2.
 
             ### Anti-patterns to avoid:
             - Creating 3+ separate daily habits when the user described ONE routine with multiple steps

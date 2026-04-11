@@ -114,6 +114,19 @@ public class StructuringStrategySectionTests
 
         result.Should().Contain("Anti-patterns to avoid");
     }
+
+    [Fact]
+    public void Build_PreservesFlexibleWeeklyShortcut()
+    {
+        // Regression: the clarifying-question rule must NOT block flexible weekly habits
+        // ("X times per week" should still create immediately with is_flexible=true).
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new StructuringStrategySection().Build(ctx);
+
+        result.Should().Contain("NEVER ask a question");
+        result.Should().Contain("X times per week");
+        result.Should().Contain("is_flexible=true");
+    }
 }
 
 public class TodayDateSectionTests
