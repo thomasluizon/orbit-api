@@ -181,9 +181,6 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.Description).HasMaxLength(500);
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
-            // TODO: Run EF migration after adding AppFeatureFlag entity and seed data:
-            //   dotnet ef migrations add AddOfflineSyncSupport --project src/Orbit.Infrastructure --startup-project src/Orbit.Api
-            //   dotnet ef database update --project src/Orbit.Infrastructure --startup-project src/Orbit.Api
             // Seed data uses anonymous types for deterministic values (required by EF Core HasData).
             entity.HasData(
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
@@ -208,7 +205,6 @@ public class OrbitDbContext : DbContext
             entity.Property(cb => cb.Key).HasMaxLength(100);
             entity.Property(cb => cb.Locale).HasMaxLength(10);
             entity.Property(cb => cb.Category).HasMaxLength(50);
-            // TODO: Run EF migration after adding ContentBlock entity
         });
     }
 
@@ -262,7 +258,7 @@ public class OrbitDbContext : DbContext
         });
     }
 
-    private void ConfigureHabitEntity(
+    private static void ConfigureHabitEntity(
         ModelBuilder modelBuilder,
         bool usePostgresArrayColumns,
         EncryptionValueConverter? encConverter,
@@ -420,12 +416,10 @@ public class OrbitDbContext : DbContext
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        foreach (var entry in ChangeTracker.Entries<ITimestamped>())
+        foreach (var entry in ChangeTracker.Entries<ITimestamped>()
+            .Where(e => e.State is EntityState.Modified or EntityState.Added))
         {
-            if (entry.State is EntityState.Modified or EntityState.Added)
-            {
-                entry.Entity.UpdatedAtUtc = now;
-            }
+            entry.Entity.UpdatedAtUtc = now;
         }
 
         return base.SaveChangesAsync(cancellationToken);

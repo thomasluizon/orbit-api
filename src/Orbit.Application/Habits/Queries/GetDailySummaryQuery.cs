@@ -41,9 +41,13 @@ public class GetDailySummaryQueryHandler(
 
         // The backend is authoritative about the user's language: prefer the persisted
         // profile language, fall back to the request-supplied value, finally English.
-        var effectiveLanguage = !string.IsNullOrWhiteSpace(user.Language)
-            ? user.Language!
-            : (!string.IsNullOrWhiteSpace(request.Language) ? request.Language : "en");
+        string effectiveLanguage;
+        if (!string.IsNullOrWhiteSpace(user.Language))
+            effectiveLanguage = user.Language!;
+        else if (!string.IsNullOrWhiteSpace(request.Language))
+            effectiveLanguage = request.Language;
+        else
+            effectiveLanguage = "en";
 
         var cacheKey = CacheKey(request.UserId, request.DateFrom, effectiveLanguage);
 

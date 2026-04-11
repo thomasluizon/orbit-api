@@ -42,28 +42,50 @@ public class SkipHabitCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         if (habit.FrequencyUnit is null)
-        {
-            // One-time task: postpone to tomorrow
-            habit.PostponeTo(today.AddDays(1));
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
-            return Result.Success();
-        }
+            return await HandleOneTimeSkip(habit, today, cancellationToken);
+
         var targetDate = request.Date ?? today;
 
-        // Validate target date
+        var validationError = ValidateSkipTarget(habit, targetDate, today);
+        if (validationError is not null)
+            return validationError;
+
+        var skipError = await ApplySkip(habit, targetDate, cancellationToken);
+        if (skipError is not null)
+            return skipError;
+
+        await SyncStreakGoals(habit, today, cancellationToken);
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+
+        return Result.Success();
+    }
+
+    private async Task<Result> HandleOneTimeSkip(Habit habit, DateOnly today, CancellationToken cancellationToken)
+    {
+        habit.PostponeTo(today.AddDays(1));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        return Result.Success();
+    }
+
+    private static Result? ValidateSkipTarget(Habit habit, DateOnly targetDate, DateOnly today)
+    {
         if (targetDate > today)
             return Result.Failure("Cannot skip a future date.");
 
-        // For flexible habits, skip means record a skip log (Value=0) to reduce the period target
-        // For regular habits, they must be due on or before the target date
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return Result.Failure("Cannot skip a habit that is not yet due.");
 
-        // Validate the habit is actually scheduled on the target date (for non-flexible)
         if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
             return Result.Failure("Habit is not scheduled on this date.");
 
+        return null;
+    }
+
+    private async Task<Result?> ApplySkip(Habit habit, DateOnly targetDate, CancellationToken cancellationToken)
+    {
         if (habit.IsFlexible)
         {
             var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
@@ -81,29 +103,25 @@ public class SkipHabitCommandHandler(
             habit.AdvanceDueDate(targetDate);
         }
 
-        // Sync streak goals linked to this habit
-        if (habit.Goals.Count > 0)
-        {
-            var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
-            var trackedGoals = await goalRepository.FindTrackedAsync(
-                g => goalIds.Contains(g.Id), cancellationToken);
+        return null;
+    }
 
-            var streakGoals = trackedGoals
-                .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
-                .ToList();
+    private async Task SyncStreakGoals(Habit habit, DateOnly today, CancellationToken cancellationToken)
+    {
+        if (habit.Goals.Count == 0) return;
 
-            if (streakGoals.Count > 0)
-            {
-                var metrics = HabitMetricsCalculator.Calculate(habit, today);
-                foreach (var streakGoal in streakGoals)
-                    streakGoal.SyncStreakProgress(metrics.CurrentStreak);
-            }
-        }
+        var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
+        var trackedGoals = await goalRepository.FindTrackedAsync(
+            g => goalIds.Contains(g.Id), cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var streakGoals = trackedGoals
+            .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
+            .ToList();
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        if (streakGoals.Count == 0) return;
 
-        return Result.Success();
+        var metrics = HabitMetricsCalculator.Calculate(habit, today);
+        foreach (var streakGoal in streakGoals)
+            streakGoal.SyncStreakProgress(metrics.CurrentStreak);
     }
 }

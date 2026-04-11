@@ -26,9 +26,10 @@ public class RunCalendarAutoSyncCommandHandlerTests
 
     public RunCalendarAutoSyncCommandHandlerTests()
     {
-        _handler = new RunCalendarAutoSyncCommandHandler(
+        var deps = new CalendarAutoSyncDependencies(
             _userRepo, _habitRepo, _suggestionRepo, _notificationRepo,
-            _tokenService, _fetcher, _unitOfWork, _timeProvider, _logger);
+            _tokenService, _fetcher, _unitOfWork);
+        _handler = new RunCalendarAutoSyncCommandHandler(deps, _timeProvider, _logger);
 
         // Default: mid-day so notifications pass quiet-hours check
         _timeProvider.SetUtcNow(new DateTime(2026, 4, 9, 14, 0, 0, DateTimeKind.Utc));
