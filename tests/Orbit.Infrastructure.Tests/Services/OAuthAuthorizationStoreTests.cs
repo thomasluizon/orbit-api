@@ -9,7 +9,11 @@ public class OAuthAuthorizationStoreTests : IDisposable
 {
     private readonly OAuthAuthorizationStore _store = new();
 
-    public void Dispose() => _store.Dispose();
+    public void Dispose()
+    {
+        _store.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private static (string codeVerifier, string codeChallenge) GeneratePkce()
     {

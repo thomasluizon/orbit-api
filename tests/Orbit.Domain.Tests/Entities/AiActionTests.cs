@@ -7,6 +7,9 @@ namespace Orbit.Domain.Tests.Entities;
 
 public class AiActionTests
 {
+    private static readonly int[] ExpectedReminderTimes = [15, 30];
+    private static readonly string[] ExpectedTagNames = ["health", "fitness"];
+
     [Fact]
     public void Default_Type_IsCreateHabit()
     {
@@ -49,13 +52,13 @@ public class AiActionTests
         action.IsBadHabit.Should().BeFalse();
         action.SlipAlertEnabled.Should().BeTrue();
         action.ReminderEnabled.Should().BeTrue();
-        action.ReminderTimes.Should().BeEquivalentTo(new[] { 15, 30 });
+        action.ReminderTimes.Should().BeEquivalentTo(ExpectedReminderTimes);
         action.DueDate.Should().Be(new DateOnly(2025, 6, 15));
         action.DueTime.Should().Be(new TimeOnly(9, 0));
         action.Note.Should().Be("Keep going!");
         action.SubHabits.Should().HaveCount(1);
         action.SuggestedSubHabits.Should().HaveCount(1);
-        action.TagNames.Should().BeEquivalentTo(new[] { "health", "fitness" });
+        action.TagNames.Should().BeEquivalentTo(ExpectedTagNames);
         action.ChecklistItems.Should().HaveCount(1);
     }
 

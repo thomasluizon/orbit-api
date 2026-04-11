@@ -25,8 +25,8 @@ public class ReorderGoalsCommandHandlerTests
     [Fact]
     public async Task Handle_ValidReorder_UpdatesPositionsAndSaves()
     {
-        var goal1 = Goal.Create(UserId, "Goal 1", 10, "units", position: 0).Value;
-        var goal2 = Goal.Create(UserId, "Goal 2", 20, "units", position: 1).Value;
+        var goal1 = Goal.Create(new Goal.CreateGoalParams(UserId, "Goal 1", 10, "units", Position: 0)).Value;
+        var goal2 = Goal.Create(new Goal.CreateGoalParams(UserId, "Goal 2", 20, "units", Position: 1)).Value;
 
         var callCount = 0;
         _goalRepo.FindOneTrackedAsync(

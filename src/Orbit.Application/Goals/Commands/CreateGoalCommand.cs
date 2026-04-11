@@ -31,7 +31,7 @@ public partial class CreateGoalCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
 
-        var goalResult = Goal.Create(
+        var goalResult = Goal.Create(new Goal.CreateGoalParams(
             request.UserId,
             request.Title,
             request.TargetValue,
@@ -39,7 +39,7 @@ public partial class CreateGoalCommandHandler(
             request.Description,
             request.Deadline,
             request.Position,
-            request.Type);
+            request.Type));
 
         if (goalResult.IsFailure)
             return Result.Failure<Guid>(goalResult.Error);

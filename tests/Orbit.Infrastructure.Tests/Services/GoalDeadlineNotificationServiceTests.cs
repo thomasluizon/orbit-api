@@ -20,12 +20,12 @@ public class GoalDeadlineNotificationServiceTests
         string unit = "km",
         DateOnly? deadline = null)
     {
-        return Goal.Create(
+        return Goal.Create(new Goal.CreateGoalParams(
             ValidUserId,
             "Run Marathon",
             targetValue,
             unit,
-            deadline: deadline ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7)).Value;
+            Deadline: deadline ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7))).Value;
     }
 
     // ── FormatDeadlineBody ──

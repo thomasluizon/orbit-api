@@ -25,7 +25,7 @@ public class GetGoalsQueryHandlerTests
 
     private static Goal CreateTestGoal(string title = "Test Goal", decimal target = 100, decimal current = 0)
     {
-        var goal = Goal.Create(UserId, title, target, "units", deadline: Today.AddDays(30)).Value;
+        var goal = Goal.Create(new Goal.CreateGoalParams(UserId, title, target, "units", Deadline: Today.AddDays(30))).Value;
         if (current > 0) goal.UpdateProgress(current);
         return goal;
     }

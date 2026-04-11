@@ -22,7 +22,7 @@ public class GetGoalByIdQueryHandlerTests
 
     private static Goal CreateTestGoal(string title = "Test Goal", decimal target = 100)
     {
-        return Goal.Create(UserId, title, target, "units", description: "A test goal").Value;
+        return Goal.Create(new Goal.CreateGoalParams(UserId, title, target, "units", "A test goal")).Value;
     }
 
     [Fact]

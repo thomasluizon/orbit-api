@@ -87,7 +87,7 @@ public class LogHabitLinkedGoalTests
     [Fact]
     public async Task Handle_WithLinkedStreakGoal_SyncsStreakProgress()
     {
-        var goal = Goal.Create(UserId, "7-day streak", 7, "days", type: GoalType.Streak).Value;
+        var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "7-day streak", 7, "days", Type: GoalType.Streak)).Value;
 
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today)).Value;

@@ -13,8 +13,13 @@ public class GoalTests
         string unit = "pages",
         DateOnly? deadline = null)
     {
-        var result = Goal.Create(ValidUserId, "Read 100 pages", targetValue, unit,
-            description: "Reading goal", deadline: deadline);
+        var result = Goal.Create(new Goal.CreateGoalParams(
+            ValidUserId,
+            "Read 100 pages",
+            targetValue,
+            unit,
+            "Reading goal",
+            deadline));
         return result.Value;
     }
 
@@ -23,8 +28,13 @@ public class GoalTests
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
-        var result = Goal.Create(ValidUserId, "Read 100 pages", 100, "pages",
-            description: "Reading goal", deadline: new DateOnly(2026, 12, 31));
+        var result = Goal.Create(new Goal.CreateGoalParams(
+            ValidUserId,
+            "Read 100 pages",
+            100,
+            "pages",
+            "Reading goal",
+            new DateOnly(2026, 12, 31)));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.UserId.Should().Be(ValidUserId);
@@ -124,7 +134,12 @@ public class GoalTests
     [Fact]
     public void Create_TrimsDescription()
     {
-        var result = Goal.Create(ValidUserId, "Read", 100, "pages", description: "  My goal  ");
+        var result = Goal.Create(new Goal.CreateGoalParams(
+            ValidUserId,
+            "Read",
+            100,
+            "pages",
+            "  My goal  "));
 
         result.Value.Description.Should().Be("My goal");
     }
@@ -140,7 +155,12 @@ public class GoalTests
     [Fact]
     public void Create_NullDescription_SetsNull()
     {
-        var result = Goal.Create(ValidUserId, "Read", 100, "pages", description: null);
+        var result = Goal.Create(new Goal.CreateGoalParams(
+            ValidUserId,
+            "Read",
+            100,
+            "pages",
+            Description: null));
 
         result.Value.Description.Should().BeNull();
     }
@@ -148,7 +168,12 @@ public class GoalTests
     [Fact]
     public void Create_WithPosition_SetsPosition()
     {
-        var result = Goal.Create(ValidUserId, "Read", 100, "pages", position: 5);
+        var result = Goal.Create(new Goal.CreateGoalParams(
+            ValidUserId,
+            "Read",
+            100,
+            "pages",
+            Position: 5));
 
         result.Value.Position.Should().Be(5);
     }

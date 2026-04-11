@@ -52,45 +52,41 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     public static Result<Goal> Create(CreateGoalParams p)
     {
-        return Create(p.UserId, p.Title, p.TargetValue, p.Unit, p.Description, p.Deadline, p.Position, p.Type);
+        if (p.UserId == Guid.Empty)
+            return Result.Failure<Goal>("User ID is required.");
+
+        if (string.IsNullOrWhiteSpace(p.Title))
+            return Result.Failure<Goal>("Title is required.");
+
+        if (p.TargetValue <= 0)
+            return Result.Failure<Goal>("Target value must be greater than 0.");
+
+        if (string.IsNullOrWhiteSpace(p.Unit))
+            return Result.Failure<Goal>("Unit is required.");
+
+        return Result.Success(new Goal
+        {
+            UserId = p.UserId,
+            Title = p.Title.Trim(),
+            Description = p.Description?.Trim(),
+            TargetValue = p.TargetValue,
+            CurrentValue = 0,
+            Unit = p.Unit.Trim(),
+            Status = GoalStatus.Active,
+            Type = p.Type,
+            Deadline = p.Deadline,
+            Position = p.Position,
+            CreatedAtUtc = DateTime.UtcNow
+        });
     }
 
     public static Result<Goal> Create(
         Guid userId,
         string title,
         decimal targetValue,
-        string unit,
-        string? description = null,
-        DateOnly? deadline = null,
-        int position = 0,
-        GoalType type = GoalType.Standard)
+        string unit)
     {
-        if (userId == Guid.Empty)
-            return Result.Failure<Goal>("User ID is required.");
-
-        if (string.IsNullOrWhiteSpace(title))
-            return Result.Failure<Goal>("Title is required.");
-
-        if (targetValue <= 0)
-            return Result.Failure<Goal>("Target value must be greater than 0.");
-
-        if (string.IsNullOrWhiteSpace(unit))
-            return Result.Failure<Goal>("Unit is required.");
-
-        return Result.Success(new Goal
-        {
-            UserId = userId,
-            Title = title.Trim(),
-            Description = description?.Trim(),
-            TargetValue = targetValue,
-            CurrentValue = 0,
-            Unit = unit.Trim(),
-            Status = GoalStatus.Active,
-            Type = type,
-            Deadline = deadline,
-            Position = position,
-            CreatedAtUtc = DateTime.UtcNow
-        });
+        return Create(new CreateGoalParams(userId, title, targetValue, unit));
     }
 
     public Result UpdateProgress(decimal newValue)

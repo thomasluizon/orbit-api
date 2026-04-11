@@ -15,12 +15,12 @@ public class GoalMetricsCalculatorTests
         string unit = "km",
         DateOnly? deadline = null)
     {
-        return Goal.Create(
+        return Goal.Create(new Goal.CreateGoalParams(
             ValidUserId,
             "Test Goal",
             targetValue,
             unit,
-            deadline: deadline).Value;
+            Deadline: deadline)).Value;
     }
 
     [Fact]

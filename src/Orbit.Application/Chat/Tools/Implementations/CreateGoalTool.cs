@@ -47,7 +47,14 @@ public class CreateGoalTool(
         if (args.TryGetProperty("goal_type", out var goalTypeEl) && goalTypeEl.ValueKind == JsonValueKind.String)
             Enum.TryParse(goalTypeEl.GetString(), ignoreCase: true, out goalType);
 
-        var goalResult = Goal.Create(userId, titleEl.GetString() ?? string.Empty, targetValue, unit, description, deadline, type: goalType);
+        var goalResult = Goal.Create(new Goal.CreateGoalParams(
+            userId,
+            titleEl.GetString() ?? string.Empty,
+            targetValue,
+            unit,
+            description,
+            deadline,
+            Type: goalType));
         if (goalResult.IsFailure) return new ToolResult(false, Error: goalResult.Error);
 
         await goalRepository.AddAsync(goalResult.Value, ct);

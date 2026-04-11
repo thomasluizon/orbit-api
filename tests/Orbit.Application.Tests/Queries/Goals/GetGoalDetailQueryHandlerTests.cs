@@ -26,7 +26,7 @@ public class GetGoalDetailQueryHandlerTests
 
     private static Goal CreateTestGoal()
     {
-        return Goal.Create(UserId, "Test Goal", 100, "pages", description: "Read 100 pages").Value;
+        return Goal.Create(new Goal.CreateGoalParams(UserId, "Test Goal", 100, "pages", "Read 100 pages")).Value;
     }
 
     [Fact]
