@@ -15,6 +15,7 @@ public interface IAiIntentService
         CancellationToken cancellationToken = default);
 
     Task<Result<AiResponse>> ContinueWithToolResultsAsync(
+        AiConversationContext conversationContext,
         IReadOnlyList<AiToolCallResult> results,
         CancellationToken cancellationToken = default);
 }

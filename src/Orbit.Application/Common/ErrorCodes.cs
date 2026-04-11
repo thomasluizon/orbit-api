@@ -1,3 +1,5 @@
+using Orbit.Domain.Common;
+
 namespace Orbit.Application.Common;
 
 public static class ErrorCodes
@@ -36,6 +38,6 @@ public static class ErrorCodes
     public const string CodeExpired = "CODE_EXPIRED";
     public const string TooManyAttempts = "TOO_MANY_ATTEMPTS";
     public const string InvalidGoogleToken = "INVALID_GOOGLE_TOKEN";
-    public const string PayGate = "PAY_GATE";
+    public const string PayGate = Result.PayGateErrorCode;
     public const string InvalidSession = "INVALID_SESSION";
 }

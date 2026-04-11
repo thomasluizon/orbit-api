@@ -52,13 +52,13 @@ public class BulkSkipHabitsCommandHandler(
             {
                 results.Add(await ProcessSkipItem(i, item.HabitId, targetDate, today, habitMap, cancellationToken));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 results.Add(new BulkSkipItemResult(
                     Index: i,
                     Status: BulkItemStatus.Failed,
                     HabitId: item.HabitId,
-                    Error: ex.Message));
+                    Error: "Mutation failed"));
             }
         }
 

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
@@ -16,11 +17,7 @@ public sealed partial class AiSlipAlertMessageService(
         string language,
         CancellationToken cancellationToken = default)
     {
-        var languageName = language.ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var languageName = LocaleHelper.GetAiLanguageName(language);
 
         var timeContext = peakHour.HasValue
             ? $"They tend to slip around {peakHour.Value}:00 on {dayOfWeek}s."
@@ -62,7 +59,7 @@ public sealed partial class AiSlipAlertMessageService(
             if (lines.Length >= 2)
                 return Result.Success((lines[0], lines[1]));
 
-            var fallbackTitle = language.StartsWith("pt") ? $"Fique atento: {habitTitle}" : $"Heads up: {habitTitle}";
+            var fallbackTitle = LocaleHelper.IsPortuguese(language) ? $"Fique atento: {habitTitle}" : $"Heads up: {habitTitle}";
             return Result.Success((fallbackTitle, lines[0]));
         }
         catch (Exception ex)
@@ -74,7 +71,7 @@ public sealed partial class AiSlipAlertMessageService(
 
     private static Result<(string Title, string Body)> GenerateFallback(string habitTitle, string language)
     {
-        return language.StartsWith("pt")
+        return LocaleHelper.IsPortuguese(language)
             ? Result.Success(($"Fique atento: {habitTitle}",
                 "Você costuma deslizar por volta desse horário. Força -- você consegue!"))
             : Result.Success(($"Heads up: {habitTitle}",

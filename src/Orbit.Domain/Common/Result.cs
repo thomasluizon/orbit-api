@@ -2,6 +2,8 @@ namespace Orbit.Domain.Common;
 
 public class Result
 {
+    public const string PayGateErrorCode = "PAY_GATE";
+
     public bool IsSuccess { get; }
     public bool IsFailure => !IsSuccess;
     public string Error { get; }
@@ -26,8 +28,8 @@ public class Result
     public static Result Failure(string error, string errorCode) => new(false, error, errorCode);
     public static Result<T> Failure<T>(string error) => new(default, false, error);
     public static Result<T> Failure<T>(string error, string errorCode) => new(default, false, error, errorCode);
-    public static Result PayGateFailure(string error) => new(false, error, "PAY_GATE");
-    public static Result<T> PayGateFailure<T>(string error) => new(default, false, error, "PAY_GATE");
+    public static Result PayGateFailure(string error) => new(false, error, PayGateErrorCode);
+    public static Result<T> PayGateFailure<T>(string error) => new(default, false, error, PayGateErrorCode);
 }
 
 public class Result<T> : Result

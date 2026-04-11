@@ -139,7 +139,7 @@ public partial class VerifyCodeCommandHandler(
         {
             await mediator.Send(new ProcessReferralCodeCommand(userId, referralCode), cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogReferralProcessingFailed(logger, ex, userId);
         }
@@ -153,7 +153,7 @@ public partial class VerifyCodeCommandHandler(
             {
                 await emailService.SendWelcomeEmailAsync(email, name, language, CancellationToken.None);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 LogWelcomeEmailFailed(logger, ex, email);
             }

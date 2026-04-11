@@ -84,6 +84,7 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
@@ -104,6 +105,7 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
     }
 
     [HttpPost("logout")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout(

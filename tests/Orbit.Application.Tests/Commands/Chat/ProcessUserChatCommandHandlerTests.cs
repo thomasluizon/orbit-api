@@ -76,6 +76,12 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(payGatePass ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
     }
 
+    private static readonly AiConversationContext TestConversationContext = new()
+    {
+        Messages = new List<object>(),
+        Options = new object()
+    };
+
     private void SetupAiResponse(AiResponse response)
     {
         _aiIntentService.SendWithToolsAsync(
@@ -206,13 +212,14 @@ public class ProcessUserChatCommandHandlerTests
         var aiResponseWithTool = new AiResponse
         {
             TextMessage = null,
-            ToolCalls = [toolCall]
+            ToolCalls = [toolCall],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         // After tool execution, AI returns a final text response
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create a habit");
@@ -246,12 +253,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("delete_habit", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("delete_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Could not find that habit.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Delete my habit");
@@ -283,12 +291,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("query_habits", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("query_habits", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Here are your habits.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Show my habits");
@@ -330,12 +339,13 @@ public class ProcessUserChatCommandHandlerTests
             [
                 new AiToolCall("create_habit", "call_1", toolCallArgs),
                 new AiToolCall("log_habit", "call_2", toolCallArgs)
-            ]
+            ],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTools);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create and log habits");
@@ -369,21 +379,23 @@ public class ProcessUserChatCommandHandlerTests
         // First AI call returns tool calls
         var firstResponse = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(firstResponse);
 
         // After first tool execution, AI wants to call another tool
         var secondResponse = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_2", toolCallArgs)]
+            ToolCalls = [new AiToolCall("create_habit", "call_2", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
 
         // After second tool execution, AI produces final text
         var finalResponse = new AiResponse { TextMessage = "Created two habits!", ToolCalls = null };
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(secondResponse), Result.Success(finalResponse));
 
         var command = new ProcessUserChatCommand(UserId, "Create two habits");
@@ -404,12 +416,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("nonexistent_tool", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("nonexistent_tool", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Sorry!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Do something");
@@ -441,12 +454,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Error occurred.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create habit");
@@ -541,12 +555,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse(argsJson).RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("suggest_breakdown", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("suggest_breakdown", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Here are my suggestions.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Break down my habit");
@@ -583,13 +598,14 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var toolResponse = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_x", toolCallArgs)]
+            ToolCalls = [new AiToolCall("create_habit", "call_x", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(toolResponse);
 
         // ContinueWithToolResults always returns more tool calls (would loop forever without guard)
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(toolResponse));
 
         var command = new ProcessUserChatCommand(UserId, "Keep going");
@@ -621,12 +637,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>("Connection lost"));
 
         var command = new ProcessUserChatCommand(UserId, "Create habit");
@@ -750,12 +767,13 @@ public class ProcessUserChatCommandHandlerTests
             [
                 new AiToolCall("create_sub_habit", "call_2", toolCallArgs),
                 new AiToolCall("create_habit", "call_1", toolCallArgs)
-            ]
+            ],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTools);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create parent and child");
@@ -784,12 +802,13 @@ public class ProcessUserChatCommandHandlerTests
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
-            ToolCalls = [new AiToolCall("suggest_breakdown", "call_1", toolCallArgs)]
+            ToolCalls = [new AiToolCall("suggest_breakdown", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
         };
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Hmm.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Break it down");

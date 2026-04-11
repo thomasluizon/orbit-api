@@ -20,22 +20,26 @@ public class SendCodeCommandHandler(
         var email = request.Email.Trim().ToLowerInvariant();
         var cacheKey = $"verify:{email}";
 
-        // Test accounts: skip email, store fixed code
+        // Test accounts: skip email, store fixed code (disabled in Production)
         // Format: TEST_ACCOUNTS=email1:code1,email2:code2,...
-        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
-        if (!string.IsNullOrEmpty(testAccountsEnv))
+        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        if (!string.Equals(aspNetEnv, "Production", StringComparison.OrdinalIgnoreCase))
         {
-            foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+            if (!string.IsNullOrEmpty(testAccountsEnv))
             {
-                var parts = pair.Split(':', 2);
-                if (parts.Length == 2 && string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
+                foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    var testEntry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
-                    cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
+                    var parts = pair.Split(':', 2);
+                    if (parts.Length == 2 && string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
                     {
-                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-                    });
-                    return Result.Success();
+                        var testEntry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
+                        cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
+                        {
+                            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+                        });
+                        return Result.Success();
+                    }
                 }
             }
         }

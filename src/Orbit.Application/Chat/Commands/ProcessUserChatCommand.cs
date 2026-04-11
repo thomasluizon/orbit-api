@@ -234,7 +234,7 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         // Send results back to the AI for next iteration or final message
-        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(toolResults, cancellationToken);
+        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, cancellationToken);
         if (continueResult.IsFailure)
         {
             LogContinueWithToolResultsFailed(logger, continueResult.Error);

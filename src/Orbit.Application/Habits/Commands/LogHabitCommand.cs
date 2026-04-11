@@ -116,6 +116,7 @@ public partial class LogHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var streakState = await services.UserStreakService.RecalculateAsync(habit.UserId, cancellationToken);
+        // Streak recalculate modifies user entity; save the streak state update
         await unitOfWork.SaveChangesAsync(cancellationToken);
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 
@@ -146,9 +147,11 @@ public partial class LogHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
-
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Persist streak state changes (gamification already saved its own changes)
+        if (gamificationResult is null)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
 
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
 

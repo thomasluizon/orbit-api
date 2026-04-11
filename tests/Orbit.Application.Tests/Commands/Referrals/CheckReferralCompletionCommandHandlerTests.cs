@@ -112,19 +112,11 @@ public class CheckReferralCompletionCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habits);
 
-        // Create log instances via private constructor (only Count matters for threshold check)
-        var logs = new List<HabitLog>();
-        for (var i = 0; i < logCount; i++)
-        {
-            var log = (HabitLog)Activator.CreateInstance(typeof(HabitLog), nonPublic: true)!;
-            typeof(HabitLog).GetProperty("HabitId")!.SetValue(log, habits.First().Id);
-            logs.Add(log);
-        }
-
-        _habitLogRepo.FindAsync(
+        // CountAsync is used instead of loading all logs
+        _habitLogRepo.CountAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(logs);
+            .Returns(logCount);
     }
 
     [Fact]
@@ -250,7 +242,7 @@ public class CheckReferralCompletionCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Pending);
         // HabitLog repo should not even be queried when no habits exist
-        await _habitLogRepo.DidNotReceive().FindAsync(
+        await _habitLogRepo.DidNotReceive().CountAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>());
     }

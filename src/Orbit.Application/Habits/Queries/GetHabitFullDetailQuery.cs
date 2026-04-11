@@ -64,11 +64,10 @@ public class GetHabitFullDetailQueryHandler(
         var userTimeZone = user.TimeZone is not null
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
             : TimeZoneInfo.Utc;
-        var today = HabitMetricsCalculator.GetUserToday(user);
-        var metrics = HabitMetricsCalculator.Calculate(habit, today, userTimeZone);
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var metrics = HabitMetricsCalculator.Calculate(habit, userToday, userTimeZone);
 
         // Build logs (365-day lookback, same as GetHabitLogsQueryHandler)
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var cutoff = userToday.AddDays(-DefaultLookbackDays);
 
         var allLogs = await habitLogRepository.FindAsync(

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
@@ -17,11 +18,7 @@ public sealed partial class AiGoalReviewService(
         if (string.IsNullOrWhiteSpace(goalsContext))
             return Result.Failure<string>("No goals data provided.");
 
-        var languageName = language.ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var languageName = LocaleHelper.GetAiLanguageName(language);
 
         var prompt = $"""
             GOALS DATA:

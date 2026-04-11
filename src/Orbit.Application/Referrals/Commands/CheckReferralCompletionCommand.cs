@@ -62,11 +62,11 @@ public partial class CheckReferralCompletionCommandHandler(
         if (habitIds.Count == 0)
             return Result.Success();
 
-        var userLogs = await repos.HabitLogRepository.FindAsync(
+        var logCount = await repos.HabitLogRepository.CountAsync(
             l => habitIds.Contains(l.HabitId),
-            cancellationToken: cancellationToken);
+            cancellationToken);
 
-        if (userLogs.Count < AppConstants.ReferralCompletionThreshold)
+        if (logCount < AppConstants.ReferralCompletionThreshold)
             return Result.Success();
 
         trackedReferral.MarkCompleted();
@@ -135,7 +135,7 @@ public partial class CheckReferralCompletionCommandHandler(
 
     private async Task SendNotification(User user, bool isReferrer, CancellationToken cancellationToken)
     {
-        var isPt = user.Language?.StartsWith("pt") == true;
+        var isPt = LocaleHelper.IsPortuguese(user.Language);
 
         var (title, body) = GetNotificationContent(isReferrer, isPt, user.IsPro);
 

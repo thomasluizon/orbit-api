@@ -22,12 +22,6 @@ public sealed partial class AiIntentService(
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    /// <summary>
-    /// Conversation state maintained between SendWithToolsAsync and ContinueWithToolResultsAsync calls.
-    /// </summary>
-    private List<ChatMessage>? _conversationMessages;
-    private ChatCompletionOptions? _conversationOptions;
-
     public async Task<Result<AiResponse>> SendWithToolsAsync(
         string userMessage,
         string systemPrompt,
@@ -81,19 +75,18 @@ public sealed partial class AiIntentService(
                 options.Tools.Add(tool);
         }
 
-        // Store conversation state
-        _conversationMessages = messages;
-        _conversationOptions = options;
-
-        return await CallWithToolsAsync(cancellationToken);
+        return await CallWithToolsAsync(messages, options, cancellationToken);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
+        AiConversationContext conversationContext,
         IReadOnlyList<AiToolCallResult> results,
         CancellationToken cancellationToken = default)
     {
-        if (_conversationMessages is null)
+        if (conversationContext?.Messages is not List<ChatMessage> messages)
             return Result.Failure<AiResponse>("No active conversation. Call SendWithToolsAsync first.");
+
+        var options = (ChatCompletionOptions)conversationContext.Options;
 
         // Add tool result messages (one per result, with tool_call_id)
         foreach (var result in results)
@@ -103,17 +96,18 @@ public sealed partial class AiIntentService(
             if (result.EntityName is not null) payload["entity_name"] = result.EntityName;
             if (result.Error is not null) payload["error"] = result.Error;
 
-            _conversationMessages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
+            messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }
 
-        return await CallWithToolsAsync(cancellationToken);
+        return await CallWithToolsAsync(messages, options, cancellationToken);
     }
 
     // ───────────────────────────────────────────────────────────────
     //  Shared helpers
     // ───────────────────────────────────────────────────────────────
 
-    private async Task<Result<AiResponse>> CallWithToolsAsync(CancellationToken cancellationToken)
+    private async Task<Result<AiResponse>> CallWithToolsAsync(
+        List<ChatMessage> messages, ChatCompletionOptions options, CancellationToken cancellationToken)
     {
         try
         {
@@ -121,7 +115,7 @@ public sealed partial class AiIntentService(
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var completion = await aiClient.ChatClient.CompleteChatAsync(
-                _conversationMessages!, _conversationOptions!, cancellationToken);
+                messages, options, cancellationToken);
 
             stopwatch.Stop();
             LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
@@ -129,7 +123,7 @@ public sealed partial class AiIntentService(
             var result = completion.Value;
 
             // Append the assistant message to conversation state
-            _conversationMessages!.Add(new AssistantChatMessage(result));
+            messages.Add(new AssistantChatMessage(result));
 
             // Check if response contains tool calls
             if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
@@ -145,7 +139,8 @@ public sealed partial class AiIntentService(
                 LogAiReturnedToolCalls(logger, toolCalls.Count,
                     string.Join(", ", toolCalls.Select(tc => tc.Name)));
 
-                return Result.Success(new AiResponse { ToolCalls = toolCalls });
+                var convCtx = new AiConversationContext { Messages = messages, Options = options };
+                return Result.Success(new AiResponse { ToolCalls = toolCalls, ConversationContext = convCtx });
             }
 
             // Otherwise it's a text response
