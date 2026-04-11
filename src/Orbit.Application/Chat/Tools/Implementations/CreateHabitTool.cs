@@ -20,7 +20,7 @@ public class CreateHabitTool(
     public string Name => "create_habit";
 
     public string Description =>
-        "Create a new habit or one-time task. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. When user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
+        "Create a new habit or one-time task. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. Structure: use checklist_items for atomic sub-steps done together in one execution (shopping lists, prep lists, packing lists); use sub_habits for sub-activities that need independent tracking, streaks, or different schedules. Never list items only in the description when checklist_items would preserve them. Frequency: when user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
 
     public object GetParameterSchema() => new
     {
@@ -65,7 +65,7 @@ public class CreateHabitTool(
             checklist_items = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Inline checklist items",
+                description = "Atomic sub-steps done together in one execution of this habit. Use for shopping lists, ingredient lists, prep steps, packing lists. NOT for independently tracked activities - use sub_habits for those.",
                 items = new
                 {
                     type = JsonSchemaTypes.Object,
@@ -101,7 +101,7 @@ public class CreateHabitTool(
             sub_habits = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Inline child habits to create under this parent",
+                description = "Independently trackable child habits under this parent. Use when each sub-activity has its own schedule, streak, or time of day. NOT for atomic prep steps done together - use checklist_items on the parent for those.",
                 items = new
                 {
                     type = JsonSchemaTypes.Object,

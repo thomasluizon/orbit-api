@@ -58,6 +58,75 @@ public class GlobalRulesSectionTests
         result.Should().Contain("DUPLICATE PREVENTION");
         result.Should().Contain("ACTION-ORIENTED");
     }
+
+    [Fact]
+    public void Build_ActionOrientedRule_AllowsOneClarifyingQuestion()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().Contain("ONE targeted question");
+        result.Should().Contain("Structuring Strategy");
+    }
+}
+
+public class StructuringStrategySectionTests
+{
+    [Fact]
+    public void Order_Is250()
+    {
+        new StructuringStrategySection().Order.Should().Be(250);
+    }
+
+    [Fact]
+    public void ShouldInclude_AlwaysTrue()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        new StructuringStrategySection().ShouldInclude(ctx).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_ExplainsChecklistVsSubHabits()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new StructuringStrategySection().Build(ctx);
+
+        result.Should().Contain("Structuring Strategy");
+        result.Should().Contain("checklist_items");
+        result.Should().Contain("sub_habits");
+    }
+
+    [Fact]
+    public void Build_TeachesClarifyingQuestionPolicy()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new StructuringStrategySection().Build(ctx);
+
+        result.Should().Contain("Ask ONE targeted clarifying question");
+        result.Should().Contain("NEVER ask more than one");
+    }
+
+    [Fact]
+    public void Build_ListsAntiPatterns()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new StructuringStrategySection().Build(ctx);
+
+        result.Should().Contain("Anti-patterns to avoid");
+    }
+
+    [Fact]
+    public void Build_PreservesFlexibleWeeklyShortcut()
+    {
+        // Regression: the clarifying-question rule must NOT block flexible weekly habits
+        // ("X times per week" should still create immediately with is_flexible=true).
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new StructuringStrategySection().Build(ctx);
+
+        result.Should().Contain("NEVER ask a question");
+        result.Should().Contain("X times per week");
+        result.Should().Contain("is_flexible=true");
+    }
 }
 
 public class TodayDateSectionTests

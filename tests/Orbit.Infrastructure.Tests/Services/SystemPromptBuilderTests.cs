@@ -159,4 +159,20 @@ public class SystemPromptBuilderTests
         // Assert
         result.Should().Contain("2026-03-20");
     }
+
+    [Fact]
+    public void Build_IncludesStructuringStrategy()
+    {
+        // Arrange
+        var habits = Array.Empty<Habit>();
+        var facts = Array.Empty<UserFact>();
+
+        // Act
+        var result = BuildPrompt(habits, facts);
+
+        // Assert -- the structuring strategy section must be wired into the builder
+        result.Should().Contain("Structuring Strategy");
+        result.Should().Contain("checklist_items");
+        result.Should().Contain("sub_habits");
+    }
 }
