@@ -38,8 +38,8 @@ public partial class GamificationService(
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
         // --- Load all user habits with logs ONCE (reused across streak, volume, perfect-day, perfect-week checks) ---
-        // Limit logs to the last 90 days to avoid loading full history
-        var logCutoff = today.AddDays(-90);
+        // Limit logs to the last 400 days to cover 365-day streak achievements with buffer
+        var logCutoff = today.AddDays(-400);
         var allUserHabits = await repos.HabitRepository.FindAsync(
             h => h.UserId == userId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= logCutoff)),
