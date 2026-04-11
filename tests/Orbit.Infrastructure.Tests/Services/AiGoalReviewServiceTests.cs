@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Application.Common;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -20,54 +21,55 @@ public class AiGoalReviewServiceTests
     [Fact]
     public void LanguageMapping_English_MapsCorrectly()
     {
-        // The language mapping is inlined in the method. We can verify by
-        // testing that the prompt building does not crash for known languages.
-        // This is a smoke test for the switch expression.
-        var langMap = "en".ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var langMap = LocaleHelper.GetAiLanguageName("en");
         langMap.Should().Be("English");
     }
 
     [Fact]
     public void LanguageMapping_PortugueseBR_MapsCorrectly()
     {
-        var langMap = "pt-br".ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var langMap = LocaleHelper.GetAiLanguageName("pt-br");
         langMap.Should().Be("Brazilian Portuguese");
     }
 
     [Fact]
     public void LanguageMapping_PortugueseShort_MapsCorrectly()
     {
-        var langMap = "pt".ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var langMap = LocaleHelper.GetAiLanguageName("pt");
         langMap.Should().Be("Brazilian Portuguese");
     }
 
     [Fact]
     public void LanguageMapping_UnknownLanguage_DefaultsToEnglish()
     {
-        var langMap = "fr".ToLowerInvariant() switch
-        {
-            "pt-br" or "pt" => "Brazilian Portuguese",
-            _ => "English"
-        };
+        var langMap = LocaleHelper.GetAiLanguageName("fr");
+        langMap.Should().Be("English");
+    }
+
+    [Fact]
+    public void LanguageMapping_NullLanguage_DefaultsToEnglish()
+    {
+        var langMap = LocaleHelper.GetAiLanguageName(null);
+        langMap.Should().Be("English");
+    }
+
+    [Fact]
+    public void LanguageMapping_EmptyLanguage_DefaultsToEnglish()
+    {
+        var langMap = LocaleHelper.GetAiLanguageName("");
+        langMap.Should().Be("English");
+    }
+
+    [Fact]
+    public void LanguageMapping_WhitespaceLanguage_DefaultsToEnglish()
+    {
+        var langMap = LocaleHelper.GetAiLanguageName("   ");
         langMap.Should().Be("English");
     }
 
     [Fact]
     public void StripMarkdownFences_UsedByGoalReview_WorksCorrectly()
     {
-        // AiGoalReviewService uses AiSummaryService.StripMarkdownFences
         var input = "```\nYour goals look great!\n```";
         var result = AiSummaryService.StripMarkdownFences(input);
         result.Should().Be("Your goals look great!");
@@ -79,5 +81,45 @@ public class AiGoalReviewServiceTests
         var input = "Your fitness goal is on track. Keep it up!";
         var result = AiSummaryService.StripMarkdownFences(input);
         result.Should().Be(input);
+    }
+
+    [Fact]
+    public void StripMarkdownFences_WithLanguageTag_StripsCorrectly()
+    {
+        var input = "```json\n{\"status\": \"on_track\"}\n```";
+        var result = AiSummaryService.StripMarkdownFences(input);
+        result.Should().Be("{\"status\": \"on_track\"}");
+    }
+
+    [Fact]
+    public void StripMarkdownFences_EmptyContent_ReturnsEmpty()
+    {
+        var result = AiSummaryService.StripMarkdownFences("");
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void StripMarkdownFences_OnlyFences_ReturnsEmpty()
+    {
+        var input = "```\n```";
+        var result = AiSummaryService.StripMarkdownFences(input);
+        result.Should().BeEmpty();
+    }
+
+    // --- LocaleHelper.IsPortuguese ---
+
+    [Theory]
+    [InlineData("pt-br", true)]
+    [InlineData("pt-BR", true)]
+    [InlineData("PT-BR", true)]
+    [InlineData("pt", true)]
+    [InlineData("PT", true)]
+    [InlineData("en", false)]
+    [InlineData("fr", false)]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    public void IsPortuguese_ReturnsCorrectResult(string? language, bool expected)
+    {
+        LocaleHelper.IsPortuguese(language).Should().Be(expected);
     }
 }

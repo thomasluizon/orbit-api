@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Support.Commands;
 using Orbit.Domain.Interfaces;
 
@@ -18,58 +19,54 @@ public class SendSupportCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ValidCommand_SendsEmail()
+    public async Task Handle_ValidRequest_SendsEmailAndReturnsSuccess()
     {
-        var command = new SendSupportCommand(UserId, "John", "john@test.com", "Bug Report", "Something broke");
+        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", "Bug Report", "Something is broken");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _emailService.Received(1).SendSupportEmailAsync(
-            "John", "john@test.com", "Bug Report", "Something broke", Arg.Any<CancellationToken>());
+            "Thomas", "test@example.com", "Bug Report", "Something is broken",
+            Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_EmptySubject_ReturnsFailure()
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task Handle_EmptySubject_ReturnsFailure(string? subject)
     {
-        var command = new SendSupportCommand(UserId, "John", "john@test.com", "", "Message body");
-
+        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", subject!, "Message body");
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Subject");
+        result.Error.Should().Be(ErrorMessages.SubjectRequired);
         await _emailService.DidNotReceive().SendSupportEmailAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Handle_WhitespaceSubject_ReturnsFailure()
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task Handle_EmptyMessage_ReturnsFailure(string? message)
     {
-        var command = new SendSupportCommand(UserId, "John", "john@test.com", "   ", "Message body");
-
+        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", "Subject", message!);
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.MessageRequired);
     }
 
     [Fact]
-    public async Task Handle_EmptyMessage_ReturnsFailure()
+    public async Task Handle_EmptySubjectAndMessage_ReturnsSubjectFailureFirst()
     {
-        var command = new SendSupportCommand(UserId, "John", "john@test.com", "Subject", "");
-
+        var command = new SendSupportCommand(UserId, "Thomas", "test@example.com", "", "");
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("Message");
-    }
-
-    [Fact]
-    public async Task Handle_WhitespaceMessage_ReturnsFailure()
-    {
-        var command = new SendSupportCommand(UserId, "John", "john@test.com", "Subject", "   ");
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.SubjectRequired);
     }
 }
