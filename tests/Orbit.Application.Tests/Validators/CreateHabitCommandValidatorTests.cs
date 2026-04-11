@@ -260,4 +260,64 @@ public class CreateHabitCommandValidatorTests
         var result = _validator.TestValidate(command);
         result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
     }
+
+    [Fact]
+    public void Validate_ValidHexColor_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(Icon: "flame", Color: "#8B5CF6")
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void Validate_InvalidColorNotHex_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(Color: "red")
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Color : null);
+    }
+
+    [Fact]
+    public void Validate_ColorShortHex_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(Color: "#FFF")
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Color : null);
+    }
+
+    [Fact]
+    public void Validate_IconOver64Chars_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(Icon: new string('a', 65))
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Icon : null);
+    }
+
+    [Fact]
+    public void Validate_NullIconAndColor_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(Icon: null, Color: null)
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveAnyValidationErrors();
+    }
 }

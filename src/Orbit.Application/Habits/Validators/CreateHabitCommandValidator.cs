@@ -52,5 +52,8 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
         SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
+
+        SharedHabitRules.AddIconRules(RuleFor(x => x.Options != null ? x.Options.Icon : null));
+        SharedHabitRules.AddColorRules(RuleFor(x => x.Options != null ? x.Options.Color : null));
     }
 }

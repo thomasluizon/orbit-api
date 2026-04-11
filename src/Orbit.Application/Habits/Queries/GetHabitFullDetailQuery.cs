@@ -54,7 +54,8 @@ public class GetHabitFullDetailQueryHandler(
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
-            habit.ChecklistItems, habit.CreatedAtUtc, children);
+            habit.ChecklistItems, habit.CreatedAtUtc, children,
+            habit.Icon, habit.Color);
 
         // Build metrics
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
@@ -86,7 +87,8 @@ public class GetHabitFullDetailQueryHandler(
         c.Id, c.Title, c.Description,
         c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
         c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
-        c.Position, c.ChecklistItems, MapChildren(c));
+        c.Position, c.ChecklistItems, MapChildren(c),
+        c.Icon, c.Color);
 
     private static List<HabitChildResponse> MapChildren(Habit parent) =>
         parent.Children

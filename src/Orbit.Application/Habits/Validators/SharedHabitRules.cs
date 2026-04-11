@@ -22,6 +22,18 @@ public static class SharedHabitRules
             .WithMessage($"Checklist item text must not exceed {AppConstants.MaxChecklistItemTextLength} characters");
     }
 
+    public static void AddIconRules<T>(IRuleBuilder<T, string?> rule)
+    {
+        rule.MaximumLength(64)
+            .WithMessage("Icon must not exceed 64 characters");
+    }
+
+    public static void AddColorRules<T>(IRuleBuilder<T, string?> rule)
+    {
+        rule.Must(color => color is null || System.Text.RegularExpressions.Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$"))
+            .WithMessage("Color must be a 6-digit hex value like #8B5CF6");
+    }
+
     public static void AddFrequencyQuantityRules<T>(IRuleBuilderOptions<T, int?> rule)
     {
         rule.GreaterThan(0);

@@ -84,7 +84,9 @@ public class CreateSubHabitCommandHandler(
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
-            Position: nextPosition));
+            Position: nextPosition,
+            Icon: opts.Icon,
+            Color: opts.Color));
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);

@@ -89,7 +89,9 @@ public partial class CreateHabitCommandHandler(
             IsGeneral: request.IsGeneral,
             IsFlexible: opts.IsFlexible,
             ScheduledReminders: opts.ScheduledReminders,
-            Position: nextPosition));
+            Position: nextPosition,
+            Icon: opts.Icon,
+            Color: opts.Color));
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

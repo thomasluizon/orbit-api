@@ -28,6 +28,9 @@ public class CreateSubHabitCommandValidator : AbstractValidator<CreateSubHabitCo
 
         SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
 
+        SharedHabitRules.AddIconRules(RuleFor(x => x.Options != null ? x.Options.Icon : null));
+        SharedHabitRules.AddColorRules(RuleFor(x => x.Options != null ? x.Options.Color : null));
+
         RuleFor(x => x.TagIds)
             .Must(tags => tags is null || tags.Count <= AppConstants.MaxTagsPerHabit)
             .WithMessage($"A habit can have at most {AppConstants.MaxTagsPerHabit} tags");

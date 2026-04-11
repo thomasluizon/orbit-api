@@ -37,7 +37,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         bool IsGeneral = false,
         DateOnly? EndDate = null,
         bool IsFlexible = false,
-        IReadOnlyList<Guid>? GoalIds = null);
+        IReadOnlyList<Guid>? GoalIds = null,
+        string? Icon = null,
+        string? Color = null);
 
     public record UpdateHabitRequest(
         string Title,
@@ -58,7 +60,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         DateOnly? EndDate = null,
         bool? ClearEndDate = null,
         bool? IsFlexible = null,
-        IReadOnlyList<Guid>? GoalIds = null);
+        IReadOnlyList<Guid>? GoalIds = null,
+        string? Icon = null,
+        string? Color = null,
+        bool? ClearIcon = null,
+        bool? ClearColor = null);
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
@@ -85,7 +91,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         bool IsGeneral = false,
         DateOnly? EndDate = null,
         bool IsFlexible = false,
-        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+        string? Icon = null,
+        string? Color = null);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -133,7 +141,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         IReadOnlyList<ChecklistItem>? ChecklistItems = null,
         IReadOnlyList<Guid>? TagIds = null,
         DateOnly? EndDate = null,
-        bool IsFlexible = false);
+        bool IsFlexible = false,
+        string? Icon = null,
+        string? Color = null);
     public record LinkGoalsRequest(List<Guid> GoalIds);
 
     [HttpGet]
@@ -282,7 +292,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ChecklistItems: request.ChecklistItems,
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
-                IsFlexible: request.IsFlexible),
+                IsFlexible: request.IsFlexible,
+                Icon: request.Icon,
+                Color: request.Color),
             TagIds: request.TagIds,
             GoalIds: request.GoalIds);
 
@@ -363,7 +375,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ChecklistItems: request.ChecklistItems,
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
-                IsFlexible: request.IsFlexible),
+                IsFlexible: request.IsFlexible,
+                Icon: request.Icon,
+                Color: request.Color,
+                ClearIcon: request.ClearIcon,
+                ClearColor: request.ClearColor),
             GoalIds: request.GoalIds);
 
         var result = await mediator.Send(command, cancellationToken);
@@ -621,7 +637,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
                 ChecklistItems: request.ChecklistItems,
                 ScheduledReminders: request.ScheduledReminders,
                 EndDate: request.EndDate,
-                IsFlexible: request.IsFlexible),
+                IsFlexible: request.IsFlexible,
+                Icon: request.Icon,
+                Color: request.Color),
             TagIds: request.TagIds);
 
         var result = await mediator.Send(command, cancellationToken);
@@ -667,7 +685,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             request.EndDate,
             request.IsFlexible,
             request.ScheduledReminders,
-            request.ChecklistItems);
+            request.ChecklistItems,
+            Icon: request.Icon,
+            Color: request.Color);
     }
 
 

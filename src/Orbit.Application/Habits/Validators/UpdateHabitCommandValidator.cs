@@ -47,6 +47,8 @@ public class UpdateHabitCommandValidator : AbstractValidator<UpdateHabitCommand>
         When(x => x.Options is not null, () =>
         {
             SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options!.ScheduledReminders));
+            SharedHabitRules.AddIconRules(RuleFor(x => x.Options!.Icon));
+            SharedHabitRules.AddColorRules(RuleFor(x => x.Options!.Color));
         });
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);

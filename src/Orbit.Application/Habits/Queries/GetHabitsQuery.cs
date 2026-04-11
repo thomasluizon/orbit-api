@@ -24,7 +24,9 @@ public record HabitResponse(
     int? Position,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
-    IReadOnlyList<HabitChildResponse> Children);
+    IReadOnlyList<HabitChildResponse> Children,
+    string? Icon = null,
+    string? Color = null);
 
 public record HabitChildResponse(
     Guid Id,
@@ -43,7 +45,9 @@ public record HabitChildResponse(
     DateOnly? EndDate,
     int? Position,
     IReadOnlyList<ChecklistItem> ChecklistItems,
-    IReadOnlyList<HabitChildResponse> Children);
+    IReadOnlyList<HabitChildResponse> Children,
+    string? Icon = null,
+    string? Color = null);
 
 public record GetHabitsQuery(
     Guid UserId,
@@ -117,7 +121,9 @@ public class GetHabitsQueryHandler(
         h.Position,
         h.ChecklistItems,
         h.CreatedAtUtc,
-        MapChildren(h.Id, lookup));
+        MapChildren(h.Id, lookup),
+        h.Icon,
+        h.Color);
 
     private static List<HabitChildResponse> MapChildren(Guid parentId, ILookup<Guid?, Habit> lookup) =>
         lookup[parentId]
@@ -127,6 +133,7 @@ public class GetHabitsQueryHandler(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
                 c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
-                c.Position, c.ChecklistItems, MapChildren(c.Id, lookup)))
+                c.Position, c.ChecklistItems, MapChildren(c.Id, lookup),
+                c.Icon, c.Color))
             .ToList();
 }

@@ -29,6 +29,9 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
                 .NotNull()
                 .WithMessage("Frequency quantity is required when frequency unit is set")
                 .When(h => h.FrequencyUnit is not null);
+
+            SharedHabitRules.AddIconRules(habit.RuleFor(h => h.Icon));
+            SharedHabitRules.AddColorRules(habit.RuleFor(h => h.Color));
         });
     }
 }

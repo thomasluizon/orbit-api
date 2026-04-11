@@ -16,7 +16,9 @@ public record HabitCommandOptions(
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     DateOnly? EndDate = null,
-    bool IsFlexible = false);
+    bool IsFlexible = false,
+    string? Icon = null,
+    string? Color = null);
 
 /// <summary>
 /// Optional settings for UpdateHabitCommand. Uses nullable booleans
@@ -32,4 +34,8 @@ public record UpdateHabitCommandOptions(
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     DateOnly? EndDate = null,
-    bool? IsFlexible = null);
+    bool? IsFlexible = null,
+    string? Icon = null,
+    string? Color = null,
+    bool? ClearIcon = null,
+    bool? ClearColor = null);

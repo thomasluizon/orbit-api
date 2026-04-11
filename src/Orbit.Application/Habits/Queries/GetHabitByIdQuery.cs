@@ -29,7 +29,9 @@ public record HabitDetailResponse(
     IReadOnlyList<ScheduledReminderTime> ScheduledReminders,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
-    IReadOnlyList<HabitChildResponse> Children);
+    IReadOnlyList<HabitChildResponse> Children,
+    string? Icon = null,
+    string? Color = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -75,14 +77,17 @@ public class GetHabitByIdQueryHandler(
             habit.ScheduledReminders,
             habit.ChecklistItems,
             habit.CreatedAtUtc,
-            children));
+            children,
+            habit.Icon,
+            habit.Color));
     }
 
     private static HabitChildResponse MapChild(Habit c) => new(
         c.Id, c.Title, c.Description,
         c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
         c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
-        c.Position, c.ChecklistItems, MapChildren(c));
+        c.Position, c.ChecklistItems, MapChildren(c),
+        c.Icon, c.Color);
 
     private static List<HabitChildResponse> MapChildren(Habit parent) =>
         parent.Children

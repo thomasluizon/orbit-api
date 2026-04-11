@@ -45,7 +45,9 @@ public record HabitScheduleItem(
     int? FlexibleTarget,
     int? FlexibleCompleted,
     IReadOnlyList<HabitInstanceItem> Instances,
-    IReadOnlyList<SearchMatchField>? SearchMatches = null);
+    IReadOnlyList<SearchMatchField>? SearchMatches = null,
+    string? Icon = null,
+    string? Color = null);
 
 public record HabitScheduleChildItem(
     Guid Id,
@@ -71,7 +73,9 @@ public record HabitScheduleChildItem(
     int? FlexibleCompleted,
     bool IsLoggedInRange,
     IReadOnlyList<HabitInstanceItem> Instances,
-    IReadOnlyList<SearchMatchField>? SearchMatches = null);
+    IReadOnlyList<SearchMatchField>? SearchMatches = null,
+    string? Icon = null,
+    string? Color = null);
 
 public record GetHabitScheduleQuery(
     Guid UserId,
@@ -471,7 +475,9 @@ public class GetHabitScheduleQueryHandler(
             ctx.ChildLookup[h.Id].Any(),
             flexibleTarget, flexibleCompleted,
             instances,
-            ComputeSearchMatches(h, ctx));
+            ComputeSearchMatches(h, ctx),
+            h.Icon,
+            h.Color);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -575,7 +581,9 @@ public class GetHabitScheduleQueryHandler(
             MapChildren(c.Id, ctx),
             ctx.ChildLookup[c.Id].Any(), ft, fc, isLoggedInRange,
             instances,
-            ComputeSearchMatches(c, ctx));
+            ComputeSearchMatches(c, ctx),
+            c.Icon,
+            c.Color);
     }
 
     private static List<HabitTagItem> MapTags(Habit h) =>

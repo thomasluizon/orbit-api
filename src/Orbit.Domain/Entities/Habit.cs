@@ -27,7 +27,9 @@ public record HabitCreateParams(
     DateOnly? EndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     int? Position = null,
-    string? GoogleEventId = null);
+    string? GoogleEventId = null,
+    string? Icon = null,
+    string? Color = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -47,7 +49,11 @@ public record HabitUpdateParams(
     bool? IsFlexible = null,
     DateOnly? EndDate = null,
     bool? ClearEndDate = null,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    string? Icon = null,
+    string? Color = null,
+    bool? ClearIcon = null,
+    bool? ClearColor = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -71,6 +77,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public string? GoogleEventId { get; private set; }
+    public string? Icon { get; private set; }
+    public string? Color { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; private set; }
@@ -143,6 +151,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             EndDate = p.EndDate,
             Position = p.Position,
             GoogleEventId = p.GoogleEventId,
+            Icon = NormalizeIcon(p.Icon),
+            Color = NormalizeColor(p.Color),
             CreatedAtUtc = DateTime.UtcNow
         });
     }
@@ -394,6 +404,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             EndDate = null;
         else if (p.EndDate.HasValue)
             EndDate = p.EndDate.Value;
+
+        if (p.ClearIcon == true)
+            Icon = null;
+        else if (p.Icon is not null)
+            Icon = NormalizeIcon(p.Icon);
+
+        if (p.ClearColor == true)
+            Color = null;
+        else if (p.Color is not null)
+            Color = NormalizeColor(p.Color);
     }
 
     public void UpdateChecklist(IReadOnlyList<ChecklistItem> items)
@@ -484,6 +504,20 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return "End date must be on or after the start date.";
 
         return null;
+    }
+
+    private static string? NormalizeIcon(string? icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon))
+            return null;
+        return icon.Trim();
+    }
+
+    private static string? NormalizeColor(string? color)
+    {
+        if (string.IsNullOrWhiteSpace(color))
+            return null;
+        return color.Trim().ToLowerInvariant();
     }
 
     private static string? ValidateScheduledReminders(

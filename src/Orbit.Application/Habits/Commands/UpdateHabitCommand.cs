@@ -65,7 +65,11 @@ public class UpdateHabitCommandHandler(
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ClearEndDate: request.ClearEndDate,
-            ScheduledReminders: opts.ScheduledReminders));
+            ScheduledReminders: opts.ScheduledReminders,
+            Icon: opts.Icon,
+            Color: opts.Color,
+            ClearIcon: opts.ClearIcon,
+            ClearColor: opts.ClearColor));
 
         if (result.IsFailure)
             return result;

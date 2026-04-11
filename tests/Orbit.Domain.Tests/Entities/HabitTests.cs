@@ -1322,4 +1322,105 @@ public class HabitTests
         habit.Logs.Should().BeEmpty();
         habit.DueDate.Should().Be(originalDueDate); // Flexible unlog doesn't reset DueDate
     }
+
+    // --- Icon + Color tests ---
+
+    [Fact]
+    public void Create_WithIconAndColor_PersistsBothFields()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meditate", FrequencyUnit.Day, 1,
+            Icon: "flame", Color: "#F59E0B"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().Be("flame");
+        result.Value.Color.Should().Be("#f59e0b");
+    }
+
+    [Fact]
+    public void Create_WithNullIconAndColor_DefaultsToNull()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meditate", FrequencyUnit.Day, 1));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().BeNull();
+        result.Value.Color.Should().BeNull();
+    }
+
+    [Fact]
+    public void Create_WithWhitespaceIcon_NormalizesToNull()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meditate", FrequencyUnit.Day, 1,
+            Icon: "   ", Color: "   "));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().BeNull();
+        result.Value.Color.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_SetIconAndColor_PersistsBothFields()
+    {
+        var habit = CreateValidHabit();
+
+        habit.Update(new HabitUpdateParams(
+            "Exercise", "Daily workout",
+            FrequencyUnit.Day, 1,
+            Days: null, IsBadHabit: false, DueDate: null,
+            Icon: "dumbbell", Color: "#8B5CF6"));
+
+        habit.Icon.Should().Be("dumbbell");
+        habit.Color.Should().Be("#8b5cf6");
+    }
+
+    [Fact]
+    public void Update_ClearIcon_NullsIconButKeepsColor()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meditate", FrequencyUnit.Day, 1,
+            Icon: "flame", Color: "#F59E0B")).Value;
+
+        habit.Update(new HabitUpdateParams(
+            "Meditate", null, FrequencyUnit.Day, 1,
+            Days: null, IsBadHabit: false, DueDate: null,
+            ClearIcon: true));
+
+        habit.Icon.Should().BeNull();
+        habit.Color.Should().Be("#f59e0b");
+    }
+
+    [Fact]
+    public void Update_ClearColor_NullsColorButKeepsIcon()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meditate", FrequencyUnit.Day, 1,
+            Icon: "flame", Color: "#F59E0B")).Value;
+
+        habit.Update(new HabitUpdateParams(
+            "Meditate", null, FrequencyUnit.Day, 1,
+            Days: null, IsBadHabit: false, DueDate: null,
+            ClearColor: true));
+
+        habit.Icon.Should().Be("flame");
+        habit.Color.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_UnchangedIconAndColor_KeepsExistingValues()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meditate", FrequencyUnit.Day, 1,
+            Icon: "flame", Color: "#F59E0B")).Value;
+
+        // Update other fields without touching icon/color
+        habit.Update(new HabitUpdateParams(
+            "Meditate Updated", "new desc", FrequencyUnit.Day, 1,
+            Days: null, IsBadHabit: false, DueDate: null));
+
+        habit.Icon.Should().Be("flame");
+        habit.Color.Should().Be("#f59e0b");
+        habit.Title.Should().Be("Meditate Updated");
+    }
 }

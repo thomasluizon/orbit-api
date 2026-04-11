@@ -275,6 +275,9 @@ public class OrbitDbContext : DbContext
                 .HasFilter("\"GoogleEventId\" IS NOT NULL")
                 .IsUnique();
 
+            entity.Property(h => h.Icon).HasMaxLength(64);
+            entity.Property(h => h.Color).HasMaxLength(16);
+
             entity.HasMany(h => h.Logs)
                 .WithOne()
                 .HasForeignKey(l => l.HabitId)
