@@ -67,8 +67,8 @@ public class PayGateServiceTests
         // Trial ends in the past so user is truly free
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Habit>());
+        _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(0);
 
         // Act
         var result = await _sut.CanCreateHabits(UserId);
@@ -85,12 +85,9 @@ public class PayGateServiceTests
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        // Create 10 habits (at limit)
-        var habits = Enumerable.Range(0, 10)
-            .Select(_ => Habit.Create(new HabitCreateParams(UserId, "h", FrequencyUnit.Day, 1)).Value)
-            .ToList();
-        _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(habits);
+        // 10 habits (at limit)
+        _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(10);
 
         // Act
         var result = await _sut.CanCreateHabits(UserId);
@@ -541,11 +538,8 @@ public class PayGateServiceTests
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var habits = Enumerable.Range(0, 8)
-            .Select(_ => Habit.Create(new HabitCreateParams(UserId, "h", FrequencyUnit.Day, 1)).Value)
-            .ToList();
-        _habitRepo.FindAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(habits);
+        _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(8);
 
         // Act - trying to create 3 more (8 + 3 = 11 > 10)
         var result = await _sut.CanCreateHabits(UserId, 3);

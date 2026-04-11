@@ -24,16 +24,14 @@ public class UserStreakService(
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
-        // Push contributing-habit filters into the DB query to avoid loading all habits
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == userId && !h.IsDeleted && !h.IsBadHabit && !h.IsGeneral && !h.IsFlexible,
-            cancellationToken);
-        var habitIds = habits.Select(h => h.Id).ToHashSet();
+        // Load all habits but filter contributing habits in-memory (need all IDs for log query in calendar fallback)
+        var allHabits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
+        var allHabitIds = allHabits.Select(h => h.Id).ToHashSet();
 
-        var completionDateSet = habitIds.Count == 0
+        var completionDateSet = allHabitIds.Count == 0
             ? new HashSet<DateOnly>()
             : (await habitLogRepository.FindAsync(
-                l => habitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
+                l => allHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
                 cancellationToken))
                 .Select(log => log.Date)
                 .ToHashSet();
@@ -45,7 +43,8 @@ public class UserStreakService(
             .ToHashSet();
 
         // Determine which habits contribute to the user-wide expected timeline.
-        var contributingHabits = habits
+        var contributingHabits = allHabits
+            .Where(h => !h.IsDeleted && !h.IsBadHabit && !h.IsGeneral && !h.IsFlexible)
             .Where(h => !(h.FrequencyUnit is null && h.IsCompleted))
             .ToList();
 
