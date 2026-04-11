@@ -40,6 +40,21 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     private Goal() { }
 
+    public record CreateGoalParams(
+        Guid UserId,
+        string Title,
+        decimal TargetValue,
+        string Unit,
+        string? Description = null,
+        DateOnly? Deadline = null,
+        int Position = 0,
+        GoalType Type = GoalType.Standard);
+
+    public static Result<Goal> Create(CreateGoalParams p)
+    {
+        return Create(p.UserId, p.Title, p.TargetValue, p.Unit, p.Description, p.Deadline, p.Position, p.Type);
+    }
+
     public static Result<Goal> Create(
         Guid userId,
         string title,

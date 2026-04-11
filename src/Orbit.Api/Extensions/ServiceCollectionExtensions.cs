@@ -159,6 +159,16 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
 
+        builder.Services.AddScoped<Orbit.Application.Calendar.Commands.CalendarAutoSyncDependencies>(sp =>
+            new Orbit.Application.Calendar.Commands.CalendarAutoSyncDependencies(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoogleCalendarSyncSuggestion>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
+                sp.GetRequiredService<IGoogleTokenService>(),
+                sp.GetRequiredService<Orbit.Application.Calendar.Services.ICalendarEventFetcher>(),
+                sp.GetRequiredService<IUnitOfWork>()));
+
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatAiDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatAiDependencies(
                 sp.GetRequiredService<IAiIntentService>(),

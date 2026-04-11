@@ -160,7 +160,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var processed = 0;
         var failed = 0;
 
-        for (int i = 0; i < request.Mutations.Count; i++)
+        var mutationCount = Math.Min(request.Mutations.Count, 100);
+        for (int i = 0; i < mutationCount; i++)
         {
             var mutation = request.Mutations[i];
             try

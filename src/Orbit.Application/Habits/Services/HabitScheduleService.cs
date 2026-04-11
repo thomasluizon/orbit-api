@@ -118,11 +118,7 @@ public static class HabitScheduleService
         var union = new HashSet<DateOnly>();
         foreach (var habit in habits)
         {
-            if (habit.IsDeleted) continue;
-            if (habit.IsBadHabit) continue;
-            if (habit.IsGeneral) continue;
-            if (habit.IsFlexible) continue;
-            if (habit.FrequencyUnit is null && habit.IsCompleted) continue;
+            if (!IsStreakContributingHabit(habit)) continue;
 
             var habitStart = DateOnly.FromDateTime(
                 TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, userTimeZone));
@@ -132,6 +128,16 @@ public static class HabitScheduleService
                 union.Add(date);
         }
         return union;
+    }
+
+    private static bool IsStreakContributingHabit(Habit habit)
+    {
+        if (habit.IsDeleted) return false;
+        if (habit.IsBadHabit) return false;
+        if (habit.IsGeneral) return false;
+        if (habit.IsFlexible) return false;
+        if (habit.FrequencyUnit is null && habit.IsCompleted) return false;
+        return true;
     }
 
     /// <summary>

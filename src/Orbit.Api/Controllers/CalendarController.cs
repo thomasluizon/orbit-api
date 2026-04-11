@@ -66,7 +66,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
-    public record SetAutoSyncRequest(bool Enabled);
+    public record SetAutoSyncRequest(bool? Enabled);
 
     [HttpPut("auto-sync")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -74,7 +74,10 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> SetAutoSync([FromBody] SetAutoSyncRequest request, CancellationToken cancellationToken)
     {
-        var command = new SetCalendarAutoSyncCommand(HttpContext.GetUserId(), request.Enabled);
+        if (request.Enabled is null)
+            return BadRequest(new { error = "Enabled is required." });
+
+        var command = new SetCalendarAutoSyncCommand(HttpContext.GetUserId(), request.Enabled.Value);
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsFailure)
             return BadRequest(new { error = result.Error, code = result.ErrorCode });

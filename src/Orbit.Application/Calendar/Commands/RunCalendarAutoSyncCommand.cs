@@ -21,14 +21,17 @@ public record CalendarAutoSyncResult(
     int ReconciledHabits,
     GoogleCalendarAutoSyncStatus Status);
 
+public record CalendarAutoSyncDependencies(
+    IGenericRepository<User> UserRepository,
+    IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<GoogleCalendarSyncSuggestion> SuggestionRepository,
+    IGenericRepository<Notification> NotificationRepository,
+    IGoogleTokenService GoogleTokenService,
+    ICalendarEventFetcher EventFetcher,
+    IUnitOfWork UnitOfWork);
+
 public partial class RunCalendarAutoSyncCommandHandler(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
-    IGenericRepository<Notification> notificationRepository,
-    IGoogleTokenService googleTokenService,
-    ICalendarEventFetcher eventFetcher,
-    IUnitOfWork unitOfWork,
+    CalendarAutoSyncDependencies deps,
     TimeProvider timeProvider,
     ILogger<RunCalendarAutoSyncCommandHandler> logger)
     : IRequestHandler<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>
@@ -41,7 +44,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     public async Task<Result<CalendarAutoSyncResult>> Handle(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.FindOneTrackedAsync(
+        var user = await deps.UserRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);
 
@@ -68,7 +71,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Success(new CalendarAutoSyncResult(0, 0, user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle));
         }
 
-        var refresh = await googleTokenService.TryRefreshAsync(user, cancellationToken);
+        var refresh = await deps.GoogleTokenService.TryRefreshAsync(user, cancellationToken);
         if (refresh.Result == GoogleTokenRefreshResult.RefreshTokenInvalid)
         {
             await HandleReconnectRequired(user, refresh.ErrorCode ?? "invalid_grant", cancellationToken);
@@ -78,7 +81,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         if (refresh.Result == GoogleTokenRefreshResult.TransientFailure)
         {
             user.MarkCalendarSyncTransientError(refresh.ErrorCode ?? "refresh_failed");
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await deps.UnitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
@@ -86,7 +89,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         if (accessToken is null)
         {
             user.MarkCalendarSyncTransientError("no_access_token");
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await deps.UnitOfWork.SaveChangesAsync(cancellationToken);
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
@@ -100,13 +103,13 @@ public partial class RunCalendarAutoSyncCommandHandler(
         try
         {
             var service = CreateCalendarService(accessToken);
-            fetched = await eventFetcher.FetchAsync(service, updatedMin: null, ct);
+            fetched = await deps.EventFetcher.FetchAsync(service, updatedMin: null, ct);
         }
         catch (Google.GoogleApiException ex)
         {
             LogGoogleApiError(logger, ex, user.Id);
             user.MarkCalendarSyncTransientError("google_api_error");
-            await unitOfWork.SaveChangesAsync(ct);
+            await deps.UnitOfWork.SaveChangesAsync(ct);
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.TransientError));
         }
 
@@ -120,7 +123,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
 
         user.MarkCalendarSyncSuccess(utcNow);
-        await unitOfWork.SaveChangesAsync(ct);
+        await deps.UnitOfWork.SaveChangesAsync(ct);
 
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
     }
@@ -138,7 +141,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             eventsByKey.TryAdd(key, ev.Id);
         }
 
-        var existingHabits = await habitRepository.FindTrackedAsync(
+        var existingHabits = await deps.HabitRepository.FindTrackedAsync(
             h => h.UserId == user.Id && h.GoogleEventId == null, ct);
 
         int reconciled = 0;
@@ -164,12 +167,12 @@ public partial class RunCalendarAutoSyncCommandHandler(
     {
         if (fetched.Count == 0) return 0;
 
-        var habitEventIds = (await habitRepository.FindAsync(
+        var habitEventIds = (await deps.HabitRepository.FindAsync(
                 h => h.UserId == user.Id && h.GoogleEventId != null, ct))
             .Select(h => h.GoogleEventId!)
             .ToHashSet(StringComparer.Ordinal);
 
-        var existingSuggestionEventIds = (await suggestionRepository.FindAsync(
+        var existingSuggestionEventIds = (await deps.SuggestionRepository.FindAsync(
                 s => s.UserId == user.Id && s.ImportedAtUtc == null && s.DismissedAtUtc == null, ct))
             .Select(s => s.GoogleEventId)
             .ToHashSet(StringComparer.Ordinal);
@@ -192,7 +195,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
                 rawJson,
                 utcNow);
 
-            await suggestionRepository.AddAsync(suggestion, ct);
+            await deps.SuggestionRepository.AddAsync(suggestion, ct);
             created++;
         }
 
@@ -208,15 +211,15 @@ public partial class RunCalendarAutoSyncCommandHandler(
             "Google Calendar disconnected",
             "Auto-sync paused. Reconnect to resume.",
             url: "/calendar-sync");
-        await notificationRepository.AddAsync(notification, ct);
+        await deps.NotificationRepository.AddAsync(notification, ct);
 
-        await unitOfWork.SaveChangesAsync(ct);
+        await deps.UnitOfWork.SaveChangesAsync(ct);
     }
 
     private async Task<bool> HasRecentSuggestionNotification(Guid userId, DateTime utcNow, CancellationToken ct)
     {
         var cutoff = utcNow - NotificationRateLimitWindow;
-        return await notificationRepository.AnyAsync(
+        return await deps.NotificationRepository.AnyAsync(
             n => n.UserId == userId
                 && n.Url == "/calendar-sync?mode=review"
                 && n.CreatedAtUtc > cutoff,
@@ -233,7 +236,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             title,
             "Tap to review and import",
             url: "/calendar-sync?mode=review");
-        await notificationRepository.AddAsync(notification, ct);
+        await deps.NotificationRepository.AddAsync(notification, ct);
     }
 
     private bool IsInQuietHours(User user, DateTime utcNow)
@@ -245,7 +248,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     private static DateTime ParseStartDateUtc(CalendarEventItem ev)
     {
-        if (DateTime.TryParse(ev.StartDate, out var parsed))
+        if (DateTime.TryParse(ev.StartDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
             return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
         return DateTime.UtcNow;
     }
