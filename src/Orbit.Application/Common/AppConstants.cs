@@ -31,7 +31,11 @@ public static class AppConstants
     public const int MaxTagNameLength = 50;
     public const int MaxLanguageLength = 10;
     public const int MaxVerificationAttempts = 3;
+    public const int MaxChatMessageLength = 4000;
     public const int MaxChatHistoryLength = 50_000;
+    public const int MaxChatHistoryMessages = 40;
+    public const int MaxChatHistoryMessageLength = 4000;
+    public const int MaxAiToolResultTextLength = 12_000;
     public const int MaxCalendarRangeDays = 62;
     public const int MaxPageSize = 200;
     public const int AdRewardBonusMessages = 5;

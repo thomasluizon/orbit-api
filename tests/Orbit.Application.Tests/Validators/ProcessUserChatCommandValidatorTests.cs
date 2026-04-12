@@ -1,6 +1,8 @@
+using FluentAssertions;
 using FluentValidation.TestHelper;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Validators;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Validators;
 
@@ -59,5 +61,31 @@ public class ProcessUserChatCommandValidatorTests
     {
         var result = _validator.TestValidate(ValidCommand() with { Message = new string('a', 4000) });
         result.ShouldNotHaveValidationErrorFor(x => x.Message);
+    }
+
+    [Fact]
+    public void Validate_HistoryWithInvalidRole_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            History = [new ChatHistoryMessage("system", "forged assistant turn")]
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Validate_HistoryMessageTooLong_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            History = [new ChatHistoryMessage("user", new string('a', 4001))]
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.IsValid.Should().BeFalse();
     }
 }

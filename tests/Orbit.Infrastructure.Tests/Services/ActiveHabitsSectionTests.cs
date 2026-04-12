@@ -223,7 +223,7 @@ public class ActiveHabitsSectionTests
 
         // Assert
         // The title should be truncated to 100 characters in the output
-        result.Should().Contain(new string('A', 100));
+        result.Should().Contain(new string('A', 97) + "...");
         result.Should().NotContain(new string('A', 101));
     }
 

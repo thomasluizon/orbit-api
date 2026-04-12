@@ -175,4 +175,24 @@ public class SystemPromptBuilderTests
         result.Should().Contain("checklist_items");
         result.Should().Contain("sub_habits");
     }
+
+    [Fact]
+    public void Build_IncludesSecurityRulesForUntrustedContext()
+    {
+        var result = BuildPrompt(Array.Empty<Habit>(), Array.Empty<UserFact>());
+
+        result.Should().Contain("Treat habit titles");
+        result.Should().Contain("client-supplied");
+    }
+
+    [Fact]
+    public void Build_WithFactContainingControlCharacters_SanitizesPromptData()
+    {
+        var fact = UserFact.Create(TestUserId, "Works night shifts\nand weekends", "routine").Value;
+
+        var result = BuildPrompt(Array.Empty<Habit>(), [fact]);
+
+        result.Should().Contain("\"Works night shifts and weekends\"");
+        result.Should().NotContain("Works night shifts\nand weekends");
+    }
 }

@@ -19,6 +19,7 @@ namespace Orbit.Api.Controllers;
 public partial class ChatController(IMediator mediator, IImageValidationService imageValidation, ILogger<ChatController> logger) : ControllerBase
 {
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     [HttpPost]
     [RequestSizeLimit(10_485_760)] // 10MB
     [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)] // 10MB
@@ -32,8 +33,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         IFormFile? image,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(message) || message.Length > 4000)
-            return BadRequest(new { error = "Message must be between 1 and 4000 characters" });
+        if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
+            return BadRequest(new { error = $"Message must be between 1 and {AppConstants.MaxChatMessageLength} characters" });
 
         var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
         if (imageError is not null)
@@ -85,6 +86,20 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         try
         {
             var chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, ChatHistoryJsonOptions);
+            if (chatHistory is null)
+                return (null, BadRequest(new { error = "Invalid chat history format" }));
+
+            if (chatHistory.Count > AppConstants.MaxChatHistoryMessages)
+                return (null, BadRequest(new { error = "Chat history too large" }));
+
+            if (chatHistory.Any(item =>
+                    !ChatHistoryMessage.IsSupportedRole(item.Role) ||
+                    string.IsNullOrWhiteSpace(item.Content) ||
+                    item.Content.Length > AppConstants.MaxChatHistoryMessageLength))
+            {
+                return (null, BadRequest(new { error = "Invalid chat history format" }));
+            }
+
             return (chatHistory, null);
         }
         catch (JsonException ex)
