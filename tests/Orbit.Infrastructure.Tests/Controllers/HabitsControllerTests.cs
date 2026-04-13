@@ -332,6 +332,38 @@ public class HabitsControllerTests
     }
 
     [Fact]
+    public async Task BulkCreate_PassesSyncReviewMetadataToCommand()
+    {
+        BulkCreateHabitsCommand? captured = null;
+        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                captured = call.Arg<BulkCreateHabitsCommand>();
+                return Result.Success(new BulkCreateResult([]));
+            });
+
+        var request = new HabitsController.BulkCreateHabitsRequest(
+            [
+                new HabitsController.BulkHabitItemRequest(
+                    "Imported Event",
+                    null,
+                    null,
+                    null,
+                    DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+                    GoogleEventId: "evt_sync")
+            ],
+            FromSyncReview: true);
+
+        var result = await _controller.BulkCreate(request, CancellationToken.None);
+
+        result.Should().BeOfType<ObjectResult>();
+        captured.Should().NotBeNull();
+        captured!.FromSyncReview.Should().BeTrue();
+        captured.Habits.Should().ContainSingle();
+        captured.Habits[0].GoogleEventId.Should().Be("evt_sync");
+    }
+
+    [Fact]
     public async Task BulkCreate_PayGateFailure_Returns403()
     {
         _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())

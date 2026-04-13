@@ -66,7 +66,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
     public record SkipHabitRequest(DateOnly? Date = null);
 
-    public record BulkCreateHabitsRequest(IReadOnlyList<BulkHabitItemRequest> Habits);
+    public record BulkCreateHabitsRequest(
+        IReadOnlyList<BulkHabitItemRequest> Habits,
+        bool FromSyncReview = false);
 
     public record BulkHabitItemRequest(
         string Title,
@@ -85,7 +87,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         bool IsGeneral = false,
         DateOnly? EndDate = null,
         bool IsFlexible = false,
-        IReadOnlyList<ChecklistItem>? ChecklistItems = null);
+        IReadOnlyList<ChecklistItem>? ChecklistItems = null,
+        string? GoogleEventId = null);
 
     public record BulkDeleteHabitsRequest(IReadOnlyList<Guid> HabitIds);
 
@@ -461,7 +464,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var command = new BulkCreateHabitsCommand(
             HttpContext.GetUserId(),
-            habits);
+            habits,
+            request.FromSyncReview);
 
         var result = await mediator.Send(command, cancellationToken);
 
@@ -651,23 +655,24 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemRequest request)
     {
         return new BulkHabitItem(
-            request.Title,
-            request.Description,
-            request.FrequencyUnit,
-            request.FrequencyQuantity,
-            request.Days,
-            request.IsBadHabit,
-            request.DueDate,
-            request.DueTime,
-            request.DueEndTime,
-            request.ReminderEnabled,
-            request.ReminderTimes,
-            request.SubHabits?.Select(MapToBulkHabitItem).ToList(),
-            request.IsGeneral,
-            request.EndDate,
-            request.IsFlexible,
-            request.ScheduledReminders,
-            request.ChecklistItems);
+            Title: request.Title,
+            Description: request.Description,
+            FrequencyUnit: request.FrequencyUnit,
+            FrequencyQuantity: request.FrequencyQuantity,
+            Days: request.Days,
+            IsBadHabit: request.IsBadHabit,
+            DueDate: request.DueDate,
+            DueTime: request.DueTime,
+            DueEndTime: request.DueEndTime,
+            ReminderEnabled: request.ReminderEnabled,
+            ReminderTimes: request.ReminderTimes,
+            SubHabits: request.SubHabits?.Select(MapToBulkHabitItem).ToList(),
+            IsGeneral: request.IsGeneral,
+            EndDate: request.EndDate,
+            IsFlexible: request.IsFlexible,
+            ScheduledReminders: request.ScheduledReminders,
+            ChecklistItems: request.ChecklistItems,
+            GoogleEventId: request.GoogleEventId);
     }
 
 
