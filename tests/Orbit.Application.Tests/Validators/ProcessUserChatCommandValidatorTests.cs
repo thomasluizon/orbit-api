@@ -77,6 +77,19 @@ public class ProcessUserChatCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_HistoryWithLegacyAiRole_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            History = [new ChatHistoryMessage("ai", "assistant turn")]
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
     public void Validate_HistoryMessageTooLong_HasError()
     {
         var command = ValidCommand() with

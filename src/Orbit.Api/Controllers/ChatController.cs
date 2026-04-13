@@ -92,15 +92,22 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             if (chatHistory.Count > AppConstants.MaxChatHistoryMessages)
                 return (null, BadRequest(new { error = "Chat history too large" }));
 
-            if (chatHistory.Any(item =>
-                    !ChatHistoryMessage.IsSupportedRole(item.Role) ||
-                    string.IsNullOrWhiteSpace(item.Content) ||
-                    item.Content.Length > AppConstants.MaxChatHistoryMessageLength))
+            var normalizedHistory = new List<ChatHistoryMessage>(chatHistory.Count);
+
+            foreach (var item in chatHistory)
             {
-                return (null, BadRequest(new { error = "Invalid chat history format" }));
+                var normalizedRole = ChatHistoryMessage.NormalizeRole(item.Role);
+                if (normalizedRole is null ||
+                    string.IsNullOrWhiteSpace(item.Content) ||
+                    item.Content.Length > AppConstants.MaxChatHistoryMessageLength)
+                {
+                    return (null, BadRequest(new { error = "Invalid chat history format" }));
+                }
+
+                normalizedHistory.Add(new ChatHistoryMessage(normalizedRole, item.Content));
             }
 
-            return (chatHistory, null);
+            return (normalizedHistory, null);
         }
         catch (JsonException ex)
         {
