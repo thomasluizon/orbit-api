@@ -131,9 +131,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
     private async Task<int> ReconcileExistingHabits(
         User user, List<CalendarEventItem> fetched, DateTime utcNow, CancellationToken ct)
     {
-        if (user.GoogleCalendarSyncReconciledAt is not null)
-            return 0;
-
         var eventsByKey = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var ev in fetched)
         {

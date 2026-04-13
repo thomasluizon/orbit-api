@@ -280,6 +280,36 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Success_ReconciliationRunsAgainForHabitsStillMissingGoogleEventId()
+    {
+        var user = CreateEnabledProUser();
+        typeof(User).GetProperty("GoogleCalendarSyncReconciledAt")!
+            .SetValue(user, _timeProvider.GetUtcNow().UtcDateTime.AddDays(-1));
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var orphanHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Imported Review Event", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 10),
+            DueTime: new TimeOnly(9, 0))).Value;
+
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { orphanHabit }.AsReadOnly());
+
+        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_review", "Imported Review Event", null, "2026-04-10", "09:00", "09:30", true, null, [])
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.ReconciledHabits.Should().Be(1);
+        orphanHabit.GoogleEventId.Should().Be("evt_review");
+    }
+
+    [Fact]
     public async Task Handle_OpportunisticSkipsDedupe()
     {
         var user = CreateEnabledProUser();
