@@ -128,6 +128,10 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
         builder.Services.AddScoped<IAiTool, QueryHabitsTool>();
         builder.Services.AddScoped<IAiTool, CreateGoalTool>();
+        builder.Services.AddScoped<IAiTool, QueryGoalsTool>();
+        builder.Services.AddScoped<IAiTool, UpdateGoalTool>();
+        builder.Services.AddScoped<IAiTool, DeleteGoalTool>();
+        builder.Services.AddScoped<IAiTool, UpdateGoalStatusTool>();
         builder.Services.AddScoped<IAiTool, UpdateGoalProgressTool>();
         builder.Services.AddScoped<IAiTool, LinkHabitsToGoalTool>();
         builder.Services.AddScoped<IAiTool, GoalReviewTool>();
@@ -177,6 +181,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatDataDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatDataDependencies(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>()));

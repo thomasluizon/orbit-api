@@ -17,6 +17,7 @@ namespace Orbit.Application.Tests.Commands.Chat;
 public class ProcessUserChatCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
@@ -36,7 +37,7 @@ public class ProcessUserChatCommandHandlerTests
     {
         var toolRegistry = new AiToolRegistry(tools);
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder);
-        var dataDeps = new ChatDataDependencies(_habitRepo, _userRepo, _userFactRepo, _tagRepo);
+        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory);
 
@@ -61,6 +62,12 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<Expression<Func<UserFact, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<UserFact>().AsReadOnly());
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal>().AsReadOnly());
 
         _tagRepo.FindAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(),

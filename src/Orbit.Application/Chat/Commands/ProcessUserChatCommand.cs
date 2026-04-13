@@ -48,6 +48,7 @@ public record ChatAiDependencies(
 /// </summary>
 public record ChatDataDependencies(
     IGenericRepository<Habit> HabitRepository,
+    IGenericRepository<Goal> GoalRepository,
     IGenericRepository<User> UserRepository,
     IGenericRepository<UserFact> UserFactRepository,
     IGenericRepository<Tag> TagRepository);
@@ -85,6 +86,10 @@ public partial class ProcessUserChatCommandHandler(
             h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
             cancellationToken);
+        var activeGoals = await data.GoalRepository.FindAsync(
+            g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
+            q => q.Include(g => g.Habits),
+            cancellationToken);
 
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
@@ -111,11 +116,11 @@ public partial class ProcessUserChatCommandHandler(
         dbStopwatch.Stop();
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
 
-        // 2. Build slim system prompt (habit index only, details fetched via read tools)
+        // 2. Build slim system prompt (habit/goal indexes only, details fetched via read tools)
         var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(
             activeHabits, userFacts,
             HasImage: request.ImageData is not null,
-            UserTags: userTags, UserToday: userToday));
+            UserTags: userTags, UserToday: userToday, ActiveGoals: activeGoals));
 
         var tools = ai.ToolRegistry.GetAll();
         var toolDeclarations = tools.Select(t => (object)new
