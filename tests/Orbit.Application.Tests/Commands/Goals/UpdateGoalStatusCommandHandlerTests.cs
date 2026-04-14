@@ -15,6 +15,7 @@ namespace Orbit.Application.Tests.Commands.Goals;
 public class UpdateGoalStatusCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UpdateGoalStatusCommandHandler _handler;
@@ -25,8 +26,10 @@ public class UpdateGoalStatusCommandHandlerTests
     public UpdateGoalStatusCommandHandlerTests()
     {
         _handler = new UpdateGoalStatusCommandHandler(
-            _goalRepo, _gamificationService, _unitOfWork,
+            _goalRepo, _payGate, _gamificationService, _unitOfWork,
             Substitute.For<ILogger<UpdateGoalStatusCommandHandler>>());
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     [Fact]
@@ -178,5 +181,20 @@ public class UpdateGoalStatusCommandHandlerTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(goal);
+    }
+
+    [Fact]
+    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
+    {
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
+
+        var command = new UpdateGoalStatusCommand(UserId, GoalId, GoalStatus.Completed);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

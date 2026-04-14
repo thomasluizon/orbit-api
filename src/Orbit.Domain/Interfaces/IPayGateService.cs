@@ -30,6 +30,11 @@ public interface IPayGateService
     Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// Checks if the user can access goals (Pro-only feature).
+    /// </summary>
+    Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Checks if the user can create goals (Pro-only feature).
     /// </summary>
     Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default);

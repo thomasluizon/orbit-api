@@ -25,7 +25,7 @@ public class GetGoalReviewQueryHandler(
         GetGoalReviewQuery request,
         CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanUseRetrospective(request.UserId, cancellationToken);
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalReviewResponse>();
 

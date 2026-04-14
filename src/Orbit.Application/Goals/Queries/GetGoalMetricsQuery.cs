@@ -13,10 +13,15 @@ public record GetGoalMetricsQuery(Guid UserId, Guid GoalId) : IRequest<Result<Go
 
 public class GetGoalMetricsQueryHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUserDateService userDateService) : IRequestHandler<GetGoalMetricsQuery, Result<GoalMetrics>>
 {
     public async Task<Result<GoalMetrics>> Handle(GetGoalMetricsQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<GoalMetrics>();
+
         var logCutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-365);
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,

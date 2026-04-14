@@ -5,6 +5,19 @@ namespace Orbit.Api.Extensions;
 
 public static class ResultActionResultExtensions
 {
+    public static IActionResult ToPayGateAwareResult(this Result result, Func<IActionResult> onSuccess)
+    {
+        if (result.IsSuccess)
+            return onSuccess();
+
+        if (result.ErrorCode == Result.PayGateErrorCode)
+            return new ObjectResult(new { error = result.Error, errorCode = Result.PayGateErrorCode }) { StatusCode = 403 };
+
+        return result.ErrorCode is not null
+            ? new BadRequestObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
+            : new BadRequestObjectResult(new { error = result.Error });
+    }
+
     public static IActionResult ToPayGateAwareResult(this Result result)
     {
         if (result.IsSuccess)

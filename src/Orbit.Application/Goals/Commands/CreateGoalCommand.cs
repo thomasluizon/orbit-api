@@ -27,7 +27,7 @@ public partial class CreateGoalCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanCreateGoals(request.UserId, cancellationToken);
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
 

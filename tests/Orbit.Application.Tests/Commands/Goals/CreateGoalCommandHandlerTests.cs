@@ -25,7 +25,7 @@ public class CreateGoalCommandHandlerTests
             _goalRepo, _payGate, _gamificationService, _unitOfWork,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
-        _payGate.CanCreateGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }
 
@@ -61,7 +61,7 @@ public class CreateGoalCommandHandlerTests
     [Fact]
     public async Task Handle_PayGateLimitReached_ReturnsPayGateFailure()
     {
-        _payGate.CanCreateGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("Goals are a Pro feature"));
 
         var command = new CreateGoalCommand(UserId, "New goal", null, 10, "units", null);

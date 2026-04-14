@@ -12,6 +12,7 @@ namespace Orbit.Application.Tests.Commands.Goals;
 public class ReorderGoalsCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ReorderGoalsCommandHandler _handler;
 
@@ -19,7 +20,9 @@ public class ReorderGoalsCommandHandlerTests
 
     public ReorderGoalsCommandHandlerTests()
     {
-        _handler = new ReorderGoalsCommandHandler(_goalRepo, _unitOfWork);
+        _handler = new ReorderGoalsCommandHandler(_goalRepo, _payGate, _unitOfWork);
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     [Fact]
@@ -85,5 +88,20 @@ public class ReorderGoalsCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(ErrorMessages.GoalNotFound);
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
+    }
+
+    [Fact]
+    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
+    {
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
+
+        var command = new ReorderGoalsCommand(UserId, new List<GoalPositionUpdate>());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

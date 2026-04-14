@@ -84,7 +84,7 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default)
+    public async Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
@@ -96,6 +96,9 @@ public class PayGateService(
 
         return Result.Success();
     }
+
+    public Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default) =>
+        CanAccessGoals(userId, ct);
 
     public async Task<Result> CanCreateApiKeys(Guid userId, CancellationToken ct = default)
     {

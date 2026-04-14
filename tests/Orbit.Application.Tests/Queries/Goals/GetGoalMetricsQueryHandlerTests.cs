@@ -10,6 +10,7 @@ namespace Orbit.Application.Tests.Queries.Goals;
 public class GetGoalMetricsQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetGoalMetricsQueryHandler _handler;
 
@@ -19,7 +20,9 @@ public class GetGoalMetricsQueryHandlerTests
 
     public GetGoalMetricsQueryHandlerTests()
     {
-        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _userDateService);
+        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _payGate, _userDateService);
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
@@ -82,5 +85,19 @@ public class GetGoalMetricsQueryHandlerTests
         await _handler.Handle(query, CancellationToken.None);
 
         await _userDateService.Received(1).GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
+    {
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.PayGateFailure("Goals are a Pro feature"));
+
+        var query = new GetGoalMetricsQuery(UserId, GoalId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
     }
 }

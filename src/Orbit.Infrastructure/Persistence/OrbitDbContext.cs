@@ -249,7 +249,7 @@ public class OrbitDbContext : DbContext
                 new { Key = "ai_summary", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI daily summary", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_retrospective", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"AI retrospective analysis", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "sub_habits", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Sub-habit nesting", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new { Key = "goal_tracking", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Goal tracking with progress", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "push_notifications", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Push notification reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "scheduled_reminders", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Custom scheduled reminders", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "slip_alerts", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Slip detection alerts", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

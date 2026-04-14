@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 
 #pragma warning disable CA1873
@@ -46,6 +47,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var query = new GetGoalByIdQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
+        if (result.ErrorCode == Result.PayGateErrorCode)
+            return result.ToPayGateAwareResult(v => Ok(v));
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
@@ -57,12 +60,11 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var command = new CreateGoalCommand(HttpContext.GetUserId(), request.Title, request.Description, request.TargetValue, request.Unit, request.Deadline, Type: request.Type);
         var result = await mediator.Send(command, cancellationToken);
-        if (result.IsSuccess)
+        return result.ToPayGateAwareResult(value =>
         {
-            LogGoalCreated(logger, result.Value, HttpContext.GetUserId());
-            return CreatedAtAction(nameof(GetGoalById), new { id = result.Value }, new { id = result.Value });
-        }
-        return BadRequest(new { error = result.Error });
+            LogGoalCreated(logger, value, HttpContext.GetUserId());
+            return CreatedAtAction(nameof(GetGoalById), new { id = value }, new { id = value });
+        });
     }
 
     [HttpPut("{id:guid}")]
@@ -73,7 +75,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var command = new UpdateGoalCommand(HttpContext.GetUserId(), id, request.Title, request.Description, request.TargetValue, request.Unit, request.Deadline);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("{id:guid}/progress")]
@@ -84,7 +86,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var command = new UpdateGoalProgressCommand(HttpContext.GetUserId(), id, request.CurrentValue, request.Note);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("{id:guid}/status")]
@@ -95,7 +97,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var command = new UpdateGoalStatusCommand(HttpContext.GetUserId(), id, request.Status);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("reorder")]
@@ -107,7 +109,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var positions = request.Positions.Select(p => new GoalPositionUpdate(p.Id, p.Position)).ToList();
         var command = new ReorderGoalsCommand(HttpContext.GetUserId(), positions);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("{goalId:guid}/habits")]
@@ -121,12 +123,11 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var command = new LinkHabitsToGoalCommand(HttpContext.GetUserId(), goalId, request.HabitIds);
         var result = await mediator.Send(command, cancellationToken);
-        if (result.IsSuccess)
+        return result.ToPayGateAwareResult(() =>
         {
             LogLinkedHabitsToGoal(logger, request.HabitIds.Count, goalId, HttpContext.GetUserId());
             return NoContent();
-        }
-        return BadRequest(new { error = result.Error });
+        });
     }
 
     [HttpGet("{id:guid}/detail")]
@@ -137,6 +138,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var query = new GetGoalDetailQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
+        if (result.ErrorCode == Result.PayGateErrorCode)
+            return result.ToPayGateAwareResult(v => Ok(v));
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
@@ -148,6 +151,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var query = new GetGoalMetricsQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
+        if (result.ErrorCode == Result.PayGateErrorCode)
+            return result.ToPayGateAwareResult(v => Ok(v));
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
 
@@ -173,12 +178,11 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var command = new DeleteGoalCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-        if (result.IsSuccess)
+        return result.ToPayGateAwareResult(() =>
         {
             LogGoalDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
-        }
-        return BadRequest(new { error = result.Error });
+        });
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Goal created {GoalId} by user {UserId}")]
