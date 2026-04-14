@@ -34,24 +34,12 @@ internal static class PromptDataSanitizer
 
         foreach (var ch in normalized)
         {
-            if (char.IsControl(ch) && ch is not '\n' and not '\t')
+            if (ShouldSkipCharacter(ch))
                 continue;
 
             if (ch == '\n')
             {
-                if (!preserveLineBreaks)
-                {
-                    AppendSingleSpace(sb, ref previousWasSpace, ref previousWasNewline);
-                    continue;
-                }
-
-                if (!previousWasNewline)
-                {
-                    sb.Append('\n');
-                    previousWasNewline = true;
-                    previousWasSpace = false;
-                }
-
+                AppendNewline(sb, preserveLineBreaks, ref previousWasSpace, ref previousWasNewline);
                 continue;
             }
 
@@ -75,6 +63,31 @@ internal static class PromptDataSanitizer
             return sanitized;
 
         return sanitized[..Math.Max(0, maxLength - 3)].TrimEnd() + "...";
+    }
+
+    private static bool ShouldSkipCharacter(char ch)
+    {
+        return char.IsControl(ch) && ch is not '\n' and not '\t';
+    }
+
+    private static void AppendNewline(
+        StringBuilder sb,
+        bool preserveLineBreaks,
+        ref bool previousWasSpace,
+        ref bool previousWasNewline)
+    {
+        if (!preserveLineBreaks)
+        {
+            AppendSingleSpace(sb, ref previousWasSpace, ref previousWasNewline);
+            return;
+        }
+
+        if (previousWasNewline)
+            return;
+
+        sb.Append('\n');
+        previousWasNewline = true;
+        previousWasSpace = false;
     }
 
     private static void AppendSingleSpace(

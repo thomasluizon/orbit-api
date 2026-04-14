@@ -11,6 +11,7 @@ namespace Orbit.Infrastructure.Persistence;
 public class OrbitDbContext : DbContext
 {
     private const string JsonbColumnType = "jsonb";
+    private const string EmptyJsonArraySql = "'[]'::jsonb";
     private readonly IEncryptionService? _encryptionService;
 
     public OrbitDbContext(DbContextOptions<OrbitDbContext> options, IEncryptionService? encryptionService = null)
@@ -148,7 +149,7 @@ public class OrbitDbContext : DbContext
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
                 .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[]'::jsonb")
+                .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<string>());
         });
 

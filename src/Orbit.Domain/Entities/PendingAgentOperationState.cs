@@ -26,30 +26,22 @@ public class PendingAgentOperationState : Entity
     {
     }
 
-    public static PendingAgentOperationState Create(
-        Guid userId,
-        AgentCapability capability,
-        string operationId,
-        string argumentsJson,
-        string summary,
-        string operationFingerprint,
-        AgentExecutionSurface surface,
-        DateTime expiresAtUtc)
+    public static PendingAgentOperationState Create(PendingAgentOperationStateCreateRequest request)
     {
         return new PendingAgentOperationState
         {
-            UserId = userId,
-            CapabilityId = capability.Id,
-            OperationId = operationId,
-            ArgumentsJson = string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson,
-            DisplayName = capability.DisplayName,
-            Summary = summary,
-            OperationFingerprint = operationFingerprint,
-            Surface = surface,
-            RiskClass = capability.RiskClass,
-            ConfirmationRequirement = capability.ConfirmationRequirement,
+            UserId = request.UserId,
+            CapabilityId = request.Capability.Id,
+            OperationId = request.OperationId,
+            ArgumentsJson = string.IsNullOrWhiteSpace(request.ArgumentsJson) ? "{}" : request.ArgumentsJson,
+            DisplayName = request.Capability.DisplayName,
+            Summary = request.Summary,
+            OperationFingerprint = request.OperationFingerprint,
+            Surface = request.Surface,
+            RiskClass = request.Capability.RiskClass,
+            ConfirmationRequirement = request.Capability.ConfirmationRequirement,
             CreatedAtUtc = DateTime.UtcNow,
-            ExpiresAtUtc = expiresAtUtc
+            ExpiresAtUtc = request.ExpiresAtUtc
         };
     }
 
@@ -88,4 +80,16 @@ public class PendingAgentOperationState : Entity
     {
         ConsumedAtUtc = DateTime.UtcNow;
     }
+}
+
+public sealed class PendingAgentOperationStateCreateRequest
+{
+    public required Guid UserId { get; init; }
+    public required AgentCapability Capability { get; init; }
+    public required string OperationId { get; init; }
+    public required string ArgumentsJson { get; init; }
+    public required string Summary { get; init; }
+    public required string OperationFingerprint { get; init; }
+    public required AgentExecutionSurface Surface { get; init; }
+    public required DateTime ExpiresAtUtc { get; init; }
 }

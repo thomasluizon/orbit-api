@@ -75,162 +75,214 @@ public static class WebApplicationExtensions
     {
         app.Use(async (context, next) =>
         {
-            if (context.Request.Path.StartsWithSegments("/mcp") && context.Request.Method == "POST")
+            if (!IsMcpPostRequest(context))
             {
-                context.Request.EnableBuffering();
-                using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
-                var body = await reader.ReadToEndAsync();
-                context.Request.Body.Position = 0;
-
-                if (IsMcpUnauthenticatedMethod(body))
-                {
-                    await next();
-                    return;
-                }
-
-                // For tool calls, require auth
-                var authResult = await context.AuthenticateAsync();
-                if (!authResult.Succeeded)
-                {
-                    var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
-                    var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
-                    context.Response.StatusCode = 401;
-                    context.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{resourceUrl}\"";
-                    return;
-                }
-                context.User = authResult.Principal!;
-
-                if (TryGetMcpToolCall(body, out var toolName, out var requestId, out var operationId, out var operationFingerprint))
-                {
-                    if (string.Equals(toolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase))
-                    {
-                        await next();
-                        return;
-                    }
-
-                    var catalogService = context.RequestServices.GetRequiredService<IAgentCatalogService>();
-                    var policyEvaluator = context.RequestServices.GetRequiredService<IAgentPolicyEvaluator>();
-                    var auditService = context.RequestServices.GetRequiredService<IAgentAuditService>();
-                    var capability = catalogService.GetCapabilityByMcpTool(toolName!);
-
-                    if (capability is null)
-                    {
-                        await TryAuditLegacyMcpAsync(
-                            auditService,
-                            context,
-                            toolName!,
-                            null,
-                            AgentPolicyDecisionStatus.Denied,
-                            AgentOperationStatus.UnsupportedByPolicy,
-                            "unsupported_by_policy",
-                            body,
-                            null,
-                            null,
-                            CancellationToken.None);
-
-                        await WriteMcpPolicyErrorAsync(
-                            context,
-                            requestId,
-                            "unsupported_by_policy",
-                            null);
-                        return;
-                    }
-
-                    var decision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
-                        capability.Id,
-                        context.User.GetUserId(),
-                        AgentExecutionSurface.Mcp,
-                        context.User.GetAgentAuthMethod(),
-                        context.User.GetGrantedAgentScopes(),
-                        operationId ?? toolName!,
-                        $"{operationId ?? toolName} requested via MCP",
-                        operationFingerprint,
-                        IsReadOnlyCredential: context.User.IsReadOnlyCredential()));
-
-                    if (decision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
-                    {
-                        await TryAuditLegacyMcpAsync(
-                            auditService,
-                            context,
-                            operationId ?? toolName!,
-                            capability,
-                            AgentPolicyDecisionStatus.ConfirmationRequired,
-                            AgentOperationStatus.PendingConfirmation,
-                            decision.Reason,
-                            body,
-                            decision.ShadowStatus,
-                            decision.ShadowReason,
-                            CancellationToken.None);
-
-                        await WriteMcpPolicyErrorAsync(
-                            context,
-                            requestId,
-                            decision.Reason ?? "confirmation_required",
-                            decision.PendingOperation?.Id);
-                        return;
-                    }
-
-                    if (decision.Status == AgentPolicyDecisionStatus.Denied)
-                    {
-                        await TryAuditLegacyMcpAsync(
-                            auditService,
-                            context,
-                            operationId ?? toolName!,
-                            capability,
-                            AgentPolicyDecisionStatus.Denied,
-                            AgentOperationStatus.Denied,
-                            decision.Reason,
-                            body,
-                            decision.ShadowStatus,
-                            decision.ShadowReason,
-                            CancellationToken.None);
-
-                        await WriteMcpPolicyErrorAsync(
-                            context,
-                            requestId,
-                            decision.Reason ?? "policy_denied",
-                            null);
-                        return;
-                    }
-
-                    try
-                    {
-                        await next();
-                        await TryAuditLegacyMcpAsync(
-                            auditService,
-                            context,
-                            operationId ?? toolName!,
-                            capability,
-                            AgentPolicyDecisionStatus.Allowed,
-                            AgentOperationStatus.Succeeded,
-                            null,
-                            body,
-                            decision.ShadowStatus,
-                            decision.ShadowReason,
-                            CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        await TryAuditLegacyMcpAsync(
-                            auditService,
-                            context,
-                            operationId ?? toolName!,
-                            capability,
-                            AgentPolicyDecisionStatus.Allowed,
-                            AgentOperationStatus.Failed,
-                            ex.Message,
-                            body,
-                            decision.ShadowStatus,
-                            decision.ShadowReason,
-                            CancellationToken.None);
-                        throw;
-                    }
-
-                    return;
-                }
+                await next();
+                return;
             }
-            await next();
+
+            await HandleMcpRequestAsync(context, next);
         });
+    }
+
+    private static bool IsMcpPostRequest(HttpContext context)
+    {
+        return context.Request.Path.StartsWithSegments("/mcp") && HttpMethods.IsPost(context.Request.Method);
+    }
+
+    private static async Task HandleMcpRequestAsync(HttpContext context, Func<Task> next)
+    {
+        var body = await ReadBufferedRequestBodyAsync(context);
+        if (IsMcpUnauthenticatedMethod(body))
+        {
+            await next();
+            return;
+        }
+
+        if (!await TryAuthenticateMcpRequestAsync(context))
+            return;
+
+        if (!TryGetMcpToolCall(body, out var toolName, out var requestId, out var operationId, out var operationFingerprint))
+        {
+            await next();
+            return;
+        }
+
+        await HandleMcpToolCallAsync(
+            context,
+            next,
+            body,
+            new McpToolCallRequest(toolName!, requestId, operationId, operationFingerprint));
+    }
+
+    private static async Task<string> ReadBufferedRequestBodyAsync(HttpContext context)
+    {
+        context.Request.EnableBuffering();
+        using var reader = new StreamReader(context.Request.Body, leaveOpen: true);
+        var body = await reader.ReadToEndAsync();
+        context.Request.Body.Position = 0;
+        return body;
+    }
+
+    private static async Task<bool> TryAuthenticateMcpRequestAsync(HttpContext context)
+    {
+        var authResult = await context.AuthenticateAsync();
+        if (authResult.Succeeded)
+        {
+            context.User = authResult.Principal!;
+            return true;
+        }
+
+        var scheme = context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? context.Request.Scheme;
+        var resourceUrl = $"{scheme}://{context.Request.Host}/.well-known/oauth-protected-resource";
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        context.Response.Headers.WWWAuthenticate = $"Bearer resource_metadata=\"{resourceUrl}\"";
+        return false;
+    }
+
+    private static async Task HandleMcpToolCallAsync(
+        HttpContext context,
+        Func<Task> next,
+        string body,
+        McpToolCallRequest toolCall)
+    {
+        if (string.Equals(toolCall.ToolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase))
+        {
+            await next();
+            return;
+        }
+
+        var services = ResolveMcpServices(context);
+        var capability = services.CatalogService.GetCapabilityByMcpTool(toolCall.ToolName);
+        if (capability is null)
+        {
+            await AuditAndWritePolicyErrorAsync(
+                context,
+                services.AuditService,
+                new LegacyMcpAuditContext(
+                    toolCall.ToolName,
+                    null,
+                    AgentPolicyDecisionStatus.Denied,
+                    AgentOperationStatus.UnsupportedByPolicy,
+                    "unsupported_by_policy",
+                    body),
+                toolCall.RequestId,
+                "unsupported_by_policy",
+                null);
+            return;
+        }
+
+        var sourceName = toolCall.OperationId ?? toolCall.ToolName;
+        var decision = services.PolicyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            capability.Id,
+            context.User.GetUserId(),
+            AgentExecutionSurface.Mcp,
+            context.User.GetAgentAuthMethod(),
+            context.User.GetGrantedAgentScopes(),
+            sourceName,
+            $"{sourceName} requested via MCP",
+            toolCall.OperationFingerprint,
+            IsReadOnlyCredential: context.User.IsReadOnlyCredential()));
+
+        if (decision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
+        {
+            await AuditAndWritePolicyErrorAsync(
+                context,
+                services.AuditService,
+                new LegacyMcpAuditContext(
+                    sourceName,
+                    capability,
+                    AgentPolicyDecisionStatus.ConfirmationRequired,
+                    AgentOperationStatus.PendingConfirmation,
+                    decision.Reason,
+                    body,
+                    decision.ShadowStatus,
+                    decision.ShadowReason),
+                toolCall.RequestId,
+                decision.Reason ?? "confirmation_required",
+                decision.PendingOperation?.Id);
+            return;
+        }
+
+        if (decision.Status == AgentPolicyDecisionStatus.Denied)
+        {
+            await AuditAndWritePolicyErrorAsync(
+                context,
+                services.AuditService,
+                new LegacyMcpAuditContext(
+                    sourceName,
+                    capability,
+                    AgentPolicyDecisionStatus.Denied,
+                    AgentOperationStatus.Denied,
+                    decision.Reason,
+                    body,
+                    decision.ShadowStatus,
+                    decision.ShadowReason),
+                toolCall.RequestId,
+                decision.Reason ?? "policy_denied",
+                null);
+            return;
+        }
+
+        await ExecuteAuthorizedMcpToolCallAsync(
+            context,
+            next,
+            services.AuditService,
+            new LegacyMcpAuditContext(
+                sourceName,
+                capability,
+                AgentPolicyDecisionStatus.Allowed,
+                AgentOperationStatus.Succeeded,
+                null,
+                body,
+                decision.ShadowStatus,
+                decision.ShadowReason));
+    }
+
+    private static McpServices ResolveMcpServices(HttpContext context)
+    {
+        return new McpServices(
+            context.RequestServices.GetRequiredService<IAgentCatalogService>(),
+            context.RequestServices.GetRequiredService<IAgentPolicyEvaluator>(),
+            context.RequestServices.GetRequiredService<IAgentAuditService>());
+    }
+
+    private static async Task AuditAndWritePolicyErrorAsync(
+        HttpContext context,
+        IAgentAuditService auditService,
+        LegacyMcpAuditContext auditContext,
+        JsonElement? requestId,
+        string reason,
+        Guid? pendingOperationId)
+    {
+        await TryAuditLegacyMcpAsync(auditService, context, auditContext, CancellationToken.None);
+        await WriteMcpPolicyErrorAsync(context, requestId, reason, pendingOperationId);
+    }
+
+    private static async Task ExecuteAuthorizedMcpToolCallAsync(
+        HttpContext context,
+        Func<Task> next,
+        IAgentAuditService auditService,
+        LegacyMcpAuditContext auditContext)
+    {
+        try
+        {
+            await next();
+            await TryAuditLegacyMcpAsync(auditService, context, auditContext, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            await TryAuditLegacyMcpAsync(
+                auditService,
+                context,
+                auditContext with
+                {
+                    OutcomeStatus = AgentOperationStatus.Failed,
+                    Error = ex.Message
+                },
+                CancellationToken.None);
+            throw;
+        }
     }
 
     private static ForwardedHeadersOptions BuildForwardedHeadersOptions(WebApplication app)
@@ -365,41 +417,57 @@ public static class WebApplicationExtensions
     private static async Task TryAuditLegacyMcpAsync(
         IAgentAuditService auditService,
         HttpContext context,
-        string sourceName,
-        AgentCapability? capability,
-        AgentPolicyDecisionStatus policyDecision,
-        AgentOperationStatus outcomeStatus,
-        string? error,
-        string rawBody,
-        AgentPolicyDecisionStatus? shadowPolicyDecision,
-        string? shadowReason,
+        LegacyMcpAuditContext auditContext,
         CancellationToken cancellationToken)
     {
-        if (capability is null || context.User.Identity?.IsAuthenticated != true)
+        if (auditContext.Capability is null || context.User.Identity?.IsAuthenticated != true)
             return;
 
         try
         {
-            var redactedArguments = rawBody.Length <= 1000 ? rawBody : rawBody[..1000];
+            var redactedArguments = auditContext.RawBody.Length <= 1000
+                ? auditContext.RawBody
+                : auditContext.RawBody[..1000];
             await auditService.RecordAsync(new AgentAuditEntry(
                 context.User.GetUserId(),
-                capability.Id,
-                sourceName,
+                auditContext.Capability.Id,
+                auditContext.SourceName,
                 AgentExecutionSurface.Mcp,
                 context.User.GetAgentAuthMethod(),
-                capability.RiskClass,
-                policyDecision,
-                outcomeStatus,
+                auditContext.Capability.RiskClass,
+                auditContext.PolicyDecision,
+                auditContext.OutcomeStatus,
                 context.TraceIdentifier,
-                $"{sourceName} requested via MCP",
+                $"{auditContext.SourceName} requested via MCP",
                 RedactedArguments: redactedArguments,
-                Error: error,
-                ShadowPolicyDecision: shadowPolicyDecision,
-                ShadowReason: shadowReason), cancellationToken);
+                Error: auditContext.Error,
+                ShadowPolicyDecision: auditContext.ShadowPolicyDecision,
+                ShadowReason: auditContext.ShadowReason), cancellationToken);
         }
         catch
         {
             // Audit failures must not block MCP requests.
         }
     }
+
+    private sealed record McpToolCallRequest(
+        string ToolName,
+        JsonElement? RequestId,
+        string? OperationId,
+        string? OperationFingerprint);
+
+    private sealed record McpServices(
+        IAgentCatalogService CatalogService,
+        IAgentPolicyEvaluator PolicyEvaluator,
+        IAgentAuditService AuditService);
+
+    private sealed record LegacyMcpAuditContext(
+        string SourceName,
+        AgentCapability? Capability,
+        AgentPolicyDecisionStatus PolicyDecision,
+        AgentOperationStatus OutcomeStatus,
+        string? Error,
+        string RawBody,
+        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
+        string? ShadowReason = null);
 }

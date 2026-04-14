@@ -37,13 +37,29 @@ public class AgentPolicyEvaluator(
         if (capability is null)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, null, "unsupported_by_policy");
 
-        var user = dbContext.Users
-            .AsNoTracking()
-            .FirstOrDefault(item => item.Id == context.UserId);
-
+        var user = GetUser(context.UserId);
         if (user is null)
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "user_not_found");
 
+        var accessDecision = EvaluateAccessRequirements(context, capability, user);
+        if (accessDecision is not null)
+            return accessDecision;
+
+        return EvaluateConfirmationRequirement(context, capability, createPendingOperations);
+    }
+
+    private User? GetUser(Guid userId)
+    {
+        return dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefault(item => item.Id == userId);
+    }
+
+    private AgentPolicyDecision? EvaluateAccessRequirements(
+        AgentPolicyEvaluationContext context,
+        AgentCapability capability,
+        User user)
+    {
         if (user.IsDeactivated &&
             capability.Id is not AgentCapabilityIds.AuthManage and not AgentCapabilityIds.AccountManage)
         {
@@ -51,10 +67,12 @@ public class AgentPolicyEvaluator(
         }
 
         if (!UserMeetsPlanRequirement(user, capability.PlanRequirement))
+        {
             return new AgentPolicyDecision(
                 AgentPolicyDecisionStatus.Denied,
                 capability,
                 $"plan_required:{capability.PlanRequirement}");
+        }
 
         var featureFlagDenial = EvaluateFeatureFlags(user, capability);
         if (featureFlagDenial is not null)
@@ -75,46 +93,53 @@ public class AgentPolicyEvaluator(
         if (capability.IsMutation && string.IsNullOrWhiteSpace(context.OperationFingerprint))
             return new AgentPolicyDecision(AgentPolicyDecisionStatus.Denied, capability, "operation_not_deterministic");
 
-        if (capability.ConfirmationRequirement is AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp)
-        {
-            var requireStepUp = capability.ConfirmationRequirement == AgentConfirmationRequirement.StepUp;
+        return null;
+    }
 
-            if (!string.IsNullOrWhiteSpace(context.ConfirmationToken) &&
-                pendingOperationStore.TryConsumeFreshConfirmation(
-                    context.UserId,
-                    capability.Id,
-                    context.OperationFingerprint!,
-                    context.ConfirmationToken,
-                    requireStepUp))
-            {
-                return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
-            }
+    private AgentPolicyDecision EvaluateConfirmationRequirement(
+        AgentPolicyEvaluationContext context,
+        AgentCapability capability,
+        bool createPendingOperations)
+    {
+        if (capability.ConfirmationRequirement is not (AgentConfirmationRequirement.FreshConfirmation or AgentConfirmationRequirement.StepUp))
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
 
-            if (!createPendingOperations)
-            {
-                return new AgentPolicyDecision(
-                    AgentPolicyDecisionStatus.ConfirmationRequired,
-                    capability,
-                    requireStepUp ? "step_up_required" : "confirmation_required");
-            }
+        var requireStepUp = capability.ConfirmationRequirement == AgentConfirmationRequirement.StepUp;
+        if (HasFreshConfirmation(context, capability, requireStepUp))
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
 
-            var pendingOperation = pendingOperationStore.Create(
-                context.UserId,
-                capability,
-                context.SourceName,
-                context.OperationArgumentsJson ?? "{}",
-                context.OperationSummary,
-                context.OperationFingerprint!,
-                context.Surface);
+        var reason = requireStepUp ? "step_up_required" : "confirmation_required";
+        if (!createPendingOperations)
+            return new AgentPolicyDecision(AgentPolicyDecisionStatus.ConfirmationRequired, capability, reason);
 
-            return new AgentPolicyDecision(
-                AgentPolicyDecisionStatus.ConfirmationRequired,
-                capability,
-                requireStepUp ? "step_up_required" : "confirmation_required",
-                pendingOperation);
-        }
+        var pendingOperation = pendingOperationStore.Create(
+            context.UserId,
+            capability,
+            context.SourceName,
+            context.OperationArgumentsJson ?? "{}",
+            context.OperationSummary,
+            context.OperationFingerprint!,
+            context.Surface);
 
-        return new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability);
+        return new AgentPolicyDecision(
+            AgentPolicyDecisionStatus.ConfirmationRequired,
+            capability,
+            reason,
+            pendingOperation);
+    }
+
+    private bool HasFreshConfirmation(
+        AgentPolicyEvaluationContext context,
+        AgentCapability capability,
+        bool requireStepUp)
+    {
+        return !string.IsNullOrWhiteSpace(context.ConfirmationToken) &&
+               pendingOperationStore.TryConsumeFreshConfirmation(
+                   context.UserId,
+                   capability.Id,
+                   context.OperationFingerprint!,
+                   context.ConfirmationToken,
+                   requireStepUp);
     }
 
     private AgentPolicyDecision? EvaluateFeatureFlags(User user, AgentCapability capability)

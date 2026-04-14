@@ -10,7 +10,7 @@ namespace Orbit.Infrastructure.Services;
 
 public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistributedRateLimitService
 {
-    private static readonly IReadOnlyDictionary<string, RateLimitPolicy> Policies =
+    private static readonly Dictionary<string, RateLimitPolicy> Policies =
         new Dictionary<string, RateLimitPolicy>(StringComparer.OrdinalIgnoreCase)
         {
             ["auth"] = new(TimeSpan.FromMinutes(1), PermitLimit: 5, SegmentCount: 1),

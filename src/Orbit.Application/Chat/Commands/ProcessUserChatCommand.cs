@@ -85,6 +85,7 @@ public partial class ProcessUserChatCommandHandler(
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
     private const int MaxToolIterations = 5;
+    private const string UnsupportedByPolicyReason = "unsupported_by_policy";
 
     public async Task<Result<ChatResponse>> Handle(
         ProcessUserChatCommand request,
@@ -177,10 +178,7 @@ public partial class ProcessUserChatCommandHandler(
         var aiResponse = response.Value;
 
         // 4. Agentic tool-calling loop
-        var allActionResults = new List<ActionResult>();
-        var allOperationResults = new List<AgentOperationResult>();
-        var allPendingOperations = new List<PendingAgentOperation>();
-        var allPolicyDenials = new List<AgentPolicyDenial>();
+        var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         int iteration = 0;
 
@@ -190,10 +188,7 @@ public partial class ProcessUserChatCommandHandler(
             var continueResponse = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
-                allActionResults,
-                allOperationResults,
-                allPendingOperations,
-                allPolicyDenials,
+                executionResults,
                 iteration,
                 cancellationToken);
 
@@ -204,14 +199,14 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         actionsStopwatch.Stop();
-        LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iteration, allActionResults.Count);
+        LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iteration, executionResults.ActionResults.Count);
 
         // 5. Persist all changes in a single unit of work
         LogSavingChanges(logger);
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
-        if (RequiresStreakRecalculation(allActionResults))
+        if (RequiresStreakRecalculation(executionResults.ActionResults))
         {
             await execution.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
             await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
@@ -240,10 +235,10 @@ public partial class ProcessUserChatCommandHandler(
 
         return Result.Success(new ChatResponse(
             aiMessage,
-            allActionResults,
-            allOperationResults,
-            allPendingOperations,
-            allPolicyDenials));
+            executionResults.ActionResults,
+            executionResults.OperationResults,
+            executionResults.PendingOperations,
+            executionResults.PolicyDenials));
     }
 
     /// <summary>
@@ -253,10 +248,7 @@ public partial class ProcessUserChatCommandHandler(
     private async Task<AiResponse?> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
-        List<ActionResult> allActionResults,
-        List<AgentOperationResult> allOperationResults,
-        List<PendingAgentOperation> allPendingOperations,
-        List<AgentPolicyDenial> allPolicyDenials,
+        ToolExecutionAccumulator executionResults,
         int iteration,
         CancellationToken cancellationToken)
     {
@@ -278,14 +270,7 @@ public partial class ProcessUserChatCommandHandler(
             var (toolCallResult, actionResult, operationResult, policyDenial, pendingOperation) =
                 await ExecuteSingleToolCallAsync(call, request, cancellationToken);
             toolResults.Add(toolCallResult);
-            if (actionResult is not null)
-                allActionResults.Add(actionResult);
-            if (operationResult is not null)
-                allOperationResults.Add(operationResult);
-            if (policyDenial is not null)
-                allPolicyDenials.Add(policyDenial);
-            if (pendingOperation is not null)
-                allPendingOperations.Add(pendingOperation);
+            executionResults.Add(actionResult, operationResult, policyDenial, pendingOperation);
         }
 
         // Send results back to the AI for next iteration or final message
@@ -326,13 +311,13 @@ public partial class ProcessUserChatCommandHandler(
                     AgentRiskClass.Low,
                     AgentConfirmationRequirement.None,
                     AgentOperationStatus.UnsupportedByPolicy,
-                    PolicyReason: "unsupported_by_policy"),
+                    PolicyReason: UnsupportedByPolicyReason),
                 new AgentPolicyDenial(
                     call.Name,
                     call.Name,
                     AgentRiskClass.Low,
                     AgentConfirmationRequirement.None,
-                    "unsupported_by_policy"),
+                    UnsupportedByPolicyReason),
                 null);
         }
 
@@ -351,13 +336,13 @@ public partial class ProcessUserChatCommandHandler(
                     AgentConfirmationRequirement.None,
                     AgentOperationStatus.UnsupportedByPolicy,
                     Summary: operationSummary,
-                    PolicyReason: "unsupported_by_policy"),
+                    PolicyReason: UnsupportedByPolicyReason),
                 new AgentPolicyDenial(
                     call.Name,
                     call.Name,
                     AgentRiskClass.Low,
                     AgentConfirmationRequirement.None,
-                    "unsupported_by_policy"),
+                    UnsupportedByPolicyReason),
                 null);
         }
 
@@ -551,6 +536,33 @@ public partial class ProcessUserChatCommandHandler(
     private static bool RequiresStreakRecalculation(IEnumerable<ActionResult> actionResults)
     {
         return actionResults.Any(action => action.Status == ActionStatus.Success && action.Type is "LogHabit" or "BulkLogHabits" or "DeleteHabit");
+    }
+
+    private sealed class ToolExecutionAccumulator
+    {
+        public List<ActionResult> ActionResults { get; } = [];
+        public List<AgentOperationResult> OperationResults { get; } = [];
+        public List<PendingAgentOperation> PendingOperations { get; } = [];
+        public List<AgentPolicyDenial> PolicyDenials { get; } = [];
+
+        public void Add(
+            ActionResult? actionResult,
+            AgentOperationResult? operationResult,
+            AgentPolicyDenial? policyDenial,
+            PendingAgentOperation? pendingOperation)
+        {
+            if (actionResult is not null)
+                ActionResults.Add(actionResult);
+
+            if (operationResult is not null)
+                OperationResults.Add(operationResult);
+
+            if (policyDenial is not null)
+                PolicyDenials.Add(policyDenial);
+
+            if (pendingOperation is not null)
+                PendingOperations.Add(pendingOperation);
+        }
     }
 
     /// <summary>
