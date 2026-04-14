@@ -153,13 +153,15 @@ public class SetColorSchemeTool(IMediator mediator) : IAiTool
     }
 }
 
-public class SetAiMemoryTool(IMediator mediator) : IAiTool
+public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool
 {
     private const string EnabledState = "enabled";
     private const string DisabledState = "disabled";
 
-    public string Name => "set_ai_memory";
-    public string Description => "Enable or disable AI memory.";
+    public abstract string Name { get; }
+    public abstract string Description { get; }
+    protected abstract IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled);
+    protected abstract string SettingLabel { get; }
 
     public object GetParameterSchema() => new
     {
@@ -177,50 +179,34 @@ public class SetAiMemoryTool(IMediator mediator) : IAiTool
         if (!enabled.HasValue)
             return new ToolResult(false, Error: "enabled is required.");
 
-        var result = await mediator.Send(new SetAiMemoryCommand(userId, enabled.Value), ct);
+        var result = await mediator.Send(CreateCommand(userId, enabled.Value), ct);
 
         return result.IsSuccess
             ? new ToolResult(
                 true,
                 EntityId: userId.ToString(),
-                EntityName: $"AI memory {(enabled.Value ? EnabledState : DisabledState)}",
+                EntityName: $"{SettingLabel} {(enabled.Value ? EnabledState : DisabledState)}",
                 Payload: new { enabled })
             : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
     }
 }
 
-public class SetAiSummaryTool(IMediator mediator) : IAiTool
+public class SetAiMemoryTool(IMediator mediator) : ToggleProfileSettingTool(mediator)
 {
-    private const string EnabledState = "enabled";
-    private const string DisabledState = "disabled";
+    public override string Name => "set_ai_memory";
+    public override string Description => "Enable or disable AI memory.";
+    protected override string SettingLabel => "AI memory";
 
-    public string Name => "set_ai_summary";
-    public string Description => "Enable or disable the premium AI summary setting.";
+    protected override IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled) =>
+        new SetAiMemoryCommand(userId, enabled);
+}
 
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new
-        {
-            enabled = new { type = JsonSchemaTypes.Boolean }
-        },
-        required = new[] { "enabled" }
-    };
+public class SetAiSummaryTool(IMediator mediator) : ToggleProfileSettingTool(mediator)
+{
+    public override string Name => "set_ai_summary";
+    public override string Description => "Enable or disable the premium AI summary setting.";
+    protected override string SettingLabel => "AI summary";
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        var enabled = JsonArgumentParser.GetOptionalBool(args, "enabled");
-        if (!enabled.HasValue)
-            return new ToolResult(false, Error: "enabled is required.");
-
-        var result = await mediator.Send(new SetAiSummaryCommand(userId, enabled.Value), ct);
-
-        return result.IsSuccess
-            ? new ToolResult(
-                true,
-                EntityId: userId.ToString(),
-                EntityName: $"AI summary {(enabled.Value ? EnabledState : DisabledState)}",
-                Payload: new { enabled })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
-    }
+    protected override IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled) =>
+        new SetAiSummaryCommand(userId, enabled);
 }
