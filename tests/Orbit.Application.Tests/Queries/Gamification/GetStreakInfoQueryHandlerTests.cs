@@ -15,7 +15,7 @@ public class GetStreakInfoQueryHandlerTests
     private readonly GetStreakInfoQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 4, 3);
+    private static readonly DateOnly Today = new(2026, 4, 15);
 
     public GetStreakInfoQueryHandlerTests()
     {
@@ -47,8 +47,14 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.CurrentStreak.Should().Be(0);
         result.Value.LongestStreak.Should().Be(0);
         result.Value.FreezesUsedThisMonth.Should().Be(0);
-        result.Value.FreezesAvailable.Should().Be(3);
+        // With zero balance, nothing is available (merit-based model).
+        result.Value.FreezesAvailable.Should().Be(0);
         result.Value.MaxFreezesPerMonth.Should().Be(3);
+        result.Value.MaxFreezesHeld.Should().Be(3);
+        result.Value.StreakFreezeBalance.Should().Be(0);
+        result.Value.ProgressToNextFreeze.Should().Be(0);
+        result.Value.DaysUntilNextFreeze.Should().Be(7);
+        result.Value.IsAtHeldCap.Should().BeFalse();
         result.Value.IsFrozenToday.Should().BeFalse();
         result.Value.RecentFreezeDates.Should().BeEmpty();
     }
@@ -68,15 +74,17 @@ public class GetStreakInfoQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithRecentFreezes_CalculatesCorrectly()
+    public async Task Handle_FreezesAvailable_IsMinOfBalanceAndMonthlyRemaining()
     {
         var user = CreateTestUser();
+        user.SetStreakState(21, 21, Today);
+        user.TryEarnStreakFreezes(); // balance = 3
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
+        // 1 freeze used this month already → monthlyRemaining = 2.
         var freezes = new List<StreakFreeze>
         {
-            StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-3))
+            StreakFreeze.Create(UserId, new DateOnly(Today.Year, Today.Month, 5))
         };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
@@ -88,10 +96,10 @@ public class GetStreakInfoQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.FreezesUsedThisMonth.Should().Be(2);
-        result.Value.FreezesAvailable.Should().Be(1);
-        result.Value.RecentFreezeDates.Should().HaveCount(2);
-        result.Value.IsFrozenToday.Should().BeFalse();
+        result.Value.StreakFreezeBalance.Should().Be(3);
+        result.Value.FreezesUsedThisMonth.Should().Be(1);
+        result.Value.FreezesAvailable.Should().Be(2); // min(balance=3, monthlyRem=2)
+        result.Value.IsAtHeldCap.Should().BeTrue();
     }
 
     [Fact]
@@ -118,28 +126,50 @@ public class GetStreakInfoQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_AllFreezesUsed_ReturnsZeroAvailable()
+    public async Task Handle_ProgressAndDaysUntilNextFreeze_ComputedCorrectly()
     {
         var user = CreateTestUser();
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        // CurrentStreak = 10, LastEarnedAtStreak = 7 → delta = 3, progress = 3, daysUntilNext = 4
+        user.SetStreakState(7, 7, Today);
+        user.TryEarnStreakFreezes(); // balance = 1, last = 7
+        user.SetStreakState(10, 10, Today);
 
-        var freezes = new List<StreakFreeze>
-        {
-            StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-5)),
-            StreakFreeze.Create(UserId, Today.AddDays(-10))
-        };
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(freezes.AsReadOnly());
+            .Returns(new List<StreakFreeze>().AsReadOnly());
 
         var query = new GetStreakInfoQuery(UserId);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.FreezesAvailable.Should().Be(0);
-        result.Value.FreezesUsedThisMonth.Should().Be(3);
+        result.Value.StreakFreezeBalance.Should().Be(1);
+        result.Value.ProgressToNextFreeze.Should().Be(3);
+        result.Value.DaysUntilNextFreeze.Should().Be(4);
+        result.Value.IsAtHeldCap.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_AtHeldCap_DaysUntilNextFreezeIs7()
+    {
+        var user = CreateTestUser();
+        user.SetStreakState(21, 21, Today);
+        user.TryEarnStreakFreezes(); // balance = 3, at cap
+
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var query = new GetStreakInfoQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsAtHeldCap.Should().BeTrue();
+        result.Value.DaysUntilNextFreeze.Should().Be(7);
     }
 }

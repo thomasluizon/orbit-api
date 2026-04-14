@@ -21,6 +21,7 @@ public class LogHabitCommandHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IStreakFreezeEarnService _streakFreezeEarnService = Substitute.For<IStreakFreezeEarnService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly MediatR.IMediator _mediator = Substitute.For<MediatR.IMediator>();
@@ -33,7 +34,7 @@ public class LogHabitCommandHandlerTests
     public LogHabitCommandHandlerTests()
     {
         var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
-        var services = new LogHabitServices(_userDateService, _userStreakService, _gamificationService, _mediator);
+        var services = new LogHabitServices(_userDateService, _userStreakService, _gamificationService, _streakFreezeEarnService, _mediator);
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, _logger);
 
@@ -41,6 +42,8 @@ public class LogHabitCommandHandlerTests
             .Returns(Today);
         _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
+        _streakFreezeEarnService.EvaluateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new StreakFreezeEarnOutcome(0, 0, 0, 0));
 
         // Return a valid user by default for streak tracking
         var user = User.Create("Test", "test@test.com").Value;

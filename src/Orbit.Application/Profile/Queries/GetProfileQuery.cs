@@ -60,13 +60,15 @@ public class GetProfileQueryHandler(
 
         var levelTitle = LevelDefinitions.GetLevelForXp(user.TotalXp).Title;
 
-        // Compute streak freezes available
+        // Streak freezes available = min(earned balance, calendar-month monthly remaining).
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var windowStart = today.AddDays(-29);
-        var recentFreezes = await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var monthFreezes = await streakFreezeRepository.FindAsync(
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= monthStart && sf.UsedOnDate < monthEnd,
             cancellationToken);
-        var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - recentFreezes.Count);
+        var monthlyRemaining = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - monthFreezes.Count);
+        var freezesAvailable = Math.Min(user.StreakFreezeBalance, monthlyRemaining);
 
         return Result.Success(new ProfileResponse(
             user.Name,

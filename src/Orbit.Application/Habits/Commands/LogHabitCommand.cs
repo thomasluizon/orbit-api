@@ -21,7 +21,8 @@ public record LogHabitResponse(
     int CurrentStreak,
     IReadOnlyList<LinkedGoalUpdate>? LinkedGoalUpdates = null,
     int? XpEarned = null,
-    IReadOnlyList<string>? NewAchievementIds = null);
+    IReadOnlyList<string>? NewAchievementIds = null,
+    int? StreakFreezesEarned = null);
 
 public record LogHabitCommand(
     Guid UserId,
@@ -45,6 +46,7 @@ public record LogHabitServices(
     IUserDateService UserDateService,
     IUserStreakService UserStreakService,
     IGamificationService GamificationService,
+    IStreakFreezeEarnService StreakFreezeEarnService,
     IMediator Mediator);
 
 public partial class LogHabitCommandHandler(
@@ -147,9 +149,14 @@ public partial class LogHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
+
+        // Evaluate merit-based streak freeze earning immediately after the streak is
+        // recalculated. The outcome mutates the tracked user; persist below.
+        var earnOutcome = await services.StreakFreezeEarnService.EvaluateAsync(request.UserId, cancellationToken);
+
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
 
-        // Persist streak state changes (gamification already saved its own changes)
+        // Persist streak state + earn changes (gamification already saved its own changes)
         if (gamificationResult is null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -163,7 +170,8 @@ public partial class LogHabitCommandHandler(
             CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalUpdates,
             XpEarned: gamificationResult?.XpEarned,
-            NewAchievementIds: gamificationResult?.NewAchievementIds));
+            NewAchievementIds: gamificationResult?.NewAchievementIds,
+            StreakFreezesEarned: earnOutcome.FreezesEarned > 0 ? earnOutcome.FreezesEarned : null));
     }
 
     private async Task<HabitLogGamificationResult?> ProcessGamificationSafeAsync(

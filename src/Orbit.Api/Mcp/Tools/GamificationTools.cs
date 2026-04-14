@@ -86,12 +86,16 @@ public class GamificationTools(IMediator mediator)
                $"Longest Streak: {s.LongestStreak} days\n" +
                (s.LastActiveDate is not null ? $"Last Active: {s.LastActiveDate}\n" : "") +
                $"Frozen Today: {(s.IsFrozenToday ? "Yes" : "No")}\n" +
-               $"Freezes Available: {s.FreezesAvailable}/{s.MaxFreezesPerMonth} this month\n" +
-               $"Freezes Used: {s.FreezesUsedThisMonth}\n" +
+               $"Streak Freezes Held: {s.StreakFreezeBalance}/{s.MaxFreezesHeld}\n" +
+               $"Available To Use: {s.FreezesAvailable}\n" +
+               $"Monthly Usage: {s.FreezesUsedThisMonth}/{s.MaxFreezesPerMonth}\n" +
+               (s.IsAtHeldCap
+                   ? "Max freezes held. Use one to earn more."
+                   : $"Next freeze in {s.DaysUntilNextFreeze} days (progress {s.ProgressToNextFreeze}/7).") + "\n" +
                (s.RecentFreezeDates.Count > 0 ? $"Recent freeze dates: {string.Join(", ", s.RecentFreezeDates)}" : "");
     }
 
-    [McpServerTool(Name = "activate_streak_freeze"), Description("Activate a streak freeze to protect the current streak. Limited to 2 per month.")]
+    [McpServerTool(Name = "activate_streak_freeze"), Description("Activate a streak freeze to protect the current streak. Requires an earned freeze in balance; up to 3 uses per calendar month.")]
     public async Task<string> ActivateStreakFreeze(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
@@ -106,7 +110,8 @@ public class GamificationTools(IMediator mediator)
         var r = result.Value;
         return $"Streak freeze activated for {r.FrozenDate}\n" +
                $"Current streak preserved: {r.CurrentStreak} days\n" +
-               $"Freezes remaining this month: {r.FreezesRemainingThisMonth}";
+               $"Freezes remaining in balance: {r.FreezesRemainingBalance}/{r.MaxFreezesHeld}\n" +
+               $"Monthly usage: {r.FreezesUsedThisMonth}/{r.MaxFreezesPerMonth}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

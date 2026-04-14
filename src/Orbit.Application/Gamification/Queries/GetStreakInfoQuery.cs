@@ -13,6 +13,11 @@ public record StreakInfoResponse(
     int FreezesUsedThisMonth,
     int FreezesAvailable,
     int MaxFreezesPerMonth,
+    int MaxFreezesHeld,
+    int StreakFreezeBalance,
+    int DaysUntilNextFreeze,
+    int ProgressToNextFreeze,
+    bool IsAtHeldCap,
     bool IsFrozenToday,
     IReadOnlyList<DateOnly> RecentFreezeDates);
 
@@ -31,28 +36,53 @@ public class GetStreakInfoQueryHandler(
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        // Query recent freezes within the rolling 30-day window
-        var windowStart = today.AddDays(-29);
+        // Calendar-month boundaries for usage cap (anchored in the user's timezone via today).
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        // Recent freezes for display: the last 30 days (unchanged from prior behavior).
+        var recentStart = today.AddDays(-29);
+        var recentWindowStart = recentStart < monthStart ? recentStart : monthStart;
         var recentFreezes = await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= recentWindowStart,
             cancellationToken);
 
+        var freezesThisMonth = recentFreezes.Count(sf => sf.UsedOnDate >= monthStart && sf.UsedOnDate < monthEnd);
         var isFrozenToday = recentFreezes.Any(sf => sf.UsedOnDate == today);
-        var freezesUsed = recentFreezes.Count;
-        var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - freezesUsed);
+        var monthlyRemaining = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - freezesThisMonth);
+        var freezesAvailable = Math.Min(user.StreakFreezeBalance, monthlyRemaining);
         var recentFreezeDates = recentFreezes
+            .Where(sf => sf.UsedOnDate >= recentStart)
             .Select(sf => sf.UsedOnDate)
             .OrderByDescending(d => d)
             .ToList();
+
+        var isAtHeldCap = user.StreakFreezeBalance >= AppConstants.MaxStreakFreezesHeld;
+        var progressToNextFreeze = ComputeProgress(user);
+        var daysUntilNextFreeze = isAtHeldCap
+            ? AppConstants.DaysPerEarnedStreakFreeze
+            : Math.Max(1, AppConstants.DaysPerEarnedStreakFreeze - progressToNextFreeze);
 
         return Result.Success(new StreakInfoResponse(
             user.CurrentStreak,
             user.LongestStreak,
             user.LastActiveDate,
-            freezesUsed,
+            freezesThisMonth,
             freezesAvailable,
             AppConstants.MaxStreakFreezesPerMonth,
+            AppConstants.MaxStreakFreezesHeld,
+            user.StreakFreezeBalance,
+            daysUntilNextFreeze,
+            progressToNextFreeze,
+            isAtHeldCap,
             isFrozenToday,
             recentFreezeDates));
+    }
+
+    private static int ComputeProgress(User user)
+    {
+        var delta = user.CurrentStreak - user.LastFreezeEarnedAtStreak;
+        if (delta <= 0) return 0;
+        return delta % AppConstants.DaysPerEarnedStreakFreeze;
     }
 }

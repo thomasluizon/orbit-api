@@ -110,7 +110,7 @@ public class GetProfileQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NoRecentFreezes_ReturnsMaxAvailable()
+    public async Task Handle_NoEarnedFreezes_ReturnsZero()
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -125,32 +125,60 @@ public class GetProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.StreakFreezesAvailable.Should().Be(3);
+        // With zero balance, nothing is available regardless of monthly usage.
+        result.Value.StreakFreezesAvailable.Should().Be(0);
     }
 
     [Fact]
-    public async Task Handle_AllFreezesUsed_ReturnsZeroAvailable()
+    public async Task Handle_HasBalance_NoMonthlyUse_ReturnsBalance()
     {
         var user = CreateTestUser();
+        // Grant 2 freezes via domain (simulate 14-day streak from fresh anchor).
+        user.SetStreakState(14, 14, Today);
+        user.TryEarnStreakFreezes();
+
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
-
-        var recentFreezes = new List<StreakFreeze>
-        {
-            StreakFreeze.Create(UserId, Today.AddDays(-1)),
-            StreakFreeze.Create(UserId, Today.AddDays(-5)),
-            StreakFreeze.Create(UserId, Today.AddDays(-10))
-        };
         _streakFreezeRepo.FindAsync(
             Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(recentFreezes.AsReadOnly());
+            .Returns(new List<StreakFreeze>().AsReadOnly());
 
         var query = new GetProfileQuery(UserId);
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.StreakFreezesAvailable.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_MonthlyCapReached_ReturnsZero()
+    {
+        var user = CreateTestUser();
+        user.SetStreakState(21, 21, Today);
+        user.TryEarnStreakFreezes(); // balance = 3
+
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+
+        var monthFreezes = new List<StreakFreeze>
+        {
+            StreakFreeze.Create(UserId, new DateOnly(Today.Year, Today.Month, 1)),
+            StreakFreeze.Create(UserId, new DateOnly(Today.Year, Today.Month, 2)),
+            StreakFreeze.Create(UserId, new DateOnly(Today.Year, Today.Month, 3))
+        };
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(monthFreezes.AsReadOnly());
+
+        var query = new GetProfileQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        // Balance is 3 but monthly cap hit, so available is clamped to 0.
         result.Value.StreakFreezesAvailable.Should().Be(0);
     }
 }

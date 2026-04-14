@@ -61,6 +61,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<IGamificationService, GamificationService>();
+        builder.Services.AddScoped<IStreakFreezeEarnService, StreakFreezeEarnService>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddScoped<Orbit.Application.Calendar.Services.ICalendarEventFetcher, Orbit.Application.Calendar.Services.CalendarEventFetcher>();
         builder.Services.AddSingleton(TimeProvider.System);
@@ -195,6 +196,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IUserDateService>(),
                 sp.GetRequiredService<IUserStreakService>(),
                 sp.GetRequiredService<IGamificationService>(),
+                sp.GetRequiredService<IStreakFreezeEarnService>(),
                 sp.GetRequiredService<MediatR.IMediator>()));
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.BulkLogServices>(sp =>
             new Orbit.Application.Habits.Commands.BulkLogServices(

@@ -100,9 +100,19 @@ public class GamificationToolsTests
     public async Task GetStreakInfo_Success_ReturnsFormattedStreak()
     {
         var streak = new StreakInfoResponse(
-            15, 30, new DateOnly(2026, 4, 2),
-            1, 1, 2, false,
-            [new DateOnly(2026, 3, 15)]);
+            CurrentStreak: 15,
+            LongestStreak: 30,
+            LastActiveDate: new DateOnly(2026, 4, 2),
+            FreezesUsedThisMonth: 1,
+            FreezesAvailable: 1,
+            MaxFreezesPerMonth: 3,
+            MaxFreezesHeld: 3,
+            StreakFreezeBalance: 2,
+            DaysUntilNextFreeze: 4,
+            ProgressToNextFreeze: 3,
+            IsAtHeldCap: false,
+            IsFrozenToday: false,
+            RecentFreezeDates: [new DateOnly(2026, 3, 15)]);
 
         _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(streak));
@@ -111,7 +121,9 @@ public class GamificationToolsTests
 
         result.Should().Contain("Current Streak: 15 days");
         result.Should().Contain("Longest Streak: 30 days");
-        result.Should().Contain("Freezes Available: 1/2");
+        result.Should().Contain("Streak Freezes Held: 2/3");
+        result.Should().Contain("Available To Use: 1");
+        result.Should().Contain("Monthly Usage: 1/3");
     }
 
     [Fact]
@@ -128,7 +140,13 @@ public class GamificationToolsTests
     [Fact]
     public async Task ActivateStreakFreeze_Success_ReturnsActivatedMessage()
     {
-        var response = new StreakFreezeResponse(1, new DateOnly(2026, 4, 3), 15);
+        var response = new StreakFreezeResponse(
+            FreezesRemainingBalance: 1,
+            FreezesUsedThisMonth: 1,
+            MaxFreezesPerMonth: 3,
+            MaxFreezesHeld: 3,
+            FrozenDate: new DateOnly(2026, 4, 3),
+            CurrentStreak: 15);
         _mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
@@ -136,7 +154,8 @@ public class GamificationToolsTests
 
         result.Should().Contain("Streak freeze activated");
         result.Should().Contain("streak preserved: 15 days");
-        result.Should().Contain("Freezes remaining this month: 1");
+        result.Should().Contain("Freezes remaining in balance: 1/3");
+        result.Should().Contain("Monthly usage: 1/3");
     }
 
     [Fact]

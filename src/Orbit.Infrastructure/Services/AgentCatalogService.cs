@@ -1393,7 +1393,8 @@ public class AgentCatalogService : IAgentCatalogService
                     new UserDataFieldDescriptor("LongestStreak", "Longest recorded streak.", true, false),
                     new UserDataFieldDescriptor("ExperiencePoints", "Accumulated XP total.", true, false),
                     new UserDataFieldDescriptor("Level", "Derived level from XP.", true, false),
-                    new UserDataFieldDescriptor("AvailableStreakFreezes", "Remaining streak freezes.", true, true)
+                    new UserDataFieldDescriptor("StreakFreezeBalance", "Unused earned streak freezes held (0..3).", true, true),
+                    new UserDataFieldDescriptor("AvailableStreakFreezes", "Freezes available to use now (balance capped by calendar-month usage).", true, true)
                 ]),
 
             new UserDataCatalogEntry(

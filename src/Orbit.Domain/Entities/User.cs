@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.RegularExpressions;
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Models;
 
 namespace Orbit.Domain.Entities;
 
@@ -51,6 +52,8 @@ public partial class User : Entity
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;
     public DateOnly? LastActiveDate { get; private set; }
+    public int StreakFreezeBalance { get; private set; } = 0;
+    public int LastFreezeEarnedAtStreak { get; private set; } = 0;
     public string? ThemePreference { get; private set; }
     public string? ColorScheme { get; private set; }
 
@@ -326,6 +329,49 @@ public partial class User : Entity
         CurrentStreak = Math.Max(0, currentStreak);
         LongestStreak = Math.Max(CurrentStreak, longestStreak);
         LastActiveDate = lastActiveDate;
+
+        // If the current streak has dropped below the anchor (streak break or manual reset),
+        // clamp the anchor so future earnings require a fresh 7-day run.
+        if (LastFreezeEarnedAtStreak > CurrentStreak)
+            LastFreezeEarnedAtStreak = CurrentStreak;
+    }
+
+    /// <summary>
+    /// Evaluates whether the user should earn new streak freezes based on their
+    /// current streak versus the last-earn anchor. Grants freezes up to the hold cap,
+    /// advances the anchor even for capped earnings so the user cannot immediately re-qualify.
+    /// </summary>
+    public StreakFreezeEarnOutcome TryEarnStreakFreezes()
+    {
+        // Clamp anchor defensively: if current streak dropped below recorded anchor,
+        // earnings start fresh from the new current value.
+        if (LastFreezeEarnedAtStreak > CurrentStreak)
+            LastFreezeEarnedAtStreak = CurrentStreak;
+
+        var eligible = (CurrentStreak - LastFreezeEarnedAtStreak) / DomainConstants.DaysPerEarnedStreakFreeze;
+        if (eligible <= 0)
+            return new StreakFreezeEarnOutcome(0, 0, StreakFreezeBalance, LastFreezeEarnedAtStreak);
+
+        var capacity = Math.Max(0, DomainConstants.MaxStreakFreezesHeld - StreakFreezeBalance);
+        var earned = Math.Min(eligible, capacity);
+        var capped = eligible - earned;
+
+        StreakFreezeBalance += earned;
+        LastFreezeEarnedAtStreak += eligible * DomainConstants.DaysPerEarnedStreakFreeze;
+
+        return new StreakFreezeEarnOutcome(earned, capped, StreakFreezeBalance, LastFreezeEarnedAtStreak);
+    }
+
+    /// <summary>
+    /// Consumes one streak freeze from the user's balance.
+    /// </summary>
+    public Result ConsumeStreakFreeze()
+    {
+        if (StreakFreezeBalance <= 0)
+            return Result.Failure("No streak freezes available to consume.");
+
+        StreakFreezeBalance--;
+        return Result.Success();
     }
 
     /// <summary>
@@ -341,6 +387,8 @@ public partial class User : Entity
         CurrentStreak = 0;
         LongestStreak = 0;
         LastActiveDate = null;
+        StreakFreezeBalance = 0;
+        LastFreezeEarnedAtStreak = 0;
         AiMessagesUsedThisMonth = 0;
         AiMessagesResetAt = null;
         AdRewardBonusMessages = 0;

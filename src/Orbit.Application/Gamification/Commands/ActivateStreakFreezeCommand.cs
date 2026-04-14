@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -8,7 +7,10 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Gamification.Commands;
 
 public record StreakFreezeResponse(
-    int FreezesRemainingThisMonth,
+    int FreezesRemainingBalance,
+    int FreezesUsedThisMonth,
+    int MaxFreezesPerMonth,
+    int MaxFreezesHeld,
     DateOnly FrozenDate,
     int CurrentStreak);
 
@@ -64,16 +66,27 @@ public class ActivateStreakFreezeCommandHandler(
         if (existingFreeze.Count > 0)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.AlreadyUsedStreakFreezeToday, ErrorCodes.AlreadyUsedStreakFreezeToday);
 
-        // Count freezes in rolling 30-day window
-        var windowStart = today.AddDays(-29);
-        var recentFreezes = await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
+        // Balance precedence: user must have earned a freeze before they can spend one.
+        if (user.StreakFreezeBalance <= 0)
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoStreakFreezesEarned, ErrorCodes.NoStreakFreezesEarned);
+
+        // Usage cap is per calendar month in the user's local time.
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var monthFreezes = await streakFreezeRepository.FindAsync(
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= monthStart && sf.UsedOnDate < monthEnd,
             cancellationToken);
 
-        if (recentFreezes.Count >= AppConstants.MaxStreakFreezesPerMonth)
-            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable, ErrorCodes.StreakFreezeNotAvailable);
+        if (monthFreezes.Count >= AppConstants.MaxStreakFreezesPerMonth)
+            return Result.Failure<StreakFreezeResponse>(
+                ErrorMessages.StreakFreezeMonthlyLimitReached,
+                ErrorCodes.StreakFreezeMonthlyLimitReached);
 
-        // Create freeze
+        // Consume from balance and insert usage row.
+        var consume = user.ConsumeStreakFreeze();
+        if (consume.IsFailure)
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoStreakFreezesEarned, ErrorCodes.NoStreakFreezesEarned);
+
         var freeze = StreakFreeze.Create(request.UserId, today);
         await streakFreezeRepository.AddAsync(freeze, cancellationToken);
 
@@ -81,10 +94,13 @@ public class ActivateStreakFreezeCommandHandler(
         var updatedStreak = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var freezesRemaining = AppConstants.MaxStreakFreezesPerMonth - (recentFreezes.Count + 1);
+        var freezesUsedThisMonth = monthFreezes.Count + 1;
 
         return Result.Success(new StreakFreezeResponse(
-            freezesRemaining,
+            user.StreakFreezeBalance,
+            freezesUsedThisMonth,
+            AppConstants.MaxStreakFreezesPerMonth,
+            AppConstants.MaxStreakFreezesHeld,
             today,
             updatedStreak?.CurrentStreak ?? 0));
     }
