@@ -50,7 +50,7 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
         return new OwnershipResult(true, ownedCount == ids.Count);
     }
 
-    private static IReadOnlyCollection<Guid> CollectGuids(JsonElement arguments, params string[] propertyNames)
+    private static List<Guid> CollectGuids(JsonElement arguments, params string[] propertyNames)
     {
         var values = new HashSet<Guid>();
 

@@ -92,7 +92,7 @@ public class QueryGoalsTool(
     }
 
     private static string BuildOutput(
-        IReadOnlyList<Goal> goals,
+        List<Goal> goals,
         bool includeDescriptions,
         bool includeLinkedHabits)
     {

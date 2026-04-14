@@ -28,6 +28,7 @@ public partial class OAuthController(
     IConfiguration configuration,
     ILogger<OAuthController> logger) : ControllerBase
 {
+    private const string InvalidRedirectUriError = "invalid_redirect_uri";
     private static readonly string[] SupportedResponseTypes = ["code"];
     private static readonly string[] SupportedGrantTypes = ["authorization_code"];
     private static readonly string[] SupportedCodeChallengeMethods = ["S256"];
@@ -107,7 +108,7 @@ public partial class OAuthController(
             return BadRequest(new { error = "PKCE with S256 is required" });
 
         if (!IsRedirectUriAllowed(redirect_uri))
-            return BadRequest(new { error = "invalid_redirect_uri" });
+            return BadRequest(new { error = InvalidRedirectUriError });
 
         var googleClientId = googleSettings.Value.ClientId ?? "";
         var html = OAuthLoginPage.Render(
@@ -139,7 +140,7 @@ public partial class OAuthController(
     public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeRequest request, CancellationToken ct)
     {
         if (!IsRedirectUriAllowed(request.RedirectUri))
-            return BadRequest(new { error = "invalid_redirect_uri" });
+            return BadRequest(new { error = InvalidRedirectUriError });
 
         var result = await mediator.Send(
             new VerifyCodeCommand(request.Email, request.Code), ct);
@@ -166,7 +167,7 @@ public partial class OAuthController(
     public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthRequest request, CancellationToken ct)
     {
         if (!IsRedirectUriAllowed(request.RedirectUri))
-            return BadRequest(new { error = "invalid_redirect_uri" });
+            return BadRequest(new { error = InvalidRedirectUriError });
 
         // Validate Google ID token directly (GIS returns a JWT, not a Supabase token)
         var client = httpClientFactory.CreateClient();
@@ -236,7 +237,7 @@ public partial class OAuthController(
             return BadRequest(new { error = "unsupported_grant_type" });
 
         if (!IsRedirectUriAllowed(redirect_uri))
-            return BadRequest(new { error = "invalid_redirect_uri" });
+            return BadRequest(new { error = InvalidRedirectUriError });
 
         var entry = authStore.ExchangeCode(code, code_verifier, redirect_uri);
         if (entry is null)

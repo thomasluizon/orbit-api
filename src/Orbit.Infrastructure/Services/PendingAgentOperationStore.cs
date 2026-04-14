@@ -39,15 +39,17 @@ public class PendingAgentOperationStore(
         if (existing is not null)
             return Map(existing);
 
-        var entity = PendingAgentOperationState.Create(
-            userId,
-            capability,
-            operationId,
-            argumentsJson,
-            summary,
-            operationFingerprint,
-            surface,
-            DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.PendingOperationTtlMinutes)));
+        var entity = PendingAgentOperationState.Create(new PendingAgentOperationStateCreateRequest
+        {
+            UserId = userId,
+            Capability = capability,
+            OperationId = operationId,
+            ArgumentsJson = argumentsJson,
+            Summary = summary,
+            OperationFingerprint = operationFingerprint,
+            Surface = surface,
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.PendingOperationTtlMinutes))
+        });
 
         dbContext.PendingAgentOperations.Add(entity);
         dbContext.SaveChanges();

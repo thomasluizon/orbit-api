@@ -42,22 +42,20 @@ public class AgentOperationExecutor(
 
         if (!operation.IsAgentExecutable)
         {
-            var redactedArguments = request.Arguments.ValueKind == JsonValueKind.Undefined
-                ? RedactArguments(EmptyArguments)
-                : RedactArguments(request.Arguments);
+            var argumentsToAudit = request.Arguments.ValueKind == JsonValueKind.Undefined
+                ? EmptyArguments
+                : request.Arguments;
+            var redactedArguments = RedactArguments(argumentsToAudit);
 
             await TryAuditAsync(
-                request,
-                capability,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Denied,
-                $"{operation.DisplayName} requires a direct client flow.",
-                redactedArguments,
-                null,
-                null,
-                "direct_user_flow_required",
-                null,
-                null,
+                CreateAuditContext(
+                    request,
+                    capability,
+                    AgentPolicyDecisionStatus.Denied,
+                    AgentOperationStatus.Denied,
+                    $"{operation.DisplayName} requires a direct client flow.",
+                    redactedArguments,
+                    error: "direct_user_flow_required"),
                 cancellationToken);
 
             return new AgentExecuteOperationResponse(
@@ -91,17 +89,14 @@ public class AgentOperationExecutor(
         if (ownershipDenialReason is not null)
         {
             await TryAuditAsync(
-                request,
-                capability,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Denied,
-                summary,
-                RedactArguments(arguments),
-                null,
-                null,
-                ownershipDenialReason,
-                null,
-                null,
+                CreateAuditContext(
+                    request,
+                    capability,
+                    AgentPolicyDecisionStatus.Denied,
+                    AgentOperationStatus.Denied,
+                    summary,
+                    RedactArguments(arguments),
+                    error: ownershipDenialReason),
                 cancellationToken);
 
             return new AgentExecuteOperationResponse(
@@ -121,14 +116,7 @@ public class AgentOperationExecutor(
                     ownershipDenialReason));
         }
 
-        var grantedScopes = request.AuthMethod == AgentAuthMethod.ApiKey
-            ? request.GrantedScopes ?? []
-            : (request.GrantedScopes is { Count: > 0 }
-                ? request.GrantedScopes
-                : catalogService.GetCapabilities()
-                    .Select(item => item.Scope)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList());
+        var grantedScopes = GetGrantedScopes(request);
 
         var operationFingerprint = $"{operation.Id}:{arguments.GetRawText()}";
         var policyDecision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
@@ -147,17 +135,16 @@ public class AgentOperationExecutor(
         if (policyDecision.Status == AgentPolicyDecisionStatus.Denied)
         {
             await TryAuditAsync(
-                request,
-                capability,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Denied,
-                summary,
-                RedactArguments(arguments),
-                null,
-                null,
-                policyDecision.Reason,
-                policyDecision.ShadowStatus,
-                policyDecision.ShadowReason,
+                CreateAuditContext(
+                    request,
+                    capability,
+                    AgentPolicyDecisionStatus.Denied,
+                    AgentOperationStatus.Denied,
+                    summary,
+                    RedactArguments(arguments),
+                    error: policyDecision.Reason,
+                    shadowPolicyDecision: policyDecision.ShadowStatus,
+                    shadowReason: policyDecision.ShadowReason),
                 cancellationToken);
 
             return new AgentExecuteOperationResponse(
@@ -180,17 +167,16 @@ public class AgentOperationExecutor(
         if (policyDecision.Status == AgentPolicyDecisionStatus.ConfirmationRequired)
         {
             await TryAuditAsync(
-                request,
-                capability,
-                AgentPolicyDecisionStatus.ConfirmationRequired,
-                AgentOperationStatus.PendingConfirmation,
-                summary,
-                RedactArguments(arguments),
-                null,
-                null,
-                policyDecision.Reason,
-                policyDecision.ShadowStatus,
-                policyDecision.ShadowReason,
+                CreateAuditContext(
+                    request,
+                    capability,
+                    AgentPolicyDecisionStatus.ConfirmationRequired,
+                    AgentOperationStatus.PendingConfirmation,
+                    summary,
+                    RedactArguments(arguments),
+                    error: policyDecision.Reason,
+                    shadowPolicyDecision: policyDecision.ShadowStatus,
+                    shadowReason: policyDecision.ShadowReason),
                 cancellationToken);
 
             return new AgentExecuteOperationResponse(
@@ -232,17 +218,18 @@ public class AgentOperationExecutor(
             var outcomeStatus = result.Success ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed;
 
             await TryAuditAsync(
-                request,
-                capability,
-                AgentPolicyDecisionStatus.Allowed,
-                outcomeStatus,
-                summary,
-                RedactArguments(arguments),
-                result.EntityId,
-                result.EntityName,
-                result.Error,
-                policyDecision.ShadowStatus,
-                policyDecision.ShadowReason,
+                CreateAuditContext(
+                    request,
+                    capability,
+                    AgentPolicyDecisionStatus.Allowed,
+                    outcomeStatus,
+                    summary,
+                    RedactArguments(arguments),
+                    result.EntityId,
+                    result.EntityName,
+                    result.Error,
+                    policyDecision.ShadowStatus,
+                    policyDecision.ShadowReason),
                 cancellationToken);
 
             return new AgentExecuteOperationResponse(new AgentOperationResult(
@@ -260,17 +247,16 @@ public class AgentOperationExecutor(
         catch (Exception ex)
         {
             await TryAuditAsync(
-                request,
-                capability,
-                AgentPolicyDecisionStatus.Allowed,
-                AgentOperationStatus.Failed,
-                summary,
-                RedactArguments(arguments),
-                null,
-                null,
-                ex.Message,
-                policyDecision.ShadowStatus,
-                policyDecision.ShadowReason,
+                CreateAuditContext(
+                    request,
+                    capability,
+                    AgentPolicyDecisionStatus.Allowed,
+                    AgentOperationStatus.Failed,
+                    summary,
+                    RedactArguments(arguments),
+                    error: ex.Message,
+                    shadowPolicyDecision: policyDecision.ShadowStatus,
+                    shadowReason: policyDecision.ShadowReason),
                 cancellationToken);
 
             return new AgentExecuteOperationResponse(new AgentOperationResult(
@@ -284,39 +270,70 @@ public class AgentOperationExecutor(
         }
     }
 
-    private async Task TryAuditAsync(
+    private IReadOnlyList<string> GetGrantedScopes(AgentExecuteOperationRequest request)
+    {
+        if (request.AuthMethod == AgentAuthMethod.ApiKey)
+            return request.GrantedScopes ?? [];
+
+        if (request.GrantedScopes is { Count: > 0 })
+            return request.GrantedScopes;
+
+        return catalogService.GetCapabilities()
+            .Select(item => item.Scope)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static AuditContext CreateAuditContext(
         AgentExecuteOperationRequest request,
         AgentCapability capability,
         AgentPolicyDecisionStatus policyDecision,
         AgentOperationStatus outcomeStatus,
         string summary,
         string? redactedArguments,
-        string? targetId,
-        string? targetName,
-        string? error,
-        AgentPolicyDecisionStatus? shadowPolicyDecision,
-        string? shadowReason,
+        string? targetId = null,
+        string? targetName = null,
+        string? error = null,
+        AgentPolicyDecisionStatus? shadowPolicyDecision = null,
+        string? shadowReason = null)
+    {
+        return new AuditContext(
+            request,
+            capability,
+            policyDecision,
+            outcomeStatus,
+            summary,
+            redactedArguments,
+            targetId,
+            targetName,
+            error,
+            shadowPolicyDecision,
+            shadowReason);
+    }
+
+    private async Task TryAuditAsync(
+        AuditContext context,
         CancellationToken cancellationToken)
     {
         try
         {
             await auditService.RecordAsync(new AgentAuditEntry(
-                request.UserId,
-                capability.Id,
-                request.OperationId,
-                request.Surface,
-                request.AuthMethod,
-                capability.RiskClass,
-                policyDecision,
-                outcomeStatus,
-                request.CorrelationId,
-                summary,
-                targetId,
-                targetName,
-                redactedArguments,
-                error,
-                shadowPolicyDecision,
-                shadowReason), cancellationToken);
+                context.Request.UserId,
+                context.Capability.Id,
+                context.Request.OperationId,
+                context.Request.Surface,
+                context.Request.AuthMethod,
+                context.Capability.RiskClass,
+                context.PolicyDecision,
+                context.OutcomeStatus,
+                context.Request.CorrelationId,
+                context.Summary,
+                context.TargetId,
+                context.TargetName,
+                context.RedactedArguments,
+                context.Error,
+                context.ShadowPolicyDecision,
+                context.ShadowReason), cancellationToken);
         }
         catch
         {
@@ -329,4 +346,17 @@ public class AgentOperationExecutor(
         var raw = arguments.GetRawText();
         return raw.Length <= 1000 ? raw : raw[..1000];
     }
+
+    private sealed record AuditContext(
+        AgentExecuteOperationRequest Request,
+        AgentCapability Capability,
+        AgentPolicyDecisionStatus PolicyDecision,
+        AgentOperationStatus OutcomeStatus,
+        string Summary,
+        string? RedactedArguments,
+        string? TargetId,
+        string? TargetName,
+        string? Error,
+        AgentPolicyDecisionStatus? ShadowPolicyDecision,
+        string? ShadowReason);
 }

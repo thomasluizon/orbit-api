@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
@@ -144,7 +145,7 @@ public class AiController(
 
     public record ConfirmPendingOperationResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc);
     public record StepUpChallengeRequest(string Language = "en");
-    public record VerifyStepUpRequest(Guid ChallengeId, string Code);
+    public record VerifyStepUpRequest([property: JsonRequired] Guid ChallengeId, string Code);
     public record ExecutePendingOperationRequest(string ConfirmationToken);
 
     [HttpPost("pending-operations/{id:guid}/confirm")]

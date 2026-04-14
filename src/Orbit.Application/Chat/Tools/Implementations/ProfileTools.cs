@@ -138,6 +138,9 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
 
 public class UpdateAiSettingsTool(IMediator mediator) : IAiTool
 {
+    private const string EnabledState = "enabled";
+    private const string DisabledState = "disabled";
+
     public string Name => "update_ai_settings";
     public string Description => "Enable or disable AI memory and daily AI summary settings.";
 
@@ -174,10 +177,15 @@ public class UpdateAiSettingsTool(IMediator mediator) : IAiTool
             ? new ToolResult(
                 true,
                 EntityId: userId.ToString(),
-                EntityName: action == "set_ai_memory"
-                    ? $"AI memory {(enabled.Value ? "enabled" : "disabled")}"
-                    : $"AI summary {(enabled.Value ? "enabled" : "disabled")}",
+                EntityName: BuildEntityName(action, enabled.Value),
                 Payload: new { action, enabled })
             : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+    }
+
+    private static string BuildEntityName(string action, bool enabled)
+    {
+        var settingName = action == "set_ai_memory" ? "AI memory" : "AI summary";
+        var state = enabled ? EnabledState : DisabledState;
+        return $"{settingName} {state}";
     }
 }
