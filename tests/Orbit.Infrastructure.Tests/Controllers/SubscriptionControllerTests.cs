@@ -93,6 +93,22 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
+    public async Task CreateCheckout_UsesOrbitCountryCodeBeforeCdnCountry()
+    {
+        _controller.HttpContext.Request.Headers["X-Orbit-Country-Code"] = "BR";
+        _controller.HttpContext.Request.Headers["CF-IPCountry"] = "US";
+        _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(CheckoutResponse)!));
+
+        var request = new SubscriptionController.CreateCheckoutRequest("month");
+        await _controller.CreateCheckout(request, CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateCheckoutCommand>(command => command.CountryCode == "BR"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task CreateCheckout_UsesForwardedCountryAndIp()
     {
         _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
@@ -272,6 +288,22 @@ public class SubscriptionControllerTests
 
         await _mediator.Received(1).Send(
             Arg.Is<GetPlansQuery>(q => q.CountryCode == "BR" && q.IpAddress == "177.55.44.33"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetPlans_UsesOrbitCountryCodeBeforeCdnCountry()
+    {
+        _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(PlansResponse)!));
+
+        _controller.HttpContext.Request.Headers["X-Orbit-Country-Code"] = "BR";
+        _controller.HttpContext.Request.Headers["CF-IPCountry"] = "US";
+
+        await _controller.GetPlans(CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<GetPlansQuery>(query => query.CountryCode == "BR"),
             Arg.Any<CancellationToken>());
     }
 

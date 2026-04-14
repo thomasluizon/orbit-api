@@ -47,6 +47,7 @@ public static class HttpContextExtensions
 
     private static readonly string[] CountryHeaderNames =
     [
+        "X-Orbit-Country-Code",
         "CF-IPCountry",
         "X-Vercel-IP-Country",
         "CloudFront-Viewer-Country"
