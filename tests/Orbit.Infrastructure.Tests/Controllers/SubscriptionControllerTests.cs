@@ -127,6 +127,23 @@ public class SubscriptionControllerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task CreateCheckout_UsesTimezoneCountryFallback()
+    {
+        _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(CheckoutResponse)!));
+
+        _controller.HttpContext.Request.Headers["X-Orbit-Time-Zone"] = "America/Sao_Paulo";
+
+        var request = new SubscriptionController.CreateCheckoutRequest("month");
+
+        await _controller.CreateCheckout(request, CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateCheckoutCommand>(c => c.CountryCode == "BR" && c.IpAddress == "127.0.0.1"),
+            Arg.Any<CancellationToken>());
+    }
+
     // --- CreatePortal ---
 
     [Fact]
@@ -265,6 +282,23 @@ public class SubscriptionControllerTests
             .Returns(Result.Success(default(PlansResponse)!));
 
         _controller.HttpContext.Request.Headers["Accept-Language"] = "pt-BR,pt;q=0.9,en;q=0.8";
+
+        await _controller.GetPlans(CancellationToken.None);
+
+        await _mediator.Received(1).Send(
+            Arg.Is<GetPlansQuery>(query =>
+                query.CountryCode == "BR" &&
+                query.IpAddress == "127.0.0.1"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetPlans_UsesTimezoneCountryFallback()
+    {
+        _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(PlansResponse)!));
+
+        _controller.HttpContext.Request.Headers["X-Orbit-Time-Zone"] = "America/Sao_Paulo";
 
         await _controller.GetPlans(CancellationToken.None);
 

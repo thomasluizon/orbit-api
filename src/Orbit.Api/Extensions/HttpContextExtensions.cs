@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Claims;
+using Orbit.Application.Common;
 using Orbit.Domain.Models;
 
 namespace Orbit.Api.Extensions;
@@ -51,6 +52,8 @@ public static class HttpContextExtensions
         "CloudFront-Viewer-Country"
     ];
 
+    private const string OrbitTimeZoneHeaderName = "X-Orbit-Time-Zone";
+
     private static readonly string[] IpHeaderNames =
     [
         "CF-Connecting-IP",
@@ -66,6 +69,11 @@ public static class HttpContextExtensions
             if (countryCode is not null)
                 return countryCode;
         }
+
+        var timeZoneCountryCode = NormalizeCountryCodeFromTimeZone(
+            context.Request.Headers[OrbitTimeZoneHeaderName].ToString());
+        if (timeZoneCountryCode is not null)
+            return timeZoneCountryCode;
 
         var acceptLanguageCountryCode = NormalizeCountryCodeFromAcceptLanguage(
             context.Request.Headers.AcceptLanguage.ToString());
@@ -122,6 +130,13 @@ public static class HttpContextExtensions
         }
 
         return null;
+    }
+
+    private static string? NormalizeCountryCodeFromTimeZone(string? timeZone)
+    {
+        return TimeZoneHelper.IsBrazilTimeZone(timeZone)
+            ? "BR"
+            : null;
     }
 
     private static bool TryNormalizeIpAddress(string? ipAddress, out string? normalizedIpAddress)
