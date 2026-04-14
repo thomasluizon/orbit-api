@@ -9,13 +9,21 @@ public class ApiKey : Entity
     public string Name { get; private set; } = null!;
     public string KeyHash { get; private set; } = null!;
     public string KeyPrefix { get; private set; } = null!;
+    public IReadOnlyList<string> Scopes { get; private set; } = [];
+    public bool IsReadOnly { get; private set; }
+    public DateTime? ExpiresAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime? LastUsedAtUtc { get; private set; }
     public bool IsRevoked { get; private set; }
 
     private ApiKey() { }
 
-    public static Result<(ApiKey Entity, string RawKey)> Create(Guid userId, string name)
+    public static Result<(ApiKey Entity, string RawKey)> Create(
+        Guid userId,
+        string name,
+        IReadOnlyList<string>? scopes = null,
+        bool isReadOnly = false,
+        DateTime? expiresAtUtc = null)
     {
         if (userId == Guid.Empty)
             return Result.Failure<(ApiKey, string)>("User ID is required.");
@@ -25,6 +33,19 @@ public class ApiKey : Entity
 
         if (name.Trim().Length > 50)
             return Result.Failure<(ApiKey, string)>("API key name must be 50 characters or less.");
+
+        if (expiresAtUtc.HasValue && expiresAtUtc.Value <= DateTime.UtcNow)
+            return Result.Failure<(ApiKey, string)>("API key expiry must be in the future.");
+
+        var normalizedScopes = (scopes ?? [])
+            .Where(scope => !string.IsNullOrWhiteSpace(scope))
+            .Select(scope => scope.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (scopes is not null && normalizedScopes.Count != scopes.Count)
+            return Result.Failure<(ApiKey, string)>("API key scopes must be non-empty strings.");
 
         var rawKey = GenerateKey();
         var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);
@@ -36,6 +57,9 @@ public class ApiKey : Entity
             Name = name.Trim(),
             KeyHash = keyHash,
             KeyPrefix = keyPrefix,
+            Scopes = normalizedScopes,
+            IsReadOnly = isReadOnly,
+            ExpiresAtUtc = expiresAtUtc,
             CreatedAtUtc = DateTime.UtcNow,
             IsRevoked = false
         };
@@ -46,6 +70,8 @@ public class ApiKey : Entity
     public void Revoke() => IsRevoked = true;
 
     public void MarkUsed() => LastUsedAtUtc = DateTime.UtcNow;
+
+    public bool HasExpired() => ExpiresAtUtc.HasValue && ExpiresAtUtc.Value <= DateTime.UtcNow;
 
     private static string GenerateKey()
     {

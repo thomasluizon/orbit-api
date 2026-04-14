@@ -14,7 +14,11 @@ namespace Orbit.Api.Controllers;
 [Route("api/api-keys")]
 public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysController> logger) : ControllerBase
 {
-    public record CreateApiKeyRequest(string Name);
+    public record CreateApiKeyRequest(
+        string Name,
+        IReadOnlyList<string>? Scopes = null,
+        bool IsReadOnly = false,
+        DateTime? ExpiresAtUtc = null);
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -25,7 +29,12 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
         [FromBody] CreateApiKeyRequest request,
         CancellationToken cancellationToken)
     {
-        var command = new CreateApiKeyCommand(HttpContext.GetUserId(), request.Name);
+        var command = new CreateApiKeyCommand(
+            HttpContext.GetUserId(),
+            request.Name,
+            request.Scopes,
+            request.IsReadOnly,
+            request.ExpiresAtUtc);
         var result = await mediator.Send(command, cancellationToken);
 
         return result.ToPayGateAwareResult(value =>

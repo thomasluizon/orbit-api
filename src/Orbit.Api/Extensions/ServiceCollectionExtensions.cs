@@ -1,9 +1,7 @@
 using System.Text;
-using System.Threading.RateLimiting;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Api.Authentication;
@@ -11,6 +9,7 @@ using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
 using Orbit.Api.OAuth;
 using Orbit.Api.OpenApi;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
@@ -28,6 +27,18 @@ namespace Orbit.Api.Extensions;
 
 public static class ServiceCollectionExtensions
 {
+    public static WebApplicationBuilder ValidateOrbitSecuritySettings(this WebApplicationBuilder builder)
+    {
+        if (!builder.Environment.IsProduction())
+            return builder;
+
+        var encryptionKey = builder.Configuration[$"{EncryptionSettings.SectionName}:Key"];
+        if (string.IsNullOrWhiteSpace(encryptionKey) || encryptionKey.Contains("REPLACE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Production requires a configured Encryption:Key for protected-at-rest fields.");
+
+        return builder;
+    }
+
     public static WebApplicationBuilder AddOrbitDatabase(this WebApplicationBuilder builder)
     {
         builder.Services.AddDbContext<OrbitDbContext>(options =>
@@ -40,6 +51,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
+        builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
             new GamificationRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
@@ -106,12 +118,21 @@ public static class ServiceCollectionExtensions
     {
         builder.Services.Configure<AiSettings>(
             builder.Configuration.GetSection(AiSettings.SectionName));
+        builder.Services.Configure<AgentPlatformSettings>(
+            builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
         builder.Services.AddScoped<IFactExtractionService, AiFactExtractionService>();
         builder.Services.AddScoped<ISummaryService, AiSummaryService>();
         builder.Services.AddScoped<IRetrospectiveService, AiRetrospectiveService>();
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
+        builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
+        builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
+        builder.Services.AddScoped<IAgentStepUpService, AgentStepUpService>();
+        builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
+        builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
+        builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
+        builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
 
         // AI Tool Registration
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
@@ -135,6 +156,28 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, UpdateGoalProgressTool>();
         builder.Services.AddScoped<IAiTool, LinkHabitsToGoalTool>();
         builder.Services.AddScoped<IAiTool, GoalReviewTool>();
+        builder.Services.AddScoped<IAiTool, GetProfileTool>();
+        builder.Services.AddScoped<IAiTool, UpdateProfilePreferencesTool>();
+        builder.Services.AddScoped<IAiTool, UpdateAiSettingsTool>();
+        builder.Services.AddScoped<IAiTool, GetNotificationsTool>();
+        builder.Services.AddScoped<IAiTool, UpdateNotificationsTool>();
+        builder.Services.AddScoped<IAiTool, DeleteNotificationsTool>();
+        builder.Services.AddScoped<IAiTool, GetCalendarOverviewTool>();
+        builder.Services.AddScoped<IAiTool, ManageCalendarSyncTool>();
+        builder.Services.AddScoped<IAiTool, GetChecklistTemplatesTool>();
+        builder.Services.AddScoped<IAiTool, CreateChecklistTemplateTool>();
+        builder.Services.AddScoped<IAiTool, DeleteChecklistTemplateTool>();
+        builder.Services.AddScoped<IAiTool, GetUserFactsTool>();
+        builder.Services.AddScoped<IAiTool, DeleteUserFactsTool>();
+        builder.Services.AddScoped<IAiTool, GetGamificationOverviewTool>();
+        builder.Services.AddScoped<IAiTool, ActivateStreakFreezeTool>();
+        builder.Services.AddScoped<IAiTool, GetReferralOverviewTool>();
+        builder.Services.AddScoped<IAiTool, GetSubscriptionOverviewTool>();
+        builder.Services.AddScoped<IAiTool, ManageSubscriptionTool>();
+        builder.Services.AddScoped<IAiTool, GetApiKeysTool>();
+        builder.Services.AddScoped<IAiTool, ManageApiKeysTool>();
+        builder.Services.AddScoped<IAiTool, SendSupportRequestTool>();
+        builder.Services.AddScoped<IAiTool, ManageAccountTool>();
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
@@ -177,21 +220,25 @@ public static class ServiceCollectionExtensions
             new Orbit.Application.Chat.Commands.ChatAiDependencies(
                 sp.GetRequiredService<IAiIntentService>(),
                 sp.GetRequiredService<AiToolRegistry>(),
-                sp.GetRequiredService<ISystemPromptBuilder>()));
+                sp.GetRequiredService<ISystemPromptBuilder>(),
+                sp.GetRequiredService<IAgentCatalogService>()));
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatDataDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatDataDependencies(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChecklistTemplate>>(),
+                sp.GetRequiredService<IFeatureFlagService>()));
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatExecutionDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatExecutionDependencies(
                 sp.GetRequiredService<IUserDateService>(),
                 sp.GetRequiredService<IUserStreakService>(),
                 sp.GetRequiredService<IPayGateService>(),
                 sp.GetRequiredService<IUnitOfWork>(),
-                sp.GetRequiredService<IServiceScopeFactory>()));
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IAgentOperationExecutor>()));
 
         return builder;
     }
@@ -339,6 +386,7 @@ public static class ServiceCollectionExtensions
         // MCP Server
         builder.Services.AddMcpServer()
             .WithHttpTransport()
+            .WithTools<AgentTools>()
             .WithTools<HabitTools>()
             .WithTools<TagTools>()
             .WithTools<GoalTools>()
@@ -378,38 +426,7 @@ public static class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)
     {
-        // NOTE: IMemoryCache-backed rate limiting is not shared across replicas.
-        // For multi-replica deployments, replace with a distributed store (e.g., Redis).
-        // Disabled in Development to avoid breaking integration tests.
-        if (!builder.Environment.IsDevelopment())
-        {
-            builder.Services.AddRateLimiter(options =>
-            {
-                options.AddFixedWindowLimiter("auth", limiterOptions =>
-                {
-                    limiterOptions.Window = TimeSpan.FromMinutes(1);
-                    limiterOptions.PermitLimit = 5;
-                    limiterOptions.QueueLimit = 0;
-                    limiterOptions.AutoReplenishment = true;
-                });
-                options.AddSlidingWindowLimiter("chat", limiterOptions =>
-                {
-                    limiterOptions.Window = TimeSpan.FromMinutes(1);
-                    limiterOptions.SegmentsPerWindow = 4;
-                    limiterOptions.PermitLimit = 20;
-                    limiterOptions.QueueLimit = 0;
-                    limiterOptions.AutoReplenishment = true;
-                });
-                options.AddFixedWindowLimiter("support", limiterOptions =>
-                {
-                    limiterOptions.Window = TimeSpan.FromHours(1);
-                    limiterOptions.PermitLimit = 3;
-                    limiterOptions.QueueLimit = 0;
-                    limiterOptions.AutoReplenishment = true;
-                });
-                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            });
-        }
+        builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
 
         return builder;
     }

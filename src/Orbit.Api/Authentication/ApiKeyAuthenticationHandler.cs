@@ -19,6 +19,9 @@ public class ApiKeyAuthenticationHandler(
         if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer orb_", StringComparison.OrdinalIgnoreCase))
             return AuthenticateResult.Fail("Not an API key token.");
 
+        if (!IsAllowedApiKeyPath(Request.Path))
+            return AuthenticateResult.Fail("API keys are only allowed for agent endpoints.");
+
         var rawKey = authHeader["Bearer ".Length..].Trim();
         if (rawKey.Length < 12)
             return AuthenticateResult.Fail("Invalid API key format.");
@@ -38,14 +41,21 @@ public class ApiKeyAuthenticationHandler(
         {
             if (BCrypt.Net.BCrypt.Verify(rawKey, candidate.KeyHash))
             {
+                if (candidate.HasExpired())
+                    return AuthenticateResult.Fail("API key expired.");
+
                 candidate.MarkUsed();
                 await unitOfWork.SaveChangesAsync();
 
-                var claims = new[]
+                var claims = new List<Claim>
                 {
-                    new Claim(ClaimTypes.NameIdentifier, candidate.UserId.ToString()),
-                    new Claim("auth_method", "api_key")
+                    new(ClaimTypes.NameIdentifier, candidate.UserId.ToString()),
+                    new("auth_method", "api_key"),
+                    new("api_key_id", candidate.Id.ToString()),
+                    new("api_key_read_only", candidate.IsReadOnly.ToString())
                 };
+
+                claims.AddRange(candidate.Scopes.Select(scope => new Claim("scope", scope)));
                 var identity = new ClaimsIdentity(claims, Scheme.Name);
                 var principal = new ClaimsPrincipal(identity);
                 var ticket = new AuthenticationTicket(principal, Scheme.Name);
@@ -54,5 +64,12 @@ public class ApiKeyAuthenticationHandler(
         }
 
         return AuthenticateResult.Fail("Invalid API key.");
+    }
+
+    private static bool IsAllowedApiKeyPath(PathString path)
+    {
+        return path.StartsWithSegments("/mcp", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/api/chat", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/api/ai", StringComparison.OrdinalIgnoreCase);
     }
 }

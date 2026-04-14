@@ -11,4 +11,9 @@ public interface IAiTool
     Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct);
 }
 
-public record ToolResult(bool Success, string? EntityId = null, string? EntityName = null, string? Error = null);
+public record ToolResult(
+    bool Success,
+    string? EntityId = null,
+    string? EntityName = null,
+    string? Error = null,
+    object? Payload = null);

@@ -9,19 +9,21 @@ using Orbit.Api.Controllers;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
 public class AuthControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly ILogger<AuthController> _logger = Substitute.For<ILogger<AuthController>>();
     private readonly AuthController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
     public AuthControllerTests()
     {
-        _controller = new AuthController(_mediator, _logger);
+        _controller = new AuthController(_mediator, _auditService, _logger);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);

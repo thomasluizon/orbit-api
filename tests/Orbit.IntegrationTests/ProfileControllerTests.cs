@@ -2,43 +2,29 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
 
 [Collection("Sequential")]
 public class ProfileControllerTests : IAsyncLifetime
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly IntegrationTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly string _email = $"profile-test-{Guid.NewGuid()}@integration.test";
-    private const string Password = "TestPassword123!";
+    private const string TestCode = "999999";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public ProfileControllerTests(WebApplicationFactory<Program> factory)
+    public ProfileControllerTests(IntegrationTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
+        IntegrationTestHelpers.RegisterTestAccount(_email, TestCode);
     }
 
     public async Task InitializeAsync()
     {
-        await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "Profile Test User",
-            email = _email,
-            password = Password
-        });
-
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email = _email,
-            password = Password
-        });
-
-        var login = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
-        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {login!.Token}");
+        await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
     }
 
     public async Task DisposeAsync()
@@ -57,7 +43,7 @@ public class ProfileControllerTests : IAsyncLifetime
 
         var profile = await response.Content.ReadFromJsonAsync<ProfileResponse>(JsonOptions);
         profile.Should().NotBeNull();
-        profile!.Name.Should().Be("Profile Test User");
+        profile!.Name.Should().Be(_email.Split('@')[0]);
         profile.Email.Should().Be(_email);
     }
 
@@ -73,14 +59,14 @@ public class ProfileControllerTests : IAsyncLifetime
     // ── SetTimezone ───────────────────────────────────────────
 
     [Fact]
-    public async Task SetTimezone_ValidTimezone_ReturnsOk()
+    public async Task SetTimezone_ValidTimezone_ReturnsNoContent()
     {
         var response = await _client.PutAsJsonAsync("/api/profile/timezone", new
         {
             timeZone = "America/New_York"
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify it was persisted
         var profileResponse = await _client.GetAsync("/api/profile");
@@ -101,6 +87,5 @@ public class ProfileControllerTests : IAsyncLifetime
 
     // ── DTOs ──────────────────────────────────────────────────
 
-    private record LoginResponse(string UserId, string Token, string Name, string Email);
     private record ProfileResponse(string Name, string Email, string? TimeZone);
 }

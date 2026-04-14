@@ -29,7 +29,7 @@ public class CoreIdentitySectionTests
         var result = new CoreIdentitySection().Build(ctx);
 
         result.Should().Contain("Orbit AI");
-        result.Should().Contain("Habit Tracking Assistant");
+        result.Should().Contain("Habit and Goal Tracking Assistant");
     }
 }
 

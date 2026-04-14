@@ -1,9 +1,11 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 #pragma warning disable CA1873
 
@@ -11,7 +13,7 @@ namespace Orbit.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public partial class AuthController(IMediator mediator, ILogger<AuthController> logger) : ControllerBase
+public partial class AuthController(IMediator mediator, IAgentAuditService auditService, ILogger<AuthController> logger) : ControllerBase
 {
     public record SendCodeRequest(string Email, string Language = "en");
     public record VerifyCodeRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
@@ -19,9 +21,14 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
     public record ConfirmDeletionRequest(string Code);
     public record RefreshSessionRequest(string RefreshToken);
     public record LogoutSessionRequest(string RefreshToken);
+    public record SendCodeOperationRequest(string Email, string Language = "en");
+    public record VerifyCodeOperationRequest(string Email, string Code, string Language = "en", string? ReferralCode = null);
+    public record GoogleAuthOperationRequest(string AccessToken, string Language = "en", string? GoogleAccessToken = null, string? GoogleRefreshToken = null, string? ReferralCode = null);
+    public record RefreshSessionOperationRequest(string RefreshToken);
+    public record LogoutSessionOperationRequest(string RefreshToken);
 
     [HttpPost("send-code")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendCode(
@@ -41,8 +48,36 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
         return BadRequest(new { error = result.Error });
     }
 
+    [HttpPost("operations/send-code")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> SendCodeOperation(
+        [FromBody] SendCodeOperationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new SendCodeCommand(request.Email, request.Language), cancellationToken);
+        await RecordDirectAuthAuditAsync(
+            "send_auth_code",
+            Guid.Empty,
+            request.Email,
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            null,
+            result.IsSuccess ? null : result.Error,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(BuildOperationResponse(
+                "send_auth_code",
+                AgentOperationStatus.Succeeded,
+                payload: new { success = true }))
+            : BadRequest(BuildOperationResponse(
+                "send_auth_code",
+                AgentOperationStatus.Failed,
+                policyReason: result.Error));
+    }
+
     [HttpPost("verify-code")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> VerifyCode(
@@ -62,8 +97,48 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
         return Unauthorized(new { error = result.Error });
     }
 
+    [HttpPost("operations/verify-code")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyCodeOperation(
+        [FromBody] VerifyCodeOperationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new VerifyCodeCommand(request.Email, request.Code, request.Language, request.ReferralCode),
+            cancellationToken);
+
+        await RecordDirectAuthAuditAsync(
+            "verify_auth_code",
+            result.IsSuccess ? result.Value.UserId : Guid.Empty,
+            request.Email,
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            result.IsSuccess ? result.Value.UserId.ToString() : null,
+            result.IsSuccess ? null : result.Error,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(BuildOperationResponse(
+                "verify_auth_code",
+                AgentOperationStatus.Succeeded,
+                targetId: result.Value.UserId.ToString(),
+                payload: new
+                {
+                    access_token = result.Value.Token,
+                    refresh_token = result.Value.RefreshToken,
+                    user_id = result.Value.UserId,
+                    name = result.Value.Name,
+                    email = result.Value.Email,
+                    was_reactivated = result.Value.WasReactivated
+                }))
+            : Unauthorized(BuildOperationResponse(
+                "verify_auth_code",
+                AgentOperationStatus.Failed,
+                policyReason: result.Error));
+    }
+
     [HttpPost("google")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GoogleAuth(
@@ -83,8 +158,53 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
         return Unauthorized(new { error = result.Error });
     }
 
+    [HttpPost("operations/google")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GoogleAuthOperation(
+        [FromBody] GoogleAuthOperationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new GoogleAuthCommand(
+                request.AccessToken,
+                request.Language,
+                request.GoogleAccessToken,
+                request.GoogleRefreshToken,
+                request.ReferralCode),
+            cancellationToken);
+
+        await RecordDirectAuthAuditAsync(
+            "exchange_google_auth",
+            result.IsSuccess ? result.Value.UserId : Guid.Empty,
+            "google_oauth",
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            result.IsSuccess ? result.Value.UserId.ToString() : null,
+            result.IsSuccess ? null : result.Error,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(BuildOperationResponse(
+                "exchange_google_auth",
+                AgentOperationStatus.Succeeded,
+                targetId: result.Value.UserId.ToString(),
+                payload: new
+                {
+                    access_token = result.Value.Token,
+                    refresh_token = result.Value.RefreshToken,
+                    user_id = result.Value.UserId,
+                    name = result.Value.Name,
+                    email = result.Value.Email,
+                    was_reactivated = result.Value.WasReactivated
+                }))
+            : Unauthorized(BuildOperationResponse(
+                "exchange_google_auth",
+                AgentOperationStatus.Failed,
+                policyReason: result.Error));
+    }
+
     [HttpPost("refresh")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
@@ -104,8 +224,40 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
         return Unauthorized(new { error = result.Error });
     }
 
+    [HttpPost("operations/refresh")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RefreshOperation(
+        [FromBody] RefreshSessionOperationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new RefreshSessionCommand(request.RefreshToken), cancellationToken);
+        await RecordDirectAuthAuditAsync(
+            "refresh_auth_session",
+            Guid.Empty,
+            "refresh_token",
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            null,
+            result.IsSuccess ? null : result.Error,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(BuildOperationResponse(
+                "refresh_auth_session",
+                AgentOperationStatus.Succeeded,
+                payload: new
+                {
+                    access_token = result.Value.Token,
+                    refresh_token = result.Value.RefreshToken
+                }))
+            : Unauthorized(BuildOperationResponse(
+                "refresh_auth_session",
+                AgentOperationStatus.Failed,
+                policyReason: result.Error));
+    }
+
     [HttpPost("logout")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout(
@@ -123,6 +275,34 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
         LogSessionRevocationFailed(logger, result.Error);
         return Unauthorized(new { error = result.Error });
+    }
+
+    [HttpPost("operations/logout")]
+    [DistributedRateLimit("auth")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LogoutOperation(
+        [FromBody] LogoutSessionOperationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new LogoutSessionCommand(request.RefreshToken), cancellationToken);
+        await RecordDirectAuthAuditAsync(
+            "logout_auth_session",
+            Guid.Empty,
+            "refresh_token",
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            null,
+            result.IsSuccess ? null : result.Error,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(BuildOperationResponse(
+                "logout_auth_session",
+                AgentOperationStatus.Succeeded,
+                payload: new { success = true }))
+            : Unauthorized(BuildOperationResponse(
+                "logout_auth_session",
+                AgentOperationStatus.Failed,
+                policyReason: result.Error));
     }
 
     [Authorize]
@@ -208,5 +388,51 @@ public partial class AuthController(IMediator mediator, ILogger<AuthController> 
 
     [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}")]
     private static partial void LogSessionRevocationFailed(ILogger logger, string? error);
+
+    private static AgentExecuteOperationResponse BuildOperationResponse(
+        string operationId,
+        AgentOperationStatus status,
+        string? targetId = null,
+        string? targetName = null,
+        string? policyReason = null,
+        object? payload = null)
+    {
+        return new AgentExecuteOperationResponse(
+            new AgentOperationResult(
+                operationId,
+                operationId,
+                AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                status,
+                Summary: $"{operationId} completed via direct auth flow",
+                TargetId: targetId,
+                TargetName: targetName,
+                PolicyReason: policyReason,
+                Payload: payload));
+    }
+
+    private async Task RecordDirectAuthAuditAsync(
+        string operationId,
+        Guid auditUserId,
+        string summary,
+        AgentOperationStatus outcomeStatus,
+        string? targetId,
+        string? error,
+        CancellationToken cancellationToken)
+    {
+        await auditService.RecordAsync(new AgentAuditEntry(
+            auditUserId,
+            AgentCapabilityIds.AuthManage,
+            operationId,
+            AgentExecutionSurface.Metadata,
+            AgentAuthMethod.Unknown,
+            AgentRiskClass.Low,
+            outcomeStatus == AgentOperationStatus.Succeeded ? AgentPolicyDecisionStatus.Allowed : AgentPolicyDecisionStatus.Denied,
+            outcomeStatus,
+            HttpContext.TraceIdentifier,
+            $"Direct auth flow: {summary}",
+            TargetId: targetId,
+            Error: error), cancellationToken);
+    }
 
 }

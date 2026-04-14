@@ -39,6 +39,7 @@ public class ApiKeyAuthenticationHandlerTests
 
         var scheme = new AuthenticationScheme("ApiKey", "ApiKey", typeof(ApiKeyAuthenticationHandler));
         var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = "/mcp";
 
         if (authorizationHeader is not null)
             httpContext.Request.Headers.Authorization = authorizationHeader;
@@ -108,6 +109,7 @@ public class ApiKeyAuthenticationHandlerTests
 
         var scheme = new AuthenticationScheme("ApiKey", "ApiKey", typeof(ApiKeyAuthenticationHandler));
         var httpContext = new DefaultHttpContext();
+        httpContext.Request.Path = "/mcp";
         httpContext.Request.Headers.Authorization = "Bearer orb_testkey12345678";
 
         await handler.InitializeAsync(scheme, httpContext);

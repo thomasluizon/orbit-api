@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Claims;
+using Orbit.Domain.Models;
 
 namespace Orbit.Api.Extensions;
 
@@ -11,6 +12,36 @@ public static class HttpContextExtensions
             ?? throw new UnauthorizedAccessException("User ID not found in token");
 
         return Guid.Parse(userIdClaim);
+    }
+
+    public static Guid GetUserId(this ClaimsPrincipal user)
+    {
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? throw new UnauthorizedAccessException("User ID not found in token");
+
+        return Guid.Parse(userIdClaim);
+    }
+
+    public static AgentAuthMethod GetAgentAuthMethod(this ClaimsPrincipal user)
+    {
+        var authMethod = user.FindFirst("auth_method")?.Value;
+        return string.Equals(authMethod, "api_key", StringComparison.OrdinalIgnoreCase)
+            ? AgentAuthMethod.ApiKey
+            : AgentAuthMethod.Jwt;
+    }
+
+    public static IReadOnlyList<string> GetGrantedAgentScopes(this ClaimsPrincipal user)
+    {
+        return user.FindAll("scope")
+            .Select(claim => claim.Value)
+            .Where(scope => !string.IsNullOrWhiteSpace(scope))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public static bool IsReadOnlyCredential(this ClaimsPrincipal user)
+    {
+        return bool.TryParse(user.FindFirst("api_key_read_only")?.Value, out var isReadOnly) && isReadOnly;
     }
 
     private static readonly string[] CountryHeaderNames =

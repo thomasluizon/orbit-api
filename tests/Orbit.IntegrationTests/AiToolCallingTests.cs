@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 
 namespace Orbit.IntegrationTests;
@@ -26,13 +25,9 @@ public class AiToolCallingTests : IAsyncLifetime
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
-    public AiToolCallingTests(WebApplicationFactory<Program> factory)
+    public AiToolCallingTests(IntegrationTestWebApplicationFactory factory)
     {
-        // Register the test account via env var so send-code accepts a fixed code
-        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
-        var entry = $"{_testEmail}:{TestCode}";
-        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
-            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
+        IntegrationTestHelpers.RegisterTestAccount(_testEmail, TestCode);
 
         _client = factory.CreateClient();
         _client.Timeout = TimeSpan.FromMinutes(5);
@@ -40,21 +35,8 @@ public class AiToolCallingTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Send verification code (uses TEST_ACCOUNTS bypass)
-        var sendCodeResponse = await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _testEmail });
-        sendCodeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        // Verify code to create account + get JWT
-        var verifyResponse = await _client.PostAsJsonAsync("/api/auth/verify-code", new
-        {
-            email = _testEmail,
-            code = TestCode
-        });
-        verifyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var loginResult = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+        var loginResult = await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _testEmail, TestCode, JsonOptions);
         _testUserId = loginResult!.UserId.ToString();
-        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {loginResult.Token}");
     }
 
     public async Task DisposeAsync()
@@ -63,11 +45,11 @@ public class AiToolCallingTests : IAsyncLifetime
         {
             try
             {
-                var habitsResponse = await _client.GetAsync("/api/habits");
+                var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
                 if (habitsResponse.IsSuccessStatusCode)
                 {
                     var paginated = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
-                    foreach (var habit in paginated?.Items ?? [])
+                    foreach (var habit in paginated?.Items?.DistinctBy(h => h.Id) ?? [])
                         await _client.DeleteAsync($"/api/habits/{habit.Id}");
                 }
 
@@ -248,9 +230,9 @@ public class AiToolCallingTests : IAsyncLifetime
 
         var response = await SendChat("delete the habit Temporary Habit");
 
-        response.Actions.Should().ContainSingle();
-        response.Actions[0].Type.Should().Be("DeleteHabit");
-        response.Actions[0].Status.Should().Be("Success");
+        response.Actions.Should().BeEmpty();
+        response.PendingOperations.Should().ContainSingle();
+        response.PendingOperations![0].CapabilityId.Should().Be("habits.delete");
     }
 
     [Fact]
@@ -261,11 +243,10 @@ public class AiToolCallingTests : IAsyncLifetime
 
         var response = await SendChat("delete Remove This");
 
-        response.Actions.Should().ContainSingle();
-        response.Actions[0].Type.Should().Be("DeleteHabit");
-        response.Actions[0].Status.Should().Be("Success");
-        response.Actions[0].EntityName.Should().NotBeNull();
-        response.Actions[0].EntityName!.ToLower().Should().Contain("remove");
+        response.Actions.Should().BeEmpty();
+        response.PendingOperations.Should().ContainSingle();
+        response.PendingOperations![0].CapabilityId.Should().Be("habits.delete");
+        response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -471,8 +452,7 @@ public class AiToolCallingTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create test habit '{title}'");
 
-        var id = await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
-        return id;
+        return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -480,8 +460,12 @@ public class AiToolCallingTests : IAsyncLifetime
     // ───────────────────────────────────────────────────────────────
 
     private record LoginResponse(Guid UserId, string Token, string Name, string Email);
-    private record ChatResponse(string? AiMessage, List<ActionResultDto> Actions);
+    private record ChatResponse(
+        string? AiMessage,
+        List<ActionResultDto> Actions,
+        List<PendingOperationDto>? PendingOperations = null);
     private record ActionResultDto(string Type, string Status, Guid? EntityId = null, string? EntityName = null, string? Error = null);
+    private record PendingOperationDto(Guid Id, string CapabilityId, string DisplayName, string Summary);
     private record HabitDto(Guid Id, string Title);
     private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
 }

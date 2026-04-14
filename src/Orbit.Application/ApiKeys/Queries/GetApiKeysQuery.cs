@@ -9,6 +9,9 @@ public record ApiKeyResponse(
     Guid Id,
     string Name,
     string KeyPrefix,
+    IReadOnlyList<string> Scopes,
+    bool IsReadOnly,
+    DateTime? ExpiresAtUtc,
     DateTime CreatedAtUtc,
     DateTime? LastUsedAtUtc,
     bool IsRevoked);
@@ -30,6 +33,9 @@ public class GetApiKeysQueryHandler(
                 k.Id,
                 k.Name,
                 k.KeyPrefix,
+                k.Scopes,
+                k.IsReadOnly,
+                k.ExpiresAtUtc,
                 k.CreatedAtUtc,
                 k.LastUsedAtUtc,
                 k.IsRevoked))

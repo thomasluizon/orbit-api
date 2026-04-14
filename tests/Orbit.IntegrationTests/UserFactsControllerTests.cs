@@ -2,17 +2,16 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
 
 [Collection("Sequential")]
 public class UserFactsControllerTests : IAsyncLifetime
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly IntegrationTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly string _email = $"userfacts-test-{Guid.NewGuid()}@integration.test";
-    private const string Password = "TestPassword123!";
+    private const string TestCode = "999999";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -20,29 +19,16 @@ public class UserFactsControllerTests : IAsyncLifetime
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
-    public UserFactsControllerTests(WebApplicationFactory<Program> factory)
+    public UserFactsControllerTests(IntegrationTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
+        IntegrationTestHelpers.RegisterTestAccount(_email, TestCode);
     }
 
     public async Task InitializeAsync()
     {
-        await _client.PostAsJsonAsync("/api/auth/register", new
-        {
-            name = "UserFacts Test User",
-            email = _email,
-            password = Password
-        });
-
-        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new
-        {
-            email = _email,
-            password = Password
-        });
-
-        var login = await loginResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
-        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {login!.Token}");
+        await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
     }
 
     public async Task DisposeAsync()
@@ -58,11 +44,11 @@ public class UserFactsControllerTests : IAsyncLifetime
             }
 
             // Also clean up habits created during tests
-            var habitsResponse = await _client.GetAsync("/api/habits");
+            var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
             if (habitsResponse.IsSuccessStatusCode)
             {
-                var habits = await habitsResponse.Content.ReadFromJsonAsync<List<HabitDto>>(JsonOptions);
-                foreach (var habit in habits ?? [])
+                var habits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
+                foreach (var habit in habits?.Items?.DistinctBy(h => h.Id) ?? [])
                     await _client.DeleteAsync($"/api/habits/{habit.Id}");
             }
         }
@@ -96,14 +82,8 @@ public class UserFactsControllerTests : IAsyncLifetime
         chatResponse.Should().NotBeNull();
         chatResponse!.AiMessage.Should().NotBeNullOrEmpty();
 
-        // Give a moment for fact extraction to complete (it's synchronous but happens after response)
-        await Task.Delay(1000);
-
         // Assert - Facts should be extracted
-        var factsResponse = await _client.GetAsync("/api/user-facts");
-        factsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var facts = await factsResponse.Content.ReadFromJsonAsync<List<UserFactDto>>(JsonOptions);
+        var facts = await WaitForFactsAsync(minimumCount: 1);
         facts.Should().NotBeNull();
         facts.Should().NotBeEmpty("fact extraction should have captured personal info from the message");
 
@@ -123,10 +103,7 @@ public class UserFactsControllerTests : IAsyncLifetime
             "I prefer coffee over tea. " +
             "Create a daily journaling habit.");
 
-        await Task.Delay(1000); // Wait for fact extraction
-
-        var factsResponse = await _client.GetAsync("/api/user-facts");
-        var facts = await factsResponse.Content.ReadFromJsonAsync<List<UserFactDto>>(JsonOptions);
+        var facts = await WaitForFactsAsync(minimumCount: 1);
         facts.Should().NotBeEmpty();
 
         var factToDelete = facts!.First();
@@ -185,7 +162,10 @@ public class UserFactsControllerTests : IAsyncLifetime
                 await Task.Delay(remainingDelay);
             }
 
-            var httpResponse = await _client.PostAsJsonAsync("/api/chat", new { message });
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(message), "message");
+
+            var httpResponse = await _client.PostAsync("/api/chat", content);
             LastApiCall = DateTime.UtcNow;
 
             if (!httpResponse.IsSuccessStatusCode)
@@ -202,11 +182,28 @@ public class UserFactsControllerTests : IAsyncLifetime
         }
     }
 
+    private async Task<List<UserFactDto>> WaitForFactsAsync(int minimumCount, int maxAttempts = 12)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var factsResponse = await _client.GetAsync("/api/user-facts");
+            factsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+            var facts = await factsResponse.Content.ReadFromJsonAsync<List<UserFactDto>>(JsonOptions) ?? [];
+            if (facts.Count >= minimumCount)
+                return facts;
+
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+
+        return await _client.GetFromJsonAsync<List<UserFactDto>>("/api/user-facts", JsonOptions) ?? [];
+    }
+
     #endregion
 
     #region DTOs
 
-    private record LoginResponse(string UserId, string Token, string Name, string Email);
+    private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
     private record UserFactDto(Guid Id, string FactText, string? Category, DateTime ExtractedAtUtc, DateTime? UpdatedAtUtc);
     private record ChatResponse(string? AiMessage, object[]? Actions);
     private record HabitDto(Guid Id, string Title);

@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Api.Extensions;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Api.Controllers;
@@ -28,6 +30,91 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         IReadOnlyList<SyncDeletedRef> Deleted);
 
     public record SyncDeletedRef(Guid Id, DateTime DeletedAtUtc);
+
+    public record SyncChangesV2Response(
+        SyncEntitySetV2<SyncHabitDto> Habits,
+        SyncEntitySetV2<SyncHabitLogDto> HabitLogs,
+        SyncEntitySetV2<SyncGoalDto> Goals,
+        SyncEntitySetV2<SyncGoalProgressLogDto> GoalProgressLogs,
+        SyncEntitySetV2<SyncTagDto> Tags,
+        SyncEntitySetV2<SyncNotificationDto> Notifications,
+        SyncEntitySetV2<SyncChecklistTemplateDto> ChecklistTemplates,
+        DateTime ServerTimestamp,
+        int Version = 2);
+
+    public record SyncEntitySetV2<T>(
+        IReadOnlyList<T> Updated,
+        IReadOnlyList<SyncDeletedRef> Deleted);
+
+    public record SyncHabitDto(
+        Guid Id,
+        string Title,
+        string? Description,
+        Domain.Enums.FrequencyUnit? FrequencyUnit,
+        int? FrequencyQuantity,
+        bool IsBadHabit,
+        bool IsCompleted,
+        DateOnly DueDate,
+        TimeOnly? DueTime,
+        TimeOnly? DueEndTime,
+        bool ReminderEnabled,
+        IReadOnlyList<int> ReminderTimes,
+        bool IsGeneral,
+        bool IsFlexible,
+        bool SlipAlertEnabled,
+        IReadOnlyList<Orbit.Domain.ValueObjects.ChecklistItem> ChecklistItems,
+        IReadOnlyList<Orbit.Domain.ValueObjects.ScheduledReminderTime> ScheduledReminders,
+        DateOnly? EndDate,
+        int? Position,
+        Guid? ParentHabitId,
+        DateTime CreatedAtUtc,
+        DateTime UpdatedAtUtc);
+
+    public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, string? Note, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+
+    public record SyncGoalDto(
+        Guid Id,
+        string Title,
+        string? Description,
+        decimal TargetValue,
+        decimal CurrentValue,
+        string Unit,
+        GoalStatus Status,
+        GoalType Type,
+        DateOnly? Deadline,
+        int Position,
+        DateTime CreatedAtUtc,
+        DateTime UpdatedAtUtc,
+        DateTime? CompletedAtUtc,
+        DateTime? StreakSyncedAtUtc);
+
+    public record SyncGoalProgressLogDto(
+        Guid Id,
+        Guid GoalId,
+        decimal Value,
+        decimal PreviousValue,
+        string? Note,
+        DateTime CreatedAtUtc,
+        DateTime UpdatedAtUtc);
+
+    public record SyncTagDto(Guid Id, string Name, string Color, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+
+    public record SyncNotificationDto(
+        Guid Id,
+        string Title,
+        string Body,
+        string? Url,
+        Guid? HabitId,
+        bool IsRead,
+        DateTime CreatedAtUtc,
+        DateTime UpdatedAtUtc);
+
+    public record SyncChecklistTemplateDto(
+        Guid Id,
+        string Name,
+        IReadOnlyList<string> Items,
+        DateTime CreatedAtUtc,
+        DateTime UpdatedAtUtc);
 
     public record SyncBatchRequest(IReadOnlyList<SyncMutation> Mutations);
 
@@ -131,6 +218,94 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
                 tags.Where(t => t.IsDeleted).Select(t => new SyncDeletedRef(t.Id, t.DeletedAtUtc!.Value)).ToList()),
             Notifications: new SyncEntitySet(notifications.Cast<object>().ToList(), []),
             ChecklistTemplates: new SyncEntitySet(checklistTemplates.Cast<object>().ToList(), []),
+            ServerTimestamp: DateTime.UtcNow);
+
+        LogSyncChanges(logger, userId, since);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Returns the version 2 redacted sync DTOs modified since the given timestamp.
+    /// Unlike the legacy endpoint, this response never serializes EF entities directly.
+    /// </summary>
+    [HttpGet("v2/changes")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status410Gone)]
+    public async Task<IActionResult> GetChangesV2(
+        [FromQuery] DateTime since,
+        CancellationToken cancellationToken)
+    {
+        var userId = HttpContext.GetUserId();
+
+        if (DateTime.UtcNow - since > MaxSyncWindow)
+        {
+            return StatusCode(StatusCodes.Status410Gone, new
+            {
+                error = "Sync window exceeded. Full re-sync required.",
+                code = "SYNC_WINDOW_EXCEEDED"
+            });
+        }
+
+        var sinceUtc = DateTime.SpecifyKind(since, DateTimeKind.Utc);
+
+        var habits = await dbContext.Habits
+            .IgnoreQueryFilters()
+            .Where(h => h.UserId == userId && h.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var habitIds = habits.Select(h => h.Id).ToList();
+
+        var habitLogs = await dbContext.HabitLogs
+            .Where(l => habitIds.Contains(l.HabitId) && l.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var goals = await dbContext.Goals
+            .IgnoreQueryFilters()
+            .Where(g => g.UserId == userId && g.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var goalIds = goals.Select(g => g.Id).ToList();
+
+        var goalProgressLogs = await dbContext.GoalProgressLogs
+            .Where(l => goalIds.Contains(l.GoalId) && l.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var tags = await dbContext.Tags
+            .IgnoreQueryFilters()
+            .Where(t => t.UserId == userId && t.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var notifications = await dbContext.Notifications
+            .Where(n => n.UserId == userId && n.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var checklistTemplates = await dbContext.ChecklistTemplates
+            .Where(ct => ct.UserId == userId && ct.UpdatedAtUtc > sinceUtc)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var response = new SyncChangesV2Response(
+            Habits: new SyncEntitySetV2<SyncHabitDto>(
+                habits.Where(h => !h.IsDeleted).Select(MapHabit).ToList(),
+                habits.Where(h => h.IsDeleted).Select(h => new SyncDeletedRef(h.Id, h.DeletedAtUtc!.Value)).ToList()),
+            HabitLogs: new SyncEntitySetV2<SyncHabitLogDto>(habitLogs.Select(MapHabitLog).ToList(), []),
+            Goals: new SyncEntitySetV2<SyncGoalDto>(
+                goals.Where(g => !g.IsDeleted).Select(MapGoal).ToList(),
+                goals.Where(g => g.IsDeleted).Select(g => new SyncDeletedRef(g.Id, g.DeletedAtUtc!.Value)).ToList()),
+            GoalProgressLogs: new SyncEntitySetV2<SyncGoalProgressLogDto>(goalProgressLogs.Select(MapGoalProgressLog).ToList(), []),
+            Tags: new SyncEntitySetV2<SyncTagDto>(
+                tags.Where(t => !t.IsDeleted).Select(MapTag).ToList(),
+                tags.Where(t => t.IsDeleted).Select(t => new SyncDeletedRef(t.Id, t.DeletedAtUtc!.Value)).ToList()),
+            Notifications: new SyncEntitySetV2<SyncNotificationDto>(notifications.Select(MapNotification).ToList(), []),
+            ChecklistTemplates: new SyncEntitySetV2<SyncChecklistTemplateDto>(checklistTemplates.Select(MapChecklistTemplate).ToList(), []),
             ServerTimestamp: DateTime.UtcNow);
 
         LogSyncChanges(logger, userId, since);
@@ -266,6 +441,104 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
     private static SyncEntitySet BuildEntitySet(IReadOnlyList<object> updated, IReadOnlyList<SyncDeletedRef> deleted)
     {
         return new SyncEntitySet(updated, deleted);
+    }
+
+    private static SyncHabitDto MapHabit(Habit habit)
+    {
+        return new SyncHabitDto(
+            habit.Id,
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.IsBadHabit,
+            habit.IsCompleted,
+            habit.DueDate,
+            habit.DueTime,
+            habit.DueEndTime,
+            habit.ReminderEnabled,
+            habit.ReminderTimes,
+            habit.IsGeneral,
+            habit.IsFlexible,
+            habit.SlipAlertEnabled,
+            habit.ChecklistItems,
+            habit.ScheduledReminders,
+            habit.EndDate,
+            habit.Position,
+            habit.ParentHabitId,
+            habit.CreatedAtUtc,
+            habit.UpdatedAtUtc);
+    }
+
+    private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)
+    {
+        return new SyncHabitLogDto(
+            habitLog.Id,
+            habitLog.HabitId,
+            habitLog.Date,
+            habitLog.Value,
+            habitLog.Note,
+            habitLog.CreatedAtUtc,
+            habitLog.UpdatedAtUtc);
+    }
+
+    private static SyncGoalDto MapGoal(Goal goal)
+    {
+        return new SyncGoalDto(
+            goal.Id,
+            goal.Title,
+            goal.Description,
+            goal.TargetValue,
+            goal.CurrentValue,
+            goal.Unit,
+            goal.Status,
+            goal.Type,
+            goal.Deadline,
+            goal.Position,
+            goal.CreatedAtUtc,
+            goal.UpdatedAtUtc,
+            goal.CompletedAtUtc,
+            goal.StreakSyncedAtUtc);
+    }
+
+    private static SyncGoalProgressLogDto MapGoalProgressLog(GoalProgressLog goalProgressLog)
+    {
+        return new SyncGoalProgressLogDto(
+            goalProgressLog.Id,
+            goalProgressLog.GoalId,
+            goalProgressLog.Value,
+            goalProgressLog.PreviousValue,
+            goalProgressLog.Note,
+            goalProgressLog.CreatedAtUtc,
+            goalProgressLog.UpdatedAtUtc);
+    }
+
+    private static SyncTagDto MapTag(Tag tag)
+    {
+        return new SyncTagDto(tag.Id, tag.Name, tag.Color, tag.CreatedAtUtc, tag.UpdatedAtUtc);
+    }
+
+    private static SyncNotificationDto MapNotification(Notification notification)
+    {
+        return new SyncNotificationDto(
+            notification.Id,
+            notification.Title,
+            notification.Body,
+            notification.Url,
+            notification.HabitId,
+            notification.IsRead,
+            notification.CreatedAtUtc,
+            notification.UpdatedAtUtc);
+    }
+
+    private static SyncChecklistTemplateDto MapChecklistTemplate(ChecklistTemplate checklistTemplate)
+    {
+        return new SyncChecklistTemplateDto(
+            checklistTemplate.Id,
+            checklistTemplate.Name,
+            checklistTemplate.Items,
+            checklistTemplate.CreatedAtUtc,
+            checklistTemplate.UpdatedAtUtc);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Sync changes requested by user {UserId} since {Since}")]

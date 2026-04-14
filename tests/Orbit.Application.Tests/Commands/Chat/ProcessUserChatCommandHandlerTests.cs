@@ -21,6 +21,8 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
+    private readonly IGenericRepository<ChecklistTemplate> _checklistTemplateRepo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
+    private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAiIntentService _aiIntentService = Substitute.For<IAiIntentService>();
     private readonly ISystemPromptBuilder _promptBuilder = Substitute.For<ISystemPromptBuilder>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
@@ -28,6 +30,8 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
+    private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
+    private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -36,10 +40,11 @@ public class ProcessUserChatCommandHandlerTests
     private ProcessUserChatCommandHandler CreateHandler(params IAiTool[] tools)
     {
         var toolRegistry = new AiToolRegistry(tools);
-        var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder);
-        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo);
+        SetupOperationExecutor(toolRegistry);
+        var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
+        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory);
+            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -47,6 +52,13 @@ public class ProcessUserChatCommandHandlerTests
 
     public ProcessUserChatCommandHandlerTests()
     {
+        _catalogService.GetCapabilities().Returns([BuildCapability("test_capability")]);
+        _catalogService.GetCapability(Arg.Any<string>())
+            .Returns(callInfo => BuildCapability(callInfo.Arg<string>()));
+        _catalogService.GetCapabilityByChatTool(Arg.Any<string>())
+            .Returns(callInfo => BuildCapability(callInfo.Arg<string>()));
+        _catalogService.BuildPromptSupplement(Arg.Any<AgentContextSnapshot>()).Returns("agent policy");
+
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
@@ -73,6 +85,83 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<Expression<Func<Tag, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Tag>().AsReadOnly());
+
+        _checklistTemplateRepo.FindAsync(
+            Arg.Any<Expression<Func<ChecklistTemplate, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<ChecklistTemplate>().AsReadOnly());
+
+        _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new List<string>().AsReadOnly());
+    }
+
+    private void SetupOperationExecutor(AiToolRegistry toolRegistry)
+    {
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var request = callInfo.Arg<AgentExecuteOperationRequest>();
+                var cancellationToken = callInfo.ArgAt<CancellationToken>(1);
+                var tool = toolRegistry.GetTool(request.OperationId);
+                if (tool is null)
+                {
+                    return new AgentExecuteOperationResponse(
+                        new AgentOperationResult(
+                            request.OperationId,
+                            request.OperationId,
+                            AgentRiskClass.Low,
+                            AgentConfirmationRequirement.None,
+                            AgentOperationStatus.UnsupportedByPolicy,
+                            PolicyReason: "unsupported_by_policy"),
+                        PolicyDenial: new AgentPolicyDenial(
+                            request.OperationId,
+                            request.OperationId,
+                            AgentRiskClass.Low,
+                            AgentConfirmationRequirement.None,
+                            "unsupported_by_policy"));
+                }
+
+                try
+                {
+                    var toolResult = await tool.ExecuteAsync(request.Arguments, request.UserId, cancellationToken);
+                    return new AgentExecuteOperationResponse(
+                        new AgentOperationResult(
+                            request.OperationId,
+                            request.OperationId,
+                            AgentRiskClass.Low,
+                            AgentConfirmationRequirement.None,
+                            toolResult.Success ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+                            TargetId: toolResult.EntityId,
+                            TargetName: toolResult.EntityName,
+                            PolicyReason: toolResult.Success ? null : toolResult.Error,
+                            Payload: toolResult.Payload));
+                }
+                catch
+                {
+                    return new AgentExecuteOperationResponse(
+                        new AgentOperationResult(
+                            request.OperationId,
+                            request.OperationId,
+                            AgentRiskClass.Low,
+                            AgentConfirmationRequirement.None,
+                            AgentOperationStatus.Failed,
+                            PolicyReason: "unexpected_error"));
+                }
+            });
+    }
+
+    private static AgentCapability BuildCapability(string id)
+    {
+        return new AgentCapability(
+            id,
+            id,
+            id,
+            "chat",
+            "test_scope",
+            AgentRiskClass.Low,
+            IsMutation: false,
+            IsPhaseOneReadOnly: false,
+            AgentConfirmationRequirement.None);
     }
 
     private void SetupUserAndPayGate(User? user = null, bool payGatePass = true)
@@ -238,6 +327,7 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].Type.Should().Be("CreateHabit");
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Success);
         result.Value.Actions[0].EntityName.Should().Be("Morning Run");
+        result.Value.Operations.Should().ContainSingle(op => op.OperationId == "create_habit" && op.Status == AgentOperationStatus.Succeeded);
     }
 
     // --- Tool call with failure ---
@@ -276,6 +366,59 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().HaveCount(1);
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
         result.Value.Actions[0].Error.Should().Be("Habit not found.");
+    }
+
+    [Fact]
+    public async Task Handle_DestructiveToolWithoutConfirmation_ReturnsPendingOperation()
+    {
+        SetupUserAndPayGate();
+
+        var deleteTool = Substitute.For<IAiTool>();
+        deleteTool.Name.Returns("delete_habit");
+        deleteTool.Description.Returns("Deletes a habit");
+        deleteTool.IsReadOnly.Returns(false);
+        deleteTool.GetParameterSchema().Returns(new { type = "object" });
+
+        var handler = CreateHandler(deleteTool);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(
+                new AgentOperationResult(
+                    "delete_habit",
+                    "delete_habit",
+                    AgentRiskClass.Destructive,
+                    AgentConfirmationRequirement.FreshConfirmation,
+                    AgentOperationStatus.PendingConfirmation,
+                    Summary: "DeleteHabit requested via chat",
+                    PolicyReason: "confirmation_required",
+                    PendingOperationId: Guid.NewGuid()),
+                new PendingAgentOperation(
+                    Guid.NewGuid(),
+                    AgentCapabilityIds.HabitsDelete,
+                    "Delete Habit",
+                    "DeleteHabit requested via chat",
+                    AgentRiskClass.Destructive,
+                    AgentConfirmationRequirement.FreshConfirmation,
+                    DateTime.UtcNow.AddMinutes(10))));
+        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("delete_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Please confirm that deletion.", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Delete my habit"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PendingOperations.Should().HaveCount(1);
+        result.Value.Operations.Should().ContainSingle(op => op.Status == AgentOperationStatus.PendingConfirmation);
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(op => op.OperationId == "delete_habit"),
+            Arg.Any<CancellationToken>());
     }
 
     // --- Tool call with read-only tool ---

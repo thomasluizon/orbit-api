@@ -2,21 +2,23 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.IntegrationTests;
 
 [Collection("Sequential")]
 public class ApiKeyTests : IAsyncLifetime
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly IntegrationTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly string _email = $"apikey-test-{Guid.NewGuid()}@integration.test";
     private const string TestCode = "999999";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public ApiKeyTests(WebApplicationFactory<Program> factory)
+    public ApiKeyTests(IntegrationTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
@@ -39,12 +41,23 @@ public class ApiKeyTests : IAsyncLifetime
 
         var login = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
         _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {login!.Token}");
+
+        await ExpireTrialAsync();
     }
 
     public Task DisposeAsync()
     {
         _client.Dispose();
         return Task.CompletedTask;
+    }
+
+    private async Task ExpireTrialAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var user = await dbContext.Users.SingleAsync(u => u.Email == _email);
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        await dbContext.SaveChangesAsync();
     }
 
     // ── Create API Key ───────────────────────────────────────
@@ -57,7 +70,7 @@ public class ApiKeyTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         var body = await response.Content.ReadFromJsonAsync<ErrorWithCodeResponse>(JsonOptions);
-        body!.Code.Should().Be("PAY_GATE");
+        body!.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]
@@ -137,5 +150,5 @@ public class ApiKeyTests : IAsyncLifetime
         DateTime? LastUsedAtUtc,
         bool IsRevoked);
 
-    private record ErrorWithCodeResponse(string Error, string? Code);
+    private record ErrorWithCodeResponse(string Error, string? ErrorCode);
 }

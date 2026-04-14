@@ -15,5 +15,13 @@ public class CreateApiKeyValidator : AbstractValidator<CreateApiKeyCommand>
             .WithMessage("API key name is required.")
             .MaximumLength(50)
             .WithMessage("API key name must be 50 characters or less.");
+
+        RuleForEach(x => x.Scopes)
+            .NotEmpty()
+            .WithMessage("API key scopes must be non-empty strings.");
+
+        RuleFor(x => x.ExpiresAtUtc)
+            .Must(expiresAtUtc => !expiresAtUtc.HasValue || expiresAtUtc.Value > DateTime.UtcNow)
+            .WithMessage("API key expiry must be in the future.");
     }
 }

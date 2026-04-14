@@ -138,6 +138,9 @@ public class QueryHabitsTool(
 
     private async Task<IReadOnlyList<Habit>> QueryHabitsAsync(Guid userId, HabitFilters f, bool includeMetrics, CancellationToken ct)
     {
+        var normalizedSearch = NormalizeSearchValue(f.Search);
+        var normalizedTag = NormalizeSearchValue(f.Tag);
+
         return await habitRepository.FindAsync(
             h => h.UserId == userId
                 && (f.IsCompleted == null ? !h.IsCompleted : h.IsCompleted == f.IsCompleted.Value)
@@ -146,12 +149,20 @@ public class QueryHabitsTool(
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
                 && (f.Frequency == null || h.FrequencyUnit == f.Frequency.Value)
                 && (!f.Date.HasValue || (!h.IsGeneral && (f.IncludeOverdue ? h.DueDate <= f.Date.Value : h.DueDate == f.Date.Value)))
-                && (f.Search == null || h.Title.Contains(f.Search!, StringComparison.OrdinalIgnoreCase))
-                && (f.Tag == null || h.Tags.Any(t => t.Name.Contains(f.Tag!, StringComparison.OrdinalIgnoreCase))),
+                && (normalizedSearch == null || h.Title.ToLower().Contains(normalizedSearch))
+                && (normalizedTag == null || h.Tags.Any(t => t.Name.ToLower().Contains(normalizedTag))),
             includeMetrics
                 ? q => q.Include(h => h.Tags).Include(h => h.Logs)
                 : q => q.Include(h => h.Tags),
             ct);
+    }
+
+    private static string? NormalizeSearchValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim().ToLowerInvariant();
     }
 
 #pragma warning disable CA1859 // IReadOnlyList<Habit> is intentional -- matches repository interface return type
