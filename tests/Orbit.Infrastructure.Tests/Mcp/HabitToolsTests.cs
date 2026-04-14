@@ -33,7 +33,7 @@ public class HabitToolsTests
     {
         var items = new List<HabitScheduleItem>
         {
-            new(Guid.NewGuid(), "Read", null, FrequencyUnit.Day, 1, false, false, false, false,
+            new(Guid.NewGuid(), "Read", null, null, FrequencyUnit.Day, 1, false, false, false, false,
                 [], null, DateTime.UtcNow, DateOnly.FromDateTime(DateTime.UtcNow), null, null, null,
                 [], false, false, [], [], false, [], [], [], [], false, null, null, [])
         };
@@ -75,7 +75,7 @@ public class HabitToolsTests
     {
         var habitId = Guid.NewGuid();
         var detail = new HabitDetailResponse(
-            habitId, "Exercise", "Go for a run", FrequencyUnit.Day, 1,
+            habitId, "Exercise", "Go for a run", null, FrequencyUnit.Day, 1,
             false, false, false, false,
             DateOnly.FromDateTime(DateTime.UtcNow), null, null, null,
             [], null, false, [], [], [], DateTime.UtcNow, []);

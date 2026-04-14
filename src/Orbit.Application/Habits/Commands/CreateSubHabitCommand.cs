@@ -18,7 +18,8 @@ public record CreateSubHabitCommand(
     bool IsBadHabit = false,
     DateOnly? DueDate = null,
     HabitCommandOptions? Options = null,
-    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<Guid>? TagIds = null,
+    string? Icon = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -84,7 +85,8 @@ public class CreateSubHabitCommandHandler(
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ScheduledReminders: opts.ScheduledReminders,
-            Position: nextPosition));
+            Position: nextPosition,
+            Icon: request.Icon));
 
         if (childResult.IsFailure)
             return Result.Failure<Guid>(childResult.Error);

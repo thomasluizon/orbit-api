@@ -33,7 +33,8 @@ public record BulkHabitItem(
     bool IsFlexible = false,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    string? GoogleEventId = null);
+    string? GoogleEventId = null,
+    string? Icon = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -142,7 +143,8 @@ public partial class BulkCreateHabitsCommandHandler(
                 ScheduledReminders: item.ScheduledReminders,
                 ChecklistItems: item.ChecklistItems,
                 Position: rootPosition,
-                GoogleEventId: item.GoogleEventId));
+                GoogleEventId: item.GoogleEventId,
+                Icon: item.Icon));
 
             if (habitResult.IsFailure)
             {
@@ -175,7 +177,8 @@ public partial class BulkCreateHabitsCommandHandler(
                         ParentHabitId: parentHabit.Id,
                         IsGeneral: item.IsGeneral,
                         IsFlexible: subItem.IsFlexible,
-                        Position: subPositionCursor++));
+                        Position: subPositionCursor++,
+                        Icon: subItem.Icon));
 
                     if (childResult.IsFailure)
                     {

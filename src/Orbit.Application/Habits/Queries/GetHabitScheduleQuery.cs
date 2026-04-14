@@ -18,6 +18,7 @@ public record HabitScheduleItem(
     Guid Id,
     string Title,
     string? Description,
+    string? Icon,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
     bool IsBadHabit,
@@ -51,6 +52,7 @@ public record HabitScheduleChildItem(
     Guid Id,
     string Title,
     string? Description,
+    string? Icon,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
     bool IsBadHabit,
@@ -460,7 +462,7 @@ public class GetHabitScheduleQueryHandler(
             : [];
 
         return new HabitScheduleItem(
-            h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
+            h.Id, h.Title, h.Description, h.Icon, h.FrequencyUnit, h.FrequencyQuantity,
             h.IsBadHabit, h.IsCompleted, h.IsGeneral, h.IsFlexible,
             h.Days.ToList(), h.Position, h.CreatedAtUtc,
             h.DueDate, h.DueTime, h.DueEndTime, h.EndDate,
@@ -568,7 +570,7 @@ public class GetHabitScheduleQueryHandler(
             : [];
 
         return new HabitScheduleChildItem(
-            c.Id, c.Title, c.Description,
+            c.Id, c.Title, c.Description, c.Icon,
             c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
             c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
             c.Position, c.ChecklistItems, MapTags(c),

@@ -48,7 +48,7 @@ public class GetHabitFullDetailQueryHandler(
             .ToList();
 
         var detail = new HabitDetailResponse(
-            habit.Id, habit.Title, habit.Description,
+            habit.Id, habit.Title, habit.Description, habit.Icon,
             habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.IsBadHabit, habit.IsCompleted, habit.IsGeneral, habit.IsFlexible,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
@@ -83,7 +83,7 @@ public class GetHabitFullDetailQueryHandler(
     }
 
     private static HabitChildResponse MapChild(Habit c) => new(
-        c.Id, c.Title, c.Description,
+        c.Id, c.Title, c.Description, c.Icon,
         c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
         c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
         c.Position, c.ChecklistItems, MapChildren(c));

@@ -1322,4 +1322,150 @@ public class HabitTests
         habit.Logs.Should().BeEmpty();
         habit.DueDate.Should().Be(originalDueDate); // Flexible unlog doesn't reset DueDate
     }
+
+    // --- Icon tests ---
+
+    [Fact]
+    public void Create_NullIcon_Succeeds()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Icon: null));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().BeNull();
+    }
+
+    [Fact]
+    public void Create_EmojiIcon_IsPersisted()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Run", FrequencyUnit.Day, 1, Icon: "\U0001F3C3"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().Be("\U0001F3C3");
+    }
+
+    [Fact]
+    public void Create_IconWithSurroundingWhitespace_IsTrimmed()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Run", FrequencyUnit.Day, 1, Icon: "  \U0001F3C3  "));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().Be("\U0001F3C3");
+    }
+
+    [Fact]
+    public void Create_ZwjSequenceIcon_IsPersisted()
+    {
+        // woman astronaut = woman + ZWJ + rocket
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Dream", FrequencyUnit.Day, 1, Icon: "\U0001F469\u200D\U0001F680"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().Be("\U0001F469\u200D\U0001F680");
+    }
+
+    [Fact]
+    public void Create_FlagEmojiIcon_IsPersisted()
+    {
+        // Brazil flag = regional indicators B + R
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Travel", FrequencyUnit.Day, 1, Icon: "\U0001F1E7\U0001F1F7"));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().Be("\U0001F1E7\U0001F1F7");
+    }
+
+    [Fact]
+    public void Create_IconTooLong_ReturnsFailure()
+    {
+        var tooLong = new string('a', 33);
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Icon: tooLong));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Icon must not exceed 32 characters");
+    }
+
+    [Fact]
+    public void Create_IconWithControlChars_ReturnsFailure()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Icon: "\u0001"));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Icon contains invalid characters");
+    }
+
+    [Fact]
+    public void Create_EmptyIcon_NormalizesToNull()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Icon: ""));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().BeNull();
+    }
+
+    [Fact]
+    public void Create_WhitespaceOnlyIcon_NormalizesToNull()
+    {
+        var result = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, Icon: "   "));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Icon.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_SetsIcon()
+    {
+        var habit = CreateValidHabit();
+
+        var result = habit.Update(new HabitUpdateParams(
+            "Exercise", "Daily workout", FrequencyUnit.Day, 1, null, false, habit.DueDate, Icon: "\U0001F4DA"));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Icon.Should().Be("\U0001F4DA");
+    }
+
+    [Fact]
+    public void Update_ReplacesExistingIcon()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Run", FrequencyUnit.Day, 1, Icon: "\U0001F3C3")).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            "Run", null, FrequencyUnit.Day, 1, null, false, habit.DueDate, Icon: "\U0001F4DA"));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Icon.Should().Be("\U0001F4DA");
+    }
+
+    [Fact]
+    public void Update_NullIcon_ClearsIcon()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Run", FrequencyUnit.Day, 1, Icon: "\U0001F3C3")).Value;
+
+        var result = habit.Update(new HabitUpdateParams(
+            "Run", null, FrequencyUnit.Day, 1, null, false, habit.DueDate, Icon: null));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Icon.Should().BeNull();
+    }
+
+    [Fact]
+    public void Update_IconTooLong_ReturnsFailure()
+    {
+        var habit = CreateValidHabit();
+        var tooLong = new string('a', 33);
+
+        var result = habit.Update(new HabitUpdateParams(
+            "Exercise", null, FrequencyUnit.Day, 1, null, false, habit.DueDate, Icon: tooLong));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Icon must not exceed 32 characters");
+    }
 }

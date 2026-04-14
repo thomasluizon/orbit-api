@@ -27,7 +27,8 @@ public record HabitCreateParams(
     DateOnly? EndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     int? Position = null,
-    string? GoogleEventId = null);
+    string? GoogleEventId = null,
+    string? Icon = null);
 
 public record HabitUpdateParams(
     string Title,
@@ -47,13 +48,15 @@ public record HabitUpdateParams(
     bool? IsFlexible = null,
     DateOnly? EndDate = null,
     bool? ClearEndDate = null,
-    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null);
+    IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
+    string? Icon = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
     public string? Description { get; private set; }
+    public string? Icon { get; private set; }
     public FrequencyUnit? FrequencyUnit { get; private set; }
     public int? FrequencyQuantity { get; private set; }
     public bool IsBadHabit { get; private set; }
@@ -115,6 +118,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (reminderValidation is not null)
             return Result.Failure<Habit>(reminderValidation);
 
+        var iconValidation = ValidateIcon(p.Icon);
+        if (iconValidation is not null)
+            return Result.Failure<Habit>(iconValidation);
+
         // Note: fallback to UTC date is approximate -- used only for EndDate validation when
         // dueDate is null. The caller (CreateHabitCommand) resolves the correct local date,
         // so this path rarely fires and the 1-day drift is acceptable for a validation guard.
@@ -125,6 +132,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             UserId = p.UserId,
             Title = p.Title.Trim(),
             Description = p.Description?.Trim(),
+            Icon = NormalizeIcon(p.Icon),
             FrequencyUnit = p.FrequencyUnit,
             FrequencyQuantity = p.FrequencyQuantity,
             Days = p.IsFlexible ? [] : (p.Days?.ToList() ?? []),
@@ -353,7 +361,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (p.EndDate.HasValue && p.EndDate.Value < (p.DueDate ?? DueDate))
             return "End date must be on or after the start date.";
 
-        return ValidateScheduledReminders(p.ScheduledReminders);
+        var reminderValidation = ValidateScheduledReminders(p.ScheduledReminders);
+        if (reminderValidation is not null)
+            return reminderValidation;
+
+        return ValidateIcon(p.Icon);
     }
 
     private void ApplyRequiredUpdates(HabitUpdateParams p)
@@ -362,6 +374,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         Title = p.Title.Trim();
         Description = p.Description?.Trim();
+        Icon = NormalizeIcon(p.Icon);
         FrequencyUnit = p.FrequencyUnit;
         FrequencyQuantity = p.FrequencyQuantity;
         Days = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
@@ -484,6 +497,25 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             return "End date must be on or after the start date.";
 
         return null;
+    }
+
+    private static string? ValidateIcon(string? icon)
+    {
+        if (icon is null) return null;
+        var trimmed = icon.Trim();
+        if (trimmed.Length == 0) return null;
+        if (trimmed.Length > DomainConstants.MaxHabitIconLength)
+            return $"Icon must not exceed {DomainConstants.MaxHabitIconLength} characters.";
+        if (trimmed.Any(char.IsControl))
+            return "Icon contains invalid characters.";
+        return null;
+    }
+
+    private static string? NormalizeIcon(string? icon)
+    {
+        if (icon is null) return null;
+        var trimmed = icon.Trim();
+        return trimmed.Length == 0 ? null : trimmed;
     }
 
     private static string? ValidateScheduledReminders(

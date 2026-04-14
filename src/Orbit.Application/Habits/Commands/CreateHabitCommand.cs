@@ -21,7 +21,8 @@ public record CreateHabitCommand(
     bool IsGeneral = false,
     HabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? TagIds = null,
-    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<Guid>? GoalIds = null,
+    string? Icon = null) : IRequest<Result<Guid>>;
 
 /// <summary>
 /// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).
@@ -104,7 +105,8 @@ public partial class CreateHabitCommandHandler(
             IsGeneral: request.IsGeneral,
             IsFlexible: opts.IsFlexible,
             ScheduledReminders: opts.ScheduledReminders,
-            Position: nextPosition));
+            Position: nextPosition,
+            Icon: request.Icon));
 
         if (habitResult.IsFailure)
             return Result.Failure<Guid>(habitResult.Error);

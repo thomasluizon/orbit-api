@@ -377,6 +377,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(h => h.Title).HasConversion(encConverter).HasColumnType("text");
             entity.Property(h => h.Description).HasConversion(nullableEncConverter).HasColumnType("text");
+            entity.Property(h => h.Icon).HasConversion(nullableEncConverter).HasColumnType("text");
         });
     }
 

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Validators;
@@ -14,6 +15,15 @@ public static class SharedHabitRules
     public static void AddDescriptionRules<T>(IRuleBuilder<T, string?> rule)
     {
         rule.MaximumLength(AppConstants.MaxHabitDescriptionLength);
+    }
+
+    public static void AddIconRules<T>(IRuleBuilder<T, string?> rule)
+    {
+        rule.MaximumLength(DomainConstants.MaxHabitIconLength)
+            .WithMessage($"Icon must not exceed {DomainConstants.MaxHabitIconLength} characters");
+
+        rule.Must(value => value is null || !value.Any(char.IsControl))
+            .WithMessage("Icon contains invalid characters");
     }
 
     public static void AddChecklistItemRules<T>(IRuleBuilder<T, IReadOnlyList<ChecklistItem>?> rule)

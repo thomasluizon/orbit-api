@@ -21,7 +21,8 @@ public record UpdateHabitCommand(
     bool? IsGeneral = null,
     bool? ClearEndDate = null,
     UpdateHabitCommandOptions? Options = null,
-    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result>;
+    IReadOnlyList<Guid>? GoalIds = null,
+    string? Icon = null) : IRequest<Result>;
 
 public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -80,7 +81,8 @@ public class UpdateHabitCommandHandler(
             IsFlexible: opts.IsFlexible,
             EndDate: opts.EndDate,
             ClearEndDate: request.ClearEndDate,
-            ScheduledReminders: opts.ScheduledReminders));
+            ScheduledReminders: opts.ScheduledReminders,
+            Icon: request.Icon));
 
         if (result.IsFailure)
             return result;

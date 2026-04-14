@@ -12,6 +12,7 @@ public record HabitDetailResponse(
     Guid Id,
     string Title,
     string? Description,
+    string? Icon,
     Domain.Enums.FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
     bool IsBadHabit,
@@ -58,6 +59,7 @@ public class GetHabitByIdQueryHandler(
             habit.Id,
             habit.Title,
             habit.Description,
+            habit.Icon,
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
             habit.IsBadHabit,
@@ -79,7 +81,7 @@ public class GetHabitByIdQueryHandler(
     }
 
     private static HabitChildResponse MapChild(Habit c) => new(
-        c.Id, c.Title, c.Description,
+        c.Id, c.Title, c.Description, c.Icon,
         c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
         c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
         c.Position, c.ChecklistItems, MapChildren(c));

@@ -112,6 +112,7 @@ public class DuplicateHabitCommandHandler(
             IsFlexible: source.IsFlexible,
             EndDate: source.EndDate,
             ScheduledReminders: source.ScheduledReminders,
-            Position: position));
+            Position: position,
+            Icon: source.Icon));
     }
 }

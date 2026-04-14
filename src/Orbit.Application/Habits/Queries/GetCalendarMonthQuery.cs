@@ -165,7 +165,7 @@ public class GetCalendarMonthQueryHandler(
         var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(habit, ctx.ReferenceDate);
 
         return new HabitScheduleItem(
-            habit.Id, habit.Title, habit.Description,
+            habit.Id, habit.Title, habit.Description, habit.Icon,
             habit.FrequencyUnit, habit.FrequencyQuantity,
             habit.IsBadHabit, habit.IsCompleted, habit.IsGeneral, habit.IsFlexible,
             habit.Days.ToList(), habit.Position, habit.CreatedAtUtc,
@@ -216,7 +216,7 @@ public class GetCalendarMonthQueryHandler(
             : [];
 
         return new HabitScheduleChildItem(
-            child.Id, child.Title, child.Description,
+            child.Id, child.Title, child.Description, child.Icon,
             child.FrequencyUnit, child.FrequencyQuantity,
             child.IsBadHabit, child.IsCompleted, child.IsGeneral, child.IsFlexible,
             child.Days.ToList(), child.DueDate, child.DueTime, child.DueEndTime, child.EndDate,
