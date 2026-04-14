@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Enums;
@@ -151,6 +152,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         [FromQuery] GetHabitsFilterRequest filter,
         CancellationToken cancellationToken = default)
     {
+        // Defense in depth: clamp page + pageSize so a crafted ?pageSize=100000
+        // cannot force the DB into a multi-second scan.
+        var page = Math.Max(1, filter.Page);
+        var pageSize = Math.Clamp(filter.PageSize, 1, MaxHabitsPageSize);
+
         var query = new GetHabitScheduleQuery(
             HttpContext.GetUserId(),
             filter.DateFrom,
@@ -161,12 +167,14 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             filter.IsCompleted,
             filter.TagIds is { Length: > 0 } ? filter.TagIds : null,
             filter.IsGeneral,
-            filter.Page,
-            filter.PageSize,
+            page,
+            pageSize,
             filter.IncludeGeneral ?? false);
         var result = await mediator.Send(query, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
     }
+
+    private const int MaxHabitsPageSize = 200;
 
     [HttpGet("calendar-month")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -456,10 +464,12 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpPost("bulk")]
+    [DistributedRateLimit("bulk")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> BulkCreate(
         [FromBody] BulkCreateHabitsRequest request,
         CancellationToken cancellationToken)
@@ -480,9 +490,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpDelete("bulk")]
+    [DistributedRateLimit("bulk")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> BulkDelete(
         [FromBody] BulkDeleteHabitsRequest request,
         CancellationToken cancellationToken)
@@ -502,9 +514,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpPost("bulk/log")]
+    [DistributedRateLimit("bulk")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> BulkLog(
         [FromBody] BulkLogHabitsRequest request,
         CancellationToken cancellationToken)
@@ -525,9 +539,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     }
 
     [HttpPost("bulk/skip")]
+    [DistributedRateLimit("bulk")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> BulkSkip(
         [FromBody] BulkSkipHabitsRequest request,
         CancellationToken cancellationToken)

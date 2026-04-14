@@ -252,6 +252,7 @@ public class AiController(
     }
 
     [HttpPost("pending-operations/{id:guid}/execute")]
+    [DistributedRateLimit("agent-execute")]
     public async Task<IActionResult> ExecutePendingOperation(
         Guid id,
         [FromBody] ExecutePendingOperationRequest request,

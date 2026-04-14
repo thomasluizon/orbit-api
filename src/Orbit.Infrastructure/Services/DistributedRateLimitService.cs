@@ -15,7 +15,13 @@ public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistribute
         {
             ["auth"] = new(TimeSpan.FromMinutes(1), PermitLimit: 5, SegmentCount: 1),
             ["chat"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 4),
-            ["support"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1)
+            ["support"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1),
+            // Bulk mutation endpoints (bulk create/delete/log/skip habits): scripts can otherwise
+            // push thousands of rows in a burst. Scoped per user+ip partition.
+            ["bulk"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
+            // Agent pending-operation execution: destructive-by-definition, require a tight
+            // per-minute budget on top of step-up enforcement in AgentPolicyEvaluator.
+            ["agent-execute"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 2)
         };
 
     public async Task<DistributedRateLimitDecision> TryAcquireAsync(
