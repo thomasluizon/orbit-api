@@ -12,10 +12,15 @@ public record RevokeApiKeyCommand(
 
 public class RevokeApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<RevokeApiKeyCommand, Result>
 {
     public async Task<Result> Handle(RevokeApiKeyCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageApiKeys(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var keys = await apiKeyRepository.FindTrackedAsync(
             k => k.Id == request.KeyId && k.UserId == request.UserId,
             cancellationToken);

@@ -10,10 +10,15 @@ public record DismissCalendarImportCommand(Guid UserId) : IRequest<Result>;
 
 public class DismissCalendarImportCommandHandler(
     IGenericRepository<User> userRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<DismissCalendarImportCommand, Result>
 {
     public async Task<Result> Handle(DismissCalendarImportCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);

@@ -2,8 +2,10 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -18,8 +20,7 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
         Substitute.For<IGenericRepository<Habit>>();
     private readonly IUserDateService _userDateService =
         Substitute.For<IUserDateService>();
-    private readonly ILogger<GetCalendarSyncSuggestionsQueryHandler> _logger =
-        Substitute.For<ILogger<GetCalendarSyncSuggestionsQueryHandler>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly GetCalendarSyncSuggestionsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -27,11 +28,14 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
 
     public GetCalendarSyncSuggestionsQueryHandlerTests()
     {
+        _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
         _handler = new GetCalendarSyncSuggestionsQueryHandler(
             _suggestionRepo,
             _habitRepo,
             _userDateService,
-            _logger);
+            _payGate,
+            NullLogger<GetCalendarSyncSuggestionsQueryHandler>.Instance);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _habitRepo.FindAsync(

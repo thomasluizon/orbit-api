@@ -67,9 +67,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogAiMemoryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("ai-summary")]
@@ -86,9 +84,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogAiSummaryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("language")]
@@ -162,9 +158,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogColorSchemeChanged(logger, request.ColorScheme, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("onboarding")]

@@ -331,9 +331,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new SkipHabitCommand(HttpContext.GetUserId(), id, request?.Date);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("{id:guid}")]
@@ -644,12 +642,11 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var command = new LinkGoalsToHabitCommand(HttpContext.GetUserId(), habitId, request.GoalIds);
         var result = await mediator.Send(command, cancellationToken);
+
         if (result.IsSuccess)
-        {
             LogLinkedGoalsToHabit(logger, request.GoalIds.Count, habitId, HttpContext.GetUserId());
-            return NoContent();
-        }
-        return BadRequest(new { error = result.Error });
+
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemRequest request)

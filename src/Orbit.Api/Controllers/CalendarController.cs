@@ -42,7 +42,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
 
         if (logger.IsEnabled(LogLevel.Warning))
             LogFailedToFetchCalendarEvents(logger, result.Error);
-        return BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpPut("dismiss")]
@@ -53,7 +53,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     {
         var command = new DismissCalendarImportCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpGet("auto-sync/state")]
@@ -63,7 +63,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     {
         var query = new GetCalendarAutoSyncStateQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     public record SetAutoSyncRequest(bool? Enabled);
@@ -79,9 +79,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
 
         var command = new SetCalendarAutoSyncCommand(HttpContext.GetUserId(), request.Enabled.Value);
         var result = await mediator.Send(command, cancellationToken);
-        if (result.IsFailure)
-            return BadRequest(new { error = result.Error, code = result.ErrorCode });
-        return Ok(new { success = true });
+        return result.ToPayGateAwareResult(() => Ok(new { success = true }));
     }
 
     [HttpGet("auto-sync/suggestions")]
@@ -91,7 +89,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     {
         var query = new GetCalendarSyncSuggestionsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpPut("auto-sync/suggestions/{id:guid}/dismiss")]
@@ -102,7 +100,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     {
         var command = new DismissCalendarSuggestionCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPost("auto-sync/run")]
@@ -113,9 +111,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     {
         var command = new RunCalendarAutoSyncCommand(HttpContext.GetUserId(), IsOpportunistic: true);
         var result = await mediator.Send(command, cancellationToken);
-        if (result.IsFailure)
-            return BadRequest(new { error = result.Error, code = result.ErrorCode });
-        return Ok(result.Value);
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch calendar events: {Error}")]

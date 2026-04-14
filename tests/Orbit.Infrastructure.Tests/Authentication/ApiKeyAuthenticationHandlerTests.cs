@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Authentication;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -21,11 +22,15 @@ public class ApiKeyAuthenticationHandlerTests
     private static async Task<AuthenticateResult> RunHandler(string? authorizationHeader)
     {
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
+        var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
+        payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
 
         // Set up service provider
         var services = new ServiceCollection();
         services.AddSingleton(apiKeyRepo);
+        services.AddSingleton(payGate);
         services.AddSingleton(unitOfWork);
         var serviceProvider = services.BuildServiceProvider();
 
@@ -88,7 +93,10 @@ public class ApiKeyAuthenticationHandlerTests
     public async Task HandleAuthenticateAsync_ValidFormatButNoMatch_ReturnsFail()
     {
         var apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
+        var payGate = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
+        payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
 
         // Return empty list - no matching keys
         apiKeyRepo.FindTrackedAsync(
@@ -98,6 +106,7 @@ public class ApiKeyAuthenticationHandlerTests
 
         var services = new ServiceCollection();
         services.AddSingleton(apiKeyRepo);
+        services.AddSingleton(payGate);
         services.AddSingleton(unitOfWork);
         var serviceProvider = services.BuildServiceProvider();
 

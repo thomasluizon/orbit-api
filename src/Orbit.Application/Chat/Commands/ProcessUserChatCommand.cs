@@ -102,13 +102,15 @@ public partial class ProcessUserChatCommandHandler(
             h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
             cancellationToken);
-        var activeGoals = await data.GoalRepository.FindAsync(
-            g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
-            q => q.Include(g => g.Habits),
-            cancellationToken);
-
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
-        var aiMemoryEnabled = user?.AiMemoryEnabled ?? true;
+        var hasProAccess = user?.HasProAccess ?? false;
+        var aiMemoryEnabled = hasProAccess && (user?.AiMemoryEnabled ?? true);
+        var activeGoals = hasProAccess
+            ? await data.GoalRepository.FindAsync(
+                g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
+                q => q.Include(g => g.Habits),
+                cancellationToken)
+            : [];
 
         // Check AI message limits
         var messageGate = await execution.PayGateService.CanSendAiMessage(request.UserId, cancellationToken);
@@ -146,7 +148,7 @@ public partial class ProcessUserChatCommandHandler(
             HasImage: request.ImageData is not null,
             UserTags: userTags, UserToday: userToday, ActiveGoals: activeGoals));
         systemPrompt += Environment.NewLine + ai.CatalogService.BuildPromptSupplement(
-            BuildAgentContextSnapshot(user, request.ClientContext, enabledFeatureFlags, userTags, checklistTemplates, activeHabits, activeGoals));
+            BuildAgentContextSnapshot(user, request.ClientContext, enabledFeatureFlags, userTags, checklistTemplates, activeHabits, activeGoals, hasProAccess));
 
         var tools = ai.ToolRegistry.GetAll();
         var toolDeclarations = tools.Select(t => (object)new
@@ -429,20 +431,23 @@ public partial class ProcessUserChatCommandHandler(
         IReadOnlyCollection<Tag> userTags,
         IReadOnlyCollection<ChecklistTemplate> checklistTemplates,
         IReadOnlyCollection<Habit> activeHabits,
-        IReadOnlyCollection<Goal> activeGoals)
+        IReadOnlyCollection<Goal> activeGoals,
+        bool hasProAccess)
     {
         return new AgentContextSnapshot(
-            user?.HasProAccess == true ? "pro" : "free",
+            hasProAccess ? "pro" : "free",
             user?.Language,
             user?.TimeZone,
-            user?.AiMemoryEnabled ?? true,
-            user?.AiSummaryEnabled ?? true,
+            hasProAccess && (user?.AiMemoryEnabled ?? true),
+            hasProAccess && (user?.AiSummaryEnabled ?? true),
             user?.WeekStartDay ?? 1,
             user?.ThemePreference,
-            user?.ColorScheme,
-            user?.GoogleAccessToken is not null,
-            user?.GoogleCalendarAutoSyncEnabled ?? false,
-            (user?.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle).ToString(),
+            hasProAccess ? user?.ColorScheme : null,
+            hasProAccess && user?.GoogleAccessToken is not null,
+            hasProAccess && (user?.GoogleCalendarAutoSyncEnabled ?? false),
+            hasProAccess
+                ? (user?.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle).ToString()
+                : "Locked",
             featureFlags,
             userTags
                 .Select(tag => tag.Name)
@@ -460,12 +465,14 @@ public partial class ProcessUserChatCommandHandler(
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(8)
                 .ToList(),
-            activeGoals
-                .OrderByDescending(goal => goal.UpdatedAtUtc)
-                .Select(goal => goal.Title)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(8)
-                .ToList(),
+            hasProAccess
+                ? activeGoals
+                    .OrderByDescending(goal => goal.UpdatedAtUtc)
+                    .Select(goal => goal.Title)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(8)
+                    .ToList()
+                : [],
             ClientContext: clientContext);
     }
 

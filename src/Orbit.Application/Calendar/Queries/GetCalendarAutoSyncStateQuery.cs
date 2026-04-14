@@ -16,10 +16,15 @@ public record CalendarAutoSyncStateResponse(
     bool HasGoogleConnection);
 
 public class GetCalendarAutoSyncStateQueryHandler(
-    IGenericRepository<User> userRepository) : IRequestHandler<GetCalendarAutoSyncStateQuery, Result<CalendarAutoSyncStateResponse>>
+    IGenericRepository<User> userRepository,
+    IPayGateService payGate) : IRequestHandler<GetCalendarAutoSyncStateQuery, Result<CalendarAutoSyncStateResponse>>
 {
     public async Task<Result<CalendarAutoSyncStateResponse>> Handle(GetCalendarAutoSyncStateQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<CalendarAutoSyncStateResponse>();
+
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<CalendarAutoSyncStateResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);

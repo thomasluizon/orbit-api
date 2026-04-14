@@ -537,22 +537,47 @@ public class AgentCatalogService : IAgentCatalogService
                 controllerActions: ["HabitsController.BulkDelete"]),
 
             CreateCapability(
-                AgentCapabilityIds.HabitsInsightsRead,
-                "Read Habit Insights",
-                "Reads habit metrics, daily summaries, and retrospectives.",
+                AgentCapabilityIds.HabitMetricsRead,
+                "Read Habit Metrics",
+                "Reads non-premium habit metrics.",
                 "habits",
                 AgentScopes.ReadHabits,
                 AgentRiskClass.Low,
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                mcpTools: ["get_habit_metrics", "get_daily_summary", "get_retrospective"],
-                controllerActions:
-                [
-                    "HabitsController.GetDailySummary",
-                    "HabitsController.GetRetrospective",
-                    "HabitsController.GetMetrics"
-                ]),
+                mcpTools: ["get_habit_metrics"],
+                controllerActions: ["HabitsController.GetMetrics"]),
+
+            CreateCapability(
+                AgentCapabilityIds.DailySummaryRead,
+                "Read Daily Summary",
+                "Reads the premium AI daily summary.",
+                "habits",
+                AgentScopes.ReadHabits,
+                AgentRiskClass.Low,
+                isMutation: false,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                featureFlagKeys: ["ai_summary"],
+                mcpTools: ["get_daily_summary"],
+                controllerActions: ["HabitsController.GetDailySummary"]),
+
+            CreateCapability(
+                AgentCapabilityIds.RetrospectiveRead,
+                "Read Retrospective",
+                "Reads the yearly premium retrospective.",
+                "habits",
+                AgentScopes.ReadHabits,
+                AgentRiskClass.Low,
+                isMutation: false,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "YearlyPro",
+                featureFlagKeys: ["ai_retrospective"],
+                mcpTools: ["get_retrospective"],
+                controllerActions: ["HabitsController.GetRetrospective"]),
 
             CreateCapability(
                 AgentCapabilityIds.GoalsRead,
@@ -564,6 +589,8 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                featureFlagKeys: ["goal_tracking"],
                 chatTools: ["query_goals", "review_goals"],
                 mcpTools: ["list_goals", "get_goal", "get_goal_metrics", "get_goal_review"],
                 controllerActions:
@@ -585,6 +612,8 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                featureFlagKeys: ["goal_tracking"],
                 chatTools: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal"],
                 mcpTools: ["create_goal", "update_goal", "update_goal_progress", "update_goal_status", "reorder_goals", "link_habits_to_goal"],
                 controllerActions:
@@ -607,6 +636,8 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
+                planRequirement: "Pro",
+                featureFlagKeys: ["goal_tracking"],
                 chatTools: ["delete_goal"],
                 mcpTools: ["delete_goal"],
                 controllerActions: ["GoalsController.DeleteGoal"]),
@@ -683,25 +714,56 @@ public class AgentCatalogService : IAgentCatalogService
                     "ProfileController.SetLanguage",
                     "ProfileController.SetWeekStartDay",
                     "ProfileController.SetThemePreference",
-                    "ProfileController.SetColorScheme",
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.CompleteTour",
                     "ProfileController.ResetTour"
                 ]),
 
             CreateCapability(
-                AgentCapabilityIds.ProfileAiSettingsWrite,
-                "Write AI Settings",
-                "Updates AI memory and AI summary preferences.",
+                AgentCapabilityIds.ProfilePremiumAppearanceWrite,
+                "Write Premium Appearance",
+                "Updates premium color-scheme preferences.",
+                "profile",
+                AgentScopes.WriteProfilePreferences,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                chatTools: ["set_color_scheme"],
+                mcpTools: ["set_color_scheme"],
+                controllerActions: ["ProfileController.SetColorScheme"]),
+
+            CreateCapability(
+                AgentCapabilityIds.ProfileAiMemoryWrite,
+                "Write AI Memory Settings",
+                "Updates AI memory preferences.",
                 "profile",
                 AgentScopes.WriteAiSettings,
                 AgentRiskClass.Low,
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["update_ai_settings"],
-                mcpTools: ["set_ai_memory", "set_ai_summary"],
-                controllerActions: ["ProfileController.SetAiMemory", "ProfileController.SetAiSummary"]),
+                planRequirement: "Pro",
+                chatTools: ["set_ai_memory"],
+                mcpTools: ["set_ai_memory"],
+                controllerActions: ["ProfileController.SetAiMemory"]),
+
+            CreateCapability(
+                AgentCapabilityIds.ProfileAiSummaryWrite,
+                "Write AI Summary Settings",
+                "Updates AI summary preferences.",
+                "profile",
+                AgentScopes.WriteAiSettings,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                featureFlagKeys: ["ai_summary"],
+                chatTools: ["set_ai_summary"],
+                mcpTools: ["set_ai_summary"],
+                controllerActions: ["ProfileController.SetAiSummary"]),
 
             CreateCapability(
                 AgentCapabilityIds.NotificationsRead,
@@ -768,7 +830,6 @@ public class AgentCatalogService : IAgentCatalogService
                 controllerActions:
                 [
                     "CalendarController.GetEvents",
-                    "CalendarController.GetAutoSyncState",
                     "CalendarController.GetSuggestions"
                 ]),
 
@@ -786,6 +847,7 @@ public class AgentCatalogService : IAgentCatalogService
                 chatTools: ["manage_calendar_sync"],
                 controllerActions:
                 [
+                    "CalendarController.GetAutoSyncState",
                     "CalendarController.DismissImport",
                     "CalendarController.SetAutoSync",
                     "CalendarController.DismissSuggestion",
@@ -865,6 +927,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
                 chatTools: ["get_user_facts"],
                 mcpTools: ["get_user_facts"],
                 controllerActions: ["UserFactsController.GetUserFacts"]),
@@ -879,6 +942,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
+                planRequirement: "Pro",
                 chatTools: ["delete_user_facts"],
                 mcpTools: ["delete_user_fact"],
                 controllerActions: ["UserFactsController.DeleteUserFact", "UserFactsController.BulkDeleteUserFacts"]),
@@ -1069,7 +1133,7 @@ public class AgentCatalogService : IAgentCatalogService
                 "Shows the current day's scheduled habits, AI summary, and progress status.",
                 ["Open Today.", "Review scheduled habits and overdue items.", "Log, skip, or inspect the day's tasks."],
                 ["Uses timezone-aware dates from the backend.", "General habits can be hidden locally on some clients."],
-                [AgentCapabilityIds.HabitsRead, AgentCapabilityIds.HabitsWrite, AgentCapabilityIds.HabitsInsightsRead],
+                [AgentCapabilityIds.HabitsRead, AgentCapabilityIds.HabitsWrite, AgentCapabilityIds.DailySummaryRead],
                 ["HabitsController.GetHabits", "HabitsController.GetDailySummary"]),
 
             new AppSurface(
@@ -1105,7 +1169,7 @@ public class AgentCatalogService : IAgentCatalogService
                 "Stores identity, timezone, language, theme, color scheme, and week-start preferences.",
                 ["Open Profile.", "Review identity, plan, and settings.", "Update timezone, language, theme, or week-start preferences."],
                 ["Theme and color are user preferences, not authorization signals.", "Preference changes are low-risk writes."],
-                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfilePreferencesWrite],
+                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfilePreferencesWrite, AgentCapabilityIds.ProfilePremiumAppearanceWrite],
                 ["ProfileController.GetProfile", "ProfileController.SetTimezone"]),
 
             new AppSurface(
@@ -1114,7 +1178,7 @@ public class AgentCatalogService : IAgentCatalogService
                 "Controls AI memory and daily AI summary behavior.",
                 ["Open Profile AI settings.", "Review AI memory and summary toggles.", "Enable or disable the AI features you want."],
                 ["AI memory controls whether compact facts may be stored.", "Settings are enforced on the backend, not by prompt text."],
-                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfileAiSettingsWrite],
+                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfileAiMemoryWrite, AgentCapabilityIds.ProfileAiSummaryWrite, AgentCapabilityIds.UserFactsRead, AgentCapabilityIds.UserFactsDelete],
                 ["ProfileController.SetAiMemory", "ProfileController.SetAiSummary"]),
 
             new AppSurface(

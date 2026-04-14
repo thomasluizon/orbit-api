@@ -10,10 +10,15 @@ public record SetColorSchemeCommand(Guid UserId, string? ColorScheme) : IRequest
 
 public class SetColorSchemeCommandHandler(
     IGenericRepository<User> userRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<SetColorSchemeCommand, Result>
 {
     public async Task<Result> Handle(SetColorSchemeCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManagePremiumColors(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);

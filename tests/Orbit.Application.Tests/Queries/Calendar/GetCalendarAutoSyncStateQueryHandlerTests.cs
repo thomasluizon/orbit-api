@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -11,13 +12,16 @@ namespace Orbit.Application.Tests.Queries.Calendar;
 public class GetCalendarAutoSyncStateQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly GetCalendarAutoSyncStateQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetCalendarAutoSyncStateQueryHandlerTests()
     {
-        _handler = new GetCalendarAutoSyncStateQueryHandler(_userRepo);
+        _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new GetCalendarAutoSyncStateQueryHandler(_userRepo, _payGate);
     }
 
     [Fact]

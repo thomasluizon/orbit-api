@@ -27,12 +27,27 @@ public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<SentReminder> sentReminderRepository,
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>
 {
     public async Task<Result> Handle(UpdateHabitCommand request, CancellationToken cancellationToken)
     {
+        if (request.GoalIds is not null)
+        {
+            var goalLinkGate = await payGate.CanLinkGoalsToHabits(request.UserId, cancellationToken);
+            if (goalLinkGate.IsFailure)
+                return goalLinkGate;
+        }
+
+        if (request.Options?.SlipAlertEnabled is not null)
+        {
+            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
+            if (slipAlertGate.IsFailure)
+                return slipAlertGate;
+        }
+
         var habit = request.GoalIds is not null
             ? await habitRepository.FindOneTrackedAsync(
                 h => h.Id == request.HabitId && h.UserId == request.UserId,

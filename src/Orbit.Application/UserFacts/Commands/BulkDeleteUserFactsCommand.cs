@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -11,10 +12,15 @@ public record BulkDeleteUserFactsCommand(
 
 public class BulkDeleteUserFactsCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<BulkDeleteUserFactsCommand, Result<int>>
 {
     public async Task<Result<int>> Handle(BulkDeleteUserFactsCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageUserFacts(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<int>();
+
         var deleted = 0;
 
         foreach (var factId in request.FactIds)

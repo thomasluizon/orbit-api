@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -20,10 +21,15 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
     IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
     IGenericRepository<Habit> habitRepository,
     IUserDateService userDateService,
+    IPayGateService payGate,
     ILogger<GetCalendarSyncSuggestionsQueryHandler> logger) : IRequestHandler<GetCalendarSyncSuggestionsQuery, Result<List<CalendarSyncSuggestionItem>>>
 {
     public async Task<Result<List<CalendarSyncSuggestionItem>>> Handle(GetCalendarSyncSuggestionsQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<List<CalendarSyncSuggestionItem>>();
+
         var suggestions = await suggestionRepository.FindAsync(
             s => s.UserId == request.UserId && s.DismissedAtUtc == null && s.ImportedAtUtc == null,
             cancellationToken);

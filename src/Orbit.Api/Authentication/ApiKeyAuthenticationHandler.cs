@@ -30,6 +30,7 @@ public class ApiKeyAuthenticationHandler(
 
         using var scope = serviceProvider.CreateScope();
         var apiKeyRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<ApiKey>>();
+        var payGate = scope.ServiceProvider.GetRequiredService<IPayGateService>();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         var candidates = await apiKeyRepository.FindTrackedAsync(
@@ -43,6 +44,10 @@ public class ApiKeyAuthenticationHandler(
             {
                 if (candidate.HasExpired())
                     return AuthenticateResult.Fail("API key expired.");
+
+                var gateCheck = await payGate.CanReadApiKeys(candidate.UserId, Context.RequestAborted);
+                if (gateCheck.IsFailure)
+                    return AuthenticateResult.Fail("API keys are not available for this plan.");
 
                 candidate.MarkUsed();
                 await unitOfWork.SaveChangesAsync();

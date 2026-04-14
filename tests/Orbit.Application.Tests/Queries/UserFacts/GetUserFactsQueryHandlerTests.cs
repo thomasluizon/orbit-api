@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.UserFacts.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -10,13 +11,16 @@ namespace Orbit.Application.Tests.Queries.UserFacts;
 public class GetUserFactsQueryHandlerTests
 {
     private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly GetUserFactsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetUserFactsQueryHandlerTests()
     {
-        _handler = new GetUserFactsQueryHandler(_userFactRepo);
+        _payGate.CanReadUserFacts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new GetUserFactsQueryHandler(_userFactRepo, _payGate);
     }
 
     [Fact]

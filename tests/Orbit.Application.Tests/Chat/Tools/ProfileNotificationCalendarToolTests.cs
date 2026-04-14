@@ -25,7 +25,9 @@ public class ProfileNotificationCalendarToolTests
         var mediator = Substitute.For<IMediator>();
         var profileTool = new GetProfileTool(mediator);
         var preferencesTool = new UpdateProfilePreferencesTool(mediator);
-        var aiSettingsTool = new UpdateAiSettingsTool(mediator);
+        var colorSchemeTool = new SetColorSchemeTool(mediator);
+        var aiMemoryTool = new SetAiMemoryTool(mediator);
+        var aiSummaryTool = new SetAiSummaryTool(mediator);
         var notificationsTool = new GetNotificationsTool(mediator);
         var updateNotificationsTool = new UpdateNotificationsTool(mediator);
         var deleteNotificationsTool = new DeleteNotificationsTool(mediator);
@@ -38,10 +40,15 @@ public class ProfileNotificationCalendarToolTests
 
         preferencesTool.Name.Should().Be("update_profile_preferences");
         JsonSerializer.Serialize(preferencesTool.GetParameterSchema()).Should().Contain("set_theme_preference");
-        JsonSerializer.Serialize(preferencesTool.GetParameterSchema()).Should().Contain("color_scheme");
 
-        aiSettingsTool.Name.Should().Be("update_ai_settings");
-        JsonSerializer.Serialize(aiSettingsTool.GetParameterSchema()).Should().Contain("set_ai_summary");
+        colorSchemeTool.Name.Should().Be("set_color_scheme");
+        JsonSerializer.Serialize(colorSchemeTool.GetParameterSchema()).Should().Contain("color_scheme");
+
+        aiMemoryTool.Name.Should().Be("set_ai_memory");
+        JsonSerializer.Serialize(aiMemoryTool.GetParameterSchema()).Should().Contain("enabled");
+
+        aiSummaryTool.Name.Should().Be("set_ai_summary");
+        JsonSerializer.Serialize(aiSummaryTool.GetParameterSchema()).Should().Contain("enabled");
 
         notificationsTool.Name.Should().Be("get_notifications");
         notificationsTool.IsReadOnly.Should().BeTrue();
@@ -182,26 +189,26 @@ public class ProfileNotificationCalendarToolTests
     }
 
     [Fact]
-    public async Task UpdateProfilePreferencesTool_RequiresColorSchemeProperty()
+    public async Task SetColorSchemeTool_RequiresColorSchemeProperty()
     {
-        var tool = new UpdateProfilePreferencesTool(Substitute.For<IMediator>());
+        var tool = new SetColorSchemeTool(Substitute.For<IMediator>());
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"set_color_scheme"}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("color_scheme is required.");
     }
 
     [Fact]
-    public async Task UpdateProfilePreferencesTool_SetsColorScheme()
+    public async Task SetColorSchemeTool_SetsColorScheme()
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<SetColorSchemeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateProfilePreferencesTool(mediator);
+        var tool = new SetColorSchemeTool(mediator);
 
         var result = await tool.ExecuteAsync(
-            Parse("""{"action":"set_color_scheme","color_scheme":"sunset"}"""),
+            Parse("""{"color_scheme":"sunset"}"""),
             UserId,
             CancellationToken.None);
 
@@ -263,67 +270,67 @@ public class ProfileNotificationCalendarToolTests
     }
 
     [Fact]
-    public async Task UpdateAiSettingsTool_RequiresEnabled()
+    public async Task SetAiMemoryTool_RequiresEnabled()
     {
-        var tool = new UpdateAiSettingsTool(Substitute.For<IMediator>());
+        var tool = new SetAiMemoryTool(Substitute.For<IMediator>());
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"set_ai_memory"}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("action and enabled are required.");
+        result.Error.Should().Be("enabled is required.");
     }
 
     [Fact]
-    public async Task UpdateAiSettingsTool_BuildsAiMemoryEntityName()
+    public async Task SetAiMemoryTool_BuildsAiMemoryEntityName()
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<SetAiMemoryCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateAiSettingsTool(mediator);
+        var tool = new SetAiMemoryTool(mediator);
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"set_ai_memory","enabled":true}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{"enabled":true}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("AI memory enabled");
     }
 
     [Fact]
-    public async Task UpdateAiSettingsTool_BuildsAiSummaryDisabledEntityName()
+    public async Task SetAiSummaryTool_BuildsAiSummaryDisabledEntityName()
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<SetAiSummaryCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateAiSettingsTool(mediator);
+        var tool = new SetAiSummaryTool(mediator);
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"set_ai_summary","enabled":false}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{"enabled":false}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("AI summary disabled");
     }
 
     [Fact]
-    public async Task UpdateAiSettingsTool_PropagatesMediatorFailure()
+    public async Task SetAiSummaryTool_PropagatesMediatorFailure()
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<SetAiSummaryCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("summary_failed"));
-        var tool = new UpdateAiSettingsTool(mediator);
+        var tool = new SetAiSummaryTool(mediator);
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"set_ai_summary","enabled":true}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{"enabled":true}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("summary_failed");
     }
 
     [Fact]
-    public async Task UpdateAiSettingsTool_ReturnsFailureForUnsupportedAction()
+    public async Task SetAiSummaryTool_RequiresEnabled()
     {
-        var tool = new UpdateAiSettingsTool(Substitute.For<IMediator>());
+        var tool = new SetAiSummaryTool(Substitute.For<IMediator>());
 
-        var result = await tool.ExecuteAsync(Parse("""{"action":"unknown","enabled":false}"""), UserId, CancellationToken.None);
+        var result = await tool.ExecuteAsync(Parse("""{}"""), UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be("Unsupported action 'unknown'.");
+        result.Error.Should().Be("enabled is required.");
     }
 
     [Fact]

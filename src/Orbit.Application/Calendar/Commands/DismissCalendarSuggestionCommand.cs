@@ -9,10 +9,15 @@ public record DismissCalendarSuggestionCommand(Guid UserId, Guid SuggestionId) :
 
 public class DismissCalendarSuggestionCommandHandler(
     IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<DismissCalendarSuggestionCommand, Result>
 {
     public async Task<Result> Handle(DismissCalendarSuggestionCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var suggestion = await suggestionRepository.FindOneTrackedAsync(
             s => s.Id == request.SuggestionId && s.UserId == request.UserId,
             cancellationToken: cancellationToken);

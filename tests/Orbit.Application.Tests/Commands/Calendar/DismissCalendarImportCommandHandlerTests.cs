@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Calendar.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -10,6 +11,7 @@ namespace Orbit.Application.Tests.Commands.Calendar;
 public class DismissCalendarImportCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly DismissCalendarImportCommandHandler _handler;
 
@@ -17,7 +19,9 @@ public class DismissCalendarImportCommandHandlerTests
 
     public DismissCalendarImportCommandHandlerTests()
     {
-        _handler = new DismissCalendarImportCommandHandler(_userRepo, _unitOfWork);
+        _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new DismissCalendarImportCommandHandler(_userRepo, _payGate, _unitOfWork);
     }
 
     [Fact]

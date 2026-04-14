@@ -10,10 +10,15 @@ public record SetAiMemoryCommand(Guid UserId, bool Enabled) : IRequest<Result>;
 
 public class SetAiMemoryCommandHandler(
     IGenericRepository<User> userRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<SetAiMemoryCommand, Result>
 {
     public async Task<Result> Handle(SetAiMemoryCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageAiMemory(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);

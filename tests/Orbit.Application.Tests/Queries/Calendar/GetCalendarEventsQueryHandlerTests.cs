@@ -4,6 +4,7 @@ using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -17,6 +18,7 @@ public class GetCalendarEventsQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGoogleTokenService _googleTokenService = Substitute.For<IGoogleTokenService>();
     private readonly ICalendarEventFetcher _eventFetcher = Substitute.For<ICalendarEventFetcher>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -27,8 +29,10 @@ public class GetCalendarEventsQueryHandlerTests
 
     public GetCalendarEventsQueryHandlerTests()
     {
+        _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
         _handler = new GetCalendarEventsQueryHandler(
-            _userRepo, _habitRepo, _suggestionRepo, _googleTokenService, _eventFetcher, _unitOfWork, _logger);
+            _userRepo, _habitRepo, _suggestionRepo, _payGate, _googleTokenService, _eventFetcher, _unitOfWork, _logger);
     }
 
     private static User CreateTestUser()

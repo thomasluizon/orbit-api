@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Calendar.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -11,6 +12,7 @@ public class DismissCalendarSuggestionCommandHandlerTests
 {
     private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo =
         Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly DismissCalendarSuggestionCommandHandler _handler;
 
@@ -19,7 +21,9 @@ public class DismissCalendarSuggestionCommandHandlerTests
 
     public DismissCalendarSuggestionCommandHandlerTests()
     {
-        _handler = new DismissCalendarSuggestionCommandHandler(_suggestionRepo, _unitOfWork);
+        _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new DismissCalendarSuggestionCommandHandler(_suggestionRepo, _payGate, _unitOfWork);
     }
 
     [Fact]
