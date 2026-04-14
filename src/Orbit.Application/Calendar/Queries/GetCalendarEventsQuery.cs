@@ -32,17 +32,17 @@ public partial class GetCalendarEventsQueryHandler(
     IUnitOfWork unitOfWork,
     ILogger<GetCalendarEventsQueryHandler> logger) : IRequestHandler<GetCalendarEventsQuery, Result<List<CalendarEventItem>>>
 {
+    private const string GoogleCalendarReconnectMessage = "Google Calendar connection expired. Please reconnect.";
+
     public async Task<Result<List<CalendarEventItem>>> Handle(GetCalendarEventsQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
-        var accessToken = await googleTokenService.GetValidAccessTokenAsync(user, cancellationToken);
+        var accessToken = await ResolveAccessTokenAsync(user, cancellationToken);
         if (accessToken is null)
             return Result.Failure<List<CalendarEventItem>>("Google Calendar not connected. Please sign in with Google first.");
-
-        await unitOfWork.SaveChangesAsync(cancellationToken); // Persist refreshed token
 
         try
         {
@@ -59,8 +59,44 @@ public partial class GetCalendarEventsQueryHandler(
         catch (Google.GoogleApiException ex)
         {
             LogGoogleCalendarApiError(logger, ex, request.UserId);
+            if (IsReconnectRequired(ex))
+            {
+                user.MarkCalendarSyncReconnectRequired(NormalizeGoogleApiErrorCode(ex));
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                return Result.Failure<List<CalendarEventItem>>(GoogleCalendarReconnectMessage);
+            }
             return Result.Failure<List<CalendarEventItem>>("Failed to fetch calendar events. Please try again.");
         }
+    }
+
+    private async Task<string?> ResolveAccessTokenAsync(User user, CancellationToken cancellationToken)
+    {
+        if (user.GoogleRefreshToken is null)
+        {
+            var existingAccessToken = await googleTokenService.GetValidAccessTokenAsync(user, cancellationToken);
+            if (existingAccessToken is not null)
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+
+            return existingAccessToken;
+        }
+
+        var refresh = await googleTokenService.TryRefreshAsync(user, cancellationToken);
+
+        if (refresh.Result == GoogleTokenRefreshResult.RefreshTokenInvalid)
+        {
+            user.MarkCalendarSyncReconnectRequired(refresh.ErrorCode ?? "invalid_grant");
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
+        var accessToken = refresh.AccessToken ?? user.GoogleAccessToken;
+        if (accessToken is null)
+            return null;
+
+        await unitOfWork.SaveChangesAsync(cancellationToken); // Persist refreshed token
+        return accessToken;
     }
 
     private static CalendarService CreateCalendarService(string accessToken)
@@ -89,6 +125,29 @@ public partial class GetCalendarEventsQueryHandler(
         foreach (var id in pendingSuggestionEventIds)
             set.Add(id);
         return set;
+    }
+
+    private static bool IsReconnectRequired(Google.GoogleApiException ex)
+    {
+        var errorText = NormalizeGoogleApiErrorCode(ex);
+        var isAuthStatus = ex.HttpStatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+
+        return isAuthStatus
+            || errorText.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("invalid authentication credentials", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("insufficient authentication scopes", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("forbidden", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeGoogleApiErrorCode(Google.GoogleApiException ex)
+    {
+        var message = ex.Error?.Message;
+        if (!string.IsNullOrWhiteSpace(message))
+            return message;
+
+        return ex.Message;
     }
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]

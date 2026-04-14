@@ -8,6 +8,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
+using Google;
 
 namespace Orbit.Application.Tests.Queries.Calendar;
 
@@ -175,6 +176,58 @@ public class GetCalendarEventsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(1);
         result.Value[0].Id.Should().Be("evt_new");
+    }
+
+    [Fact]
+    public async Task Handle_InvalidRefreshToken_MarksReconnectRequiredAndReturnsConnectionFailure()
+    {
+        var user = CreateTestUser();
+        user.SetGoogleTokens("expired-access-token", "refresh-token");
+
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome(null, GoogleTokenRefreshResult.RefreshTokenInvalid, "invalid_grant"));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Google Calendar not connected");
+        user.GoogleAccessToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().BeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_GoogleApiAuthenticationError_MarksReconnectRequiredAndReturnsReconnectMessage()
+    {
+        var user = CreateTestUser();
+        user.SetGoogleTokens("stale-access-token", null);
+
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
+            .Returns("stale-access-token");
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
+        _eventFetcher.FetchAsync(
+                Arg.Any<Google.Apis.Calendar.v3.CalendarService>(),
+                Arg.Any<DateTime?>(),
+                Arg.Any<CancellationToken>())
+            .Returns<Task<List<CalendarEventItem>>>(_ => throw new GoogleApiException("CalendarService", "Invalid authentication credentials"));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("Google Calendar connection expired. Please reconnect.");
+        user.GoogleAccessToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().BeNull();
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     // --- CalendarEventItem record tests ---
