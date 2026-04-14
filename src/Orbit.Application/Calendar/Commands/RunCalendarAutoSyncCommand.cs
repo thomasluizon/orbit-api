@@ -32,6 +32,7 @@ public record CalendarAutoSyncDependencies(
 
 public partial class RunCalendarAutoSyncCommandHandler(
     CalendarAutoSyncDependencies deps,
+    IPayGateService payGate,
     TimeProvider timeProvider,
     ILogger<RunCalendarAutoSyncCommandHandler> logger)
     : IRequestHandler<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>
@@ -44,6 +45,10 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     public async Task<Result<CalendarAutoSyncResult>> Handle(RunCalendarAutoSyncCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<CalendarAutoSyncResult>();
+
         var user = await deps.UserRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);
@@ -52,9 +57,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
             return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         var utcNow = timeProvider.GetUtcNow().UtcDateTime;
-
-        if (!user.HasProAccess)
-            return Result.Failure<CalendarAutoSyncResult>("Pro access required.", "calendar.autoSync.proRequired");
 
         if (!user.GoogleCalendarAutoSyncEnabled && !request.IsOpportunistic)
         {

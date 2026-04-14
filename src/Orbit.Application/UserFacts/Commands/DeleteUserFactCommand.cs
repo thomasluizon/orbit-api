@@ -10,10 +10,15 @@ public record DeleteUserFactCommand(Guid UserId, Guid FactId) : IRequest<Result>
 
 public class DeleteUserFactCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<DeleteUserFactCommand, Result>
 {
     public async Task<Result> Handle(DeleteUserFactCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageUserFacts(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var fact = await userFactRepository.FindOneTrackedAsync(
             f => f.Id == request.FactId && f.UserId == request.UserId,
             cancellationToken: cancellationToken);

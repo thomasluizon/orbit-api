@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Profile.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -12,6 +13,7 @@ namespace Orbit.Application.Tests.Commands.Profile;
 public class ProfileCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
 
@@ -20,6 +22,16 @@ public class ProfileCommandHandlerTests
     private static User CreateTestUser()
     {
         return User.Create("Test User", "test@example.com").Value;
+    }
+
+    public ProfileCommandHandlerTests()
+    {
+        _payGate.CanManageAiMemory(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _payGate.CanManagePremiumColors(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
     }
 
     private void SetupUserFound(User user)
@@ -98,7 +110,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetAiMemoryCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetAiMemoryCommandHandler(_userRepo, _payGate, _unitOfWork);
         var command = new SetAiMemoryCommand(UserId, false);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -116,7 +128,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetAiSummaryCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetAiSummaryCommandHandler(_userRepo, _payGate, _unitOfWork);
         var command = new SetAiSummaryCommand(UserId, false);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -152,7 +164,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -167,7 +179,7 @@ public class ProfileCommandHandlerTests
     {
         SetupUserNotFound();
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, "purple");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -182,7 +194,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetColorSchemeCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetColorSchemeCommandHandler(_userRepo, _payGate, _unitOfWork);
         var command = new SetColorSchemeCommand(UserId, null);
 
         var result = await handler.Handle(command, CancellationToken.None);

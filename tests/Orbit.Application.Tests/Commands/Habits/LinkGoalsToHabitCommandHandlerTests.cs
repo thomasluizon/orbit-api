@@ -3,6 +3,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -13,6 +14,7 @@ public class LinkGoalsToHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly LinkGoalsToHabitCommandHandler _handler;
 
@@ -21,7 +23,9 @@ public class LinkGoalsToHabitCommandHandlerTests
 
     public LinkGoalsToHabitCommandHandlerTests()
     {
-        _handler = new LinkGoalsToHabitCommandHandler(_habitRepo, _goalRepo, _unitOfWork);
+        _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new LinkGoalsToHabitCommandHandler(_habitRepo, _goalRepo, _payGate, _unitOfWork);
     }
 
     private static Habit CreateTestHabit() =>

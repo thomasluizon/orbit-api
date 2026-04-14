@@ -46,7 +46,6 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
                     "set_language",
                     "set_week_start_day",
                     "set_theme_preference",
-                    "set_color_scheme",
                     "complete_onboarding",
                     "complete_tour",
                     "reset_tour"
@@ -55,8 +54,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
             timezone = new { type = JsonSchemaTypes.String, nullable = true },
             language = new { type = JsonSchemaTypes.String, nullable = true },
             week_start_day = new { type = JsonSchemaTypes.Integer, nullable = true },
-            theme_preference = new { type = JsonSchemaTypes.String, nullable = true },
-            color_scheme = new { type = JsonSchemaTypes.String, nullable = true }
+            theme_preference = new { type = JsonSchemaTypes.String, nullable = true }
         },
         required = new[] { "action" }
     };
@@ -73,7 +71,6 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
             "set_language" => await SetLanguageAsync(args, userId, ct),
             "set_week_start_day" => await SetWeekStartDayAsync(args, userId, ct),
             "set_theme_preference" => await SetThemePreferenceAsync(args, userId, ct),
-            "set_color_scheme" => await SetColorSchemeAsync(args, userId, ct),
             "complete_onboarding" => await ExecuteAsync(new CompleteOnboardingCommand(userId), userId, "Onboarding completed", ct),
             "complete_tour" => await ExecuteAsync(new CompleteTourCommand(userId), userId, "Tour completed", ct),
             "reset_tour" => await ExecuteAsync(new ResetTourCommand(userId), userId, "Tour reset", ct),
@@ -118,15 +115,6 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
         return await ExecuteAsync(new SetThemePreferenceCommand(userId, themePreference), userId, "Theme preference updated", ct);
     }
 
-    private async Task<ToolResult> SetColorSchemeAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        if (!JsonArgumentParser.PropertyExists(args, "color_scheme"))
-            return new ToolResult(false, Error: "color_scheme is required.");
-
-        var colorScheme = JsonArgumentParser.GetNullableString(args, "color_scheme");
-        return await ExecuteAsync(new SetColorSchemeCommand(userId, colorScheme), userId, "Color scheme updated", ct);
-    }
-
     private async Task<ToolResult> ExecuteAsync(IRequest<Orbit.Domain.Common.Result> command, Guid userId, string entityName, CancellationToken ct)
     {
         var result = await mediator.Send(command, ct);
@@ -136,56 +124,89 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
     }
 }
 
-public class UpdateAiSettingsTool(IMediator mediator) : IAiTool
+public class SetColorSchemeTool(IMediator mediator) : IAiTool
 {
-    private const string EnabledState = "enabled";
-    private const string DisabledState = "disabled";
-
-    public string Name => "update_ai_settings";
-    public string Description => "Enable or disable AI memory and daily AI summary settings.";
+    public string Name => "set_color_scheme";
+    public string Description => "Update the user's premium color scheme preference.";
 
     public object GetParameterSchema() => new
     {
         type = JsonSchemaTypes.Object,
         properties = new
         {
-            action = new
-            {
-                type = JsonSchemaTypes.String,
-                @enum = new[] { "set_ai_memory", "set_ai_summary" }
-            },
-            enabled = new { type = JsonSchemaTypes.Boolean }
+            color_scheme = new { type = JsonSchemaTypes.String, nullable = true }
         },
-        required = new[] { "action", "enabled" }
+        required = new[] { "color_scheme" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var action = JsonArgumentParser.GetOptionalString(args, "action");
-        var enabled = JsonArgumentParser.GetOptionalBool(args, "enabled");
-        if (string.IsNullOrWhiteSpace(action) || !enabled.HasValue)
-            return new ToolResult(false, Error: "action and enabled are required.");
+        if (!JsonArgumentParser.PropertyExists(args, "color_scheme"))
+            return new ToolResult(false, Error: "color_scheme is required.");
 
-        Orbit.Domain.Common.Result result = action switch
+        var colorScheme = JsonArgumentParser.GetNullableString(args, "color_scheme");
+        var result = await mediator.Send(new SetColorSchemeCommand(userId, colorScheme), ct);
+
+        return result.IsSuccess
+            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Color scheme updated", Payload: new { color_scheme = colorScheme })
+            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+    }
+}
+
+public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool
+{
+    private const string EnabledState = "enabled";
+    private const string DisabledState = "disabled";
+
+    public abstract string Name { get; }
+    public abstract string Description { get; }
+    protected abstract IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled);
+    protected abstract string SettingLabel { get; }
+
+    public object GetParameterSchema() => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
         {
-            "set_ai_memory" => await mediator.Send(new SetAiMemoryCommand(userId, enabled.Value), ct),
-            "set_ai_summary" => await mediator.Send(new SetAiSummaryCommand(userId, enabled.Value), ct),
-            _ => Orbit.Domain.Common.Result.Failure($"Unsupported action '{action}'.")
-        };
+            enabled = new { type = JsonSchemaTypes.Boolean }
+        },
+        required = new[] { "enabled" }
+    };
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var enabled = JsonArgumentParser.GetOptionalBool(args, "enabled");
+        if (!enabled.HasValue)
+            return new ToolResult(false, Error: "enabled is required.");
+
+        var result = await mediator.Send(CreateCommand(userId, enabled.Value), ct);
 
         return result.IsSuccess
             ? new ToolResult(
                 true,
                 EntityId: userId.ToString(),
-                EntityName: BuildEntityName(action, enabled.Value),
-                Payload: new { action, enabled })
+                EntityName: $"{SettingLabel} {(enabled.Value ? EnabledState : DisabledState)}",
+                Payload: new { enabled })
             : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
     }
+}
 
-    private static string BuildEntityName(string action, bool enabled)
-    {
-        var settingName = action == "set_ai_memory" ? "AI memory" : "AI summary";
-        var state = enabled ? EnabledState : DisabledState;
-        return $"{settingName} {state}";
-    }
+public class SetAiMemoryTool(IMediator mediator) : ToggleProfileSettingTool(mediator)
+{
+    public override string Name => "set_ai_memory";
+    public override string Description => "Enable or disable AI memory.";
+    protected override string SettingLabel => "AI memory";
+
+    protected override IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled) =>
+        new SetAiMemoryCommand(userId, enabled);
+}
+
+public class SetAiSummaryTool(IMediator mediator) : ToggleProfileSettingTool(mediator)
+{
+    public override string Name => "set_ai_summary";
+    public override string Description => "Enable or disable the premium AI summary setting.";
+    protected override string SettingLabel => "AI summary";
+
+    protected override IRequest<Orbit.Domain.Common.Result> CreateCommand(Guid userId, bool enabled) =>
+        new SetAiSummaryCommand(userId, enabled);
 }

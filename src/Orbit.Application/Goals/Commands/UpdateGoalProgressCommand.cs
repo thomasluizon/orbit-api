@@ -15,10 +15,15 @@ public record UpdateGoalProgressCommand(
 public class UpdateGoalProgressCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<UpdateGoalProgressCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalProgressCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken: cancellationToken);

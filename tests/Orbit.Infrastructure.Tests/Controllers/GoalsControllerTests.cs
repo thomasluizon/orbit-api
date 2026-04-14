@@ -83,6 +83,18 @@ public class GoalsControllerTests
         result.Should().BeOfType<NotFoundObjectResult>();
     }
 
+    [Fact]
+    public async Task GetGoalById_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<GetGoalByIdQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<GoalDetailDto>("Pro required"));
+
+        var result = await _controller.GetGoalById(Guid.NewGuid(), CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+    }
+
     // --- CreateGoal ---
 
     [Fact]
@@ -108,6 +120,19 @@ public class GoalsControllerTests
         var result = await _controller.CreateGoal(request, CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task CreateGoal_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<CreateGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<Guid>("Pro required"));
+
+        var request = new GoalsController.CreateGoalRequest("Test Goal", null, 100m, "pages");
+        var result = await _controller.CreateGoal(request, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
     }
 
     // --- UpdateGoal ---
@@ -136,6 +161,19 @@ public class GoalsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task UpdateGoal_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<UpdateGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Pro required"));
+
+        var request = new GoalsController.UpdateGoalRequest("Updated", null, 200m, "pages");
+        var result = await _controller.UpdateGoal(Guid.NewGuid(), request, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+    }
+
     // --- UpdateProgress ---
 
     [Fact]
@@ -160,6 +198,19 @@ public class GoalsControllerTests
         var result = await _controller.UpdateProgress(Guid.NewGuid(), request, CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdateProgress_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<UpdateGoalProgressCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Pro required"));
+
+        var request = new GoalsController.UpdateProgressRequest(50m);
+        var result = await _controller.UpdateProgress(Guid.NewGuid(), request, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
     }
 
     // --- UpdateStatus ---
@@ -188,6 +239,19 @@ public class GoalsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task UpdateStatus_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<UpdateGoalStatusCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Pro required"));
+
+        var request = new GoalsController.UpdateStatusRequest(GoalStatus.Active);
+        var result = await _controller.UpdateStatus(Guid.NewGuid(), request, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+    }
+
     // --- ReorderGoals ---
 
     [Fact]
@@ -212,6 +276,19 @@ public class GoalsControllerTests
         var result = await _controller.ReorderGoals(request, CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task ReorderGoals_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<ReorderGoalsCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Pro required"));
+
+        var request = new GoalsController.ReorderGoalsRequest([]);
+        var result = await _controller.ReorderGoals(request, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
     }
 
     // --- LinkHabits ---
@@ -240,6 +317,19 @@ public class GoalsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    [Fact]
+    public async Task LinkHabits_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<LinkHabitsToGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Pro required"));
+
+        var request = new GoalsController.LinkHabitsRequest([Guid.NewGuid()]);
+        var result = await _controller.LinkHabits(Guid.NewGuid(), request, CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+    }
+
     // --- GetGoalDetail ---
 
     [Fact]
@@ -264,6 +354,18 @@ public class GoalsControllerTests
         result.Should().BeOfType<NotFoundObjectResult>();
     }
 
+    [Fact]
+    public async Task GetGoalDetail_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<GetGoalDetailQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<GoalDetailWithMetricsResponse>("Pro required"));
+
+        var result = await _controller.GetGoalDetail(Guid.NewGuid(), CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+    }
+
     // --- GetGoalMetrics ---
 
     [Fact]
@@ -286,6 +388,18 @@ public class GoalsControllerTests
         var result = await _controller.GetGoalMetrics(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetGoalMetrics_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<GoalMetrics>("Pro required"));
+
+        var result = await _controller.GetGoalMetrics(Guid.NewGuid(), CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
     }
 
     // --- GetGoalReview ---
@@ -335,5 +449,17 @@ public class GoalsControllerTests
         var result = await _controller.DeleteGoal(Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task DeleteGoal_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<DeleteGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Pro required"));
+
+        var result = await _controller.DeleteGoal(Guid.NewGuid(), CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
     }
 }

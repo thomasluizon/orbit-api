@@ -18,6 +18,7 @@ public class UpdateHabitGoalSyncTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<SentReminder> _sentReminderRepo = Substitute.For<IGenericRepository<SentReminder>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
@@ -28,8 +29,12 @@ public class UpdateHabitGoalSyncTests
 
     public UpdateHabitGoalSyncTests()
     {
+        _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
         _handler = new UpdateHabitCommandHandler(
-            _habitRepo, _sentReminderRepo, _goalRepo, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _sentReminderRepo, _goalRepo, _payGate, _userDateService, _unitOfWork, _cache);
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);

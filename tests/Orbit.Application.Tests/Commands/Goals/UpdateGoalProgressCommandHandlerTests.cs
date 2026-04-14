@@ -13,6 +13,7 @@ public class UpdateGoalProgressCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<GoalProgressLog> _progressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UpdateGoalProgressCommandHandler _handler;
 
@@ -21,7 +22,9 @@ public class UpdateGoalProgressCommandHandlerTests
 
     public UpdateGoalProgressCommandHandlerTests()
     {
-        _handler = new UpdateGoalProgressCommandHandler(_goalRepo, _progressLogRepo, _unitOfWork);
+        _handler = new UpdateGoalProgressCommandHandler(_goalRepo, _progressLogRepo, _payGate, _unitOfWork);
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     [Fact]
@@ -123,5 +126,20 @@ public class UpdateGoalProgressCommandHandlerTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(goal);
+    }
+
+    [Fact]
+    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
+    {
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
+
+        var command = new UpdateGoalProgressCommand(UserId, GoalId, 50);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

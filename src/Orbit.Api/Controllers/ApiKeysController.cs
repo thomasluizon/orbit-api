@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
+using Orbit.Domain.Common;
 
 #pragma warning disable CA1873
 
@@ -52,7 +53,7 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
     {
         var query = new GetApiKeysQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpDelete("{id:guid}")]
@@ -63,6 +64,9 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
     {
         var command = new RevokeApiKeyCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure && result.ErrorCode == Result.PayGateErrorCode)
+            return result.ToPayGateAwareResult(() => NoContent());
 
         if (result.IsSuccess)
         {

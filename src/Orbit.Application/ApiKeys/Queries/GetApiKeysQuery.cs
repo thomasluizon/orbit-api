@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -19,10 +20,15 @@ public record ApiKeyResponse(
 public record GetApiKeysQuery(Guid UserId) : IRequest<Result<IReadOnlyList<ApiKeyResponse>>>;
 
 public class GetApiKeysQueryHandler(
-    IGenericRepository<ApiKey> apiKeyRepository) : IRequestHandler<GetApiKeysQuery, Result<IReadOnlyList<ApiKeyResponse>>>
+    IGenericRepository<ApiKey> apiKeyRepository,
+    IPayGateService payGate) : IRequestHandler<GetApiKeysQuery, Result<IReadOnlyList<ApiKeyResponse>>>
 {
     public async Task<Result<IReadOnlyList<ApiKeyResponse>>> Handle(GetApiKeysQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanReadApiKeys(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<IReadOnlyList<ApiKeyResponse>>();
+
         var keys = await apiKeyRepository.FindAsync(
             k => k.UserId == request.UserId,
             cancellationToken);

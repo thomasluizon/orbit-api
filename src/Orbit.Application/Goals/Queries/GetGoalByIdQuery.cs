@@ -36,10 +36,15 @@ public record GetGoalByIdQuery(
     Guid GoalId) : IRequest<Result<GoalDetailDto>>;
 
 public class GetGoalByIdQueryHandler(
-    IGenericRepository<Goal> goalRepository) : IRequestHandler<GetGoalByIdQuery, Result<GoalDetailDto>>
+    IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate) : IRequestHandler<GetGoalByIdQuery, Result<GoalDetailDto>>
 {
     public async Task<Result<GoalDetailDto>> Handle(GetGoalByIdQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<GoalDetailDto>();
+
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             includes: q => q.Include(g => g.ProgressLogs).Include(g => g.Habits),

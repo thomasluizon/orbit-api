@@ -15,10 +15,15 @@ public record LinkHabitsToGoalCommand(
 public class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<LinkHabitsToGoalCommand, Result>
 {
     public async Task<Result> Handle(LinkHabitsToGoalCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         if (request.HabitIds.Count > AppConstants.MaxHabitsPerGoal)
             return Result.Failure($"A goal can have at most {AppConstants.MaxHabitsPerGoal} linked habits.");
 

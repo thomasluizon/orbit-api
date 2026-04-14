@@ -35,10 +35,15 @@ public record GetGoalsQuery(
 
 public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUserDateService userDateService) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
     public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<PaginatedResponse<GoalDto>>();
+
         var allGoals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId,
             q => q.Include(g => g.Habits),

@@ -21,11 +21,16 @@ public record GetGoalDetailQuery(
 
 public class GetGoalDetailQueryHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork) : IRequestHandler<GetGoalDetailQuery, Result<GoalDetailWithMetricsResponse>>
 {
     public async Task<Result<GoalDetailWithMetricsResponse>> Handle(GetGoalDetailQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<GoalDetailWithMetricsResponse>();
+
         // Superset includes: ProgressLogs for detail + Habits.Logs for metrics
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,

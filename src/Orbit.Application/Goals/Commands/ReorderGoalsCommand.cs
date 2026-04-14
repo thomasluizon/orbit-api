@@ -14,10 +14,15 @@ public record ReorderGoalsCommand(
 
 public class ReorderGoalsCommandHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<ReorderGoalsCommand, Result>
 {
     public async Task<Result> Handle(ReorderGoalsCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         foreach (var update in request.Positions)
         {
             var goal = await goalRepository.FindOneTrackedAsync(

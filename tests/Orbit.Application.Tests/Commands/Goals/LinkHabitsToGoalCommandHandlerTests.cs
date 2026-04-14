@@ -14,6 +14,7 @@ public class LinkHabitsToGoalCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly LinkHabitsToGoalCommandHandler _handler;
 
@@ -22,7 +23,9 @@ public class LinkHabitsToGoalCommandHandlerTests
 
     public LinkHabitsToGoalCommandHandlerTests()
     {
-        _handler = new LinkHabitsToGoalCommandHandler(_goalRepo, _habitRepo, _unitOfWork);
+        _handler = new LinkHabitsToGoalCommandHandler(_goalRepo, _habitRepo, _payGate, _unitOfWork);
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
     }
 
     [Fact]
@@ -137,5 +140,20 @@ public class LinkHabitsToGoalCommandHandlerTests
         goal.Habits.Should().HaveCount(1);
         goal.Habits.Should().Contain(newHabit);
         goal.Habits.Should().NotContain(oldHabit);
+    }
+
+    [Fact]
+    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
+    {
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
+
+        var command = new LinkHabitsToGoalCommand(UserId, GoalId, new List<Guid> { Guid.NewGuid() });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

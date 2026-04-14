@@ -10,6 +10,7 @@ namespace Orbit.Application.Tests.Queries.Goals;
 public class GetGoalByIdQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly GetGoalByIdQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -17,7 +18,9 @@ public class GetGoalByIdQueryHandlerTests
 
     public GetGoalByIdQueryHandlerTests()
     {
-        _handler = new GetGoalByIdQueryHandler(_goalRepo);
+        _handler = new GetGoalByIdQueryHandler(_goalRepo, _payGate);
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.Success());
     }
 
     private static Goal CreateTestGoal(string title = "Test Goal", decimal target = 100)
@@ -142,5 +145,19 @@ public class GetGoalByIdQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.LinkedHabits.Should().BeEmpty();
         result.Value.ProgressHistory.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
+    {
+        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Orbit.Domain.Common.Result.PayGateFailure("Goals are a Pro feature"));
+
+        var query = new GetGoalByIdQuery(UserId, GoalId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
     }
 }

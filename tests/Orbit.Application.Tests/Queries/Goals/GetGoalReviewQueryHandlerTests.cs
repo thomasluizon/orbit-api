@@ -36,7 +36,7 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_GeneratesNewReview_WhenNotCached()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.CanAccessGoals(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
 
         var goal = CreateTestGoal();
         _goalRepo.FindAsync(
@@ -61,7 +61,7 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_ReturnsCachedReview_WhenCached()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.CanAccessGoals(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
 
         var goal = CreateTestGoal();
         _goalRepo.FindAsync(
@@ -89,8 +89,8 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_PayGateFails_ReturnsFailure()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("PAY_GATE", "PAY_GATE"));
+        _payGate.CanAccessGoals(UserId, Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
 
         var query = new GetGoalReviewQuery(UserId, "en");
 
@@ -102,7 +102,7 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_NoActiveGoals_ReturnsFailure()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.CanAccessGoals(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
 
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -121,7 +121,7 @@ public class GetGoalReviewQueryHandlerTests
     [Fact]
     public async Task Handle_ReviewServiceFails_ReturnsFailure()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.CanAccessGoals(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
 
         var goal = CreateTestGoal();
         _goalRepo.FindAsync(

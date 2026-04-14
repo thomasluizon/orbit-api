@@ -10,10 +10,15 @@ public record SetAiSummaryCommand(Guid UserId, bool Enabled) : IRequest<Result>;
 
 public class SetAiSummaryCommandHandler(
     IGenericRepository<User> userRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<SetAiSummaryCommand, Result>
 {
     public async Task<Result> Handle(SetAiSummaryCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanManageAiSummary(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);

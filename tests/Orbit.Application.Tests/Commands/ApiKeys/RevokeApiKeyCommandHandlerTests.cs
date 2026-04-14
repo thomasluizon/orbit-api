@@ -3,6 +3,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -11,6 +12,7 @@ namespace Orbit.Application.Tests.Commands.ApiKeys;
 public class RevokeApiKeyCommandHandlerTests
 {
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly RevokeApiKeyCommandHandler _handler;
 
@@ -18,7 +20,9 @@ public class RevokeApiKeyCommandHandlerTests
 
     public RevokeApiKeyCommandHandlerTests()
     {
-        _handler = new RevokeApiKeyCommandHandler(_apiKeyRepo, _unitOfWork);
+        _payGate.CanManageApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new RevokeApiKeyCommandHandler(_apiKeyRepo, _payGate, _unitOfWork);
     }
 
     [Fact]

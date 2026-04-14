@@ -15,10 +15,15 @@ public record LinkGoalsToHabitCommand(
 public class LinkGoalsToHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<LinkGoalsToHabitCommand, Result>
 {
     public async Task<Result> Handle(LinkGoalsToHabitCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanLinkGoalsToHabits(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Goals),

@@ -42,6 +42,8 @@ public partial class CreateHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
     {
+        var opts = request.Options ?? new HabitCommandOptions();
+
         var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
@@ -53,8 +55,21 @@ public partial class CreateHabitCommandHandler(
                 return subGateCheck.PropagateError<Guid>();
         }
 
+        if (request.GoalIds is { Count: > 0 })
+        {
+            var goalLinkGate = await payGate.CanLinkGoalsToHabits(request.UserId, cancellationToken);
+            if (goalLinkGate.IsFailure)
+                return goalLinkGate.PropagateError<Guid>();
+        }
+
+        if (opts.SlipAlertEnabled)
+        {
+            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
+            if (slipAlertGate.IsFailure)
+                return slipAlertGate.PropagateError<Guid>();
+        }
+
         var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var opts = request.Options ?? new HabitCommandOptions();
 
         // If specific days are set, advance DueDate to the next matching day
         if (opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))

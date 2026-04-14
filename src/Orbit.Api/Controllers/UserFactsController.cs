@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.UserFacts.Commands;
 using Orbit.Application.UserFacts.Queries;
+using Orbit.Domain.Common;
 
 #pragma warning disable CA1873
 
@@ -24,7 +25,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
     {
         var query = new GetUserFactsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpDelete("{id:guid}")]
@@ -35,6 +36,9 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
     {
         var command = new DeleteUserFactCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure && result.ErrorCode == Result.PayGateErrorCode)
+            return result.ToPayGateAwareResult(() => NoContent());
 
         if (result.IsSuccess)
             LogUserFactDeleted(logger, id, HttpContext.GetUserId());
@@ -55,9 +59,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
         var command = new BulkDeleteUserFactsCommand(HttpContext.GetUserId(), request.FactIds);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(new { deleted = result.Value })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(value => Ok(new { deleted = value }));
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "User fact deleted {FactId} by user {UserId}")]

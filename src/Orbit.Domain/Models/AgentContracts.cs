@@ -242,6 +242,9 @@ public static class AgentCapabilityIds
     public const string HabitsBulkWrite = "habits.bulk.write";
     public const string HabitsBulkDelete = "habits.bulk.delete";
     public const string HabitsInsightsRead = "habits.insights.read";
+    public const string HabitMetricsRead = "habits.metrics.read";
+    public const string DailySummaryRead = "habits.daily-summary.read";
+    public const string RetrospectiveRead = "habits.retrospective.read";
     public const string GoalsRead = "goals.read";
     public const string GoalsWrite = "goals.write";
     public const string GoalsDelete = "goals.delete";
@@ -251,7 +254,10 @@ public static class AgentCapabilityIds
     public const string ProfileReadBasic = "profile.read.basic";
     public const string ProfileReadSensitive = "profile.read.sensitive";
     public const string ProfilePreferencesWrite = "profile.preferences.write";
+    public const string ProfilePremiumAppearanceWrite = "profile.premium-appearance.write";
     public const string ProfileAiSettingsWrite = "profile.ai-settings.write";
+    public const string ProfileAiMemoryWrite = "profile.ai-memory.write";
+    public const string ProfileAiSummaryWrite = "profile.ai-summary.write";
     public const string NotificationsRead = "notifications.read";
     public const string NotificationsWrite = "notifications.write";
     public const string NotificationsDelete = "notifications.delete";

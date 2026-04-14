@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.UserFacts.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -11,9 +12,16 @@ public class UserFactCommandHandlerTests
 {
     private readonly IGenericRepository<UserFact> _factRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IAppConfigService _appConfigService = Substitute.For<IAppConfigService>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
     private static readonly Guid UserId = Guid.NewGuid();
+
+    public UserFactCommandHandlerTests()
+    {
+        _payGate.CanManageUserFacts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+    }
 
     // ----- CreateUserFact -----
 
@@ -132,7 +140,7 @@ public class UserFactCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(fact);
 
-        var handler = new DeleteUserFactCommandHandler(_factRepo, _unitOfWork);
+        var handler = new DeleteUserFactCommandHandler(_factRepo, _payGate, _unitOfWork);
         var command = new DeleteUserFactCommand(UserId, fact.Id);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -156,7 +164,7 @@ public class UserFactCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(fact1, fact2);
 
-        var handler = new BulkDeleteUserFactsCommandHandler(_factRepo, _unitOfWork);
+        var handler = new BulkDeleteUserFactsCommandHandler(_factRepo, _payGate, _unitOfWork);
         var command = new BulkDeleteUserFactsCommand(UserId, new List<Guid> { fact1.Id, fact2.Id });
 
         var result = await handler.Handle(command, CancellationToken.None);

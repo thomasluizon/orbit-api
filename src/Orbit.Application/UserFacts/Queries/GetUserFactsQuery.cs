@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -15,10 +16,15 @@ public record UserFactDto(
     DateTime? UpdatedAtUtc);
 
 public class GetUserFactsQueryHandler(
-    IGenericRepository<UserFact> userFactRepository) : IRequestHandler<GetUserFactsQuery, Result<IReadOnlyList<UserFactDto>>>
+    IGenericRepository<UserFact> userFactRepository,
+    IPayGateService payGate) : IRequestHandler<GetUserFactsQuery, Result<IReadOnlyList<UserFactDto>>>
 {
     public async Task<Result<IReadOnlyList<UserFactDto>>> Handle(GetUserFactsQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanReadUserFacts(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<IReadOnlyList<UserFactDto>>();
+
         var facts = await userFactRepository.FindAsync(
             f => f.UserId == request.UserId,
             cancellationToken);

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260414173756_SeedGoalsProGateConsistency")]
+    partial class SeedGoalsProGateConsistency
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -317,7 +320,7 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "ai_chat",
                             Description = "AI chat assistant",
                             Enabled = true,
-                            PlanRequirement = "Free",
+                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -333,7 +336,7 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "ai_retrospective",
                             Description = "AI retrospective analysis",
                             Enabled = true,
-                            PlanRequirement = "YearlyPro",
+                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -341,7 +344,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "sub_habits",
                             Description = "Sub-habit nesting",
                             Enabled = true,
-                            PlanRequirement = "Pro",
                             UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new

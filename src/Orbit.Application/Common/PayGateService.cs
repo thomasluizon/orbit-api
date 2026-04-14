@@ -53,7 +53,13 @@ public class PayGateService(
         var messageLimit = baseLimit + user.AdRewardBonusMessages;
 
         if (user.AiMessagesUsedThisMonth >= messageLimit)
-            return Result.PayGateFailure($"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.");
+        {
+            var errorMessage = user.HasProAccess
+                ? $"You've reached your monthly AI message limit ({messageLimit})."
+                : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+
+            return Result.PayGateFailure(errorMessage);
+        }
 
         return Result.Success();
     }
@@ -84,7 +90,7 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default)
+    public async Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
@@ -97,16 +103,45 @@ public class PayGateService(
         return Result.Success();
     }
 
+    public Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default) =>
+        CanAccessGoals(userId, ct);
+
+    public Task<Result> CanAccessCalendar(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "Calendar integration is a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanManageCalendar(Guid userId, CancellationToken ct = default) =>
+        CanAccessCalendar(userId, ct);
+
+    public Task<Result> CanReadApiKeys(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "API keys are a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanManageApiKeys(Guid userId, CancellationToken ct = default) =>
+        CanReadApiKeys(userId, ct);
+
+    public Task<Result> CanManageAiMemory(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "AI memory is a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanManageAiSummary(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "AI summaries are a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanManagePremiumColors(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "Premium color schemes are a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanReadUserFacts(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "AI memory is a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanManageUserFacts(Guid userId, CancellationToken ct = default) =>
+        CanReadUserFacts(userId, ct);
+
+    public Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default) =>
+        RequireProAccess(userId, "Slip alerts are a Pro feature. Upgrade to unlock!", ct);
+
+    public Task<Result> CanLinkGoalsToHabits(Guid userId, CancellationToken ct = default) =>
+        CanAccessGoals(userId, ct);
+
     public async Task<Result> CanCreateApiKeys(Guid userId, CancellationToken ct = default)
     {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
-
-        if (!user.HasProAccess)
-            return Result.PayGateFailure("API keys are a Pro feature. Upgrade to unlock!");
-
-        return Result.Success();
+        return await CanManageApiKeys(userId, ct);
     }
 
     /// <summary>
@@ -121,5 +156,16 @@ public class PayGateService(
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
         var baseLimit = user.HasProAccess ? proLimit : freeLimit;
         return baseLimit + user.AdRewardBonusMessages;
+    }
+
+    private async Task<Result> RequireProAccess(Guid userId, string errorMessage, CancellationToken ct)
+    {
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+
+        return user.HasProAccess
+            ? Result.Success()
+            : Result.PayGateFailure(errorMessage);
     }
 }

@@ -15,12 +15,17 @@ public record UpdateGoalStatusCommand(
 
 public partial class UpdateGoalStatusCommandHandler(
     IGenericRepository<Goal> goalRepository,
+    IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     ILogger<UpdateGoalStatusCommandHandler> logger) : IRequestHandler<UpdateGoalStatusCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalStatusCommand request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken: cancellationToken);

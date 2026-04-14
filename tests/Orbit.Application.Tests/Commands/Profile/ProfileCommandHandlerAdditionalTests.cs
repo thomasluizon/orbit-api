@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Profile.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -69,6 +70,7 @@ public class CompleteOnboardingCommandHandlerTests
 public class SetAiMemoryCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SetAiMemoryCommandHandler _handler;
 
@@ -76,7 +78,9 @@ public class SetAiMemoryCommandHandlerTests
 
     public SetAiMemoryCommandHandlerTests()
     {
-        _handler = new SetAiMemoryCommandHandler(_userRepo, _unitOfWork);
+        _payGate.CanManageAiMemory(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new SetAiMemoryCommandHandler(_userRepo, _payGate, _unitOfWork);
     }
 
     [Fact]
@@ -131,6 +135,7 @@ public class SetAiMemoryCommandHandlerTests
 public class SetAiSummaryCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SetAiSummaryCommandHandler _handler;
 
@@ -138,7 +143,9 @@ public class SetAiSummaryCommandHandlerTests
 
     public SetAiSummaryCommandHandlerTests()
     {
-        _handler = new SetAiSummaryCommandHandler(_userRepo, _unitOfWork);
+        _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new SetAiSummaryCommandHandler(_userRepo, _payGate, _unitOfWork);
     }
 
     [Fact]

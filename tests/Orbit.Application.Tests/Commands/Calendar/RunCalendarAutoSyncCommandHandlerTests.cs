@@ -5,6 +5,7 @@ using NSubstitute;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -17,6 +18,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
     private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGoogleTokenService _tokenService = Substitute.For<IGoogleTokenService>();
     private readonly ICalendarEventFetcher _fetcher = Substitute.For<ICalendarEventFetcher>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -29,7 +31,9 @@ public class RunCalendarAutoSyncCommandHandlerTests
         var deps = new CalendarAutoSyncDependencies(
             _userRepo, _habitRepo, _suggestionRepo, _notificationRepo,
             _tokenService, _fetcher, _unitOfWork);
-        _handler = new RunCalendarAutoSyncCommandHandler(deps, _timeProvider, _logger);
+        _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Success()));
+        _handler = new RunCalendarAutoSyncCommandHandler(deps, _payGate, _timeProvider, _logger);
 
         // Default: mid-day so notifications pass quiet-hours check
         _timeProvider.SetUtcNow(new DateTime(2026, 4, 9, 14, 0, 0, DateTimeKind.Utc));
@@ -74,12 +78,10 @@ public class RunCalendarAutoSyncCommandHandlerTests
     [Fact]
     public async Task Handle_NonProUser_ReturnsProRequired()
     {
-        var user = User.Create("Test", "test@example.com").Value;
-        // Clear trial to force non-pro
-        typeof(User).GetProperty("TrialEndsAt")!.SetValue(user, null);
-        StubUser(user);
+        _payGate.CanManageCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(Result.Failure("Calendar integration is a Pro feature. Upgrade to unlock!", "calendar.autoSync.proRequired")));
 
-        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(Guid.NewGuid()), default);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("calendar.autoSync.proRequired");

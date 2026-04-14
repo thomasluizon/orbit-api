@@ -27,6 +27,7 @@ public partial class GetCalendarEventsQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
+    IPayGateService payGate,
     IGoogleTokenService googleTokenService,
     ICalendarEventFetcher eventFetcher,
     IUnitOfWork unitOfWork,
@@ -36,6 +37,10 @@ public partial class GetCalendarEventsQueryHandler(
 
     public async Task<Result<List<CalendarEventItem>>> Handle(GetCalendarEventsQuery request, CancellationToken cancellationToken)
     {
+        var gateCheck = await payGate.CanAccessCalendar(request.UserId, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck.PropagateError<List<CalendarEventItem>>();
+
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
