@@ -31,6 +31,52 @@ namespace Orbit.Infrastructure.Migrations
                 nullable: false,
                 defaultValueSql: "'[]'::jsonb");
 
+            migrationBuilder.Sql(
+                """
+                UPDATE "ApiKeys"
+                SET "Scopes" = '[
+                  "chat_interact",
+                  "catalog_read",
+                  "read_config",
+                  "read_habits",
+                  "write_habits",
+                  "delete_habits",
+                  "read_goals",
+                  "write_goals",
+                  "delete_goals",
+                  "read_tags",
+                  "write_tags",
+                  "delete_tags",
+                  "read_profile_basic",
+                  "read_profile_sensitive",
+                  "write_profile_preferences",
+                  "write_ai_settings",
+                  "read_notifications",
+                  "write_notifications",
+                  "delete_notifications",
+                  "read_calendar",
+                  "manage_calendar_sync",
+                  "read_gamification",
+                  "write_gamification",
+                  "read_checklist_templates",
+                  "write_checklist_templates",
+                  "read_user_facts",
+                  "delete_user_facts",
+                  "read_referrals",
+                  "read_subscriptions",
+                  "manage_subscriptions",
+                  "read_api_keys",
+                  "manage_api_keys",
+                  "write_support",
+                  "read_sync",
+                  "write_sync",
+                  "manage_account",
+                  "manage_auth"
+                ]'::jsonb
+                WHERE jsonb_typeof("Scopes") = 'array'
+                  AND jsonb_array_length("Scopes") = 0;
+                """);
+
             migrationBuilder.CreateTable(
                 name: "AgentAuditLogs",
                 columns: table => new

@@ -288,7 +288,13 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool
 
         var scopes = JsonArgumentParser.ParseStringArray(args, "scopes");
         var isReadOnly = JsonArgumentParser.GetOptionalBool(args, "is_read_only") ?? false;
-        var expiresAtUtc = ParseUtcTimestamp(JsonArgumentParser.GetOptionalString(args, "expires_at_utc"));
+        var expiresAtValue = JsonArgumentParser.GetOptionalString(args, "expires_at_utc");
+        DateTime? expiresAtUtc = null;
+        if (JsonArgumentParser.PropertyExists(args, "expires_at_utc") &&
+            !TryParseUtcTimestamp(expiresAtValue, out expiresAtUtc))
+        {
+            return new ToolResult(false, Error: "expires_at_utc must be a valid ISO-8601 UTC timestamp.");
+        }
 
         var result = await mediator.Send(new CreateApiKeyCommand(userId, name, scopes, isReadOnly, expiresAtUtc), ct);
         return result.IsSuccess
@@ -308,18 +314,25 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool
             : new ToolResult(false, EntityId: parsedId.ToString(), Error: result.Error);
     }
 
-    private static DateTime? ParseUtcTimestamp(string? value)
+    private static bool TryParseUtcTimestamp(string? value, out DateTime? parsedUtc)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
+        parsedUtc = null;
 
-        return DateTime.TryParse(
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (!DateTime.TryParse(
             value,
             CultureInfo.InvariantCulture,
             DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
             out var parsed)
-            ? parsed
-            : null;
+        )
+        {
+            return false;
+        }
+
+        parsedUtc = parsed;
+        return true;
     }
 }
 

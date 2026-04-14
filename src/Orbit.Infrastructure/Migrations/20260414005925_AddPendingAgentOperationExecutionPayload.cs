@@ -15,7 +15,7 @@ namespace Orbit.Infrastructure.Migrations
                 table: "PendingAgentOperations",
                 type: "jsonb",
                 nullable: false,
-                defaultValue: "");
+                defaultValueSql: "'{}'::jsonb");
 
             migrationBuilder.AddColumn<string>(
                 name: "OperationId",

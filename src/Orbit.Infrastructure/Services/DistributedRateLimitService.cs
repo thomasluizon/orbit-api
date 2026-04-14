@@ -1,4 +1,6 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -24,6 +26,45 @@ public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistribute
         if (!Policies.TryGetValue(policyName, out var policy))
             throw new InvalidOperationException($"Unknown rate-limit policy '{policyName}'.");
 
+        var supportsRetryableTransactions =
+            dbContext.Database.IsRelational() &&
+            dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true;
+
+        const int maxAttempts = 3;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            await using var transaction = supportsRetryableTransactions
+                ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : null;
+
+            try
+            {
+                var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
+
+                if (transaction is not null)
+                    await transaction.CommitAsync(cancellationToken);
+
+                return decision;
+            }
+            catch (Exception ex) when (supportsRetryableTransactions && IsRetryableRateLimitConflict(ex) && attempt < maxAttempts - 1)
+            {
+                if (transaction is not null)
+                    await transaction.RollbackAsync(cancellationToken);
+
+                dbContext.ChangeTracker.Clear();
+            }
+        }
+
+        throw new InvalidOperationException("Rate-limit acquisition failed after retrying transactional conflicts.");
+    }
+
+    private async Task<DistributedRateLimitDecision> TryAcquireCoreAsync(
+        string policyName,
+        string partitionKey,
+        RateLimitPolicy policy,
+        CancellationToken cancellationToken)
+    {
         var now = DateTime.UtcNow;
         var segmentWindow = TimeSpan.FromTicks(policy.Window.Ticks / policy.SegmentCount);
         var segmentStartUtc = FloorUtc(now, segmentWindow);
@@ -89,6 +130,16 @@ public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistribute
             policy.PermitLimit,
             currentCount + 1,
             segmentEndUtc);
+    }
+
+    private static bool IsRetryableRateLimitConflict(Exception exception)
+    {
+        return exception switch
+        {
+            DbUpdateException dbUpdateException => IsRetryableRateLimitConflict(dbUpdateException.InnerException ?? dbUpdateException),
+            PostgresException postgresException => postgresException.SqlState is PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.SerializationFailure,
+            _ => false
+        };
     }
 
     private static DateTime FloorUtc(DateTime utcNow, TimeSpan window)
