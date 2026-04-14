@@ -67,6 +67,11 @@ public static class HttpContextExtensions
                 return countryCode;
         }
 
+        var acceptLanguageCountryCode = NormalizeCountryCodeFromAcceptLanguage(
+            context.Request.Headers.AcceptLanguage.ToString());
+        if (acceptLanguageCountryCode is not null)
+            return acceptLanguageCountryCode;
+
         return null;
     }
 
@@ -94,6 +99,29 @@ public static class HttpContextExtensions
         return normalized.Length == 2 && normalized.All(char.IsLetter)
             ? normalized
             : null;
+    }
+
+    private static string? NormalizeCountryCodeFromAcceptLanguage(string? acceptLanguage)
+    {
+        if (string.IsNullOrWhiteSpace(acceptLanguage))
+            return null;
+
+        var languageTags = acceptLanguage.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var entry in languageTags)
+        {
+            var languageTag = entry.Split(';', 2, StringSplitOptions.TrimEntries)[0]
+                .Replace('_', '-');
+            var segments = languageTag.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (segments.Length < 2)
+                continue;
+
+            var countryCode = NormalizeCountryCode(segments[^1]);
+            if (countryCode is not null)
+                return countryCode;
+        }
+
+        return null;
     }
 
     private static bool TryNormalizeIpAddress(string? ipAddress, out string? normalizedIpAddress)
