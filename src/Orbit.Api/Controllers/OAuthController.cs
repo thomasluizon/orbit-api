@@ -2,13 +2,14 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Orbit.Api.OAuth;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Api.Controllers;
@@ -105,8 +106,7 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(code_challenge) || code_challenge_method != "S256")
             return BadRequest(new { error = "PKCE with S256 is required" });
 
-        if (!Uri.TryCreate(redirect_uri, UriKind.Absolute, out var redirectParsed) ||
-            !_allowedRedirectHosts.Contains(redirectParsed.Host))
+        if (!IsRedirectUriAllowed(redirect_uri))
             return BadRequest(new { error = "invalid_redirect_uri" });
 
         var googleClientId = googleSettings.Value.ClientId ?? "";
@@ -120,7 +120,7 @@ public partial class OAuthController(
     public record SendCodeRequest(string Email, string? Language = "en");
 
     [HttpPost("/oauth/send-code")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     public async Task<IActionResult> SendCode([FromBody] SendCodeRequest request, CancellationToken ct)
     {
         var result = await mediator.Send(new SendCodeCommand(request.Email, request.Language ?? "en"), ct);
@@ -135,9 +135,12 @@ public partial class OAuthController(
         string State, string CodeChallenge, string RedirectUri, string ClientId);
 
     [HttpPost("/oauth/verify-code")]
-    [EnableRateLimiting("auth")]
+    [DistributedRateLimit("auth")]
     public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeRequest request, CancellationToken ct)
     {
+        if (!IsRedirectUriAllowed(request.RedirectUri))
+            return BadRequest(new { error = "invalid_redirect_uri" });
+
         var result = await mediator.Send(
             new VerifyCodeCommand(request.Email, request.Code), ct);
 
@@ -159,8 +162,12 @@ public partial class OAuthController(
         string State, string CodeChallenge, string RedirectUri, string ClientId);
 
     [HttpPost("/oauth/google")]
+    [DistributedRateLimit("auth")]
     public async Task<IActionResult> GoogleAuth([FromBody] GoogleAuthRequest request, CancellationToken ct)
     {
+        if (!IsRedirectUriAllowed(request.RedirectUri))
+            return BadRequest(new { error = "invalid_redirect_uri" });
+
         // Validate Google ID token directly (GIS returns a JWT, not a Supabase token)
         var client = httpClientFactory.CreateClient();
         var response = await client.GetAsync(
@@ -215,6 +222,7 @@ public partial class OAuthController(
     }
 
     [HttpPost("/oauth/token")]
+    [DistributedRateLimit("auth")]
     [Consumes("application/x-www-form-urlencoded")]
     public async Task<IActionResult> Token(
         [FromForm] string grant_type,
@@ -227,6 +235,9 @@ public partial class OAuthController(
         if (grant_type != "authorization_code")
             return BadRequest(new { error = "unsupported_grant_type" });
 
+        if (!IsRedirectUriAllowed(redirect_uri))
+            return BadRequest(new { error = "invalid_redirect_uri" });
+
         var entry = authStore.ExchangeCode(code, code_verifier, redirect_uri);
         if (entry is null)
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
@@ -238,7 +249,11 @@ public partial class OAuthController(
             existing.Revoke();
 
         // Create an API key for this user (name: "Claude.ai", no Pro gate)
-        var keyResult = ApiKey.Create(entry.UserId, "Claude.ai");
+        var keyResult = ApiKey.Create(
+            entry.UserId,
+            "Claude.ai",
+            AgentScopes.ClaudeDefaultScopes,
+            isReadOnly: false);
         if (keyResult.IsFailure)
         {
             if (logger.IsEnabled(LogLevel.Error))
@@ -257,8 +272,14 @@ public partial class OAuthController(
         {
             access_token = rawKey,
             token_type = "Bearer",
-            scope = "all"
+            scope = string.Join(' ', AgentScopes.ClaudeDefaultScopes)
         });
+    }
+
+    private bool IsRedirectUriAllowed(string redirectUri)
+    {
+        return Uri.TryCreate(redirectUri, UriKind.Absolute, out var redirectParsed)
+            && _allowedRedirectHosts.Contains(redirectParsed.Host);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create OAuth API key for user {UserId}: {Error}")]

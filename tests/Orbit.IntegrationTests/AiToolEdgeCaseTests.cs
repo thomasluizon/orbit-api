@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
 
@@ -28,12 +27,9 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
-    public AiToolEdgeCaseTests(WebApplicationFactory<Program> factory)
+    public AiToolEdgeCaseTests(IntegrationTestWebApplicationFactory factory)
     {
-        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
-        var entry = $"{_testEmail}:{TestCode}";
-        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
-            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
+        IntegrationTestHelpers.RegisterTestAccount(_testEmail, TestCode);
 
         _client = factory.CreateClient();
         _client.Timeout = TimeSpan.FromMinutes(5);
@@ -41,19 +37,8 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var sendCodeResponse = await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _testEmail });
-        sendCodeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var verifyResponse = await _client.PostAsJsonAsync("/api/auth/verify-code", new
-        {
-            email = _testEmail,
-            code = TestCode
-        });
-        verifyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var loginResult = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+        var loginResult = await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _testEmail, TestCode, JsonOptions);
         _testUserId = loginResult!.UserId.ToString();
-        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {loginResult.Token}");
     }
 
     public async Task DisposeAsync()
@@ -72,11 +57,11 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
                 }
 
                 // Delete all habits
-                var habitsResponse = await _client.GetAsync("/api/habits");
+                var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
                 if (habitsResponse.IsSuccessStatusCode)
                 {
                     var paginated = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
-                    foreach (var habit in paginated?.Items ?? [])
+                    foreach (var habit in paginated?.Items?.DistinctBy(h => h.Id) ?? [])
                         await _client.DeleteAsync($"/api/habits/{habit.Id}");
                 }
 
@@ -737,8 +722,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create test habit '{title}'");
 
-        var id = await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
-        return id;
+        return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
 
     private async Task<Guid> CreateHabitViaApiOneTime(string title)
@@ -752,7 +736,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create one-time habit '{title}'");
 
-        return await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
 
     private async Task<Guid> CreateHabitViaApiWithDate(string title, string frequencyUnit,
@@ -769,7 +753,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create habit '{title}' with date {dueDate}");
 
-        return await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
 
     private async Task<Guid> CreateHabitViaApiWithChecklist(string title, string frequencyUnit,
@@ -787,7 +771,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create habit '{title}' with checklist");
 
-        return await response.Content.ReadFromJsonAsync<Guid>(JsonOptions);
+        return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
 
     private async Task<Guid> CreateSubHabitViaApi(Guid parentId, string title)
@@ -806,10 +790,10 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
     private async Task<List<HabitDto>> GetAllHabits()
     {
-        var response = await _client.GetAsync("/api/habits");
+        var response = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var paginated = await response.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
-        return paginated?.Items ?? [];
+        return (paginated?.Items ?? []).DistinctBy(habit => habit.Id).ToList();
     }
 
     // ===================================================================

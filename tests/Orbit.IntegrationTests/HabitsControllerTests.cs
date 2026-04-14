@@ -2,54 +2,40 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
 
 [Collection("Sequential")]
 public class HabitsControllerTests : IAsyncLifetime
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly IntegrationTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly string _email = $"habits-test-{Guid.NewGuid()}@integration.test";
     private const string TestCode = "999999";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public HabitsControllerTests(WebApplicationFactory<Program> factory)
+    public HabitsControllerTests(IntegrationTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
-
-        var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
-        var entry = $"{_email}:{TestCode}";
-        Environment.SetEnvironmentVariable("TEST_ACCOUNTS",
-            string.IsNullOrEmpty(existing) ? entry : $"{existing},{entry}");
+        IntegrationTestHelpers.RegisterTestAccount(_email, TestCode);
     }
 
     public async Task InitializeAsync()
     {
-        await _client.PostAsJsonAsync("/api/auth/send-code", new { email = _email });
-
-        var verifyResponse = await _client.PostAsJsonAsync("/api/auth/verify-code", new
-        {
-            email = _email,
-            code = TestCode
-        });
-
-        var login = await verifyResponse.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
-        _client.DefaultRequestHeaders.Add("Authorization", $"Bearer {login!.Token}");
+        await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
     }
 
     public async Task DisposeAsync()
     {
         try
         {
-            var habitsResponse = await _client.GetAsync("/api/habits");
+            var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
             if (habitsResponse.IsSuccessStatusCode)
             {
                 var paginated = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
-                foreach (var h in paginated?.Items ?? [])
+                foreach (var h in paginated?.Items?.DistinctBy(h => h.Id) ?? [])
                     await _client.DeleteAsync($"/api/habits/{h.Id}");
             }
         }
@@ -63,7 +49,7 @@ public class HabitsControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetHabits_Authenticated_ReturnsOk()
     {
-        var response = await _client.GetAsync("/api/habits");
+        var response = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -76,7 +62,7 @@ public class HabitsControllerTests : IAsyncLifetime
     public async Task GetHabits_NoToken_ReturnsUnauthorized()
     {
         using var anonClient = _factory.CreateClient();
-        var response = await anonClient.GetAsync("/api/habits");
+        var response = await anonClient.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -96,7 +82,7 @@ public class HabitsControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var habitId = await response.Content.ReadFromJsonAsync<Guid>();
+        var habitId = await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
         habitId.Should().NotBeEmpty();
     }
 
@@ -212,7 +198,7 @@ public class HabitsControllerTests : IAsyncLifetime
             }
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var result = await response.Content.ReadFromJsonAsync<BulkCreateResultDto>(JsonOptions);
         result.Should().NotBeNull();
@@ -221,7 +207,7 @@ public class HabitsControllerTests : IAsyncLifetime
         result.Results.Should().AllSatisfy(r => r.HabitId.Should().NotBeEmpty());
 
         // Verify parent B has children
-        var habitsResponse = await _client.GetAsync("/api/habits");
+        var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitWithChildrenDto>>(JsonOptions);
         var parentB = paginatedHabits!.Items.FirstOrDefault(h => h.Title == "Parent Habit B");
         parentB.Should().NotBeNull();
@@ -280,7 +266,7 @@ public class HabitsControllerTests : IAsyncLifetime
         result.Results.Should().AllSatisfy(r => r.Status.Should().Be("Success"));
 
         // Verify all deleted
-        var habitsResponse = await _client.GetAsync("/api/habits");
+        var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
         paginatedHabits!.Items.Should().NotContain(h => h.Id == id1 || h.Id == id2 || h.Id == id3);
     }
@@ -311,7 +297,7 @@ public class HabitsControllerTests : IAsyncLifetime
         result.Results[2].Status.Should().Be("Success");
 
         // Verify valid ones deleted
-        var habitsResponse = await _client.GetAsync("/api/habits");
+        var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
         paginatedHabits!.Items.Should().NotContain(h => h.Id == id1 || h.Id == id2);
     }
@@ -342,12 +328,11 @@ public class HabitsControllerTests : IAsyncLifetime
         });
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Guid>();
+        return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
 
     // ── DTOs ──────────────────────────────────────────────────
 
-    private record LoginResponse(Guid UserId, string Token, string Name, string Email);
     private record HabitDto(Guid Id, string Title);
     private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
     private record HabitWithChildrenDto(Guid Id, string Title, List<HabitDto> Children);

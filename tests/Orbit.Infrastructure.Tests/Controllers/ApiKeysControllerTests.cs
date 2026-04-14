@@ -36,7 +36,7 @@ public class ApiKeysControllerTests
     [Fact]
     public async Task CreateApiKey_Success_ReturnsCreated()
     {
-        var response = new CreateApiKeyResponse(Guid.NewGuid(), "Test Key", "orb_abc123", "orb_abc", DateTime.UtcNow);
+        var response = new CreateApiKeyResponse(Guid.NewGuid(), "Test Key", "orb_abc123", "orb_abc", ["read_habits"], false, null, DateTime.UtcNow);
         _mediator.Send(Arg.Any<CreateApiKeyCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 

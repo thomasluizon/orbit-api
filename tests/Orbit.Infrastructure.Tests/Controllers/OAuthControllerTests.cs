@@ -276,6 +276,19 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task VerifyCode_InvalidRedirectUri_ReturnsBadRequest()
+    {
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", "state-abc",
+            "challenge-xyz", "https://evil.com/callback", "client-123");
+
+        var result = await _controller.VerifyCode(request, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_redirect_uri");
+    }
+
+    [Fact]
     public async Task VerifyCode_RedirectUriWithQueryParam_UseAmpersandSeparator()
     {
         var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
@@ -312,6 +325,19 @@ public class OAuthControllerTests : IDisposable
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
         json.Should().Contain("Invalid or expired Google sign-in token");
+    }
+
+    [Fact]
+    public async Task GoogleAuth_InvalidRedirectUri_ReturnsBadRequest()
+    {
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "state-abc", "challenge-xyz",
+            "https://evil.com/callback", "client-123");
+
+        var result = await _controller.GoogleAuth(request, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_redirect_uri");
     }
 
     [Fact]
@@ -449,6 +475,17 @@ public class OAuthControllerTests : IDisposable
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
         json.Should().Contain("invalid_grant");
+    }
+
+    [Fact]
+    public async Task Token_InvalidRedirectUri_ReturnsBadRequest()
+    {
+        var result = await _controller.Token(
+            "authorization_code", "nonexistent-code", "verifier-xyz",
+            "client-123", "https://evil.com/callback", CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_redirect_uri");
     }
 
     [Fact]

@@ -85,6 +85,38 @@ internal static class JsonArgumentParser
         return items.Count > 0 ? items : null;
     }
 
+    public static List<string>? ParseStringArray(JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var items = new List<string>();
+        foreach (var item in arrEl.EnumerateArray())
+        {
+            var value = item.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                items.Add(value);
+        }
+
+        return items.Count > 0 ? items : null;
+    }
+
+    public static List<Guid>? ParseGuidArray(JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var items = new List<Guid>();
+        foreach (var item in arrEl.EnumerateArray())
+        {
+            var value = item.GetString();
+            if (Guid.TryParse(value, out var parsed))
+                items.Add(parsed);
+        }
+
+        return items.Count > 0 ? items : null;
+    }
+
     public static List<ScheduledReminderTime>? ParseScheduledReminders(JsonElement el)
     {
         if (!el.TryGetProperty("scheduled_reminders", out var arrEl) || arrEl.ValueKind != JsonValueKind.Array)

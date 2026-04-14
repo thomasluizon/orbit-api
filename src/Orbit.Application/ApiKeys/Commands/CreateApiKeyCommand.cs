@@ -11,11 +11,17 @@ public record CreateApiKeyResponse(
     string Name,
     string Key,
     string KeyPrefix,
+    IReadOnlyList<string> Scopes,
+    bool IsReadOnly,
+    DateTime? ExpiresAtUtc,
     DateTime CreatedAtUtc);
 
 public record CreateApiKeyCommand(
     Guid UserId,
-    string Name) : IRequest<Result<CreateApiKeyResponse>>;
+    string Name,
+    IReadOnlyList<string>? Scopes = null,
+    bool IsReadOnly = false,
+    DateTime? ExpiresAtUtc = null) : IRequest<Result<CreateApiKeyResponse>>;
 
 public class CreateApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
@@ -37,7 +43,12 @@ public class CreateApiKeyCommandHandler(
         if (activeKeys.Count >= MaxActiveKeys)
             return Result.Failure<CreateApiKeyResponse>($"You can have at most {MaxActiveKeys} active API keys.");
 
-        var createResult = ApiKey.Create(request.UserId, request.Name);
+        var createResult = ApiKey.Create(
+            request.UserId,
+            request.Name,
+            request.Scopes,
+            request.IsReadOnly,
+            request.ExpiresAtUtc);
         if (createResult.IsFailure)
             return Result.Failure<CreateApiKeyResponse>(createResult.Error);
 
@@ -51,6 +62,9 @@ public class CreateApiKeyCommandHandler(
             apiKey.Name,
             rawKey,
             apiKey.KeyPrefix,
+            apiKey.Scopes,
+            apiKey.IsReadOnly,
+            apiKey.ExpiresAtUtc,
             apiKey.CreatedAtUtc));
     }
 }

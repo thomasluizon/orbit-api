@@ -20,9 +20,20 @@ public record ProcessUserChatCommand(
     string Message,
     byte[]? ImageData = null,
     string? ImageMimeType = null,
-    List<ChatHistoryMessage>? History = null) : IRequest<Result<ChatResponse>>;
+    List<ChatHistoryMessage>? History = null,
+    AgentClientContext? ClientContext = null,
+    string? ConfirmationToken = null,
+    AgentAuthMethod AuthMethod = AgentAuthMethod.Jwt,
+    IReadOnlyList<string>? GrantedScopes = null,
+    bool IsReadOnlyCredential = false,
+    string? CorrelationId = null) : IRequest<Result<ChatResponse>>;
 
-public record ChatResponse(string? AiMessage, IReadOnlyList<ActionResult> Actions);
+public record ChatResponse(
+    string? AiMessage,
+    IReadOnlyList<ActionResult> Actions,
+    IReadOnlyList<AgentOperationResult>? Operations = null,
+    IReadOnlyList<PendingAgentOperation>? PendingOperations = null,
+    IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null);
 
 public record ActionResult(
     string Type,
@@ -41,7 +52,8 @@ public enum ActionStatus { Success, Failed, Suggestion }
 public record ChatAiDependencies(
     IAiIntentService IntentService,
     AiToolRegistry ToolRegistry,
-    ISystemPromptBuilder PromptBuilder);
+    ISystemPromptBuilder PromptBuilder,
+    IAgentCatalogService CatalogService);
 
 /// <summary>
 /// Groups data repository dependencies to reduce constructor parameter count (S107).
@@ -51,7 +63,9 @@ public record ChatDataDependencies(
     IGenericRepository<Goal> GoalRepository,
     IGenericRepository<User> UserRepository,
     IGenericRepository<UserFact> UserFactRepository,
-    IGenericRepository<Tag> TagRepository);
+    IGenericRepository<Tag> TagRepository,
+    IGenericRepository<ChecklistTemplate> ChecklistTemplateRepository,
+    IFeatureFlagService FeatureFlagService);
 
 /// <summary>
 /// Groups workflow services to reduce constructor parameter count (S107).
@@ -61,7 +75,8 @@ public record ChatExecutionDependencies(
     IUserStreakService UserStreakService,
     IPayGateService PayGateService,
     IUnitOfWork UnitOfWork,
-    IServiceScopeFactory ServiceScopeFactory);
+    IServiceScopeFactory ServiceScopeFactory,
+    IAgentOperationExecutor OperationExecutor);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -111,6 +126,14 @@ public partial class ProcessUserChatCommandHandler(
             t => t.UserId == request.UserId,
             cancellationToken);
 
+        var checklistTemplates = await data.ChecklistTemplateRepository.FindAsync(
+            template => template.UserId == request.UserId,
+            cancellationToken);
+
+        var enabledFeatureFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(
+            request.UserId,
+            cancellationToken);
+
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
@@ -121,6 +144,8 @@ public partial class ProcessUserChatCommandHandler(
             activeHabits, userFacts,
             HasImage: request.ImageData is not null,
             UserTags: userTags, UserToday: userToday, ActiveGoals: activeGoals));
+        systemPrompt += Environment.NewLine + ai.CatalogService.BuildPromptSupplement(
+            BuildAgentContextSnapshot(user, request.ClientContext, enabledFeatureFlags, userTags, checklistTemplates, activeHabits, activeGoals));
 
         var tools = ai.ToolRegistry.GetAll();
         var toolDeclarations = tools.Select(t => (object)new
@@ -153,6 +178,9 @@ public partial class ProcessUserChatCommandHandler(
 
         // 4. Agentic tool-calling loop
         var allActionResults = new List<ActionResult>();
+        var allOperationResults = new List<AgentOperationResult>();
+        var allPendingOperations = new List<PendingAgentOperation>();
+        var allPolicyDenials = new List<AgentPolicyDenial>();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         int iteration = 0;
 
@@ -160,7 +188,14 @@ public partial class ProcessUserChatCommandHandler(
         {
             iteration++;
             var continueResponse = await ProcessToolCallsAsync(
-                aiResponse, request.UserId, allActionResults, iteration, cancellationToken);
+                aiResponse,
+                request,
+                allActionResults,
+                allOperationResults,
+                allPendingOperations,
+                allPolicyDenials,
+                iteration,
+                cancellationToken);
 
             if (continueResponse is null)
                 break;
@@ -203,7 +238,12 @@ public partial class ProcessUserChatCommandHandler(
         LogToolExecutionTime(logger, actionsStopwatch.ElapsedMilliseconds, iteration);
         LogSaveChangesTime(logger, saveStopwatch.ElapsedMilliseconds);
 
-        return Result.Success(new ChatResponse(aiMessage, allActionResults));
+        return Result.Success(new ChatResponse(
+            aiMessage,
+            allActionResults,
+            allOperationResults,
+            allPendingOperations,
+            allPolicyDenials));
     }
 
     /// <summary>
@@ -212,8 +252,11 @@ public partial class ProcessUserChatCommandHandler(
     /// </summary>
     private async Task<AiResponse?> ProcessToolCallsAsync(
         AiResponse aiResponse,
-        Guid userId,
+        ProcessUserChatCommand request,
         List<ActionResult> allActionResults,
+        List<AgentOperationResult> allOperationResults,
+        List<PendingAgentOperation> allPendingOperations,
+        List<AgentPolicyDenial> allPolicyDenials,
         int iteration,
         CancellationToken cancellationToken)
     {
@@ -232,10 +275,17 @@ public partial class ProcessUserChatCommandHandler(
 
         foreach (var call in orderedCalls)
         {
-            var (toolCallResult, actionResult) = await ExecuteSingleToolCallAsync(call, userId, cancellationToken);
+            var (toolCallResult, actionResult, operationResult, policyDenial, pendingOperation) =
+                await ExecuteSingleToolCallAsync(call, request, cancellationToken);
             toolResults.Add(toolCallResult);
             if (actionResult is not null)
                 allActionResults.Add(actionResult);
+            if (operationResult is not null)
+                allOperationResults.Add(operationResult);
+            if (policyDenial is not null)
+                allPolicyDenials.Add(policyDenial);
+            if (pendingOperation is not null)
+                allPendingOperations.Add(pendingOperation);
         }
 
         // Send results back to the AI for next iteration or final message
@@ -253,9 +303,14 @@ public partial class ProcessUserChatCommandHandler(
     /// Executes a single tool call: resolves the tool, runs it, and produces both a result
     /// for the AI and an optional action result for the frontend.
     /// </summary>
-    private async Task<(AiToolCallResult ToolResult, ActionResult? ActionResult)> ExecuteSingleToolCallAsync(
+    private async Task<(
+        AiToolCallResult ToolResult,
+        ActionResult? ActionResult,
+        AgentOperationResult? OperationResult,
+        AgentPolicyDenial? PolicyDenial,
+        PendingAgentOperation? PendingOperation)> ExecuteSingleToolCallAsync(
         AiToolCall call,
-        Guid userId,
+        ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {
         var tool = ai.ToolRegistry.GetTool(call.Name);
@@ -264,29 +319,88 @@ public partial class ProcessUserChatCommandHandler(
             LogUnknownToolRequested(logger, call.Name);
             return (
                 new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"),
-                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"));
+                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"),
+                new AgentOperationResult(
+                    call.Name,
+                    call.Name,
+                    AgentRiskClass.Low,
+                    AgentConfirmationRequirement.None,
+                    AgentOperationStatus.UnsupportedByPolicy,
+                    PolicyReason: "unsupported_by_policy"),
+                new AgentPolicyDenial(
+                    call.Name,
+                    call.Name,
+                    AgentRiskClass.Low,
+                    AgentConfirmationRequirement.None,
+                    "unsupported_by_policy"),
+                null);
         }
 
-        try
-        {
-            var result = await tool.ExecuteAsync(call.Args, userId, cancellationToken);
-            var toolResult = new AiToolCallResult(call.Name, call.Id, result.Success, result.EntityId, result.EntityName, result.Error);
-            var actionResult = BuildActionResult(call, tool, result);
+        var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
+        var operationSummary = BuildOperationSummary(call);
 
-            if (result.Success)
-                LogToolSucceeded(logger, call.Name, result.EntityName);
-            else
-                LogToolFailed(logger, call.Name, result.Error);
-
-            return (toolResult, actionResult);
-        }
-        catch (Exception ex)
+        if (capability is null)
         {
-            LogToolThrewException(logger, ex, call.Name);
             return (
-                new AiToolCallResult(call.Name, call.Id, false, null, null, "An unexpected error occurred."),
-                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "An unexpected error occurred."));
+                new AiToolCallResult(call.Name, call.Id, false, null, null, "Operation is unsupported by policy."),
+                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "Operation is unsupported by policy."),
+                new AgentOperationResult(
+                    call.Name,
+                    call.Name,
+                    AgentRiskClass.Low,
+                    AgentConfirmationRequirement.None,
+                    AgentOperationStatus.UnsupportedByPolicy,
+                    Summary: operationSummary,
+                    PolicyReason: "unsupported_by_policy"),
+                new AgentPolicyDenial(
+                    call.Name,
+                    call.Name,
+                    AgentRiskClass.Low,
+                    AgentConfirmationRequirement.None,
+                    "unsupported_by_policy"),
+                null);
         }
+
+        var executionResponse = await execution.OperationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
+            request.UserId,
+            call.Name,
+            call.Args,
+            AgentExecutionSurface.Chat,
+            request.AuthMethod,
+            request.GrantedScopes,
+            request.IsReadOnlyCredential,
+            request.ConfirmationToken,
+            request.CorrelationId), cancellationToken);
+
+        var operationResult = executionResponse.Operation;
+        var toolResult = BuildToolCallResult(call, operationResult);
+
+        if (operationResult.Status == AgentOperationStatus.Succeeded)
+            LogToolSucceeded(logger, call.Name, operationResult.TargetName);
+        else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
+            LogToolFailed(logger, call.Name, operationResult.PolicyReason);
+
+        return operationResult.Status switch
+        {
+            AgentOperationStatus.PendingConfirmation => (
+                new AiToolCallResult(call.Name, call.Id, false, null, null, "Confirmation required before this action can run."),
+                null,
+                operationResult,
+                executionResponse.PolicyDenial,
+                executionResponse.PendingOperation),
+            AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => (
+                toolResult,
+                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error),
+                operationResult,
+                executionResponse.PolicyDenial,
+                null),
+            _ => (
+                toolResult,
+                BuildActionResult(call, tool, ToToolResult(operationResult)),
+                operationResult,
+                executionResponse.PolicyDenial,
+                executionResponse.PendingOperation)
+        };
     }
 
     /// <summary>
@@ -321,6 +435,94 @@ public partial class ProcessUserChatCommandHandler(
             ActionStatus.Success,
             result.EntityId is not null ? Guid.Parse(result.EntityId) : null,
             result.EntityName);
+    }
+
+    private static AgentContextSnapshot BuildAgentContextSnapshot(
+        User? user,
+        AgentClientContext? clientContext,
+        IReadOnlyList<string> featureFlags,
+        IReadOnlyCollection<Tag> userTags,
+        IReadOnlyCollection<ChecklistTemplate> checklistTemplates,
+        IReadOnlyCollection<Habit> activeHabits,
+        IReadOnlyCollection<Goal> activeGoals)
+    {
+        return new AgentContextSnapshot(
+            user?.HasProAccess == true ? "pro" : "free",
+            user?.Language,
+            user?.TimeZone,
+            user?.AiMemoryEnabled ?? true,
+            user?.AiSummaryEnabled ?? true,
+            user?.WeekStartDay ?? 1,
+            user?.ThemePreference,
+            user?.ColorScheme,
+            user?.GoogleAccessToken is not null,
+            user?.GoogleCalendarAutoSyncEnabled ?? false,
+            (user?.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle).ToString(),
+            featureFlags,
+            userTags
+                .Select(tag => tag.Name)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Take(12)
+                .ToList(),
+            checklistTemplates
+                .Select(template => template.Name)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToList(),
+            activeHabits
+                .OrderByDescending(habit => habit.UpdatedAtUtc)
+                .Select(habit => habit.Title)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToList(),
+            activeGoals
+                .OrderByDescending(goal => goal.UpdatedAtUtc)
+                .Select(goal => goal.Title)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8)
+                .ToList(),
+            ClientContext: clientContext);
+    }
+
+    private static string BuildOperationSummary(AiToolCall call)
+    {
+        return $"{ToolNameToPascalCase(call.Name)} requested via chat";
+    }
+
+    private static AiToolCallResult BuildToolCallResult(AiToolCall call, AgentOperationResult operationResult)
+    {
+        return new AiToolCallResult(
+            call.Name,
+            call.Id,
+            operationResult.Status == AgentOperationStatus.Succeeded,
+            operationResult.TargetId,
+            operationResult.TargetName,
+            BuildToolError(operationResult),
+            operationResult.Payload);
+    }
+
+    private static string? BuildToolError(AgentOperationResult operationResult)
+    {
+        return operationResult.Status switch
+        {
+            AgentOperationStatus.Denied => $"Policy denied: {operationResult.PolicyReason}",
+            AgentOperationStatus.UnsupportedByPolicy => "Operation is unsupported by policy.",
+            AgentOperationStatus.PendingConfirmation => "Confirmation required before this action can run.",
+            AgentOperationStatus.Failed => string.Equals(operationResult.PolicyReason, "unexpected_error", StringComparison.Ordinal)
+                ? "An unexpected error occurred."
+                : operationResult.PolicyReason,
+            _ => null
+        };
+    }
+
+    private static ToolResult ToToolResult(AgentOperationResult operationResult)
+    {
+        return new ToolResult(
+            operationResult.Status == AgentOperationStatus.Succeeded,
+            operationResult.TargetId,
+            operationResult.TargetName,
+            BuildToolError(operationResult),
+            operationResult.Payload);
     }
 
     /// <summary>

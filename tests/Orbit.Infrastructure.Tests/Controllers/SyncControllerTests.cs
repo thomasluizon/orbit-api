@@ -120,6 +120,40 @@ public class SyncControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetChangesV2_ReturnsRedactedDtoPayload()
+    {
+        var since = DateTime.UtcNow.AddMinutes(-5);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var activeHabit = Habit.Create(new HabitCreateParams(UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: today)).Value;
+        var activeGoal = Goal.Create(UserId, "Read books", 12, "books").Value;
+        var activeTag = Tag.Create(UserId, "Health", "#00ff00").Value;
+        var notification = Notification.Create(UserId, "Reminder", "Drink water");
+        var checklistTemplate = ChecklistTemplate.Create(UserId, "Morning", ["Water", "Stretch"]).Value;
+
+        _dbContext.AddRange(activeHabit, activeGoal, activeTag, notification, checklistTemplate);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _controller.GetChangesV2(since, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = okResult.Value.Should().BeOfType<SyncController.SyncChangesV2Response>().Subject;
+
+        response.Version.Should().Be(2);
+        response.Habits.Updated.Should().ContainSingle();
+        response.Habits.Updated[0].Title.Should().Be("Exercise");
+        response.Goals.Updated.Should().ContainSingle();
+        response.Tags.Updated.Should().ContainSingle();
+        response.Notifications.Updated.Should().ContainSingle();
+        response.ChecklistTemplates.Updated.Should().ContainSingle();
+
+        var json = System.Text.Json.JsonSerializer.Serialize(response);
+        json.Should().NotContain("UserId");
+        json.Should().NotContain("IsDeleted");
+        json.Should().NotContain("DeletedAtUtc");
+    }
+
+    [Fact]
     public async Task ProcessBatch_NoMutations_ReturnsBadRequest()
     {
         var result = await _controller.ProcessBatch(new SyncController.SyncBatchRequest([]), CancellationToken.None);

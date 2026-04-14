@@ -42,6 +42,10 @@ public class OrbitDbContext : DbContext
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+    public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
+    public DbSet<AgentStepUpChallengeState> AgentStepUpChallenges => Set<AgentStepUpChallengeState>();
+    public DbSet<AgentAuditLog> AgentAuditLogs => Set<AgentAuditLog>();
+    public DbSet<DistributedRateLimitBucket> DistributedRateLimitBuckets => Set<DistributedRateLimitBucket>();
     public DbSet<ChecklistTemplate> ChecklistTemplates => Set<ChecklistTemplate>();
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
@@ -139,6 +143,62 @@ public class OrbitDbContext : DbContext
             entity.HasOne<User>().WithMany().HasForeignKey(k => k.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(k => k.Name).HasMaxLength(50);
             entity.Property(k => k.KeyPrefix).HasMaxLength(12);
+            entity.Property(k => k.Scopes)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+                .HasColumnType(JsonbColumnType)
+                .HasDefaultValueSql("'[]'::jsonb")
+                .Metadata.SetValueComparer(CreateReadOnlyListComparer<string>());
+        });
+
+        modelBuilder.Entity<PendingAgentOperationState>(entity =>
+        {
+            entity.HasIndex(item => new { item.UserId, item.CapabilityId });
+            entity.HasIndex(item => new { item.UserId, item.OperationFingerprint });
+            entity.Property(item => item.CapabilityId).HasMaxLength(100);
+            entity.Property(item => item.OperationId).HasMaxLength(100);
+            entity.Property(item => item.ArgumentsJson).HasColumnType(JsonbColumnType);
+            entity.Property(item => item.DisplayName).HasMaxLength(200);
+            entity.Property(item => item.Summary).HasMaxLength(500);
+            entity.Property(item => item.OperationFingerprint).HasMaxLength(256);
+            entity.Property(item => item.ConfirmationTokenHash).HasMaxLength(64);
+            entity.Property(item => item.Surface).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.RiskClass).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.ConfirmationRequirement).HasConversion<string>().HasMaxLength(32);
+        });
+
+        modelBuilder.Entity<AgentStepUpChallengeState>(entity =>
+        {
+            entity.HasIndex(item => new { item.UserId, item.PendingOperationId, item.CreatedAtUtc });
+            entity.Property(item => item.CodeHash).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<AgentAuditLog>(entity =>
+        {
+            entity.HasIndex(item => new { item.UserId, item.CreatedAtUtc });
+            entity.HasIndex(item => new { item.CapabilityId, item.CreatedAtUtc });
+            entity.Property(item => item.CapabilityId).HasMaxLength(100);
+            entity.Property(item => item.SourceName).HasMaxLength(100);
+            entity.Property(item => item.CorrelationId).HasMaxLength(100);
+            entity.Property(item => item.TargetId).HasMaxLength(100);
+            entity.Property(item => item.TargetName).HasMaxLength(200);
+            entity.Property(item => item.RedactedArguments).HasMaxLength(4000);
+            entity.Property(item => item.Error).HasMaxLength(500);
+            entity.Property(item => item.ShadowReason).HasMaxLength(500);
+            entity.Property(item => item.Surface).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.AuthMethod).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.RiskClass).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.PolicyDecision).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.OutcomeStatus).HasConversion<string>().HasMaxLength(32);
+            entity.Property(item => item.ShadowPolicyDecision).HasConversion<string>().HasMaxLength(32);
+        });
+
+        modelBuilder.Entity<DistributedRateLimitBucket>(entity =>
+        {
+            entity.HasIndex(item => new { item.PolicyName, item.PartitionKey, item.WindowStartUtc }).IsUnique();
+            entity.Property(item => item.PolicyName).HasMaxLength(64);
+            entity.Property(item => item.PartitionKey).HasMaxLength(256);
         });
 
         modelBuilder.Entity<AppConfig>(entity =>

@@ -100,6 +100,8 @@ public sealed partial class AiIntentService(
                 payload["entity_name"] = PromptDataSanitizer.SanitizeBlock(result.EntityName, AppConstants.MaxAiToolResultTextLength);
             if (result.Error is not null)
                 payload["error"] = PromptDataSanitizer.SanitizeInline(result.Error, AppConstants.MaxChatMessageLength);
+            if (result.Payload is not null)
+                payload["payload"] = JsonSerializer.SerializeToElement(result.Payload, SerializeOptions);
 
             messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }

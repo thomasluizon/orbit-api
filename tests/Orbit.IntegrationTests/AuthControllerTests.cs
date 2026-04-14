@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
 
@@ -15,7 +14,7 @@ public class AuthControllerTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    public AuthControllerTests(WebApplicationFactory<Program> factory)
+    public AuthControllerTests(IntegrationTestWebApplicationFactory factory)
     {
         var existing = Environment.GetEnvironmentVariable("TEST_ACCOUNTS") ?? "";
         var entry = $"{_email}:{TestCode}";

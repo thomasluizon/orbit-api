@@ -3,6 +3,7 @@ using Orbit.Api.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 builder
+    .ValidateOrbitSecuritySettings()
     .AddOrbitDatabase()
     .AddOrbitAuthentication()
     .AddOrbitAiServices()

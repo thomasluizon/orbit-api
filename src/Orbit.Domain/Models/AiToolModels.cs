@@ -4,7 +4,14 @@ namespace Orbit.Domain.Models;
 
 public record AiToolCall(string Name, string Id, JsonElement Args);
 
-public record AiToolCallResult(string Name, string Id, bool Success, string? EntityId, string? EntityName, string? Error);
+public record AiToolCallResult(
+    string Name,
+    string Id,
+    bool Success,
+    string? EntityId,
+    string? EntityName,
+    string? Error,
+    object? Payload = null);
 
 /// <summary>
 /// Opaque conversation state passed between SendWithToolsAsync and ContinueWithToolResultsAsync.
