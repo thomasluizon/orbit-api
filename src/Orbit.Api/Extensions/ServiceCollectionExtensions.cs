@@ -36,6 +36,30 @@ public static class ServiceCollectionExtensions
         if (string.IsNullOrWhiteSpace(encryptionKey) || encryptionKey.Contains("REPLACE", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Production requires a configured Encryption:Key for protected-at-rest fields.");
 
+        // Disallow localhost and non-TLS origins in production CORS policy. Prevents a
+        // stale default shipping to prod (e.g. http://localhost:3000) and letting a
+        // local attacker bypass same-site restrictions via a rogue host.
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? Array.Empty<string>();
+        foreach (var origin in allowedOrigins)
+        {
+            if (string.IsNullOrWhiteSpace(origin))
+                continue;
+            if (origin.Contains("localhost", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Production CORS must not allow localhost origin: '{origin}'. Remove from Cors:AllowedOrigins.");
+            if (origin.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Production CORS must not allow non-TLS origin: '{origin}'. Use https:// only.");
+        }
+
+        // JWT secret hardening: must be long enough for HS256 and not the placeholder.
+        var jwtSecret = builder.Configuration[$"{JwtSettings.SectionName}:SecretKey"];
+        if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Contains("REPLACE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Production requires a configured Jwt:SecretKey.");
+        if (jwtSecret.Length < 64)
+            throw new InvalidOperationException("Production requires Jwt:SecretKey to be at least 64 characters.");
+
         return builder;
     }
 
