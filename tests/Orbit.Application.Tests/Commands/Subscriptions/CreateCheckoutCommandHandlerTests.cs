@@ -195,6 +195,33 @@ public class CreateCheckoutCommandHandlerTests
             .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_BrazilTimezoneProfile_UsesBrlPriceIdBeforeGeoFallback()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetStripeCustomerId("cus_br_tz");
+        user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
+        SetupExistingUser(user);
+
+        _sessionService.CreateAsync(
+            Arg.Any<SessionCreateOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new Session { Url = "https://checkout.stripe.com/br_tz" });
+
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, "8.8.8.8");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _sessionService.Received(1).CreateAsync(
+            Arg.Is<SessionCreateOptions>(o => o.LineItems[0].Price == "price_monthly_brl"),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>());
+        await _geoLocationService.DidNotReceive()
+            .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
     private void SetupExistingUser(User user)
     {
         _userRepo.FindOneTrackedAsync(

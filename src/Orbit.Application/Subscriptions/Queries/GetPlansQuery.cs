@@ -27,8 +27,12 @@ public partial class GetPlansQueryHandler(
         if (user is null)
             return Result.Failure<PlansResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
-        var countryCode = NormalizeCountryCode(request.CountryCode)
-            ?? await geoLocationService.GetCountryCodeAsync(request.IpAddress, cancellationToken);
+        var countryCode = await SubscriptionPricingCountryResolver.ResolveCountryCodeAsync(
+            user,
+            request.CountryCode,
+            request.IpAddress,
+            geoLocationService,
+            cancellationToken);
         var isBrazil = countryCode == "BR";
 
         var monthlyPriceId = isBrazil ? _settings.MonthlyPriceIdBrl : _settings.MonthlyPriceIdUsd;
@@ -80,15 +84,4 @@ public partial class GetPlansQueryHandler(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to fetch plans from Stripe")]
     private static partial void LogFetchPlansFailed(ILogger logger, Exception ex);
-
-    private static string? NormalizeCountryCode(string? countryCode)
-    {
-        if (string.IsNullOrWhiteSpace(countryCode))
-            return null;
-
-        var normalized = countryCode.Trim().ToUpperInvariant();
-        return normalized.Length == 2 && normalized.All(char.IsLetter)
-            ? normalized
-            : null;
-    }
 }

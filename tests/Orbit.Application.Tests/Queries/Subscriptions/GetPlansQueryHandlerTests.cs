@@ -178,4 +178,38 @@ public class GetPlansQueryHandlerTests
         await _geoLocationService.DidNotReceive()
             .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_PortugueseProfile_PrefersBrlPricingBeforeGeoFallback()
+    {
+        var user = CreateTestUser();
+        user.SetLanguage("pt-BR");
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var monthlyPrice = new Price { UnitAmount = 1990 };
+        var yearlyPrice = new Price { UnitAmount = 19900 };
+
+        _priceService.GetAsync(
+            "price_monthly_brl",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(monthlyPrice);
+
+        _priceService.GetAsync(
+            "price_yearly_brl",
+            Arg.Any<PriceGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(yearlyPrice);
+
+        var query = new GetPlansQuery(UserId, null, "8.8.8.8");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Currency.Should().Be("brl");
+        await _geoLocationService.DidNotReceive()
+            .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
 }
