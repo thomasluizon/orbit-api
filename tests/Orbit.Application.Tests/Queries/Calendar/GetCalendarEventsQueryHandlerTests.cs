@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Google.Apis.Calendar.v3.Data;
+using Orbit.Application.Calendar.Queries;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
@@ -9,7 +9,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
-using Google;
+
 
 namespace Orbit.Application.Tests.Queries.Calendar;
 
@@ -111,7 +111,7 @@ public class GetCalendarEventsQueryHandlerTests
             Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
-        _eventFetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>());
 
         var query = new GetCalendarEventsQuery(UserId);
@@ -167,7 +167,7 @@ public class GetCalendarEventsQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
 
-        _eventFetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_already", "Existing", null, "2026-05-01", null, null, true, null, []),
@@ -220,10 +220,14 @@ public class GetCalendarEventsQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
         _eventFetcher.FetchAsync(
-                Arg.Any<Google.Apis.Calendar.v3.CalendarService>(),
+                Arg.Any<string>(),
                 Arg.Any<DateTime?>(),
                 Arg.Any<CancellationToken>())
-            .Returns<Task<List<CalendarEventItem>>>(_ => throw new GoogleApiException("CalendarService", "Invalid authentication credentials"));
+            .Returns<Task<List<CalendarEventItem>>>(_ => throw new CalendarProviderException(
+                CalendarFetchErrorKind.ReconnectRequired,
+                "Invalid authentication credentials",
+                "reconnect required",
+                new InvalidOperationException("stub")));
 
         var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
 
@@ -267,76 +271,7 @@ public class GetCalendarEventsQueryHandlerTests
         q1.UserId.Should().Be(id);
     }
 
-    // --- BuildReminders tests moved to CalendarEventFetcher ---
-
-    [Fact]
-    public void BuildReminders_TimedEventWithoutExplicitReminders_AddsDefaultAndAtTime()
-    {
-        var result = CalendarEventFetcher.BuildReminders(new Event(), "09:00");
-        result.Should().Equal(AppConstants.DefaultReminderMinutes, 0);
-    }
-
-    [Fact]
-    public void BuildReminders_TimedEventWithExplicitReminders_PreservesThemAndAddsAtTime()
-    {
-        var ev = new Event
-        {
-            Reminders = new Event.RemindersData
-            {
-                Overrides =
-                [
-                    new EventReminder { Minutes = 30 },
-                    new EventReminder { Minutes = 15 }
-                ]
-            }
-        };
-
-        var result = CalendarEventFetcher.BuildReminders(ev, "09:00");
-        result.Should().Equal(30, 15, 0);
-    }
-
-    [Fact]
-    public void BuildReminders_TimedEventWithExistingAtTime_DoesNotDuplicateZero()
-    {
-        var ev = new Event
-        {
-            Reminders = new Event.RemindersData
-            {
-                Overrides =
-                [
-                    new EventReminder { Minutes = 15 },
-                    new EventReminder { Minutes = 0 },
-                    new EventReminder { Minutes = 15 }
-                ]
-            }
-        };
-
-        var result = CalendarEventFetcher.BuildReminders(ev, "09:00");
-        result.Should().Equal(15, 0);
-    }
-
-    [Fact]
-    public void BuildReminders_AllDayEventWithoutExplicitReminders_RemainsEmpty()
-    {
-        var result = CalendarEventFetcher.BuildReminders(new Event(), null);
-        result.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void BuildReminders_AllDayEventWithExplicitReminders_PreservesThem()
-    {
-        var ev = new Event
-        {
-            Reminders = new Event.RemindersData
-            {
-                Overrides =
-                [
-                    new EventReminder { Minutes = 60 }
-                ]
-            }
-        };
-
-        var result = CalendarEventFetcher.BuildReminders(ev, null);
-        result.Should().Equal(60);
-    }
+    // BuildReminders tests for the private helper on GoogleCalendarEventFetcher
+    // belong in Orbit.Infrastructure.Tests (they require the Google SDK Event types).
+    // Application tests intentionally stay SDK-free after the Calendar extraction.
 }

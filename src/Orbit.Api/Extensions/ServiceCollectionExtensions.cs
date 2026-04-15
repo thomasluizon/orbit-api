@@ -76,7 +76,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
-        builder.Services.AddScoped<Orbit.Application.Calendar.Services.ICalendarEventFetcher, Orbit.Application.Calendar.Services.CalendarEventFetcher>();
+        builder.Services.AddScoped<Orbit.Application.Calendar.Services.ICalendarEventFetcher, Orbit.Infrastructure.Services.GoogleCalendarEventFetcher>();
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthSessionService, AuthSessionService>();

@@ -1,6 +1,5 @@
 using FileSignatures;
 using FileSignatures.Formats;
-using Microsoft.AspNetCore.Http;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -16,32 +15,34 @@ public sealed class ImageValidationService : IImageValidationService
 
     private static readonly FileFormatInspector Inspector = new();
 
-    public async Task<Result<(string MimeType, long Size)>> ValidateAsync(IFormFile file)
+    public Task<Result<(string MimeType, long Size)>> ValidateAsync(Stream stream, string fileName, long length)
     {
         // 1. Size check
-        if (file.Length > MaxFileSizeBytes)
-            return Result.Failure<(string, long)>($"File size exceeds maximum allowed size of {MaxFileSizeBytes / (1024 * 1024)}MB.");
+        if (length > MaxFileSizeBytes)
+            return Task.FromResult(Result.Failure<(string, long)>(
+                $"File size exceeds maximum allowed size of {MaxFileSizeBytes / (1024 * 1024)}MB."));
 
-        if (file.Length == 0)
-            return Result.Failure<(string, long)>("File is empty.");
+        if (length == 0)
+            return Task.FromResult(Result.Failure<(string, long)>("File is empty."));
 
         // 2. Extension check
-        var extension = Path.GetExtension(file.FileName);
+        var extension = Path.GetExtension(fileName);
         if (string.IsNullOrWhiteSpace(extension) || !AllowedExtensions.Contains(extension))
-            return Result.Failure<(string, long)>($"File extension '{extension}' is not allowed. Allowed: {string.Join(", ", AllowedExtensions)}.");
+            return Task.FromResult(Result.Failure<(string, long)>(
+                $"File extension '{extension}' is not allowed. Allowed: {string.Join(", ", AllowedExtensions)}."));
 
         // 3. Magic bytes signature check using FileSignatures library
-        using var stream = file.OpenReadStream();
         var format = Inspector.DetermineFileFormat(stream);
 
         if (format == null)
-            return Result.Failure<(string, long)>("Unable to determine file format from magic bytes.");
+            return Task.FromResult(Result.Failure<(string, long)>(
+                "Unable to determine file format from magic bytes."));
 
         // Validate it's an image format
         if (format is not Image)
-            return Result.Failure<(string, long)>($"File is not a recognized image format. Detected: {format.GetType().Name}");
+            return Task.FromResult(Result.Failure<(string, long)>(
+                $"File is not a recognized image format. Detected: {format.GetType().Name}"));
 
-        // Return the media type from the detected format
-        return await Task.FromResult(Result.Success((format.MediaType, file.Length)));
+        return Task.FromResult(Result.Success((format.MediaType, length)));
     }
 }

@@ -145,7 +145,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
@@ -177,7 +177,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { existingHabit }.AsReadOnly());
 
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
@@ -200,7 +200,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         var many = Enumerable.Range(0, 40)
             .Select(i => new CalendarEventItem($"evt_{i}", $"Event {i}", null, "2026-04-10", null, null, false, null, []))
             .ToList();
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(many);
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
@@ -219,7 +219,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_a", "Event", null, "2026-04-10", null, null, false, null, [])
@@ -240,7 +240,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _notificationRepo.AnyAsync(Arg.Any<Expression<Func<Notification, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_a", "Event", null, "2026-04-10", null, null, false, null, [])
@@ -268,7 +268,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { orphanHabit }.AsReadOnly());
 
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
@@ -299,7 +299,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { orphanHabit }.AsReadOnly());
 
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_review", "Imported Review Event", null, "2026-04-10", "09:00", "09:30", true, null, [])
@@ -320,7 +320,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
         StubUser(user);
         _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
             .Returns(new GoogleTokenRefreshOutcome("new", GoogleTokenRefreshResult.Success, null));
-        _fetcher.FetchAsync(Arg.Any<Google.Apis.Calendar.v3.CalendarService>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>());
 
         var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);

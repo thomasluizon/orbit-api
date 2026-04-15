@@ -1,18 +1,41 @@
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Calendar.v3;
+using Google.Apis.Services;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
 
-namespace Orbit.Application.Calendar.Services;
+namespace Orbit.Infrastructure.Services;
 
-public partial class CalendarEventFetcher(ILogger<CalendarEventFetcher> logger) : ICalendarEventFetcher
+/// <summary>
+/// Google-Calendar-backed implementation of <see cref="ICalendarEventFetcher"/>. Owns
+/// construction of the Google SDK CalendarService so Application never sees the vendor
+/// SDK types (Clean Architecture: vendor integrations belong in Infrastructure).
+/// </summary>
+public partial class GoogleCalendarEventFetcher(ILogger<GoogleCalendarEventFetcher> logger) : ICalendarEventFetcher
 {
     public async Task<List<CalendarEventItem>> FetchAsync(
-        CalendarService service,
+        string accessToken,
         DateTime? updatedMin,
         CancellationToken ct)
     {
-        var events = await ExecuteList(service, updatedMin, ct);
+        using var service = CreateCalendarService(accessToken);
+
+        Google.Apis.Calendar.v3.Data.Events events;
+        try
+        {
+            events = await ExecuteList(service, updatedMin, ct);
+        }
+        catch (Google.GoogleApiException ex)
+        {
+            var rawCode = NormalizeGoogleApiErrorCode(ex);
+            throw new CalendarProviderException(
+                ClassifyGoogleError(ex),
+                rawCode,
+                $"Google Calendar API error: {rawCode}",
+                ex);
+        }
 
         var items = new List<CalendarEventItem>();
         var seenRecurringMasterIds = new HashSet<string>();
@@ -48,6 +71,16 @@ public partial class CalendarEventFetcher(ILogger<CalendarEventFetcher> logger) 
         }
 
         return items;
+    }
+
+    private static CalendarService CreateCalendarService(string accessToken)
+    {
+        var credential = GoogleCredential.FromAccessToken(accessToken);
+        return new CalendarService(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "Orbit"
+        });
     }
 
     private static async Task<Google.Apis.Calendar.v3.Data.Events> ExecuteList(
@@ -90,7 +123,7 @@ public partial class CalendarEventFetcher(ILogger<CalendarEventFetcher> logger) 
             var master = await service.Events.Get("primary", ev.RecurringEventId).ExecuteAsync(cancellationToken);
             rrule = master.Recurrence?.FirstOrDefault(r => r.StartsWith("RRULE:", StringComparison.OrdinalIgnoreCase));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogFetchMasterRruleFailed(logger, ex, ev.RecurringEventId);
             rrule = null;
@@ -119,6 +152,32 @@ public partial class CalendarEventFetcher(ILogger<CalendarEventFetcher> logger) 
             reminders.Add(0);
 
         return reminders;
+    }
+
+    private static CalendarFetchErrorKind ClassifyGoogleError(Google.GoogleApiException ex)
+    {
+        var errorText = NormalizeGoogleApiErrorCode(ex);
+        var isAuthStatus = ex.HttpStatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+
+        if (isAuthStatus
+            || errorText.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("invalid authentication credentials", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("insufficient authentication scopes", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("forbidden", StringComparison.OrdinalIgnoreCase)
+            || errorText.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase))
+        {
+            return CalendarFetchErrorKind.ReconnectRequired;
+        }
+        return CalendarFetchErrorKind.Transient;
+    }
+
+    private static string NormalizeGoogleApiErrorCode(Google.GoogleApiException ex)
+    {
+        var message = ex.Error?.Message;
+        if (!string.IsNullOrWhiteSpace(message))
+            return message;
+        return ex.Message;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch master event RRULE for recurring event {EventId}")]

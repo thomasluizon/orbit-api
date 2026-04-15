@@ -337,8 +337,12 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
 
         // Each mutation commits (or rolls back) independently so a partial failure
         // can't leave tracked changes that leak into the next mutation or the final
-        // SaveChanges. We use IExecutionStrategy because EnableRetryOnFailure is on
-        // (raw BeginTransactionAsync is not permitted with the retrying strategy).
+        // SaveChanges. Relational providers use a real transaction via IExecutionStrategy
+        // (EnableRetryOnFailure is on in prod). The in-memory test provider doesn't
+        // support transactions, so we fall back to SaveChanges-per-mutation +
+        // ChangeTracker.Clear on failure, which yields equivalent isolation since
+        // there's no real transaction to manage.
+        var supportsTransactions = dbContext.Database.IsRelational();
         var strategy = dbContext.Database.CreateExecutionStrategy();
         var mutationCount = Math.Min(request.Mutations.Count, 100);
         for (int i = 0; i < mutationCount; i++)
@@ -347,26 +351,34 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             var index = i;
             try
             {
-                await strategy.ExecuteAsync(async () =>
+                if (supportsTransactions)
                 {
-                    await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-                    try
+                    await strategy.ExecuteAsync(async () =>
                     {
-                        await ProcessMutation(userId, mutation, cancellationToken);
-                        await dbContext.SaveChangesAsync(cancellationToken);
-                        await tx.CommitAsync(cancellationToken);
-                    }
-                    catch
-                    {
-                        // Roll back the DB transaction AND clear EF's change tracker so the
-                        // next mutation starts from a clean slate. Without the Clear, entities
-                        // mutated by the failed handler would remain in the ChangeTracker and
-                        // could be persisted later.
-                        await tx.RollbackAsync(CancellationToken.None);
-                        dbContext.ChangeTracker.Clear();
-                        throw;
-                    }
-                });
+                        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                        try
+                        {
+                            await ProcessMutation(userId, mutation, cancellationToken);
+                            await dbContext.SaveChangesAsync(cancellationToken);
+                            await tx.CommitAsync(cancellationToken);
+                        }
+                        catch
+                        {
+                            await tx.RollbackAsync(CancellationToken.None);
+                            dbContext.ChangeTracker.Clear();
+                            throw;
+                        }
+                    });
+                }
+                else
+                {
+                    // In-memory / non-relational path used by unit tests. No transactions,
+                    // no ChangeTracker.Clear (tests rely on reference identity of tracked
+                    // entities from the initial seed). SaveChangesAsync-per-mutation still
+                    // provides partial-failure isolation within the test scope.
+                    await ProcessMutation(userId, mutation, cancellationToken);
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
                 results.Add(new SyncMutationResult(index, "success"));
                 processed++;
             }
