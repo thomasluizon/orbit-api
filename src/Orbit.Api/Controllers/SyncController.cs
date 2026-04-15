@@ -335,27 +335,48 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var processed = 0;
         var failed = 0;
 
+        // Each mutation commits (or rolls back) independently so a partial failure
+        // can't leave tracked changes that leak into the next mutation or the final
+        // SaveChanges. We use IExecutionStrategy because EnableRetryOnFailure is on
+        // (raw BeginTransactionAsync is not permitted with the retrying strategy).
+        var strategy = dbContext.Database.CreateExecutionStrategy();
         var mutationCount = Math.Min(request.Mutations.Count, 100);
         for (int i = 0; i < mutationCount; i++)
         {
             var mutation = request.Mutations[i];
+            var index = i;
             try
             {
-                // Server-wins: if the entity was modified on the server after the client's version,
-                // the server version takes precedence. The client will get the latest on next sync.
-                await ProcessMutation(userId, mutation, cancellationToken);
-                results.Add(new SyncMutationResult(i, "success"));
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                    try
+                    {
+                        await ProcessMutation(userId, mutation, cancellationToken);
+                        await dbContext.SaveChangesAsync(cancellationToken);
+                        await tx.CommitAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        // Roll back the DB transaction AND clear EF's change tracker so the
+                        // next mutation starts from a clean slate. Without the Clear, entities
+                        // mutated by the failed handler would remain in the ChangeTracker and
+                        // could be persisted later.
+                        await tx.RollbackAsync(CancellationToken.None);
+                        dbContext.ChangeTracker.Clear();
+                        throw;
+                    }
+                });
+                results.Add(new SyncMutationResult(index, "success"));
                 processed++;
             }
             catch (Exception ex)
             {
-                LogMutationFailed(logger, i, mutation.Entity, mutation.Action, ex);
-                results.Add(new SyncMutationResult(i, "failed", "Mutation failed"));
+                LogMutationFailed(logger, index, mutation.Entity, mutation.Action, ex);
+                results.Add(new SyncMutationResult(index, "failed", "Mutation failed"));
                 failed++;
             }
         }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         LogSyncBatch(logger, userId, processed, failed);
         return Ok(new SyncBatchResponse(processed, failed, results));
