@@ -386,6 +386,16 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         if (p.DueDate is not null)
             DueDate = p.DueDate.Value;
+
+        // Re-anchor OriginalDayOfMonth on edit so changing a monthly habit from the 31st
+        // to the 15th re-anchors to day 15 (instead of staying at the old day), and switching
+        // a daily habit to monthly seeds the field instead of leaving it null.
+        // Daily/weekly habits don't use this field, so clear it on transition away from
+        // monthly/yearly to avoid stale anchors lingering across cadence flips.
+        if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
+            OriginalDayOfMonth = DueDate.Day;
+        else
+            OriginalDayOfMonth = null;
     }
 
     private void ApplyOptionalUpdates(HabitUpdateParams p)

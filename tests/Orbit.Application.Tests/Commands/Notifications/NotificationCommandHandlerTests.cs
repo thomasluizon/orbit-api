@@ -307,4 +307,41 @@ public class SubscribePushCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_FcmEndpoint_AcceptsRawTokenWithoutHttpsCheck()
+    {
+        // FCM stores a raw Firebase registration token in Endpoint (not a URL). The
+        // PushNotificationService passes it as Message.Token to the Firebase Admin SDK,
+        // which addresses Google's servers internally. The https-only validation must
+        // not apply here, otherwise no native (mobile) subscription can register.
+        _pushSubRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((PushSubscription?)null);
+
+        _pushSubRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<PushSubscription>().AsReadOnly());
+
+        var command = new SubscribePushCommand(UserId, "fcm-token-abc123", "fcm", "ignored");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _pushSubRepo.Received(1).AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FcmEndpoint_RejectsEmptyToken()
+    {
+        var command = new SubscribePushCommand(UserId, "   ", "fcm", "ignored");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+    }
 }

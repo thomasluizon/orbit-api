@@ -48,7 +48,10 @@ public static class WebApplicationExtensions
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
-        app.MapMcp("/mcp");
+        // MCP server uses Bearer API-key auth (no cookies), so it gets the non-credentialed
+        // ThirdParty CORS policy. claude.ai/claude.com origins are listed in
+        // Cors:ThirdPartyOrigins; first-party origins continue to use the default policy.
+        app.MapMcp("/mcp").RequireCors("ThirdParty");
 
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
