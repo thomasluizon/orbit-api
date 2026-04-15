@@ -30,7 +30,10 @@ public sealed partial class AiCompletionClient
             credential: new ApiKeyCredential(settings.ApiKey),
             options: new OpenAIClientOptions
             {
-                Endpoint = new Uri(settings.BaseUrl)
+                Endpoint = new Uri(settings.BaseUrl),
+                // Cap network IO at 60s. Without this the OpenAI SDK can hold a thread-pool
+                // thread on a stalled completion for the full pipeline timeout (10 min default).
+                NetworkTimeout = TimeSpan.FromSeconds(60)
             });
     }
 

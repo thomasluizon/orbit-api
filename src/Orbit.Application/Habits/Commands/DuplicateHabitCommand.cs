@@ -65,7 +65,7 @@ public class DuplicateHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success(rootCopy.Value.Id);
     }

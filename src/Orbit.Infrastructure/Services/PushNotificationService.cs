@@ -63,8 +63,59 @@ public partial class PushNotificationService(
             return;
         }
 
-        foreach (var sub in subs)
-            await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct);
+        // Batch via SendEachAsync so N tokens cost one HTTP round-trip per chunk of 500
+        // instead of one per token. SendEach reports per-message status, letting us still
+        // detect and remove stale tokens.
+        const int FcmBatchSize = 500;
+        var subsList = subs as IList<Domain.Entities.PushSubscription> ?? subs.ToList();
+        for (int offset = 0; offset < subsList.Count; offset += FcmBatchSize)
+        {
+            var chunk = subsList.Skip(offset).Take(FcmBatchSize).ToList();
+            var messages = chunk.Select(s => new Message
+            {
+                Token = s.Endpoint,
+                Notification = new Notification { Title = title, Body = body },
+                Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
+            }).ToList();
+
+            BatchResponse response;
+            try
+            {
+                response = await FirebaseMessaging.DefaultInstance.SendEachAsync(messages, ct);
+            }
+            catch (Exception ex)
+            {
+                // If the entire batch errors (e.g., network), fall back to per-message sends
+                // so a single transient hiccup doesn't lose the whole batch.
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogFcmPushFailed(logger, ex, "batch");
+                foreach (var sub in chunk)
+                    await SendFcmToSubscription(sub, title, body, url, staleSubscriptions, ct);
+                continue;
+            }
+
+            for (int i = 0; i < response.Responses.Count; i++)
+            {
+                var resp = response.Responses[i];
+                var sub = chunk[i];
+                var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
+                if (resp.IsSuccess) continue;
+
+                if (resp.Exception is FirebaseMessagingException fme && (
+                    fme.MessagingErrorCode == MessagingErrorCode.Unregistered ||
+                    fme.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
+                    fme.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch))
+                {
+                    if (logger.IsEnabled(LogLevel.Information))
+                        LogFcmTokenStale(logger, tokenPreview);
+                    staleSubscriptions.Add(sub);
+                }
+                else if (resp.Exception is not null && logger.IsEnabled(LogLevel.Warning))
+                {
+                    LogFcmPushFailed(logger, resp.Exception, tokenPreview);
+                }
+            }
+        }
     }
 
     private async Task SendFcmToSubscription(

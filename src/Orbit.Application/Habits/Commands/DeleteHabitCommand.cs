@@ -32,7 +32,7 @@ public class DeleteHabitCommandHandler(
         await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success();
     }

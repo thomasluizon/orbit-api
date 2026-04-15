@@ -122,7 +122,7 @@ public partial class LogHabitCommandHandler(
             habit.UserId, cancellationToken, awardFreezeIfEligible: false);
         // Streak recalculate modifies user entity; save the streak state update
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
         return Result.Success(new LogHabitResponse(
             unlogResult.Value.Id,
@@ -157,7 +157,7 @@ public partial class LogHabitCommandHandler(
         if (gamificationResult is null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 

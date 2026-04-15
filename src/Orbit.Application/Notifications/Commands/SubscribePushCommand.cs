@@ -18,6 +18,15 @@ public class SubscribePushCommandHandler(
 {
     public async Task<Result> Handle(SubscribePushCommand request, CancellationToken cancellationToken)
     {
+        // Validate the endpoint URL before storing -- the value flows out as an HTTP request
+        // target in PushNotificationService, so a non-https or non-absolute URL is an SSRF
+        // vector against internal hosts.
+        if (!Uri.TryCreate(request.Endpoint, UriKind.Absolute, out var endpointUri)
+            || endpointUri.Scheme != Uri.UriSchemeHttps)
+        {
+            return Result.Failure("Push subscription endpoint must be an absolute https:// URL.");
+        }
+
         // Check if subscription with this endpoint already exists
         var existing = await pushSubscriptionRepository.FindOneTrackedAsync(
             s => s.Endpoint == request.Endpoint,
@@ -29,8 +38,10 @@ public class SubscribePushCommandHandler(
             if (existing.UserId == request.UserId)
                 return Result.Success();
 
-            // Different user owns the endpoint -- remove the old subscription
-            pushSubscriptionRepository.Remove(existing);
+            // Different user owns this endpoint. Reject -- a legitimate browser re-registration
+            // produces a NEW endpoint URL, so a duplicate cross-user collision is most likely
+            // an attempt to hijack another user's notification stream.
+            return Result.Failure("Push subscription endpoint is already registered to a different user.");
         }
 
         var result = PushSubscription.Create(request.UserId, request.Endpoint, request.P256dh, request.Auth);

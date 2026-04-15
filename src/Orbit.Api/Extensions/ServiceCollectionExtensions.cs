@@ -29,6 +29,11 @@ public static class ServiceCollectionExtensions
 {
     public static WebApplicationBuilder ValidateOrbitSecuritySettings(this WebApplicationBuilder builder)
     {
+        // JWT secret strength check applies in every environment -- a weak key in dev/staging
+        // becomes a weak key in prod the moment someone copy-pastes appsettings.
+        var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
+        jwtSettings?.Validate();
+
         if (!builder.Environment.IsProduction())
             return builder;
 
@@ -42,7 +47,16 @@ public static class ServiceCollectionExtensions
     public static WebApplicationBuilder AddOrbitDatabase(this WebApplicationBuilder builder)
     {
         builder.Services.AddDbContext<OrbitDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(
+                builder.Configuration.GetConnectionString("DefaultConnection"),
+                npgsql =>
+                {
+                    // Retry transient PostgreSQL disconnects (Supabase pooler can drop idle
+                    // connections). Without this, a single transient blip surfaces as an
+                    // uncaught NpgsqlException at the request boundary.
+                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
+                    npgsql.CommandTimeout(30);
+                }));
 
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -357,18 +371,35 @@ public static class ServiceCollectionExtensions
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 
-        // CORS
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        // CORS -- two policies:
+        //  1. Default credentialed policy for first-party Orbit web/mobile origins (cookie auth).
+        //  2. Separate non-credentialed policy for third-party MCP origins (claude.ai/claude.com)
+        //     which authenticate via Bearer API key, not cookies. Allowing credentials with
+        //     third-party origins would let a malicious page issue cookie-bearing requests on
+        //     behalf of an authenticated user.
+        var firstPartyOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
             ?? ["http://localhost:3000"];
+        var thirdPartyOrigins = builder.Configuration.GetSection("Cors:ThirdPartyOrigins").Get<string[]>()
+            ?? [];
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
             {
-                policy.WithOrigins(allowedOrigins)
+                policy.WithOrigins(firstPartyOrigins)
                       .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
                       .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                       .AllowCredentials();
             });
+            if (thirdPartyOrigins.Length > 0)
+            {
+                options.AddPolicy("ThirdParty", policy =>
+                {
+                    policy.WithOrigins(thirdPartyOrigins)
+                          .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                          .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
+                    // No AllowCredentials() -- third-party origins use Bearer token auth.
+                });
+            }
         });
 
         // Cookie Security Policy

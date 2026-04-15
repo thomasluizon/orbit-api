@@ -33,6 +33,9 @@ public class ActivateStreakFreezeCommandHandler(
         if (user is null)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
+        if (!user.HasProAccess)
+            return Result.PayGateFailure<StreakFreezeResponse>("Streak freezes are a Pro feature. Upgrade to unlock!");
+
         var existingStreak = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         if (existingStreak is null)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);

@@ -122,7 +122,7 @@ public partial class CreateHabitCommandHandler(
 
         await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success(habit.Id);
     }

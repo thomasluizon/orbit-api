@@ -52,6 +52,9 @@ public static class WebApplicationExtensions
 
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
+            // Anonymous endpoint -- omit per-check `data` (background-service tick timing,
+            // internal names, etc.) to avoid leaking infrastructure topology to unauthenticated
+            // callers. Aggregate status is sufficient for liveness probes.
             ResponseWriter = async (context, report) =>
             {
                 context.Response.ContentType = "application/json";
@@ -61,9 +64,7 @@ public static class WebApplicationExtensions
                     checks = report.Entries.Select(e => new
                     {
                         name = e.Key,
-                        status = e.Value.Status.ToString(),
-                        description = e.Value.Description,
-                        data = e.Value.Data
+                        status = e.Value.Status.ToString()
                     })
                 };
                 await context.Response.WriteAsJsonAsync(result);
