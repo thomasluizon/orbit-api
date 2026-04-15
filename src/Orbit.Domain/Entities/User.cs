@@ -47,6 +47,7 @@ public partial class User : Entity
     public string? ReferralCouponId { get; private set; }
     public int AdRewardBonusMessages { get; private set; } = 0;
     public DateTime? LastAdRewardAt { get; private set; }
+    public DateOnly? LastAdRewardLocalDate { get; private set; }
     public int AdRewardsClaimedToday { get; private set; } = 0;
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;
@@ -172,12 +173,15 @@ public partial class User : Entity
         AiMessagesUsedThisMonth++;
     }
 
-    public Result GrantAdReward(int bonusMessages = 5, int dailyCap = 3)
+    public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
     {
         if (HasProAccess)
             return Result.Failure("Pro users do not see ads");
 
-        if (!LastAdRewardAt.HasValue || LastAdRewardAt.Value.Date < DateTime.UtcNow.Date)
+        // Use the caller-supplied user-local "today" so the daily cap rolls over at the
+        // user's midnight, not at UTC midnight (which would let users in negative offsets
+        // double-claim mid-evening).
+        if (!LastAdRewardLocalDate.HasValue || LastAdRewardLocalDate.Value < userToday)
             AdRewardsClaimedToday = 0;
 
         if (AdRewardsClaimedToday >= dailyCap)
@@ -186,6 +190,7 @@ public partial class User : Entity
         AdRewardBonusMessages += bonusMessages;
         AdRewardsClaimedToday++;
         LastAdRewardAt = DateTime.UtcNow;
+        LastAdRewardLocalDate = userToday;
         return Result.Success();
     }
 
@@ -386,6 +391,7 @@ public partial class User : Entity
         AdRewardBonusMessages = 0;
         AdRewardsClaimedToday = 0;
         LastAdRewardAt = null;
+        LastAdRewardLocalDate = null;
         HasImportedCalendar = false;
         GoogleAccessToken = null;
         GoogleRefreshToken = null;

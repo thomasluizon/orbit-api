@@ -5,8 +5,6 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
-using Stripe.Checkout;
 
 namespace Orbit.Application.Subscriptions.Commands;
 
@@ -17,8 +15,7 @@ public partial class CreateCheckoutCommandHandler(
     IUnitOfWork unitOfWork,
     IGeoLocationService geoLocationService,
     IOptions<StripeSettings> stripeSettings,
-    CustomerService customerService,
-    SessionService sessionService,
+    IBillingService billingService,
     ILogger<CreateCheckoutCommandHandler> logger) : IRequestHandler<CreateCheckoutCommand, Result<CheckoutResponse>>
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
@@ -55,42 +52,30 @@ public partial class CreateCheckoutCommandHandler(
         {
             if (string.IsNullOrEmpty(user.StripeCustomerId))
             {
-                var customer = await customerService.CreateAsync(new CustomerCreateOptions
-                {
-                    Email = user.Email,
-                    Name = user.Name,
-                    Metadata = new Dictionary<string, string> { { "userId", request.UserId.ToString() } }
-                }, cancellationToken: cancellationToken);
-                user.SetStripeCustomerId(customer.Id);
+                var customerId = await billingService.CreateCustomerAsync(
+                    user.Email, user.Name, request.UserId, cancellationToken);
+                user.SetStripeCustomerId(customerId);
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
-            var sessionOptions = new SessionCreateOptions
-            {
-                Customer = user.StripeCustomerId,
-                Mode = "subscription",
-                LineItems = [new SessionLineItemOptions { Price = priceId, Quantity = 1 }],
-                SuccessUrl = _settings.SuccessUrl,
-                CancelUrl = _settings.CancelUrl,
-                Metadata = new Dictionary<string, string> { { "userId", request.UserId.ToString() } }
-            };
-
             if (!string.IsNullOrEmpty(user.ReferralCouponId))
             {
-                sessionOptions.Discounts = [new SessionDiscountOptions { Coupon = user.ReferralCouponId }];
                 LogApplyingReferralCoupon(logger, user.ReferralCouponId, request.UserId);
             }
-            else
-            {
-                sessionOptions.AllowPromotionCodes = true;
-            }
 
-            var session = await sessionService.CreateAsync(sessionOptions, cancellationToken: cancellationToken);
+            var url = await billingService.CreateCheckoutSessionAsync(
+                user.StripeCustomerId!,
+                priceId,
+                _settings.SuccessUrl,
+                _settings.CancelUrl,
+                request.UserId,
+                user.ReferralCouponId,
+                cancellationToken);
 
             LogCheckoutCreated(logger, request.UserId, priceId, countryCode);
-            return Result.Success(new CheckoutResponse(session.Url));
+            return Result.Success(new CheckoutResponse(url));
         }
-        catch (StripeException ex)
+        catch (BillingProviderException ex)
         {
             LogStripeCheckoutError(logger, ex, request.UserId);
             return Result.Failure<CheckoutResponse>("Payment service temporarily unavailable");
@@ -103,6 +88,6 @@ public partial class CreateCheckoutCommandHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Checkout created for user {UserId} price={PriceId} country={Country}")]
     private static partial void LogCheckoutCreated(ILogger logger, Guid userId, string priceId, string? country);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Stripe API error during checkout for user {UserId}")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Billing provider error during checkout for user {UserId}")]
     private static partial void LogStripeCheckoutError(ILogger logger, Exception ex, Guid userId);
 }

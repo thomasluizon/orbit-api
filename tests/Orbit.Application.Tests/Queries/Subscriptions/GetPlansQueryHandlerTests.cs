@@ -7,7 +7,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
 
 namespace Orbit.Application.Tests.Queries.Subscriptions;
 
@@ -16,8 +15,7 @@ public class GetPlansQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGeoLocationService _geoLocationService = Substitute.For<IGeoLocationService>();
     private readonly IOptions<StripeSettings> _stripeSettings;
-    private readonly PriceService _priceService = Substitute.For<PriceService>();
-    private readonly CouponService _couponService = Substitute.For<CouponService>();
+    private readonly IBillingService _billingService = Substitute.For<IBillingService>();
     private readonly ILogger<GetPlansQueryHandler> _logger = Substitute.For<ILogger<GetPlansQueryHandler>>();
     private readonly GetPlansQueryHandler _handler;
 
@@ -32,7 +30,7 @@ public class GetPlansQueryHandlerTests
             MonthlyPriceIdBrl = "price_monthly_brl",
             YearlyPriceIdBrl = "price_yearly_brl"
         });
-        _handler = new GetPlansQueryHandler(_userRepo, _geoLocationService, _stripeSettings, _priceService, _couponService, _logger);
+        _handler = new GetPlansQueryHandler(_userRepo, _geoLocationService, _stripeSettings, _billingService, _logger);
     }
 
     private static User CreateTestUser()
@@ -55,18 +53,14 @@ public class GetPlansQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_StripeError_ReturnsFailure()
+    public async Task Handle_BillingProviderError_ReturnsFailure()
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns("US");
 
-        _priceService.GetAsync(
-            Arg.Any<string>(),
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .ThrowsAsync(new StripeException("Stripe error"));
+        _billingService.GetPriceUnitAmountAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("Stripe error"));
 
         var query = new GetPlansQuery(UserId, null, "1.2.3.4");
 
@@ -83,22 +77,8 @@ public class GetPlansQueryHandlerTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns("BR");
 
-        var monthlyPrice = new Price { UnitAmount = 1990 };
-        var yearlyPrice = new Price { UnitAmount = 19900 };
-
-        _priceService.GetAsync(
-            "price_monthly_brl",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(monthlyPrice);
-
-        _priceService.GetAsync(
-            "price_yearly_brl",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(yearlyPrice);
+        _billingService.GetPriceUnitAmountAsync("price_monthly_brl", Arg.Any<CancellationToken>()).Returns(1990);
+        _billingService.GetPriceUnitAmountAsync("price_yearly_brl", Arg.Any<CancellationToken>()).Returns(19900);
 
         var query = new GetPlansQuery(UserId, null, "200.100.50.1");
 
@@ -118,22 +98,8 @@ public class GetPlansQueryHandlerTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns("US");
 
-        var monthlyPrice = new Price { UnitAmount = 499 };
-        var yearlyPrice = new Price { UnitAmount = 3999 };
-
-        _priceService.GetAsync(
-            "price_monthly_usd",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(monthlyPrice);
-
-        _priceService.GetAsync(
-            "price_yearly_usd",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(yearlyPrice);
+        _billingService.GetPriceUnitAmountAsync("price_monthly_usd", Arg.Any<CancellationToken>()).Returns(499);
+        _billingService.GetPriceUnitAmountAsync("price_yearly_usd", Arg.Any<CancellationToken>()).Returns(3999);
 
         var query = new GetPlansQuery(UserId, null, "8.8.8.8");
 
@@ -152,22 +118,8 @@ public class GetPlansQueryHandlerTests
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var monthlyPrice = new Price { UnitAmount = 1990 };
-        var yearlyPrice = new Price { UnitAmount = 19900 };
-
-        _priceService.GetAsync(
-            "price_monthly_brl",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(monthlyPrice);
-
-        _priceService.GetAsync(
-            "price_yearly_brl",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(yearlyPrice);
+        _billingService.GetPriceUnitAmountAsync("price_monthly_brl", Arg.Any<CancellationToken>()).Returns(1990);
+        _billingService.GetPriceUnitAmountAsync("price_yearly_brl", Arg.Any<CancellationToken>()).Returns(19900);
 
         var query = new GetPlansQuery(UserId, "br", "10.0.0.1");
 
@@ -186,22 +138,8 @@ public class GetPlansQueryHandlerTests
         user.SetLanguage("pt-BR");
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var monthlyPrice = new Price { UnitAmount = 1990 };
-        var yearlyPrice = new Price { UnitAmount = 19900 };
-
-        _priceService.GetAsync(
-            "price_monthly_brl",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(monthlyPrice);
-
-        _priceService.GetAsync(
-            "price_yearly_brl",
-            Arg.Any<PriceGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(yearlyPrice);
+        _billingService.GetPriceUnitAmountAsync("price_monthly_brl", Arg.Any<CancellationToken>()).Returns(1990);
+        _billingService.GetPriceUnitAmountAsync("price_yearly_brl", Arg.Any<CancellationToken>()).Returns(19900);
 
         var query = new GetPlansQuery(UserId, null, "8.8.8.8");
 

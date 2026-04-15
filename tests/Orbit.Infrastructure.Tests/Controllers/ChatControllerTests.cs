@@ -109,8 +109,9 @@ public class ChatControllerTests
         var file = Substitute.For<IFormFile>();
         file.Length.Returns(100);
         file.FileName.Returns("test.txt");
+        file.OpenReadStream().Returns(new MemoryStream());
 
-        _imageValidation.ValidateAsync(file)
+        _imageValidation.ValidateAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<long>())
             .Returns(Result.Failure<(string MimeType, long Size)>("Invalid image format"));
 
         var result = await _controller.ProcessChat("Hello", null, file, CancellationToken.None);

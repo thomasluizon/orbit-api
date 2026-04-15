@@ -41,4 +41,5 @@ public static class ErrorCodes
     public const string InvalidGoogleToken = "INVALID_GOOGLE_TOKEN";
     public const string PayGate = Result.PayGateErrorCode;
     public const string InvalidSession = "INVALID_SESSION";
+    public const string SessionCreationFailed = "SESSION_CREATION_FAILED";
 }

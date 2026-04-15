@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -12,7 +11,7 @@ public record SetTimezoneCommand(Guid UserId, string TimeZone) : IRequest<Result
 public class SetTimezoneCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<SetTimezoneCommand, Result>
+    IUserDateService userDateService) : IRequestHandler<SetTimezoneCommand, Result>
 {
     public async Task<Result> Handle(SetTimezoneCommand request, CancellationToken cancellationToken)
     {
@@ -29,8 +28,7 @@ public class SetTimezoneCommandHandler(
             return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        cache.Remove($"user-tz:{request.UserId}");
+        userDateService.InvalidateUserTimezone(request.UserId);
 
         return Result.Success();
     }

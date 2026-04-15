@@ -1,6 +1,4 @@
 using System.Text.Json;
-using Google.Apis.Calendar.v3;
-using Google.Apis.Services;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Calendar.Queries;
@@ -104,11 +102,13 @@ public partial class RunCalendarAutoSyncCommandHandler(
         List<CalendarEventItem> fetched;
         try
         {
-            var service = CreateCalendarService(accessToken);
-            fetched = await deps.EventFetcher.FetchAsync(service, updatedMin: null, ct);
+            fetched = await deps.EventFetcher.FetchAsync(accessToken, updatedMin: null, ct);
         }
-        catch (Google.GoogleApiException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Google SDK exceptions surface as opaque errors to Application (Infrastructure
+            // owns the SDK and catches Google.GoogleApiException internally if it wants to
+            // classify). Any thrown exception here is treated as a transient provider error.
             LogGoogleApiError(logger, ex, user.Id);
             user.MarkCalendarSyncTransientError("google_api_error");
             await deps.UnitOfWork.SaveChangesAsync(ct);
@@ -255,16 +255,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
     private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)
     {
         return $"{title.Trim().ToLowerInvariant()}|{startDate ?? ""}|{startTime ?? ""}";
-    }
-
-    private static CalendarService CreateCalendarService(string accessToken)
-    {
-        var credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromAccessToken(accessToken);
-        return new CalendarService(new BaseClientService.Initializer
-        {
-            HttpClientInitializer = credential,
-            ApplicationName = "Orbit"
-        });
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Google API error during auto-sync for user {UserId}")]

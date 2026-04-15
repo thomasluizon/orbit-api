@@ -74,7 +74,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         if (image is null)
             return (null, null, null);
 
-        var validationResult = await imageValidation.ValidateAsync(image);
+        // Open the upload stream here so Domain doesn't need an AspNetCore dependency.
+        using var uploadStream = image.OpenReadStream();
+        var validationResult = await imageValidation.ValidateAsync(uploadStream, image.FileName, image.Length);
         if (validationResult.IsFailure)
         {
             if (logger.IsEnabled(LogLevel.Warning))

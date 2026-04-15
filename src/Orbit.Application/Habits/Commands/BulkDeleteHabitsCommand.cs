@@ -73,7 +73,7 @@ public class BulkDeleteHabitsCommandHandler(
             throw;
         }
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success(new BulkDeleteResult(results));
     }

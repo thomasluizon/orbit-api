@@ -5,7 +5,6 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
 
 namespace Orbit.Application.Subscriptions.Commands;
 
@@ -14,7 +13,7 @@ public record CreatePortalSessionCommand(Guid UserId) : IRequest<Result<PortalRe
 public partial class CreatePortalSessionCommandHandler(
     IGenericRepository<User> userRepository,
     IOptions<StripeSettings> stripeSettings,
-    Stripe.BillingPortal.SessionService portalSessionService,
+    IBillingService billingService,
     ILogger<CreatePortalSessionCommandHandler> logger) : IRequestHandler<CreatePortalSessionCommand, Result<PortalResponse>>
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
@@ -30,21 +29,17 @@ public partial class CreatePortalSessionCommandHandler(
 
         try
         {
-            var session = await portalSessionService.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
-            {
-                Customer = user.StripeCustomerId,
-                ReturnUrl = _settings.SuccessUrl.Replace("?subscription=success", "")
-            }, cancellationToken: cancellationToken);
-
-            return Result.Success(new PortalResponse(session.Url));
+            var returnUrl = _settings.SuccessUrl.Replace("?subscription=success", "");
+            var url = await billingService.CreatePortalSessionAsync(user.StripeCustomerId, returnUrl, cancellationToken);
+            return Result.Success(new PortalResponse(url));
         }
-        catch (StripeException ex)
+        catch (BillingProviderException ex)
         {
             LogStripePortalError(logger, ex, request.UserId);
             return Result.Failure<PortalResponse>("Payment service temporarily unavailable");
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Stripe API error during portal creation for user {UserId}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Billing provider error during portal creation for user {UserId}")]
     private static partial void LogStripePortalError(ILogger logger, Exception ex, Guid userId);
 }

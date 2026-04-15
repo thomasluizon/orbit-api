@@ -1,0 +1,190 @@
+using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
+using Orbit.Domain.Enums;
+using Stripe;
+using Stripe.Checkout;
+
+namespace Orbit.Infrastructure.Services;
+
+/// <summary>
+/// Stripe-backed implementation of <see cref="IBillingService"/>. All Stripe SDK calls
+/// are isolated here so the Application layer stays SDK-free.
+/// </summary>
+public sealed partial class StripeBillingService(
+    CustomerService customerService,
+    Stripe.Checkout.SessionService checkoutSessionService,
+    Stripe.BillingPortal.SessionService portalSessionService,
+    SubscriptionService subscriptionService,
+    InvoiceService invoiceService,
+    PriceService priceService,
+    CouponService couponService,
+    ILogger<StripeBillingService> logger) : IBillingService
+{
+    public async Task<string> CreateCustomerAsync(string email, string name, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var customer = await customerService.CreateAsync(new CustomerCreateOptions
+            {
+                Email = email,
+                Name = name,
+                Metadata = new Dictionary<string, string> { ["userId"] = userId.ToString() },
+            }, cancellationToken: cancellationToken);
+            return customer.Id;
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to create customer", ex);
+        }
+    }
+
+    public async Task<string> CreateCheckoutSessionAsync(
+        string customerId,
+        string priceId,
+        string successUrl,
+        string cancelUrl,
+        Guid userId,
+        string? referralCouponId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var options = new SessionCreateOptions
+            {
+                Customer = customerId,
+                Mode = "subscription",
+                LineItems = [new SessionLineItemOptions { Price = priceId, Quantity = 1 }],
+                SuccessUrl = successUrl,
+                CancelUrl = cancelUrl,
+                Metadata = new Dictionary<string, string> { ["userId"] = userId.ToString() },
+            };
+
+            if (!string.IsNullOrEmpty(referralCouponId))
+            {
+                options.Discounts = [new SessionDiscountOptions { Coupon = referralCouponId }];
+            }
+            else
+            {
+                options.AllowPromotionCodes = true;
+            }
+
+            var session = await checkoutSessionService.CreateAsync(options, cancellationToken: cancellationToken);
+            return session.Url;
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to create checkout session", ex);
+        }
+    }
+
+    public async Task<string> CreatePortalSessionAsync(string customerId, string returnUrl, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var session = await portalSessionService.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
+            {
+                Customer = customerId,
+                ReturnUrl = returnUrl,
+            }, cancellationToken: cancellationToken);
+            return session.Url;
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to create portal session", ex);
+        }
+    }
+
+    public async Task<BillingSubscriptionDetails?> GetSubscriptionDetailsAsync(string subscriptionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var options = new SubscriptionGetOptions();
+            options.AddExpand("default_payment_method");
+            var subscription = await subscriptionService.GetAsync(subscriptionId, options, cancellationToken: cancellationToken);
+
+            BillingPaymentMethod? paymentMethod = null;
+            if (subscription.DefaultPaymentMethod?.Card is not null)
+            {
+                var card = subscription.DefaultPaymentMethod.Card;
+                paymentMethod = new BillingPaymentMethod(
+                    card.Brand ?? "unknown",
+                    card.Last4 ?? "****",
+                    (int)card.ExpMonth,
+                    (int)card.ExpYear);
+            }
+
+            var item = subscription.Items?.Data?.FirstOrDefault();
+            var intervalString = item?.Price?.Recurring?.Interval;
+            var interval = intervalString == "year" ? SubscriptionInterval.Yearly : SubscriptionInterval.Monthly;
+
+            return new BillingSubscriptionDetails(
+                subscription.Status,
+                item?.CurrentPeriodEnd ?? DateTime.UtcNow,
+                subscription.CancelAtPeriodEnd,
+                interval,
+                item?.Price?.UnitAmount ?? 0,
+                subscription.Currency ?? "usd",
+                paymentMethod);
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to fetch subscription", ex);
+        }
+    }
+
+    public async Task<IReadOnlyList<BillingInvoice>> ListInvoicesAsync(string customerId, int limit, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invoices = await invoiceService.ListAsync(new InvoiceListOptions
+            {
+                Customer = customerId,
+                Limit = limit,
+            }, cancellationToken: cancellationToken);
+
+            return invoices.Data.Select(inv => new BillingInvoice(
+                inv.Id,
+                inv.Created,
+                inv.AmountPaid,
+                inv.Currency ?? "usd",
+                inv.Status ?? "unknown",
+                inv.HostedInvoiceUrl,
+                inv.InvoicePdf,
+                inv.BillingReason ?? "unknown")).ToList();
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException("Failed to list invoices", ex);
+        }
+    }
+
+    public async Task<long> GetPriceUnitAmountAsync(string priceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var price = await priceService.GetAsync(priceId, cancellationToken: cancellationToken);
+            return price.UnitAmount ?? 0;
+        }
+        catch (StripeException ex)
+        {
+            throw new BillingProviderException($"Failed to fetch price {priceId}", ex);
+        }
+    }
+
+    public async Task<int?> TryGetCouponPercentOffAsync(string couponId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var coupon = await couponService.GetAsync(couponId, cancellationToken: cancellationToken);
+            return (int)(coupon.PercentOff ?? 0);
+        }
+        catch (StripeException ex)
+        {
+            LogCouponFetchFailed(logger, ex, couponId);
+            return null;
+        }
+    }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch coupon {CouponId}")]
+    private static partial void LogCouponFetchFailed(ILogger logger, Exception ex, string couponId);
+}

@@ -8,8 +8,6 @@ using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
-using Stripe.Checkout;
 
 namespace Orbit.Application.Tests.Commands.Subscriptions;
 
@@ -18,8 +16,7 @@ public class CreateCheckoutCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IGeoLocationService _geoLocationService = Substitute.For<IGeoLocationService>();
-    private readonly CustomerService _customerService = Substitute.For<CustomerService>();
-    private readonly SessionService _sessionService = Substitute.For<SessionService>();
+    private readonly IBillingService _billingService = Substitute.For<IBillingService>();
     private readonly CreateCheckoutCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -38,11 +35,16 @@ public class CreateCheckoutCommandHandlerTests
 
         _handler = new CreateCheckoutCommandHandler(
             _userRepo, _unitOfWork, _geoLocationService, settings,
-            _customerService, _sessionService,
+            _billingService,
             Substitute.For<ILogger<CreateCheckoutCommandHandler>>());
 
         _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns("US");
+
+        _billingService.CreateCheckoutSessionAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns("https://checkout.stripe.com/session_default");
     }
 
     [Fact]
@@ -52,11 +54,10 @@ public class CreateCheckoutCommandHandlerTests
         user.SetStripeCustomerId("cus_existing");
         SetupExistingUser(user);
 
-        _sessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new Session { Url = "https://checkout.stripe.com/session_123" });
+        _billingService.CreateCheckoutSessionAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns("https://checkout.stripe.com/session_123");
 
         var command = new CreateCheckoutCommand(UserId, "monthly", null, "1.2.3.4");
 
@@ -72,27 +73,17 @@ public class CreateCheckoutCommandHandlerTests
         var user = User.Create("Test", "test@example.com").Value;
         SetupExistingUser(user);
 
-        _customerService.CreateAsync(
-            Arg.Any<CustomerCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new Customer { Id = "cus_new_123" });
-
-        _sessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new Session { Url = "https://checkout.stripe.com/session_456" });
+        _billingService.CreateCustomerAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns("cus_new_123");
 
         var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _customerService.Received(1).CreateAsync(
-            Arg.Any<CustomerCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>());
+        await _billingService.Received(1).CreateCustomerAsync(
+            user.Email, user.Name, UserId, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -131,35 +122,28 @@ public class CreateCheckoutCommandHandlerTests
         user.SetStripeCustomerId("cus_br");
         SetupExistingUser(user);
 
-        _sessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new Session { Url = "https://checkout.stripe.com/br_session" });
-
         var command = new CreateCheckoutCommand(UserId, "yearly", null, "200.100.50.1");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _sessionService.Received(1).CreateAsync(
-            Arg.Is<SessionCreateOptions>(o => o.LineItems[0].Price == "price_yearly_brl"),
-            Arg.Any<RequestOptions>(),
+        await _billingService.Received(1).CreateCheckoutSessionAsync(
+            "cus_br", "price_yearly_brl",
+            Arg.Any<string>(), Arg.Any<string>(), UserId, Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_StripeException_ReturnsFailure()
+    public async Task Handle_BillingProviderException_ReturnsFailure()
     {
         var user = User.Create("Test", "test@example.com").Value;
         user.SetStripeCustomerId("cus_err");
         SetupExistingUser(user);
 
-        _sessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .ThrowsAsync(new StripeException("API error"));
+        _billingService.CreateCheckoutSessionAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("API error"));
 
         var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
 
@@ -176,20 +160,14 @@ public class CreateCheckoutCommandHandlerTests
         user.SetStripeCustomerId("cus_br_header");
         SetupExistingUser(user);
 
-        _sessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new Session { Url = "https://checkout.stripe.com/br_header" });
-
         var command = new CreateCheckoutCommand(UserId, "monthly", "BR", "10.0.0.1");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _sessionService.Received(1).CreateAsync(
-            Arg.Is<SessionCreateOptions>(o => o.LineItems[0].Price == "price_monthly_brl"),
-            Arg.Any<RequestOptions>(),
+        await _billingService.Received(1).CreateCheckoutSessionAsync(
+            "cus_br_header", "price_monthly_brl",
+            Arg.Any<string>(), Arg.Any<string>(), UserId, Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
         await _geoLocationService.DidNotReceive()
             .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
@@ -203,20 +181,14 @@ public class CreateCheckoutCommandHandlerTests
         user.SetTimeZone("America/Sao_Paulo").IsSuccess.Should().BeTrue();
         SetupExistingUser(user);
 
-        _sessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new Session { Url = "https://checkout.stripe.com/br_tz" });
-
         var command = new CreateCheckoutCommand(UserId, "monthly", null, "8.8.8.8");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _sessionService.Received(1).CreateAsync(
-            Arg.Is<SessionCreateOptions>(o => o.LineItems[0].Price == "price_monthly_brl"),
-            Arg.Any<RequestOptions>(),
+        await _billingService.Received(1).CreateCheckoutSessionAsync(
+            "cus_br_tz", "price_monthly_brl",
+            Arg.Any<string>(), Arg.Any<string>(), UserId, Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
         await _geoLocationService.DidNotReceive()
             .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());

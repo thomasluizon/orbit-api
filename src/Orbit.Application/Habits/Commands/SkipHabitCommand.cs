@@ -57,7 +57,7 @@ public class SkipHabitCommandHandler(
         await SyncStreakGoals(habit, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
         return Result.Success();
     }
@@ -66,7 +66,7 @@ public class SkipHabitCommandHandler(
     {
         habit.PostponeTo(today.AddDays(1));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
         return Result.Success();
     }
 

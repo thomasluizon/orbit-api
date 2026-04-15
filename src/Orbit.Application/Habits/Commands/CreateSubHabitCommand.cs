@@ -103,7 +103,7 @@ public class CreateSubHabitCommandHandler(
         await habitRepository.AddAsync(child, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success(childResult.Value.Id);
     }

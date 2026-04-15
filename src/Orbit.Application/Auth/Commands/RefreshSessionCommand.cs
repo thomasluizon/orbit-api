@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Auth.Models;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -14,7 +15,7 @@ public class RefreshSessionCommandHandler(IAuthSessionService authSessionService
     {
         var result = await authSessionService.RefreshSessionAsync(request.RefreshToken, cancellationToken);
         if (result.IsFailure)
-            return Result.Failure<RefreshSessionResponse>(result.Error, result.ErrorCode!);
+            return Result.Failure<RefreshSessionResponse>(result.Error, result.ErrorCode ?? ErrorCodes.InvalidSession);
 
         return Result.Success(new RefreshSessionResponse(
             result.Value.AccessToken,

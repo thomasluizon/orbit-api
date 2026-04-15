@@ -11,6 +11,7 @@ public class ClaimAdRewardCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly ClaimAdRewardCommandHandler _handler;
 
@@ -18,9 +19,11 @@ public class ClaimAdRewardCommandHandlerTests
 
     public ClaimAdRewardCommandHandlerTests()
     {
-        _handler = new ClaimAdRewardCommandHandler(_userRepo, _unitOfWork, _payGate);
+        _handler = new ClaimAdRewardCommandHandler(_userRepo, _unitOfWork, _userDateService, _payGate);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(25);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
     [Fact]

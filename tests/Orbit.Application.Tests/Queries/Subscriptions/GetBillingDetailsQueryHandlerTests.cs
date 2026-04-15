@@ -2,18 +2,17 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
 
 namespace Orbit.Application.Tests.Queries.Subscriptions;
 
 public class GetBillingDetailsQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly SubscriptionService _subscriptionService = Substitute.For<SubscriptionService>();
-    private readonly InvoiceService _invoiceService = Substitute.For<InvoiceService>();
+    private readonly IBillingService _billingService = Substitute.For<IBillingService>();
     private readonly ILogger<GetBillingDetailsQueryHandler> _logger = Substitute.For<ILogger<GetBillingDetailsQueryHandler>>();
     private readonly GetBillingDetailsQueryHandler _handler;
 
@@ -21,7 +20,7 @@ public class GetBillingDetailsQueryHandlerTests
 
     public GetBillingDetailsQueryHandlerTests()
     {
-        _handler = new GetBillingDetailsQueryHandler(_userRepo, _subscriptionService, _invoiceService, _logger);
+        _handler = new GetBillingDetailsQueryHandler(_userRepo, _billingService, _logger);
     }
 
     private static User CreateTestUser()
@@ -58,7 +57,7 @@ public class GetBillingDetailsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UserWithSubscription_StripeError_ReturnsFailure()
+    public async Task Handle_UserWithSubscription_BillingProviderError_ReturnsFailure()
     {
         var user = CreateTestUser();
         user.SetStripeCustomerId("cus_test");
@@ -66,12 +65,8 @@ public class GetBillingDetailsQueryHandlerTests
 
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        _subscriptionService.GetAsync(
-            Arg.Any<string>(),
-            Arg.Any<SubscriptionGetOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .ThrowsAsync(new StripeException("Stripe error"));
+        _billingService.GetSubscriptionDetailsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("Stripe error"));
 
         var query = new GetBillingDetailsQuery(UserId);
 

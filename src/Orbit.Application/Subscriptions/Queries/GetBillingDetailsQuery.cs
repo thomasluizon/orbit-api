@@ -3,9 +3,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Stripe;
 
 namespace Orbit.Application.Subscriptions.Queries;
 
@@ -13,8 +11,7 @@ public record GetBillingDetailsQuery(Guid UserId) : IRequest<Result<BillingDetai
 
 public partial class GetBillingDetailsQueryHandler(
     IGenericRepository<User> userRepository,
-    SubscriptionService subscriptionService,
-    InvoiceService invoiceService,
+    IBillingService billingService,
     ILogger<GetBillingDetailsQueryHandler> logger) : IRequestHandler<GetBillingDetailsQuery, Result<BillingDetailsResponse>>
 {
     public async Task<Result<BillingDetailsResponse>> Handle(GetBillingDetailsQuery request, CancellationToken cancellationToken)
@@ -28,68 +25,45 @@ public partial class GetBillingDetailsQueryHandler(
 
         try
         {
-            var subOptions = new SubscriptionGetOptions();
-            subOptions.AddExpand("default_payment_method");
-            var subscription = await subscriptionService.GetAsync(user.StripeSubscriptionId, subOptions, cancellationToken: cancellationToken);
+            var subscription = await billingService.GetSubscriptionDetailsAsync(user.StripeSubscriptionId, cancellationToken);
+            if (subscription is null)
+                return Result.Failure<BillingDetailsResponse>("Subscription not found");
 
-            PaymentMethodDto? paymentMethod = null;
-            if (subscription.DefaultPaymentMethod?.Card is not null)
-            {
-                var card = subscription.DefaultPaymentMethod.Card;
-                paymentMethod = new PaymentMethodDto(
-                    card.Brand ?? "unknown",
-                    card.Last4 ?? "****",
-                    (int)card.ExpMonth,
-                    (int)card.ExpYear);
-            }
+            var invoices = await billingService.ListInvoicesAsync(user.StripeCustomerId, limit: 12, cancellationToken);
 
-            var invoices = await invoiceService.ListAsync(new InvoiceListOptions
-            {
-                Customer = user.StripeCustomerId,
-                Limit = 12
-            }, cancellationToken: cancellationToken);
-
-            var item = subscription.Items?.Data?.FirstOrDefault();
-            var interval = GetSubscriptionInterval(subscription);
+            var paymentMethod = subscription.PaymentMethod is null
+                ? null
+                : new PaymentMethodDto(
+                    subscription.PaymentMethod.Brand,
+                    subscription.PaymentMethod.Last4,
+                    subscription.PaymentMethod.ExpMonth,
+                    subscription.PaymentMethod.ExpYear);
 
             return Result.Success(new BillingDetailsResponse(
                 subscription.Status,
-                item?.CurrentPeriodEnd ?? DateTime.UtcNow,
+                subscription.CurrentPeriodEnd,
                 subscription.CancelAtPeriodEnd,
-                interval.ToString().ToLowerInvariant(),
-                item?.Price?.UnitAmount ?? 0,
-                subscription.Currency ?? "usd",
+                subscription.Interval.ToString().ToLowerInvariant(),
+                subscription.UnitAmount,
+                subscription.Currency,
                 paymentMethod,
-                invoices.Data.Select(inv => new InvoiceDto(
+                invoices.Select(inv => new InvoiceDto(
                     inv.Id,
                     inv.Created,
                     inv.AmountPaid,
-                    inv.Currency ?? "usd",
-                    inv.Status ?? "unknown",
-                    inv.HostedInvoiceUrl,
-                    inv.InvoicePdf,
-                    inv.BillingReason ?? "unknown"
-                )).ToList()));
+                    inv.Currency,
+                    inv.Status,
+                    inv.HostedUrl,
+                    inv.PdfUrl,
+                    inv.BillingReason)).ToList()));
         }
-        catch (StripeException ex)
+        catch (BillingProviderException ex)
         {
             LogFetchBillingDetailsFailed(logger, ex, request.UserId);
             return Result.Failure<BillingDetailsResponse>("Failed to load billing details from payment provider");
         }
     }
 
-    private static SubscriptionInterval GetSubscriptionInterval(Stripe.Subscription subscription)
-    {
-        var item = subscription.Items?.Data?.FirstOrDefault();
-        var interval = item?.Price?.Recurring?.Interval;
-
-        return (interval, item?.Price?.Recurring?.IntervalCount ?? 1) switch
-        {
-            ("year", _) => SubscriptionInterval.Yearly,
-            _ => SubscriptionInterval.Monthly
-        };
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to fetch billing details from Stripe for user {UserId}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to fetch billing details from billing provider for user {UserId}")]
     private static partial void LogFetchBillingDetailsFailed(ILogger logger, Exception ex, Guid userId);
 }

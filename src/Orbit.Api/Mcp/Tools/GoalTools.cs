@@ -66,7 +66,7 @@ public class GoalTools(IMediator mediator)
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null,
+            McpInputParser.ParseOptionalDate(deadline, "deadline"),
             Type: goalType);
 
         var result = await mediator.Send(command, cancellationToken);
@@ -82,7 +82,7 @@ public class GoalTools(IMediator mediator)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetGoalByIdQuery(userId, Guid.Parse(goalId));
+        var query = new GetGoalByIdQuery(userId, McpInputParser.ParseGuid(goalId, "goalId"));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -116,12 +116,12 @@ public class GoalTools(IMediator mediator)
         var userId = GetUserId(user);
         var command = new UpdateGoalCommand(
             userId,
-            Guid.Parse(goalId),
+            McpInputParser.ParseGuid(goalId, "goalId"),
             title,
             description,
             targetValue,
             unit,
-            deadline is not null ? DateOnly.Parse(deadline, CultureInfo.InvariantCulture) : null);
+            McpInputParser.ParseOptionalDate(deadline, "deadline"));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -136,7 +136,7 @@ public class GoalTools(IMediator mediator)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var command = new DeleteGoalCommand(userId, Guid.Parse(goalId));
+        var command = new DeleteGoalCommand(userId, McpInputParser.ParseGuid(goalId, "goalId"));
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Deleted goal {goalId}"
@@ -154,7 +154,7 @@ public class GoalTools(IMediator mediator)
         var userId = GetUserId(user);
         var command = new UpdateGoalProgressCommand(
             userId,
-            Guid.Parse(goalId),
+            McpInputParser.ParseGuid(goalId, "goalId"),
             currentValue,
             note);
 
@@ -173,7 +173,7 @@ public class GoalTools(IMediator mediator)
     {
         var userId = GetUserId(user);
         var newStatus = Enum.Parse<GoalStatus>(status, true);
-        var command = new UpdateGoalStatusCommand(userId, Guid.Parse(goalId), newStatus);
+        var command = new UpdateGoalStatusCommand(userId, McpInputParser.ParseGuid(goalId, "goalId"), newStatus);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Updated goal {goalId} status to {status}"
@@ -192,7 +192,7 @@ public class GoalTools(IMediator mediator)
             CaseInsensitiveJsonOptions)
             ?? [];
 
-        var positions = items.Select(p => new GoalPositionUpdate(Guid.Parse(p.Id), p.Position)).ToList();
+        var positions = items.Select(p => new GoalPositionUpdate(McpInputParser.ParseGuid(p.Id, "id"), p.Position)).ToList();
         var command = new ReorderGoalsCommand(userId, positions);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -209,9 +209,9 @@ public class GoalTools(IMediator mediator)
     {
         var userId = GetUserId(user);
         var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Guid.Parse).ToList();
+            .Select(s => McpInputParser.ParseGuid(s, "habitIds")).ToList();
 
-        var command = new LinkHabitsToGoalCommand(userId, Guid.Parse(goalId), ids);
+        var command = new LinkHabitsToGoalCommand(userId, McpInputParser.ParseGuid(goalId, "goalId"), ids);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Linked {ids.Count} habits to goal {goalId}"
@@ -225,7 +225,7 @@ public class GoalTools(IMediator mediator)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetGoalMetricsQuery(userId, Guid.Parse(goalId));
+        var query = new GetGoalMetricsQuery(userId, McpInputParser.ParseGuid(goalId, "goalId"));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -270,7 +270,9 @@ public class GoalTools(IMediator mediator)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-        return Guid.Parse(claim);
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
+        return userId;
     }
 
     private sealed record GoalPositionDto(string Id, int Position);

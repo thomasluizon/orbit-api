@@ -311,6 +311,83 @@ public class HabitTests
     }
 
     [Fact]
+    public void Update_MonthlyHabit_ChangingDueDateRefreshesOriginalDayOfMonth()
+    {
+        // Create a monthly habit anchored on the 31st (so OriginalDayOfMonth = 31).
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId: Guid.NewGuid(),
+            Title: "Monthly Bills",
+            FrequencyUnit: FrequencyUnit.Month,
+            FrequencyQuantity: 1,
+            DueDate: new DateOnly(2025, 1, 31))).Value;
+        habit.OriginalDayOfMonth.Should().Be(31);
+
+        // User edits the habit to land on the 15th instead. The anchor must follow,
+        // otherwise future advances re-use the stale 31 anchor.
+        habit.Update(new HabitUpdateParams(
+            "Monthly Bills",
+            null,
+            FrequencyUnit.Month,
+            1,
+            Days: null,
+            IsBadHabit: false,
+            DueDate: new DateOnly(2025, 2, 15)));
+
+        habit.OriginalDayOfMonth.Should().Be(15);
+    }
+
+    [Fact]
+    public void Update_DailyToMonthly_SeedsOriginalDayOfMonth()
+    {
+        // Create a daily habit (no anchor day needed).
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId: Guid.NewGuid(),
+            Title: "Daily Stretch",
+            FrequencyUnit: FrequencyUnit.Day,
+            FrequencyQuantity: 1,
+            DueDate: new DateOnly(2025, 3, 10))).Value;
+        habit.OriginalDayOfMonth.Should().BeNull();
+
+        // Convert to monthly. The anchor must seed from the new DueDate so future
+        // advances re-anchor correctly.
+        habit.Update(new HabitUpdateParams(
+            "Daily Stretch",
+            null,
+            FrequencyUnit.Month,
+            1,
+            Days: null,
+            IsBadHabit: false,
+            DueDate: new DateOnly(2025, 3, 28)));
+
+        habit.OriginalDayOfMonth.Should().Be(28);
+    }
+
+    [Fact]
+    public void Update_MonthlyToDaily_ClearsOriginalDayOfMonth()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId: Guid.NewGuid(),
+            Title: "Monthly Review",
+            FrequencyUnit: FrequencyUnit.Month,
+            FrequencyQuantity: 1,
+            DueDate: new DateOnly(2025, 1, 20))).Value;
+        habit.OriginalDayOfMonth.Should().Be(20);
+
+        // Switching away from monthly should clear the anchor so a future flip back
+        // to monthly doesn't pick up a stale day.
+        habit.Update(new HabitUpdateParams(
+            "Monthly Review",
+            null,
+            FrequencyUnit.Day,
+            1,
+            Days: null,
+            IsBadHabit: false,
+            DueDate: null));
+
+        habit.OriginalDayOfMonth.Should().BeNull();
+    }
+
+    [Fact]
     public void Update_EmptyTitle_ReturnsFailure()
     {
         var habit = CreateValidHabit();

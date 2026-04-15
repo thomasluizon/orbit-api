@@ -37,6 +37,7 @@ public class GoogleAuthCommandHandlerTests
 
         _handler = new GoogleAuthCommandHandler(
             _userRepo, _unitOfWork, _authSessionService, httpFactory, _emailService, _mediator,
+            Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
             Substitute.For<ILogger<GoogleAuthCommandHandler>>());
 
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())

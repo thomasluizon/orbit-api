@@ -1,8 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -20,6 +22,7 @@ public partial class GoogleAuthCommandHandler(
     IHttpClientFactory httpClientFactory,
     IEmailService emailService,
     IMediator mediator,
+    IServiceScopeFactory scopeFactory,
     ILogger<GoogleAuthCommandHandler> logger) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
@@ -43,7 +46,7 @@ public partial class GoogleAuthCommandHandler(
 
         var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)
-            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode!);
+            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode ?? ErrorCodes.SessionCreationFailed);
 
         return Result.Success(new LoginResponse(
             user.Id,
@@ -135,7 +138,7 @@ public partial class GoogleAuthCommandHandler(
         User user, GoogleAuthCommand request, bool isNewUser, CancellationToken cancellationToken)
     {
         if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
-            _ = ProcessReferralSafeAsync(user.Id, request.ReferralCode, cancellationToken);
+            ProcessReferralInBackground(user.Id, request.ReferralCode);
 
         var wasReactivated = false;
         if (user.IsDeactivated)
@@ -148,6 +151,28 @@ public partial class GoogleAuthCommandHandler(
             user.SetGoogleTokens(request.GoogleAccessToken, request.GoogleRefreshToken);
 
         return wasReactivated;
+    }
+
+    private void ProcessReferralInBackground(Guid userId, string referralCode)
+    {
+        // Spawn a fresh DI scope so the mediator and downstream services aren't disposed
+        // when the request completes, and use CancellationToken.None so the work survives
+        // request cancellation.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var scopedMediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+                await scopedMediator.Send(
+                    new ProcessReferralCodeCommand(userId, referralCode),
+                    CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                LogReferralProcessingFailed(logger, ex, userId);
+            }
+        }, CancellationToken.None);
     }
 
     private async Task ProcessReferralSafeAsync(Guid userId, string referralCode, CancellationToken cancellationToken)

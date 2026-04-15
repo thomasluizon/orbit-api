@@ -34,6 +34,9 @@ public class GetStreakInfoQueryHandler(
         if (user is null)
             return Result.Failure<StreakInfoResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
+        if (!user.HasProAccess)
+            return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
+
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         var monthStart = new DateOnly(today.Year, today.Month, 1);
@@ -74,7 +77,9 @@ public class GetStreakInfoQueryHandler(
             user.LongestStreak,
             user.LastActiveDate,
             freezesUsedThisMonth,
-            freezesAvailableToUse,
+            // FreezesAvailable = raw accumulated count (what the user has earned).
+            // FreezesAvailableToUse = capped by monthly quota (what they can actually use right now).
+            user.StreakFreezesAccumulated,
             AppConstants.MaxStreakFreezesPerMonth,
             isFrozenToday,
             recentFreezeDates,

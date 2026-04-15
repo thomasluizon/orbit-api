@@ -335,27 +335,60 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var processed = 0;
         var failed = 0;
 
+        // Each mutation commits (or rolls back) independently so a partial failure
+        // can't leave tracked changes that leak into the next mutation or the final
+        // SaveChanges. Relational providers use a real transaction via IExecutionStrategy
+        // (EnableRetryOnFailure is on in prod). The in-memory test provider doesn't
+        // support transactions, so we fall back to SaveChanges-per-mutation +
+        // ChangeTracker.Clear on failure, which yields equivalent isolation since
+        // there's no real transaction to manage.
+        var supportsTransactions = dbContext.Database.IsRelational();
+        var strategy = dbContext.Database.CreateExecutionStrategy();
         var mutationCount = Math.Min(request.Mutations.Count, 100);
         for (int i = 0; i < mutationCount; i++)
         {
             var mutation = request.Mutations[i];
+            var index = i;
             try
             {
-                // Server-wins: if the entity was modified on the server after the client's version,
-                // the server version takes precedence. The client will get the latest on next sync.
-                await ProcessMutation(userId, mutation, cancellationToken);
-                results.Add(new SyncMutationResult(i, "success"));
+                if (supportsTransactions)
+                {
+                    await strategy.ExecuteAsync(async () =>
+                    {
+                        await using var tx = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                        try
+                        {
+                            await ProcessMutation(userId, mutation, cancellationToken);
+                            await dbContext.SaveChangesAsync(cancellationToken);
+                            await tx.CommitAsync(cancellationToken);
+                        }
+                        catch
+                        {
+                            await tx.RollbackAsync(CancellationToken.None);
+                            dbContext.ChangeTracker.Clear();
+                            throw;
+                        }
+                    });
+                }
+                else
+                {
+                    // In-memory / non-relational path used by unit tests. No transactions,
+                    // no ChangeTracker.Clear (tests rely on reference identity of tracked
+                    // entities from the initial seed). SaveChangesAsync-per-mutation still
+                    // provides partial-failure isolation within the test scope.
+                    await ProcessMutation(userId, mutation, cancellationToken);
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                }
+                results.Add(new SyncMutationResult(index, "success"));
                 processed++;
             }
             catch (Exception ex)
             {
-                LogMutationFailed(logger, i, mutation.Entity, mutation.Action, ex);
-                results.Add(new SyncMutationResult(i, "failed", "Mutation failed"));
+                LogMutationFailed(logger, index, mutation.Entity, mutation.Action, ex);
+                results.Add(new SyncMutationResult(index, "failed", "Mutation failed"));
                 failed++;
             }
         }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         LogSyncBatch(logger, userId, processed, failed);
         return Ok(new SyncBatchResponse(processed, failed, results));

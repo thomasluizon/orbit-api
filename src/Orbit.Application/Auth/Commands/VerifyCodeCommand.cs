@@ -41,7 +41,7 @@ public partial class VerifyCodeCommandHandler(
 
         var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)
-            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode!);
+            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode ?? ErrorCodes.SessionCreationFailed);
 
         return Result.Success(new LoginResponse(
             user.Id,

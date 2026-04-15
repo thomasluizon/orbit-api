@@ -1,5 +1,3 @@
-using Google.Apis.Calendar.v3;
-using Google.Apis.Services;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Calendar.Services;
@@ -51,8 +49,7 @@ public partial class GetCalendarEventsQueryHandler(
 
         try
         {
-            var service = CreateCalendarService(accessToken);
-            var fetched = await eventFetcher.FetchAsync(service, updatedMin: null, cancellationToken);
+            var fetched = await eventFetcher.FetchAsync(accessToken, updatedMin: null, cancellationToken);
 
             var importedEventIds = await BuildImportedEventIdSet(request.UserId, cancellationToken);
             var items = fetched
@@ -61,12 +58,12 @@ public partial class GetCalendarEventsQueryHandler(
 
             return Result.Success(items);
         }
-        catch (Google.GoogleApiException ex)
+        catch (CalendarProviderException ex)
         {
             LogGoogleCalendarApiError(logger, ex, request.UserId);
-            if (IsReconnectRequired(ex))
+            if (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
             {
-                user.MarkCalendarSyncReconnectRequired(NormalizeGoogleApiErrorCode(ex));
+                user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
                 await unitOfWork.SaveChangesAsync(cancellationToken);
                 return Result.Failure<List<CalendarEventItem>>(GoogleCalendarReconnectMessage);
             }
@@ -104,16 +101,6 @@ public partial class GetCalendarEventsQueryHandler(
         return accessToken;
     }
 
-    private static CalendarService CreateCalendarService(string accessToken)
-    {
-        var credential = Google.Apis.Auth.OAuth2.GoogleCredential.FromAccessToken(accessToken);
-        return new CalendarService(new BaseClientService.Initializer
-        {
-            HttpClientInitializer = credential,
-            ApplicationName = "Orbit"
-        });
-    }
-
     private async Task<HashSet<string>> BuildImportedEventIdSet(Guid userId, CancellationToken ct)
     {
         var habitEventIds = (await habitRepository.FindAsync(
@@ -130,29 +117,6 @@ public partial class GetCalendarEventsQueryHandler(
         foreach (var id in pendingSuggestionEventIds)
             set.Add(id);
         return set;
-    }
-
-    private static bool IsReconnectRequired(Google.GoogleApiException ex)
-    {
-        var errorText = NormalizeGoogleApiErrorCode(ex);
-        var isAuthStatus = ex.HttpStatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
-
-        return isAuthStatus
-            || errorText.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("invalid authentication credentials", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("insufficient authentication scopes", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("forbidden", StringComparison.OrdinalIgnoreCase)
-            || errorText.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeGoogleApiErrorCode(Google.GoogleApiException ex)
-    {
-        var message = ex.Error?.Message;
-        if (!string.IsNullOrWhiteSpace(message))
-            return message;
-
-        return ex.Message;
     }
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]
