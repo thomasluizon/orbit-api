@@ -42,7 +42,7 @@ public class NotificationTools(OrbitDbContext dbContext)
     {
         var userId = GetUserId(user);
         var notification = await dbContext.Notifications
-            .FirstOrDefaultAsync(n => n.Id == Guid.Parse(notificationId) && n.UserId == userId, cancellationToken);
+            .FirstOrDefaultAsync(n => n.Id == McpInputParser.ParseGuid(notificationId, "notificationId") && n.UserId == userId, cancellationToken);
 
         if (notification is null)
             return "Error: Notification not found.";
@@ -73,7 +73,7 @@ public class NotificationTools(OrbitDbContext dbContext)
     {
         var userId = GetUserId(user);
         var notification = await dbContext.Notifications
-            .FirstOrDefaultAsync(n => n.Id == Guid.Parse(notificationId) && n.UserId == userId, cancellationToken);
+            .FirstOrDefaultAsync(n => n.Id == McpInputParser.ParseGuid(notificationId, "notificationId") && n.UserId == userId, cancellationToken);
 
         if (notification is null)
             return "Error: Notification not found.";
@@ -87,6 +87,8 @@ public class NotificationTools(OrbitDbContext dbContext)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-        return Guid.Parse(claim);
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
+        return userId;
     }
 }

@@ -34,8 +34,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var query = new GetHabitScheduleQuery(
             userId,
-            DateOnly.Parse(dateFrom, CultureInfo.InvariantCulture),
-            DateOnly.Parse(dateTo, CultureInfo.InvariantCulture),
+            McpInputParser.ParseDate(dateFrom, "dateFrom"),
+            McpInputParser.ParseDate(dateTo, "dateTo"),
             includeOverdue,
             search,
             Page: page,
@@ -69,7 +69,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetHabitByIdQuery(userId, Guid.Parse(habitId));
+        var query = new GetHabitByIdQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -117,10 +117,10 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             freqUnit,
             frequencyQuantity,
             IsBadHabit: isBadHabit,
-            DueDate: DateOnly.Parse(dueDate, CultureInfo.InvariantCulture),
+            DueDate: McpInputParser.ParseDate(dueDate, "dueDate"),
             IsGeneral: isGeneral,
             Options: new HabitCommandOptions(
-                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
+                DueTime: McpInputParser.ParseOptionalTime(dueTime, "dueTime"),
                 IsFlexible: isFlexible));
 
         var result = await mediator.Send(command, cancellationToken);
@@ -147,14 +147,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
 
         var command = new UpdateHabitCommand(
             userId,
-            Guid.Parse(habitId),
+            McpInputParser.ParseGuid(habitId, "habitId"),
             title,
             description,
             freqUnit,
             frequencyQuantity,
-            DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
+            DueDate: McpInputParser.ParseOptionalDate(dueDate, "dueDate"),
             Options: new UpdateHabitCommandOptions(
-                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null));
+                DueTime: McpInputParser.ParseOptionalTime(dueTime, "dueTime")));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -169,7 +169,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var command = new DeleteHabitCommand(userId, Guid.Parse(habitId));
+        var command = new DeleteHabitCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"));
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Deleted habit {habitId}"
@@ -187,9 +187,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var command = new LogHabitCommand(
             userId,
-            Guid.Parse(habitId),
+            McpInputParser.ParseGuid(habitId, "habitId"),
             note,
-            date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : null);
+            McpInputParser.ParseOptionalDate(date, "date"));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -204,7 +204,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetHabitMetricsQuery(userId, Guid.Parse(habitId));
+        var query = new GetHabitMetricsQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -230,8 +230,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var command = new SkipHabitCommand(
             userId,
-            Guid.Parse(habitId),
-            date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : null);
+            McpInputParser.ParseGuid(habitId, "habitId"),
+            McpInputParser.ParseOptionalDate(date, "date"));
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -252,7 +252,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             CaseInsensitiveJsonOptions)
             ?? [];
 
-        var command = new UpdateChecklistCommand(userId, Guid.Parse(habitId), items);
+        var command = new UpdateChecklistCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"), items);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Updated checklist for habit {habitId} ({items.Count} items)"
@@ -266,7 +266,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetHabitLogsQuery(userId, Guid.Parse(habitId));
+        var query = new GetHabitLogsQuery(userId, McpInputParser.ParseGuid(habitId, "habitId"));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -292,7 +292,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var query = new GetAllHabitLogsQuery(userId, DateOnly.Parse(dateFrom, CultureInfo.InvariantCulture), DateOnly.Parse(dateTo, CultureInfo.InvariantCulture));
+        var query = new GetAllHabitLogsQuery(userId, McpInputParser.ParseDate(dateFrom, "dateFrom"), McpInputParser.ParseDate(dateTo, "dateTo"));
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -328,15 +328,15 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
 
         var command = new CreateSubHabitCommand(
             userId,
-            Guid.Parse(parentHabitId),
+            McpInputParser.ParseGuid(parentHabitId, "parentHabitId"),
             title,
             description,
             freqUnit,
             frequencyQuantity,
             IsBadHabit: isBadHabit,
-            DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
+            DueDate: McpInputParser.ParseOptionalDate(dueDate, "dueDate"),
             Options: new HabitCommandOptions(
-                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
+                DueTime: McpInputParser.ParseOptionalTime(dueTime, "dueTime"),
                 IsFlexible: isFlexible));
 
         var result = await mediator.Send(command, cancellationToken);
@@ -352,7 +352,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var command = new DuplicateHabitCommand(userId, Guid.Parse(habitId));
+        var command = new DuplicateHabitCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"));
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Duplicated habit {habitId} (new id: {result.Value})"
@@ -419,8 +419,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     {
         var userId = GetUserId(user);
         var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Guid.Parse).ToList();
-        var logDate = date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : (DateOnly?)null;
+            .Select(s => McpInputParser.ParseGuid(s, "habitIds")).ToList();
+        var logDate = McpInputParser.ParseOptionalDate(date, "date");
 
         var items = ids.Select(id => new BulkLogItem(id, logDate)).ToList();
         var command = new BulkLogHabitsCommand(userId, items);
@@ -444,7 +444,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(Guid.Parse).ToList();
-        var skipDate = date is not null ? DateOnly.Parse(date, CultureInfo.InvariantCulture) : (DateOnly?)null;
+        var skipDate = McpInputParser.ParseOptionalDate(date, "date");
 
         var items = ids.Select(id => new BulkSkipItem(id, skipDate)).ToList();
         var command = new BulkSkipHabitsCommand(userId, items);
@@ -470,7 +470,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             CaseInsensitiveJsonOptions)
             ?? [];
 
-        var positions = items.Select(p => new HabitPositionUpdate(Guid.Parse(p.HabitId), p.Position)).ToList();
+        var positions = items.Select(p => new HabitPositionUpdate(McpInputParser.ParseGuid(p.HabitId, "habitId"), p.Position)).ToList();
         var command = new ReorderHabitsCommand(userId, positions);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -488,8 +488,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var command = new MoveHabitParentCommand(
             userId,
-            Guid.Parse(habitId),
-            parentId is not null ? Guid.Parse(parentId) : null);
+            McpInputParser.ParseGuid(habitId, "habitId"),
+            McpInputParser.ParseOptionalGuid(parentId, "parentId"));
 
         var result = await mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -511,7 +511,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var ids = goalIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(Guid.Parse).ToList();
 
-        var command = new LinkGoalsToHabitCommand(userId, Guid.Parse(habitId), ids);
+        var command = new LinkGoalsToHabitCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"), ids);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Linked {ids.Count} goals to habit {habitId}"
@@ -530,8 +530,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var userId = GetUserId(user);
         var query = new GetDailySummaryQuery(
             userId,
-            DateOnly.Parse(dateFrom, CultureInfo.InvariantCulture),
-            DateOnly.Parse(dateTo, CultureInfo.InvariantCulture),
+            McpInputParser.ParseDate(dateFrom, "dateFrom"),
+            McpInputParser.ParseDate(dateTo, "dateTo"),
             includeOverdue,
             language);
 
@@ -577,7 +577,9 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-        return Guid.Parse(claim);
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
+        return userId;
     }
 
     // DTOs for JSON deserialization
@@ -640,8 +642,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             freqUnit,
             dto.FrequencyQuantity,
             IsBadHabit: dto.IsBadHabit,
-            DueDate: dto.DueDate is not null ? DateOnly.Parse(dto.DueDate, CultureInfo.InvariantCulture) : null,
-            DueTime: dto.DueTime is not null ? TimeOnly.Parse(dto.DueTime, CultureInfo.InvariantCulture) : null,
+            DueDate: McpInputParser.ParseOptionalDate(dto.DueDate, "dueDate"),
+            DueTime: McpInputParser.ParseOptionalTime(dto.DueTime, "dueTime"),
             IsGeneral: dto.IsGeneral,
             IsFlexible: dto.IsFlexible,
             SubHabits: dto.SubHabits?.Select(MapToBulkHabitItem).ToList());

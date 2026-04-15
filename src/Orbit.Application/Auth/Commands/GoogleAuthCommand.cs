@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Common;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -43,7 +44,7 @@ public partial class GoogleAuthCommandHandler(
 
         var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)
-            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode!);
+            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode ?? ErrorCodes.SessionCreationFailed);
 
         return Result.Success(new LoginResponse(
             user.Id,

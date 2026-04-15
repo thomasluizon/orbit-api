@@ -40,6 +40,8 @@ public class CalendarTools(IMediator mediator)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-        return Guid.Parse(claim);
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
+        return userId;
     }
 }

@@ -82,10 +82,9 @@ public sealed partial class AiIntentService(
         IReadOnlyList<AiToolCallResult> results,
         CancellationToken cancellationToken = default)
     {
-        if (conversationContext?.Messages is not List<ChatMessage> messages)
+        if (conversationContext?.Messages is not List<ChatMessage> messages ||
+            conversationContext.Options is not ChatCompletionOptions options)
             return Result.Failure<AiResponse>("No active conversation. Call SendWithToolsAsync first.");
-
-        var options = (ChatCompletionOptions)conversationContext.Options;
 
         // Add tool result messages (one per result, with tool_call_id)
         foreach (var result in results)
@@ -183,7 +182,9 @@ public sealed partial class AiIntentService(
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        var name = root.GetProperty("name").GetString() ?? "";
+        if (!root.TryGetProperty("name", out var nameEl))
+            return null;
+        var name = nameEl.GetString() ?? "";
         var description = root.TryGetProperty("description", out var descEl) ? descEl.GetString() : null;
 
         BinaryData? parameters = null;

@@ -28,7 +28,7 @@ public class AuthSessionService(
             DateTime.UtcNow.AddDays(_jwtSettings.RefreshExpiryDays));
 
         if (sessionResult.IsFailure)
-            return Result.Failure<SessionTokens>(sessionResult.Error);
+            return Result.Failure<SessionTokens>(sessionResult.Error, ErrorCodes.SessionCreationFailed);
 
         await userSessionRepository.AddAsync(sessionResult.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

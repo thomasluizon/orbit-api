@@ -55,7 +55,7 @@ public class TagTools(IMediator mediator)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var command = new UpdateTagCommand(userId, Guid.Parse(tagId), name, color);
+        var command = new UpdateTagCommand(userId, McpInputParser.ParseGuid(tagId, "tagId"), name, color);
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Updated tag {tagId}"
@@ -69,7 +69,7 @@ public class TagTools(IMediator mediator)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var command = new DeleteTagCommand(userId, Guid.Parse(tagId));
+        var command = new DeleteTagCommand(userId, McpInputParser.ParseGuid(tagId, "tagId"));
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Deleted tag {tagId}"
@@ -87,9 +87,9 @@ public class TagTools(IMediator mediator)
         var ids = string.IsNullOrWhiteSpace(tagIds)
             ? new List<Guid>()
             : tagIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(Guid.Parse).ToList();
+                .Select(s => McpInputParser.ParseGuid(s, "tagIds")).ToList();
 
-        var command = new AssignTagsCommand(userId, Guid.Parse(habitId), ids);
+        var command = new AssignTagsCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"), ids);
         var result = await mediator.Send(command, cancellationToken);
         if (!result.IsSuccess)
             return $"Error: {result.Error}";
@@ -103,6 +103,8 @@ public class TagTools(IMediator mediator)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-        return Guid.Parse(claim);
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
+        return userId;
     }
 }

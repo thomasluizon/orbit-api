@@ -41,7 +41,7 @@ public class UserFactTools(IMediator mediator)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var command = new DeleteUserFactCommand(userId, Guid.Parse(factId));
+        var command = new DeleteUserFactCommand(userId, McpInputParser.ParseGuid(factId, "factId"));
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
             ? $"Deleted user fact {factId}"
@@ -52,6 +52,8 @@ public class UserFactTools(IMediator mediator)
     {
         var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? throw new UnauthorizedAccessException("User ID not found in token");
-        return Guid.Parse(claim);
+        if (!Guid.TryParse(claim, out var userId))
+            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
+        return userId;
     }
 }
