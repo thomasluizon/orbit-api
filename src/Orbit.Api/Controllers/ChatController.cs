@@ -33,7 +33,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         IFormFile? image,
         CancellationToken cancellationToken,
         [FromForm] string? clientContext = null,
-        [FromForm] string? confirmationToken = null)
+        [FromForm] string? confirmationToken = null,
+        [FromForm] Guid? conversationId = null)
     {
         if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
             return BadRequest(new { error = $"Message must be between 1 and {AppConstants.MaxChatMessageLength} characters" });
@@ -61,7 +62,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(),
             HttpContext.User.IsReadOnlyCredential(),
-            HttpContext.TraceIdentifier);
+            HttpContext.TraceIdentifier,
+            conversationId);
 
         var result = await mediator.Send(command, cancellationToken);
 

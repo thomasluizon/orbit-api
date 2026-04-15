@@ -32,8 +32,15 @@ public sealed partial class AiIntentService(
         byte[]? imageData = null,
         string? imageMimeType = null,
         IReadOnlyList<ChatHistoryMessage>? history = null,
+        AiBudgetTracker? budget = null,
         CancellationToken cancellationToken = default)
     {
+        // Pre-flight budget check: if a previous turn already exhausted the
+        // budget the caller should not even be here, but be defensive.
+        var preflight = budget?.GetExceededReason();
+        if (preflight is not null)
+            return Result.Failure<AiResponse>("ai_budget_exceeded");
+
         var messages = new List<ChatMessage>
         {
             new SystemChatMessage(systemPrompt)
@@ -74,16 +81,22 @@ public sealed partial class AiIntentService(
                 options.Tools.Add(tool);
         }
 
-        return await CallWithToolsAsync(messages, options, cancellationToken);
+        return await CallWithToolsAsync(messages, options, budget, cancellationToken);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
         AiConversationContext conversationContext,
         IReadOnlyList<AiToolCallResult> results,
+        AiBudgetTracker? budget = null,
         CancellationToken cancellationToken = default)
     {
         if (conversationContext?.Messages is not List<ChatMessage> messages)
             return Result.Failure<AiResponse>("No active conversation. Call SendWithToolsAsync first.");
+
+        // If the prior round already exceeded the budget, refuse to spend more.
+        var preflight = budget?.GetExceededReason();
+        if (preflight is not null)
+            return Result.Failure<AiResponse>("ai_budget_exceeded");
 
         var options = (ChatCompletionOptions)conversationContext.Options;
 
@@ -106,7 +119,7 @@ public sealed partial class AiIntentService(
             messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }
 
-        return await CallWithToolsAsync(messages, options, cancellationToken);
+        return await CallWithToolsAsync(messages, options, budget, cancellationToken);
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -114,7 +127,10 @@ public sealed partial class AiIntentService(
     // ───────────────────────────────────────────────────────────────
 
     private async Task<Result<AiResponse>> CallWithToolsAsync(
-        List<ChatMessage> messages, ChatCompletionOptions options, CancellationToken cancellationToken)
+        List<ChatMessage> messages,
+        ChatCompletionOptions options,
+        AiBudgetTracker? budget,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -128,6 +144,22 @@ public sealed partial class AiIntentService(
             LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
             var result = completion.Value;
+
+            // Track cumulative spend. If the OpenAI SDK exposes usage info,
+            // honour it; otherwise approximate from message length.
+            if (budget is not null)
+            {
+                var inputTokens = result.Usage?.InputTokenCount ?? 0;
+                var outputTokens = result.Usage?.OutputTokenCount ?? 0;
+                budget.AddUsage(inputTokens, outputTokens);
+
+                var exceeded = budget.GetExceededReason();
+                if (exceeded is not null)
+                {
+                    LogAiBudgetExceeded(logger, exceeded);
+                    return Result.Failure<AiResponse>("ai_budget_exceeded");
+                }
+            }
 
             // Append the assistant message to conversation state
             messages.Add(new AssistantChatMessage(result));
@@ -249,5 +281,8 @@ public sealed partial class AiIntentService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "AI API call failed")]
     private static partial void LogAiApiCallFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "AI request budget exceeded: {Reason}")]
+    private static partial void LogAiBudgetExceeded(ILogger logger, string reason);
 
 }

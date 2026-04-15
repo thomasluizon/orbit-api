@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Orbit.Api.Middleware;
 using Orbit.Api.OAuth;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
@@ -111,9 +112,12 @@ public partial class OAuthController(
             return BadRequest(new { error = InvalidRedirectUriError });
 
         var googleClientId = googleSettings.Value.ClientId ?? "";
+        // Pass the per-request CSP nonce so inline <style>/<script> on the
+        // OAuth page validate without needing 'unsafe-inline'.
+        var cspNonce = HttpContext.GetCspNonce();
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, googleClientId);
+            code_challenge, code_challenge_method, googleClientId, cspNonce);
 
         return Content(html, "text/html");
     }

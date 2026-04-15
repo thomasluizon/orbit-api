@@ -20,20 +20,37 @@ public record ProcessUserChatCommand(
     string Message,
     byte[]? ImageData = null,
     string? ImageMimeType = null,
+    /// <summary>
+    /// Legacy client-supplied history. Retained for backwards compat for one
+    /// release (logged as deprecated). New clients should pass <see cref="ConversationId"/>
+    /// instead so the server is the source of truth.
+    /// </summary>
     List<ChatHistoryMessage>? History = null,
     AgentClientContext? ClientContext = null,
     string? ConfirmationToken = null,
     AgentAuthMethod AuthMethod = AgentAuthMethod.Jwt,
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
-    string? CorrelationId = null) : IRequest<Result<ChatResponse>>;
+    string? CorrelationId = null,
+    /// <summary>
+    /// Server-managed conversation thread. When provided, the handler loads
+    /// the recent N messages from the DB and ignores <see cref="History"/>.
+    /// When null the handler creates a new conversation. The id of the
+    /// effective conversation is returned in <see cref="ChatResponse.ConversationId"/>.
+    /// </summary>
+    Guid? ConversationId = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
     IReadOnlyList<ActionResult> Actions,
     IReadOnlyList<AgentOperationResult>? Operations = null,
     IReadOnlyList<PendingAgentOperation>? PendingOperations = null,
-    IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null);
+    IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null,
+    /// <summary>
+    /// The id of the conversation that owns this exchange. Always set —
+    /// either echoed from the request or freshly generated for a new thread.
+    /// </summary>
+    Guid? ConversationId = null);
 
 public record ActionResult(
     string Type,
@@ -65,7 +82,9 @@ public record ChatDataDependencies(
     IGenericRepository<UserFact> UserFactRepository,
     IGenericRepository<Tag> TagRepository,
     IGenericRepository<ChecklistTemplate> ChecklistTemplateRepository,
-    IFeatureFlagService FeatureFlagService);
+    IFeatureFlagService FeatureFlagService,
+    IGenericRepository<Conversation> ConversationRepository,
+    IGenericRepository<ConversationMessage> ConversationMessageRepository);
 
 /// <summary>
 /// Groups workflow services to reduce constructor parameter count (S107).
@@ -84,8 +103,10 @@ public partial class ProcessUserChatCommandHandler(
     ChatExecutionDependencies execution,
     ILogger<ProcessUserChatCommandHandler> logger) : IRequestHandler<ProcessUserChatCommand, Result<ChatResponse>>
 {
-    private const int MaxToolIterations = 5;
+    // MaxToolIterations is now sourced from AiBudget.MaxToolIterations so it
+    // is enforced in the same place as the token spend ceilings.
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
+    private const string AiBudgetExceededError = "ai_budget_exceeded";
 
     public async Task<Result<ChatResponse>> Handle(
         ProcessUserChatCommand request,
@@ -93,6 +114,17 @@ public partial class ProcessUserChatCommandHandler(
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
+
+        // Resolve / create the server-authoritative conversation. Anything the
+        // client posted in `History` is treated as untrusted hint data only —
+        // when a conversationId is present we ALWAYS prefer the DB transcript
+        // (PLAN.md F4 / Frontend Area B #3). Server roles are never trusted
+        // from the wire: only `User` / `Assistant` are persisted, and the
+        // `Assistant` row is written by this handler, not the client.
+        var (conversation, dbHistory) = await ResolveConversationAndHistoryAsync(
+            request.UserId, request.ConversationId, cancellationToken);
+
+        var effectiveHistory = dbHistory ?? request.History;
 
         // 1. Load lightweight context for system prompt (no Logs, no metrics)
         LogFetchingContext(logger);
@@ -162,13 +194,19 @@ public partial class ProcessUserChatCommandHandler(
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        // Per-turn token budget. Aborts the agentic loop with a polite
+        // "slow down" failure if any limit is exceeded — prevents adversarial
+        // prompts from looping the model through unbounded tool calls.
+        var budget = new AiBudgetTracker(AiBudget.Default);
+
         var response = await ai.IntentService.SendWithToolsAsync(
             request.Message,
             systemPrompt,
             toolDeclarations,
             request.ImageData,
             request.ImageMimeType,
-            request.History,
+            effectiveHistory,
+            budget,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -184,14 +222,24 @@ public partial class ProcessUserChatCommandHandler(
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         int iteration = 0;
 
-        while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
+        while (aiResponse.HasToolCalls && iteration < budget.Budget.MaxToolIterations)
         {
             iteration++;
+            budget.IncrementIteration();
+
+            var budgetReason = budget.GetExceededReason();
+            if (budgetReason is not null)
+            {
+                LogToolBudgetExceeded(logger, budgetReason);
+                return Result.Failure<ChatResponse>(AiBudgetExceededError);
+            }
+
             var continueResponse = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
                 executionResults,
                 iteration,
+                budget,
                 cancellationToken);
 
             if (continueResponse is null)
@@ -220,6 +268,12 @@ public partial class ProcessUserChatCommandHandler(
         // 6. Extract AI message (strip JSON wrapper if model didn't use function calling)
         var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
 
+        // 6b. Persist the user turn + assistant reply on the server side.
+        // This is the single source of truth for chat history going forward.
+        // Roles are written by us, not the client — that's how we block the
+        // client-forged-system-prompt attack class.
+        await PersistConversationTurnAsync(conversation, request.Message, aiMessage, cancellationToken);
+
         // 7. Fire-and-forget: fact extraction + message counter (non-blocking background work)
         RunBackgroundPostResponseWork(
             request.UserId,
@@ -240,7 +294,75 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.ActionResults,
             executionResults.OperationResults,
             executionResults.PendingOperations,
-            executionResults.PolicyDenials));
+            executionResults.PolicyDenials,
+            ConversationId: conversation.Id));
+    }
+
+    /// <summary>
+    /// Resolves the conversation referenced by <paramref name="conversationId"/>
+    /// (must belong to the calling user) and returns the recent message
+    /// transcript. If <paramref name="conversationId"/> is null, creates a
+    /// fresh conversation row and returns no history. The created row is
+    /// added to the change tracker but not yet saved — the surrounding
+    /// SaveChangesAsync call commits it together with everything else.
+    /// </summary>
+    private async Task<(Conversation Conversation, IReadOnlyList<ChatHistoryMessage>? History)> ResolveConversationAndHistoryAsync(
+        Guid userId,
+        Guid? conversationId,
+        CancellationToken cancellationToken)
+    {
+        if (conversationId is { } id)
+        {
+            var existing = await data.ConversationRepository.FindOneTrackedAsync(
+                c => c.Id == id && c.UserId == userId,
+                cancellationToken: cancellationToken);
+
+            if (existing is not null)
+            {
+                var rawMessages = await data.ConversationMessageRepository.FindAsync(
+                    m => m.ConversationId == existing.Id,
+                    cancellationToken);
+
+                var orderedTail = rawMessages
+                    .OrderBy(m => m.CreatedAtUtc)
+                    .TakeLast(AppConstants.MaxChatHistoryMessages)
+                    .Select(m => new ChatHistoryMessage(
+                        m.Role == ConversationMessageRole.User ? "user" : "assistant",
+                        m.Content))
+                    .ToList();
+
+                existing.TouchLastMessage();
+                return (existing, orderedTail);
+            }
+        }
+
+        var conversation = Conversation.Create(userId);
+        await data.ConversationRepository.AddAsync(conversation, cancellationToken);
+        return (conversation, null);
+    }
+
+    /// <summary>
+    /// Append the current user message and the AI's response to the persisted
+    /// transcript. The Assistant row is authored by the server — clients
+    /// can never write Assistant or System rows.
+    /// </summary>
+    private async Task PersistConversationTurnAsync(
+        Conversation conversation,
+        string userMessage,
+        string? aiMessage,
+        CancellationToken cancellationToken)
+    {
+        var userRow = ConversationMessage.Create(conversation.Id, ConversationMessageRole.User, userMessage);
+        await data.ConversationMessageRepository.AddAsync(userRow, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(aiMessage))
+        {
+            var assistantRow = ConversationMessage.Create(conversation.Id, ConversationMessageRole.Assistant, aiMessage);
+            await data.ConversationMessageRepository.AddAsync(assistantRow, cancellationToken);
+        }
+
+        conversation.TouchLastMessage();
+        await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -252,6 +374,7 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         int iteration,
+        AiBudgetTracker budget,
         CancellationToken cancellationToken)
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
@@ -276,7 +399,7 @@ public partial class ProcessUserChatCommandHandler(
         }
 
         // Send results back to the AI for next iteration or final message
-        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, cancellationToken);
+        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, budget, cancellationToken);
         if (continueResult.IsFailure)
         {
             LogContinueWithToolResultsFailed(logger, continueResult.Error);
@@ -735,6 +858,9 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
     private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 24, Level = LogLevel.Warning, Message = "AI tool-call loop exceeded budget: {Reason}")]
+    private static partial void LogToolBudgetExceeded(ILogger logger, string reason);
 
     /// <summary>
     /// Converts snake_case tool names to PascalCase for backward compatibility with the frontend.

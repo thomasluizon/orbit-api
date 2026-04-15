@@ -78,10 +78,30 @@ The API runs at `http://localhost:5000`. API docs available at `/scalar` in deve
 | `GEMINI_MODEL` | Gemini model name (e.g., `gemini-2.5-flash`) |
 | `CORS_ORIGIN` | Allowed frontend origin |
 | `JWT_SECRET_KEY` | 64-char random string for JWT signing |
+| `JWT_PREVIOUS_SECRET_KEY` | (optional) Previous signing key, accepted during validation only. Used for rotation. |
 | `JWT_ISSUER` | JWT issuer claim |
 | `JWT_AUDIENCE` | JWT audience claim |
 
 Additional env vars for Supabase, Firebase, Stripe, VAPID, and Resend are configured in the hosting dashboard.
+
+### Rotating the JWT signing key (zero-downtime)
+
+The API supports a primary signing key plus an optional secondary validation
+key. New tokens are always signed with `Jwt:SecretKey`; tokens signed with
+`Jwt:PreviousSecretKey` continue to validate during the rollover window.
+
+Procedure:
+
+1. Generate a new 64-char secret. Set `Jwt:PreviousSecretKey` to the **current**
+   `Jwt:SecretKey` value (so already-issued tokens keep working).
+2. Set `Jwt:SecretKey` to the new value.
+3. Deploy. Both keys are now accepted on validation.
+4. Wait long enough for every issued token to expire (default `Jwt:ExpiryHours = 168` = 7 days).
+5. Remove `Jwt:PreviousSecretKey`. Deploy again.
+
+Never publish `Jwt:PreviousSecretKey` to clients — it is a server-only
+validation hint. The rotation never re-issues active tokens; it just guarantees
+neither old nor new tokens get rejected during the window.
 
 ## Architecture
 

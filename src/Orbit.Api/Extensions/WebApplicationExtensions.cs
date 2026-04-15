@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Api;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
@@ -34,7 +36,9 @@ public static class WebApplicationExtensions
         }
 
         app.UseExceptionHandler();
-        app.UseCors();
+        // Default CORS = ApiPolicy. The MCP endpoint applies McpPolicy
+        // explicitly via RequireCors below.
+        app.UseCors(CorsPolicyNames.ApiPolicy);
         app.UseCookiePolicy();
 
         if (app.Environment.IsProduction())
@@ -48,10 +52,14 @@ public static class WebApplicationExtensions
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
-        app.MapMcp("/mcp");
+        app.MapMcp("/mcp").RequireCors(CorsPolicyNames.McpPolicy);
 
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
+            // The /health endpoint is unauthenticated and reachable from the public
+            // internet. We must not echo internal data (connection strings, env
+            // var values, hostnames) — only emit a strict allow-list.
+            // See PLAN.md (api) Data exposure P1 and frontend audit P0/P1.
             ResponseWriter = async (context, report) =>
             {
                 context.Response.ContentType = "application/json";
@@ -61,9 +69,7 @@ public static class WebApplicationExtensions
                     checks = report.Entries.Select(e => new
                     {
                         name = e.Key,
-                        status = e.Value.Status.ToString(),
-                        description = e.Value.Description,
-                        data = e.Value.Data
+                        status = e.Value.Status.ToString()
                     })
                 };
                 await context.Response.WriteAsJsonAsync(result);
@@ -425,9 +431,10 @@ public static class WebApplicationExtensions
 
         try
         {
-            var redactedArguments = auditContext.RawBody.Length <= 1000
-                ? auditContext.RawBody
-                : auditContext.RawBody[..1000];
+            // MCP request bodies are user-supplied JSON-RPC payloads. Without
+            // redaction we'd persist bearer tokens, API keys, emails, and
+            // plaintext UUIDs. Run through AuditBodyRedactor before storing.
+            var redactedArguments = AuditBodyRedactor.Redact(auditContext.RawBody, maxLength: 1000);
             await auditService.RecordAsync(new AgentAuditEntry(
                 context.User.GetUserId(),
                 auditContext.Capability.Id,

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Orbit.Api;
 using Orbit.Api.Authentication;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
@@ -36,21 +37,48 @@ public static class ServiceCollectionExtensions
         if (string.IsNullOrWhiteSpace(encryptionKey) || encryptionKey.Contains("REPLACE", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Production requires a configured Encryption:Key for protected-at-rest fields.");
 
-        // Disallow localhost and non-TLS origins in production CORS policy. Prevents a
-        // stale default shipping to prod (e.g. http://localhost:3000) and letting a
-        // local attacker bypass same-site restrictions via a rogue host.
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        // Disallow localhost and non-TLS origins in production CORS policies.
+        //   * Cors:ApiOrigins — credentialed; must not contain localhost or http://.
+        //   * Cors:McpOrigins — must be claude.ai/claude.com only (no other hosts) so
+        //     the bearer-token MCP surface cannot be borrowed by arbitrary third
+        //     parties via permissive CORS.
+        var apiOrigins = builder.Configuration.GetSection(CorsPolicyNames.ApiOriginsConfigKey).Get<string[]>()
             ?? Array.Empty<string>();
-        foreach (var origin in allowedOrigins)
+        foreach (var origin in apiOrigins)
         {
             if (string.IsNullOrWhiteSpace(origin))
                 continue;
             if (origin.Contains("localhost", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
-                    $"Production CORS must not allow localhost origin: '{origin}'. Remove from Cors:AllowedOrigins.");
+                    $"Production CORS must not allow localhost origin: '{origin}'. Remove from {CorsPolicyNames.ApiOriginsConfigKey}.");
             if (origin.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
                     $"Production CORS must not allow non-TLS origin: '{origin}'. Use https:// only.");
+            if (origin.Contains("claude.ai", StringComparison.OrdinalIgnoreCase) ||
+                origin.Contains("claude.com", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"claude.ai/claude.com must NOT be present in {CorsPolicyNames.ApiOriginsConfigKey} (credentialed). " +
+                    $"Move to {CorsPolicyNames.McpOriginsConfigKey} (token-only) instead.");
+            }
+        }
+
+        var mcpOrigins = builder.Configuration.GetSection(CorsPolicyNames.McpOriginsConfigKey).Get<string[]>()
+            ?? Array.Empty<string>();
+        foreach (var origin in mcpOrigins)
+        {
+            if (string.IsNullOrWhiteSpace(origin))
+                continue;
+            if (origin.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Production MCP CORS must not allow non-TLS origin: '{origin}'.");
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri) ||
+                (!uri.Host.Equals("claude.ai", StringComparison.OrdinalIgnoreCase) &&
+                 !uri.Host.Equals("claude.com", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    $"Production {CorsPolicyNames.McpOriginsConfigKey} must only contain claude.ai or claude.com hosts. Got: '{origin}'.");
+            }
         }
 
         // JWT secret hardening: must be long enough for HS256 and not the placeholder.
@@ -109,6 +137,20 @@ public static class ServiceCollectionExtensions
         })
         .AddJwtBearer("JwtBearer", options =>
         {
+            // Rotation-aware validation: accept the current key plus an optional
+            // previous key during a rotation window. New tokens are still signed
+            // with the current key only (see JwtTokenService).
+            var signingKeys = new List<SecurityKey>
+            {
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
+            };
+
+            if (!string.IsNullOrWhiteSpace(jwtSettings.PreviousSecretKey) &&
+                !string.Equals(jwtSettings.PreviousSecretKey, jwtSettings.SecretKey, StringComparison.Ordinal))
+            {
+                signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.PreviousSecretKey)));
+            }
+
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -117,8 +159,7 @@ public static class ServiceCollectionExtensions
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = jwtSettings.Issuer,
                 ValidAudience = jwtSettings.Audience,
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
+                IssuerSigningKeys = signingKeys,
                 ClockSkew = TimeSpan.Zero
             };
         })
@@ -258,7 +299,9 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChecklistTemplate>>(),
-                sp.GetRequiredService<IFeatureFlagService>()));
+                sp.GetRequiredService<IFeatureFlagService>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Conversation>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ConversationMessage>>()));
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatExecutionDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatExecutionDependencies(
                 sp.GetRequiredService<IUserDateService>(),
@@ -383,18 +426,39 @@ public static class ServiceCollectionExtensions
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 
-        // CORS
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+        // CORS — split into two policies (PLAN.md F1):
+        //   - ApiCors: strict, credentialed, app frontends only. Used for /api/*.
+        //   - McpCors: token-based (no credentials), claude.ai/com only. Used for /mcp.
+        // ValidateOrbitSecuritySettings enforces in production that:
+        //   * ApiCors origins must be HTTPS and not localhost.
+        //   * McpCors origins must be claude.ai/claude.com (no other hosts).
+        var apiOrigins = builder.Configuration.GetSection(CorsPolicyNames.ApiOriginsConfigKey).Get<string[]>()
             ?? ["http://localhost:3000"];
+        var mcpOrigins = builder.Configuration.GetSection(CorsPolicyNames.McpOriginsConfigKey).Get<string[]>()
+            ?? ["https://claude.ai", "https://claude.com"];
+
         builder.Services.AddCors(options =>
         {
-            options.AddDefaultPolicy(policy =>
+            options.AddPolicy(CorsPolicyNames.ApiPolicy, policy =>
             {
-                policy.WithOrigins(allowedOrigins)
-                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                policy.WithOrigins(apiOrigins)
+                      .WithHeaders("Authorization", "Content-Type")
                       .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                       .AllowCredentials();
             });
+
+            options.AddPolicy(CorsPolicyNames.McpPolicy, policy =>
+            {
+                // MCP traffic is bearer-token authenticated and explicitly does NOT
+                // accept browser cookies. AllowCredentials must NEVER be set here.
+                policy.WithOrigins(mcpOrigins)
+                      .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
+                      .WithMethods("GET", "POST", "OPTIONS");
+            });
+
+            // Default policy = ApiCors so any controller without an explicit
+            // [EnableCors] attribute still gets the strict frontend rules.
+            options.DefaultPolicyName = CorsPolicyNames.ApiPolicy;
         });
 
         // Cookie Security Policy

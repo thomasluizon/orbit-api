@@ -51,6 +51,8 @@ public class OrbitDbContext : DbContext
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -266,6 +268,20 @@ public class OrbitDbContext : DbContext
             entity.Property(cb => cb.Key).HasMaxLength(100);
             entity.Property(cb => cb.Locale).HasMaxLength(10);
             entity.Property(cb => cb.Category).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<Conversation>(entity =>
+        {
+            entity.HasIndex(c => new { c.UserId, c.LastMessageAtUtc });
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ConversationMessage>(entity =>
+        {
+            entity.HasIndex(m => new { m.ConversationId, m.CreatedAtUtc });
+            entity.HasOne<Conversation>().WithMany().HasForeignKey(m => m.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(m => m.Role).HasConversion<string>().HasMaxLength(16);
+            entity.Property(m => m.Content).HasMaxLength(8000);
         });
     }
 

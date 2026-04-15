@@ -5,7 +5,8 @@ namespace Orbit.Api.OAuth;
 public static class OAuthLoginPage
 {
     public static string Render(string clientId, string redirectUri, string state,
-        string codeChallenge, string codeChallengeMethod, string googleClientId)
+        string codeChallenge, string codeChallengeMethod, string googleClientId,
+        string cspNonce = "")
     {
         clientId = WebUtility.HtmlEncode(clientId);
         redirectUri = WebUtility.HtmlEncode(redirectUri);
@@ -13,6 +14,15 @@ public static class OAuthLoginPage
         codeChallenge = WebUtility.HtmlEncode(codeChallenge);
         codeChallengeMethod = WebUtility.HtmlEncode(codeChallengeMethod);
         googleClientId = WebUtility.HtmlEncode(googleClientId);
+        cspNonce = WebUtility.HtmlEncode(cspNonce);
+
+        // Include nonce on inline <style> and <script> so the strict CSP
+        // (script-src 'nonce-…') validates them. Inline event handlers
+        // (onclick=) are removed in favor of addEventListener bindings at
+        // the bottom of the script — required because nonce CSPs do not
+        // permit inline-attribute scripts.
+        var styleNonce = string.IsNullOrEmpty(cspNonce) ? "" : $" nonce=\"{cspNonce}\"";
+        var scriptNonce = string.IsNullOrEmpty(cspNonce) ? "" : $" nonce=\"{cspNonce}\"";
 
         return $$"""
 <!DOCTYPE html>
@@ -23,8 +33,8 @@ public static class OAuthLoginPage
     <title>Authorize Orbit</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <style>
+    <script src="https://accounts.google.com/gsi/client" async defer{{scriptNonce}}></script>
+    <style{{styleNonce}}>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Manrope', sans-serif;
@@ -240,12 +250,12 @@ public static class OAuthLoginPage
                 <label for="email">Email</label>
                 <input type="email" id="email" placeholder="you@example.com" autocomplete="email" autofocus>
             </div>
-            <button class="btn btn-primary" id="send-code-btn" onclick="sendCode()">Send code</button>
+            <button class="btn btn-primary" id="send-code-btn">Send code</button>
 
             <div class="divider">or</div>
 
             <div id="google-btn-container">
-                <button class="google-btn" id="google-signin-btn" onclick="googleSignIn()">
+                <button class="google-btn" id="google-signin-btn">
                     <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                     Continue with Google
                 </button>
@@ -254,7 +264,7 @@ public static class OAuthLoginPage
 
         <!-- Step 2: Code -->
         <div id="step-code" class="hidden">
-            <button class="back-link" onclick="showEmailStep()">&#8592; Back</button>
+            <button class="back-link" id="back-link-btn">&#8592; Back</button>
             <p style="text-align:center;color:#a1a1aa;font-size:0.875rem;margin-bottom:1.25rem;">
                 Enter the 6-digit code sent to <strong id="email-display" style="color:#e4e4e7;"></strong>
             </p>
@@ -267,9 +277,9 @@ public static class OAuthLoginPage
                 <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
             </div>
             <div class="resend">
-                <button id="resend-btn" onclick="sendCode()" disabled>Resend code</button>
+                <button id="resend-btn" disabled>Resend code</button>
             </div>
-            <button class="btn btn-primary" id="verify-btn" onclick="verifyCode()">Verify & Authorize</button>
+            <button class="btn btn-primary" id="verify-btn">Verify & Authorize</button>
         </div>
 
         <div class="permissions">
@@ -282,7 +292,7 @@ public static class OAuthLoginPage
         </div>
     </div>
 
-    <script>
+    <script{{scriptNonce}}>
         const oauthParams = {
             clientId: '{{clientId}}',
             redirectUri: '{{redirectUri}}',
@@ -481,6 +491,15 @@ public static class OAuthLoginPage
         document.getElementById('email').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendCode();
         });
+
+        // Strict CSP (nonce-only) does not allow inline event handlers (onclick=).
+        // Bind every action via addEventListener so the page works without
+        // 'unsafe-inline' on script-src.
+        document.getElementById('send-code-btn').addEventListener('click', sendCode);
+        document.getElementById('google-signin-btn').addEventListener('click', googleSignIn);
+        document.getElementById('back-link-btn').addEventListener('click', showEmailStep);
+        document.getElementById('resend-btn').addEventListener('click', sendCode);
+        document.getElementById('verify-btn').addEventListener('click', verifyCode);
     </script>
 </body>
 </html>
