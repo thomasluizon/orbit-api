@@ -102,7 +102,8 @@ public class GamificationToolsTests
         var streak = new StreakInfoResponse(
             15, 30, new DateOnly(2026, 4, 2),
             1, 1, 2, false,
-            [new DateOnly(2026, 3, 15)]);
+            [new DateOnly(2026, 3, 15)],
+            1, 3, 7, 1, true);
 
         _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(streak));
@@ -128,7 +129,7 @@ public class GamificationToolsTests
     [Fact]
     public async Task ActivateStreakFreeze_Success_ReturnsActivatedMessage()
     {
-        var response = new StreakFreezeResponse(1, new DateOnly(2026, 4, 3), 15);
+        var response = new StreakFreezeResponse(1, new DateOnly(2026, 4, 3), 15, 0);
         _mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
