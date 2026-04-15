@@ -16,6 +16,7 @@ public class ProfileCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
 
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -60,7 +61,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _cache);
+        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _userDateService);
         var command = new SetTimezoneCommand(UserId, "America/New_York");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -75,7 +76,7 @@ public class ProfileCommandHandlerTests
     {
         SetupUserNotFound();
 
-        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _cache);
+        var handler = new SetTimezoneCommandHandler(_userRepo, _unitOfWork, _userDateService);
         var command = new SetTimezoneCommand(UserId, "America/New_York");
 
         var result = await handler.Handle(command, CancellationToken.None);

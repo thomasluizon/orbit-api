@@ -273,8 +273,12 @@ public class SubscribePushCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ExistingEndpointDifferentUser_ReplacesSubscription()
+    public async Task Handle_ExistingEndpointDifferentUser_RejectsToPreventHijack()
     {
+        // Push subscription endpoints are unique per browser/device. If a different user already
+        // owns this endpoint, the request is most likely an attempt to hijack notifications --
+        // legitimate browser re-registration produces a NEW endpoint URL. The handler now
+        // rejects rather than silently replacing.
         var otherUserId = Guid.NewGuid();
         var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
 
@@ -284,17 +288,23 @@ public class SubscribePushCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(existing);
 
-        _pushSubRepo.FindTrackedAsync(
-            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<PushSubscription>().AsReadOnly());
-
         var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "new_p256dh", "new_auth");
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        _pushSubRepo.Received(1).Remove(existing);
-        await _pushSubRepo.Received(1).AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+        result.IsFailure.Should().BeTrue();
+        _pushSubRepo.DidNotReceive().Remove(Arg.Any<PushSubscription>());
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NonHttpsEndpoint_RejectsAsSsrfDefense()
+    {
+        var command = new SubscribePushCommand(UserId, "http://push.example.com/endpoint", "p256dh", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
     }
 }
