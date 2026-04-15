@@ -105,6 +105,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Whether this is a general habit with no schedule")] bool isGeneral = false,
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due time in HH:mm format")] string? dueTime = null,
+        [Description("Optional emoji icon for the habit (single emoji or short grapheme, up to 32 chars)")] string? icon = null,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -121,7 +122,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             IsGeneral: isGeneral,
             Options: new HabitCommandOptions(
                 DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
-                IsFlexible: isFlexible));
+                IsFlexible: isFlexible),
+            Icon: icon);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -140,6 +142,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("New frequency quantity")] int? frequencyQuantity = null,
         [Description("New due date in YYYY-MM-DD format")] string? dueDate = null,
         [Description("New due time in HH:mm format")] string? dueTime = null,
+        [Description("New emoji icon (single emoji or short grapheme, up to 32 chars). Pass empty string to clear the icon.")] string? icon = null,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -154,7 +157,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             frequencyQuantity,
             DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
             Options: new UpdateHabitCommandOptions(
-                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null));
+                DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null),
+            Icon: icon);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -321,6 +325,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Whether this is a bad habit")] bool isBadHabit = false,
         [Description("Whether this is a flexible frequency habit")] bool isFlexible = false,
         [Description("Due date override in YYYY-MM-DD format")] string? dueDate = null,
+        [Description("Optional emoji icon for the sub-habit (single emoji or short grapheme, up to 32 chars)")] string? icon = null,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -337,7 +342,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             DueDate: dueDate is not null ? DateOnly.Parse(dueDate, CultureInfo.InvariantCulture) : null,
             Options: new HabitCommandOptions(
                 DueTime: dueTime is not null ? TimeOnly.Parse(dueTime, CultureInfo.InvariantCulture) : null,
-                IsFlexible: isFlexible));
+                IsFlexible: isFlexible),
+            Icon: icon);
 
         var result = await mediator.Send(command, cancellationToken);
         return result.IsSuccess
@@ -362,7 +368,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     [McpServerTool(Name = "bulk_create_habits"), Description("Create multiple habits at once. Each habit can have sub-habits.")]
     public async Task<string> BulkCreateHabits(
         ClaimsPrincipal user,
-        [Description("JSON array of habit objects. Each with: title (required), description, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible")] string habitsJson,
+        [Description("JSON array of habit objects. Each with: title (required), description, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible, icon (optional emoji, up to 32 chars), subHabits (nested array)")] string habitsJson,
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
@@ -591,7 +597,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         string? DueTime = null,
         bool IsGeneral = false,
         bool IsFlexible = false,
-        List<BulkHabitItemDto>? SubHabits = null);
+        List<BulkHabitItemDto>? SubHabits = null,
+        string? Icon = null);
 
     private sealed record HabitLineData(
         Guid Id, string Title, FrequencyUnit? FreqUnit, int? FreqQty,
@@ -644,6 +651,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             DueTime: dto.DueTime is not null ? TimeOnly.Parse(dto.DueTime, CultureInfo.InvariantCulture) : null,
             IsGeneral: dto.IsGeneral,
             IsFlexible: dto.IsFlexible,
-            SubHabits: dto.SubHabits?.Select(MapToBulkHabitItem).ToList());
+            SubHabits: dto.SubHabits?.Select(MapToBulkHabitItem).ToList(),
+            Icon: dto.Icon);
     }
 }
