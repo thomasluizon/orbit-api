@@ -124,6 +124,50 @@ public class CreateSubHabitToolTests
         result.Error.Should().Contain("parent_habit_id is required");
     }
 
+    [Fact]
+    public async Task WithIcon_PassesIconThroughCommand()
+    {
+        var newId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(newId));
+
+        var result = await Execute($$$"""
+        {
+            "parent_habit_id": "{{{ParentId}}}",
+            "title": "Floss",
+            "icon": "\uD83E\uDDB7"
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd => cmd.Icon == "\uD83E\uDDB7"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WithoutIcon_PassesNullIconThroughCommand()
+    {
+        var newId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(newId));
+
+        var result = await Execute($$$"""{"parent_habit_id": "{{{ParentId}}}", "title": "Floss"}""");
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd => cmd.Icon == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void ToolSchemaAdvertisesIcon()
+    {
+        var schema = _tool.GetParameterSchema();
+        var json = JsonSerializer.Serialize(schema);
+        json.Should().Contain("\"icon\"");
+    }
+
     private async Task<ToolResult> Execute(string json)
     {
         var args = JsonDocument.Parse(json).RootElement;

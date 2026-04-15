@@ -20,7 +20,7 @@ public class CreateHabitTool(
     public string Name => "create_habit";
 
     public string Description =>
-        "Create a new habit or one-time task. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. Structure: use checklist_items for atomic sub-steps done together in one execution (shopping lists, prep lists, packing lists); use sub_habits for sub-activities that need independent tracking, streaks, or different schedules. Never list items only in the description when checklist_items would preserve them. Frequency: when user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
+        "Create a new habit or one-time task. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. Structure: use checklist_items for atomic sub-steps done together in one execution (shopping lists, prep lists, packing lists); use sub_habits for sub-activities that need independent tracking, streaks, or different schedules. Never list items only in the description when checklist_items would preserve them. Frequency: when user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri]. Optional: pass an emoji via 'icon' (e.g. '\uD83C\uDFC3' for running) to give the habit a visual identity in the UI.";
 
     public object GetParameterSchema() => new
     {
@@ -29,6 +29,7 @@ public class CreateHabitTool(
         {
             title = new { type = JsonSchemaTypes.String, description = "Name of the habit" },
             description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            icon = new { type = JsonSchemaTypes.String, description = "Optional emoji to represent this habit (e.g. '🏃', '📚', '🧘'). Max 32 characters; supports ZWJ sequences and flag pairs.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
@@ -109,6 +110,7 @@ public class CreateHabitTool(
                     {
                         title = new { type = JsonSchemaTypes.String, description = "Sub-habit name" },
                         description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+                        icon = new { type = JsonSchemaTypes.String, description = "Optional emoji for this sub-habit", nullable = true },
                         frequency_unit = new { type = JsonSchemaTypes.String, @enum = JsonSchemaTypes.FrequencyUnitEnum },
                         frequency_quantity = new { type = JsonSchemaTypes.Integer },
                         days = new { type = JsonSchemaTypes.Array, items = new { type = JsonSchemaTypes.String } },
@@ -189,7 +191,8 @@ public class CreateHabitTool(
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
             IsFlexible: JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false,
             EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date"),
-            ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(args)));
+            ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(args),
+            Icon: JsonArgumentParser.GetOptionalString(args, "icon")));
     }
 
     private async Task<ToolResult?> CreateInlineSubHabitsAsync(
@@ -238,7 +241,8 @@ public class CreateHabitTool(
             IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
             DueDate: JsonArgumentParser.ParseDateOnly(sub, "due_date") ?? parentDueDate,
             ParentHabitId: parentId,
-            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub)));
+            ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub),
+            Icon: JsonArgumentParser.GetOptionalString(sub, "icon")));
     }
 
     private async Task AssignTagsFromArgsAsync(JsonElement args, Habit habit, Guid userId, CancellationToken ct)

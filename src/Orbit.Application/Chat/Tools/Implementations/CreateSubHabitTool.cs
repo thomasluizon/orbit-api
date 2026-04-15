@@ -12,7 +12,7 @@ public class CreateSubHabitTool(
     public string Name => "create_sub_habit";
 
     public string Description =>
-        "Create a sub-habit under an existing parent habit.";
+        "Create a sub-habit under an existing parent habit. Optionally pass 'icon' with an emoji to give the sub-habit its own visual identity.";
 
     public object GetParameterSchema() => new
     {
@@ -22,6 +22,7 @@ public class CreateSubHabitTool(
             parent_habit_id = new { type = JsonSchemaTypes.String, description = "ID of the existing parent habit" },
             title = new { type = JsonSchemaTypes.String, description = "Name of the new sub-habit" },
             description = new { type = JsonSchemaTypes.String, description = "Optional description" },
+            icon = new { type = JsonSchemaTypes.String, description = "Optional emoji to represent this sub-habit. Max 32 characters.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
@@ -81,6 +82,7 @@ public class CreateSubHabitTool(
         var dueDate = JsonArgumentParser.ParseDateOnly(args, "due_date");
         var scheduledReminders = JsonArgumentParser.ParseScheduledReminders(args);
         string? description = JsonArgumentParser.GetOptionalString(args, "description");
+        string? icon = JsonArgumentParser.GetOptionalString(args, "icon");
 
         var result = await mediator.Send(
             new Orbit.Application.Habits.Commands.CreateSubHabitCommand(
@@ -100,7 +102,8 @@ public class CreateSubHabitTool(
                     ReminderTimes: reminderTimes,
                     SlipAlertEnabled: slipAlertEnabled,
                     IsFlexible: isFlexible,
-                    ScheduledReminders: scheduledReminders)), ct);
+                    ScheduledReminders: scheduledReminders),
+                Icon: icon), ct);
 
         if (result.IsFailure)
             return new ToolResult(false, Error: result.Error);

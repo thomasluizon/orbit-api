@@ -391,9 +391,85 @@ public class UpdateHabitToolTests
         habit.DueTime.Should().Be(new TimeOnly(6, 0));
     }
 
+    // ── Icon (emoji) parameter ──
+
+    [Fact]
+    public async Task SetIcon_PersistsIconOnHabit()
+    {
+        var habit = CreateHabit("Run", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "icon": "\uD83C\uDFC3"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Icon.Should().Be("\uD83C\uDFC3");
+    }
+
+    [Fact]
+    public async Task ChangeIcon_ReplacesExistingIcon()
+    {
+        var habit = CreateHabitWithIcon("Read", FrequencyUnit.Day, 1, "\uD83C\uDFC3");
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "icon": "\uD83D\uDCDA"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Icon.Should().Be("\uD83D\uDCDA");
+    }
+
+    [Fact]
+    public async Task ClearIconWithExplicitNull_RemovesIcon()
+    {
+        var habit = CreateHabitWithIcon("Read", FrequencyUnit.Day, 1, "\uD83D\uDCDA");
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "icon": null}""");
+
+        result.Success.Should().BeTrue();
+        habit.Icon.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AbsentIcon_PreservesExistingIcon()
+    {
+        var habit = CreateHabitWithIcon("Read", FrequencyUnit.Day, 1, "\uD83D\uDCDA");
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "title": "Read Daily"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Icon.Should().Be("\uD83D\uDCDA");
+    }
+
+    [Fact]
+    public async Task SetIconExceedingLimit_ReturnsValidationError()
+    {
+        var habit = CreateHabit("Run", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+        var oversized = new string('x', 33);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "icon": "{{{oversized}}}"}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("Icon must not exceed");
+    }
+
+    [Fact]
+    public void ToolSchemaAdvertisesIcon()
+    {
+        var schema = _tool.GetParameterSchema();
+        var json = JsonSerializer.Serialize(schema);
+        json.Should().Contain("\"icon\"");
+    }
+
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
+    }
+
+    private static Habit CreateHabitWithIcon(string title, FrequencyUnit? freq, int? qty, string icon)
+    {
+        return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today, Icon: icon)).Value;
     }
 
     private static Habit CreateHabitWithTime(string title, FrequencyUnit? freq, int? qty, TimeOnly dueTime)

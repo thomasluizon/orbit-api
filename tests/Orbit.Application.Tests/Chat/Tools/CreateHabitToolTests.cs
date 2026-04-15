@@ -622,6 +622,83 @@ public class CreateHabitToolTests
         result.EntityId.Should().NotBeNullOrEmpty();
     }
 
+    // ── Icon (emoji) parameter ──
+
+    [Fact]
+    public async Task WithIcon_PersistsIconOnHabit()
+    {
+        Habit? captured = null;
+        await _habitRepo.AddAsync(
+            Arg.Do<Habit>(h => captured = h),
+            Arg.Any<CancellationToken>());
+
+        var result = await Execute("""{"title": "Run", "icon": "\uD83C\uDFC3"}""");
+
+        result.Success.Should().BeTrue();
+        captured.Should().NotBeNull();
+        captured!.Icon.Should().Be("\uD83C\uDFC3");
+    }
+
+    [Fact]
+    public async Task WithoutIcon_HabitHasNullIcon()
+    {
+        Habit? captured = null;
+        await _habitRepo.AddAsync(
+            Arg.Do<Habit>(h => captured = h),
+            Arg.Any<CancellationToken>());
+
+        var result = await Execute("""{"title": "Read"}""");
+
+        result.Success.Should().BeTrue();
+        captured.Should().NotBeNull();
+        captured!.Icon.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task WithSubHabitIcon_PersistsIconOnChild()
+    {
+        var captured = new List<Habit>();
+        await _habitRepo.AddAsync(
+            Arg.Do<Habit>(h => captured.Add(h)),
+            Arg.Any<CancellationToken>());
+
+        var result = await Execute("""
+        {
+            "title": "Routine",
+            "frequency_unit": "Day",
+            "icon": "\uD83C\uDF05",
+            "sub_habits": [
+                {"title": "Stretch", "icon": "\uD83E\uDDD8"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        captured.Should().HaveCount(2);
+        var parent = captured.Single(h => h.ParentHabitId is null);
+        var sub = captured.Single(h => h.ParentHabitId is not null);
+        parent.Icon.Should().Be("\uD83C\uDF05");
+        sub.Icon.Should().Be("\uD83E\uDDD8");
+    }
+
+    [Fact]
+    public async Task WithIconExceedingLimit_ReturnsValidationError()
+    {
+        var oversized = new string('x', 33);
+        var result = await Execute($$"""{"title": "Run", "icon": "{{oversized}}"}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("Icon must not exceed");
+    }
+
+    [Fact]
+    public async Task ToolSchemaAdvertisesIcon()
+    {
+        var schema = _tool.GetParameterSchema();
+        var json = JsonSerializer.Serialize(schema);
+        json.Should().Contain("\"icon\"");
+    }
+
     private async Task<ToolResult> Execute(string json)
     {
         var args = JsonDocument.Parse(json).RootElement;
