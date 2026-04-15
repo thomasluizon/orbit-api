@@ -7,15 +7,13 @@ using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
-using Stripe.BillingPortal;
 
 namespace Orbit.Application.Tests.Commands.Subscriptions;
 
 public class CreatePortalSessionCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly SessionService _portalSessionService = Substitute.For<SessionService>();
+    private readonly IBillingService _billingService = Substitute.For<IBillingService>();
     private readonly CreatePortalSessionCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -28,7 +26,7 @@ public class CreatePortalSessionCommandHandlerTests
         });
 
         _handler = new CreatePortalSessionCommandHandler(
-            _userRepo, settings, _portalSessionService,
+            _userRepo, settings, _billingService,
             Substitute.For<ILogger<CreatePortalSessionCommandHandler>>());
     }
 
@@ -40,12 +38,8 @@ public class CreatePortalSessionCommandHandlerTests
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
 
-        var session = new Session { Url = "https://billing.stripe.com/portal/session_123" };
-        _portalSessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .Returns(session);
+        _billingService.CreatePortalSessionAsync("cus_123", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns("https://billing.stripe.com/portal/session_123");
 
         var command = new CreatePortalSessionCommand(UserId);
 
@@ -58,7 +52,6 @@ public class CreatePortalSessionCommandHandlerTests
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
-        // GetByIdAsync returns null by default
         var command = new CreatePortalSessionCommand(UserId);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -71,7 +64,6 @@ public class CreatePortalSessionCommandHandlerTests
     public async Task Handle_NoStripeCustomer_ReturnsSubscriptionNotFoundFailure()
     {
         var user = User.Create("Test", "test@example.com").Value;
-        // User has no StripeCustomerId
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
 
@@ -84,18 +76,15 @@ public class CreatePortalSessionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_StripeApiError_ReturnsFailure()
+    public async Task Handle_BillingProviderException_ReturnsFailure()
     {
         var user = User.Create("Test", "test@example.com").Value;
         user.SetStripeCustomerId("cus_123");
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
 
-        _portalSessionService.CreateAsync(
-            Arg.Any<SessionCreateOptions>(),
-            Arg.Any<RequestOptions>(),
-            Arg.Any<CancellationToken>())
-            .ThrowsAsync(new StripeException("Stripe API error"));
+        _billingService.CreatePortalSessionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("Stripe API error"));
 
         var command = new CreatePortalSessionCommand(UserId);
 

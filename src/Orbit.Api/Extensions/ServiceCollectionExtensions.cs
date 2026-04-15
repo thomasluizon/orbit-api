@@ -318,6 +318,9 @@ public static class ServiceCollectionExtensions
         builder.Services.AddSingleton<Stripe.InvoiceService>();
         builder.Services.AddSingleton<Stripe.PriceService>();
         builder.Services.AddSingleton<Stripe.CouponService>();
+        // IBillingService wraps every Stripe SDK call used by checkout, portal, plans,
+        // and billing-details so the Application layer has no Stripe imports.
+        builder.Services.AddScoped<Orbit.Application.Common.IBillingService, Orbit.Infrastructure.Services.StripeBillingService>();
 
         // Push Notifications (VAPID + FCM)
         builder.Services.Configure<VapidSettings>(

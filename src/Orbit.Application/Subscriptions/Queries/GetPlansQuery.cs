@@ -5,7 +5,6 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Stripe;
 
 namespace Orbit.Application.Subscriptions.Queries;
 
@@ -15,8 +14,7 @@ public partial class GetPlansQueryHandler(
     IGenericRepository<User> userRepository,
     IGeoLocationService geoLocationService,
     IOptions<StripeSettings> stripeSettings,
-    PriceService priceService,
-    CouponService couponService,
+    IBillingService billingService,
     ILogger<GetPlansQueryHandler> logger) : IRequestHandler<GetPlansQuery, Result<PlansResponse>>
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
@@ -41,11 +39,8 @@ public partial class GetPlansQueryHandler(
 
         try
         {
-            var monthlyPrice = await priceService.GetAsync(monthlyPriceId, cancellationToken: cancellationToken);
-            var yearlyPrice = await priceService.GetAsync(yearlyPriceId, cancellationToken: cancellationToken);
-
-            var monthlyAmount = monthlyPrice.UnitAmount ?? 0;
-            var yearlyAmount = yearlyPrice.UnitAmount ?? 0;
+            var monthlyAmount = await billingService.GetPriceUnitAmountAsync(monthlyPriceId, cancellationToken);
+            var yearlyAmount = await billingService.GetPriceUnitAmountAsync(yearlyPriceId, cancellationToken);
 
             var savingsPercent = monthlyAmount > 0
                 ? (int)Math.Round((1 - (double)yearlyAmount / (monthlyAmount * 12)) * 100)
@@ -54,14 +49,11 @@ public partial class GetPlansQueryHandler(
             int? couponPercentOff = null;
             if (!string.IsNullOrEmpty(user.ReferralCouponId))
             {
-                try
+                // TryGet returns null on any provider error; treat as "no discount" and log.
+                couponPercentOff = await billingService.TryGetCouponPercentOffAsync(user.ReferralCouponId, cancellationToken);
+                if (couponPercentOff is null)
                 {
-                    var coupon = await couponService.GetAsync(user.ReferralCouponId, cancellationToken: cancellationToken);
-                    couponPercentOff = (int)(coupon.PercentOff ?? 0);
-                }
-                catch (StripeException ex)
-                {
-                    LogFetchReferralCouponFailed(logger, ex, user.ReferralCouponId, request.UserId);
+                    LogFetchReferralCouponFailed(logger, user.ReferralCouponId, request.UserId);
                 }
             }
 
@@ -72,7 +64,7 @@ public partial class GetPlansQueryHandler(
                 couponPercentOff,
                 currency));
         }
-        catch (StripeException ex)
+        catch (BillingProviderException ex)
         {
             LogFetchPlansFailed(logger, ex);
             return Result.Failure<PlansResponse>("Payment service temporarily unavailable");
@@ -80,8 +72,8 @@ public partial class GetPlansQueryHandler(
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch referral coupon {CouponId} for user {UserId}")]
-    private static partial void LogFetchReferralCouponFailed(ILogger logger, Exception ex, string? couponId, Guid userId);
+    private static partial void LogFetchReferralCouponFailed(ILogger logger, string? couponId, Guid userId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to fetch plans from Stripe")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Failed to fetch plans from billing provider")]
     private static partial void LogFetchPlansFailed(ILogger logger, Exception ex);
 }
