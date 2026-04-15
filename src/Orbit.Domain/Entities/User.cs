@@ -326,9 +326,10 @@ public partial class User : Entity
     public void SetStreakState(int currentStreak, int longestStreak, DateOnly? lastActiveDate)
     {
         var normalizedStreak = Math.Max(0, currentStreak);
-        if (normalizedStreak == 0 && CurrentStreak > 0)
+        if (normalizedStreak < CurrentStreak)
         {
-            // Streak broke; reset the "last award" marker so the next 7-day run triggers a fresh award.
+            // Streak broke (went to 0, or restarted from a lower value such as 14 -> 1 after a missed day);
+            // reset the "last award" marker so the next 7-day run triggers a fresh award.
             LastFreezeAwardStreak = 0;
         }
         CurrentStreak = normalizedStreak;
