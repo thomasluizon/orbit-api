@@ -115,7 +115,11 @@ public partial class LogHabitCommandHandler(
         var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        var streakState = await services.UserStreakService.RecalculateAsync(habit.UserId, cancellationToken);
+        // Pass awardFreezeIfEligible: false on unlog -- the streak being recomputed is
+        // the one the user is no longer credited for, so awarding a freeze from it would
+        // double-count milestones the user has already received freezes for.
+        var streakState = await services.UserStreakService.RecalculateAsync(
+            habit.UserId, cancellationToken, awardFreezeIfEligible: false);
         // Streak recalculate modifies user entity; save the streak state update
         await unitOfWork.SaveChangesAsync(cancellationToken);
         CacheInvalidationHelper.InvalidateSummaryCache(cache, habit.UserId);

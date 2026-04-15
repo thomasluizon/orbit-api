@@ -11,6 +11,7 @@ public record ClaimAdRewardCommand(Guid UserId) : IRequest<Result<AdRewardRespon
 public class ClaimAdRewardCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IPayGateService payGate) : IRequestHandler<ClaimAdRewardCommand, Result<AdRewardResponse>>
 {
     public async Task<Result<AdRewardResponse>> Handle(ClaimAdRewardCommand request, CancellationToken cancellationToken)
@@ -19,10 +20,14 @@ public class ClaimAdRewardCommandHandler(
         if (user is null)
             return Result.Failure<AdRewardResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
-        var result = user.GrantAdReward();
+        var userToday = await userDateService.GetUserTodayAsync(user.Id, cancellationToken);
+        var result = user.GrantAdReward(userToday);
         if (result.IsFailure)
             return Result.Failure<AdRewardResponse>(result.Error);
 
+        // Optimistic concurrency token on User (RowVersion) backstops two simultaneous
+        // claims at the same daily count: one save will succeed, the other will throw
+        // DbUpdateConcurrencyException and surface as a retryable error.
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var newLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);

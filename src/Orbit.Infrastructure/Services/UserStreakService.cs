@@ -13,7 +13,10 @@ public class UserStreakService(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService) : IUserStreakService
 {
-    public async Task<UserStreakState?> RecalculateAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<UserStreakState?> RecalculateAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default,
+        bool awardFreezeIfEligible = true)
     {
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == userId,
@@ -32,14 +35,14 @@ public class UserStreakService(
         var hasRecurring = contributingHabits.Any(h => h.FrequencyUnit is not null);
         if (!hasRecurring)
         {
-            return CalendarFallback(user, completionDateSet, freezeDateSet);
+            return CalendarFallback(user, completionDateSet, freezeDateSet, awardFreezeIfEligible);
         }
 
         // Build expected-date timeline using historical schedule (anchored on CreatedAtUtc,
         // not DueDate) so that past dates remain visible after DueDate advances.
-        var userTimeZone = user.TimeZone is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-            : TimeZoneInfo.Utc;
+        // Use TimeZoneHelper rather than raw FindSystemTimeZoneById so an invalid/migrated
+        // timezone string falls back to UTC instead of crashing the entire log_habit path.
+        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
             contributingHabits, lookbackStart, userToday, userTimeZone);
 
@@ -51,9 +54,12 @@ public class UserStreakService(
         if (currentStreak > longestStreak) longestStreak = currentStreak;
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
-        user.AwardStreakFreezeIfEligible(
-            AppConstants.MaxStreakFreezesAccumulated,
-            AppConstants.StreakDaysPerFreeze);
+        if (awardFreezeIfEligible)
+        {
+            user.AwardStreakFreezeIfEligible(
+                AppConstants.MaxStreakFreezesAccumulated,
+                AppConstants.StreakDaysPerFreeze);
+        }
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 
@@ -158,7 +164,8 @@ public class UserStreakService(
     private static UserStreakState CalendarFallback(
         User user,
         HashSet<DateOnly> completionDateSet,
-        HashSet<DateOnly> freezeDateSet)
+        HashSet<DateOnly> freezeDateSet,
+        bool awardFreezeIfEligible)
     {
         var orderedDates = completionDateSet
             .Concat(freezeDateSet)
@@ -198,9 +205,12 @@ public class UserStreakService(
         }
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
-        user.AwardStreakFreezeIfEligible(
-            AppConstants.MaxStreakFreezesAccumulated,
-            AppConstants.StreakDaysPerFreeze);
+        if (awardFreezeIfEligible)
+        {
+            user.AwardStreakFreezeIfEligible(
+                AppConstants.MaxStreakFreezesAccumulated,
+                AppConstants.StreakDaysPerFreeze);
+        }
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 }

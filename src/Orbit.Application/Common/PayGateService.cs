@@ -19,8 +19,10 @@ public class PayGateService(
             return Result.Success();
 
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
+        // Cap applies to top-level habits only; soft-deleted habits are excluded
+        // automatically by the EF global query filter on Habit.IsDeleted.
         var activeHabitCount = await habitRepository.CountAsync(
-            h => h.UserId == userId, ct);
+            h => h.UserId == userId && h.ParentHabitId == null, ct);
 
         if (activeHabitCount + count > maxHabits)
             return Result.PayGateFailure($"You've reached the {maxHabits} habit limit on the free plan. Upgrade to Pro for unlimited habits.");

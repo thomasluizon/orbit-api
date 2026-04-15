@@ -502,7 +502,7 @@ public class PayGateServiceTests
         for (int i = 0; i < 20; i++)
             user.IncrementAiMessageCount();
         // Add ad reward bonus (5 extra)
-        user.GrantAdReward(5);
+        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), 5);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         // Act
@@ -518,7 +518,7 @@ public class PayGateServiceTests
         // Arrange
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        user.GrantAdReward(5);
+        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), 5);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         // Act
