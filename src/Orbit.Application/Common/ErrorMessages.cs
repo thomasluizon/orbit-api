@@ -25,6 +25,7 @@ public static class ErrorMessages
     public const string ChatHistoryTooLarge = "Chat history too large.";
     public const string MessageTooLong = "Message must be between 1 and 4000 characters.";
     public const string StreakFreezeNotAvailable = "No streak freeze available.";
+    public const string StreakFreezeMonthlyLimit = "You've used all streak freezes this month.";
     public const string AlreadyUsedStreakFreezeToday = "Streak freeze already used today.";
     public const string NoActiveStreak = "No active streak to protect.";
     public const string NotEnoughCoins = "Not enough coins.";

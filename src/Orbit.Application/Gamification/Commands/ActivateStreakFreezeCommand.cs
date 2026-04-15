@@ -10,7 +10,8 @@ namespace Orbit.Application.Gamification.Commands;
 public record StreakFreezeResponse(
     int FreezesRemainingThisMonth,
     DateOnly FrozenDate,
-    int CurrentStreak);
+    int CurrentStreak,
+    int StreakFreezesAccumulated);
 
 public record ActivateStreakFreezeCommand(Guid UserId) : IRequest<Result<StreakFreezeResponse>>;
 
@@ -38,11 +39,12 @@ public class ActivateStreakFreezeCommandHandler(
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        // Validate streak > 0
         if (existingStreak.CurrentStreak <= 0)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.NoActiveStreak, ErrorCodes.NoActiveStreak);
 
-        // Check if user already logged a habit today
+        if (user.StreakFreezesAccumulated <= 0)
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable, ErrorCodes.StreakFreezeNotAvailable);
+
         var userHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
         var habitIds = userHabits.Select(h => h.Id).ToList();
 
@@ -56,7 +58,6 @@ public class ActivateStreakFreezeCommandHandler(
                 return Result.Failure<StreakFreezeResponse>("You already completed a habit today. No freeze needed!");
         }
 
-        // Check if already frozen today
         var existingFreeze = await streakFreezeRepository.FindAsync(
             sf => sf.UserId == request.UserId && sf.UsedOnDate == today,
             cancellationToken);
@@ -64,16 +65,19 @@ public class ActivateStreakFreezeCommandHandler(
         if (existingFreeze.Count > 0)
             return Result.Failure<StreakFreezeResponse>(ErrorMessages.AlreadyUsedStreakFreezeToday, ErrorCodes.AlreadyUsedStreakFreezeToday);
 
-        // Count freezes in rolling 30-day window
-        var windowStart = today.AddDays(-29);
-        var recentFreezes = await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var freezesThisMonth = await streakFreezeRepository.FindAsync(
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= monthStart && sf.UsedOnDate < monthEnd,
             cancellationToken);
 
-        if (recentFreezes.Count >= AppConstants.MaxStreakFreezesPerMonth)
-            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeNotAvailable, ErrorCodes.StreakFreezeNotAvailable);
+        if (freezesThisMonth.Count >= AppConstants.MaxStreakFreezesPerMonth)
+            return Result.Failure<StreakFreezeResponse>(ErrorMessages.StreakFreezeMonthlyLimit, ErrorCodes.StreakFreezeMonthlyLimit);
 
-        // Create freeze
+        var consume = user.ConsumeStreakFreeze();
+        if (consume.IsFailure)
+            return Result.Failure<StreakFreezeResponse>(consume.Error!, ErrorCodes.StreakFreezeNotAvailable);
+
         var freeze = StreakFreeze.Create(request.UserId, today);
         await streakFreezeRepository.AddAsync(freeze, cancellationToken);
 
@@ -81,11 +85,12 @@ public class ActivateStreakFreezeCommandHandler(
         var updatedStreak = await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var freezesRemaining = AppConstants.MaxStreakFreezesPerMonth - (recentFreezes.Count + 1);
+        var freezesRemaining = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - (freezesThisMonth.Count + 1));
 
         return Result.Success(new StreakFreezeResponse(
             freezesRemaining,
             today,
-            updatedStreak?.CurrentStreak ?? 0));
+            updatedStreak?.CurrentStreak ?? 0,
+            user.StreakFreezesAccumulated));
     }
 }

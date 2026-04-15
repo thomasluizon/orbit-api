@@ -47,8 +47,12 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.CurrentStreak.Should().Be(0);
         result.Value.LongestStreak.Should().Be(0);
         result.Value.FreezesUsedThisMonth.Should().Be(0);
-        result.Value.FreezesAvailable.Should().Be(3);
+        result.Value.FreezesAvailable.Should().Be(0);
+        result.Value.FreezesAvailableToUse.Should().Be(0);
         result.Value.MaxFreezesPerMonth.Should().Be(3);
+        result.Value.StreakFreezesAccumulated.Should().Be(0);
+        result.Value.MaxStreakFreezesAccumulated.Should().Be(3);
+        result.Value.CanEarnMore.Should().BeTrue();
         result.Value.IsFrozenToday.Should().BeFalse();
         result.Value.RecentFreezeDates.Should().BeEmpty();
     }
@@ -89,7 +93,9 @@ public class GetStreakInfoQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FreezesUsedThisMonth.Should().Be(2);
-        result.Value.FreezesAvailable.Should().Be(1);
+        // FreezesAvailable now reflects min(accumulated, monthly remaining). User hasn't
+        // earned any freezes, so available is 0 despite monthly room.
+        result.Value.FreezesAvailable.Should().Be(0);
         result.Value.RecentFreezeDates.Should().HaveCount(2);
         result.Value.IsFrozenToday.Should().BeFalse();
     }

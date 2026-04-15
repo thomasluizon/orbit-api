@@ -30,14 +30,21 @@ public class ActivateStreakFreezeCommandHandlerTests
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
-    private static User CreateUserWithStreak(int streak = 5)
+    private static User CreateUserWithStreak(int streak = 5, int accumulatedFreezes = 1)
     {
         var user = User.Create("Test User", "test@example.com").Value;
         user.UpdateStreak(Today.AddDays(-1));
-        // Build streak by calling UpdateStreak for consecutive days
         for (int i = streak - 1; i >= 1; i--)
         {
             user.UpdateStreak(Today.AddDays(-i));
+        }
+        // Simulate accumulated freezes without requiring the streak to be a multiple of 7.
+        while (user.StreakFreezesAccumulated < accumulatedFreezes)
+        {
+            if (!user.AwardStreakFreezeIfEligible(accumulatedFreezes, 1))
+            {
+                break;
+            }
         }
         return user;
     }
@@ -156,7 +163,7 @@ public class ActivateStreakFreezeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("No streak freeze available");
+        result.Error.Should().Contain("streak freezes this month");
     }
 
     [Fact]

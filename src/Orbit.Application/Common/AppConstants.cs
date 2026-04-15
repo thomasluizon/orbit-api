@@ -41,6 +41,8 @@ public static class AppConstants
     public const int AdRewardBonusMessages = 5;
     public const int AdRewardDailyCap = 3;
     public const int MaxStreakFreezesPerMonth = 3;
+    public const int MaxStreakFreezesAccumulated = 3;
+    public const int StreakDaysPerFreeze = 7;
     public const int MaxStreakLookbackDays = 365;
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }
