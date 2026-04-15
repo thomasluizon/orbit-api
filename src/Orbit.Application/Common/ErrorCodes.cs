@@ -27,6 +27,7 @@ public static class ErrorCodes
     public const string ChatHistoryTooLarge = "CHAT_HISTORY_TOO_LARGE";
     public const string MessageTooLong = "MESSAGE_TOO_LONG";
     public const string StreakFreezeNotAvailable = "STREAK_FREEZE_NOT_AVAILABLE";
+    public const string StreakFreezeMonthlyLimit = "STREAK_FREEZE_MONTHLY_LIMIT";
     public const string AlreadyUsedStreakFreezeToday = "ALREADY_USED_STREAK_FREEZE_TODAY";
     public const string NoActiveStreak = "NO_ACTIVE_STREAK";
     public const string NotEnoughCoins = "NOT_ENOUGH_COINS";

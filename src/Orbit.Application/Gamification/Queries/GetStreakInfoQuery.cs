@@ -14,7 +14,12 @@ public record StreakInfoResponse(
     int FreezesAvailable,
     int MaxFreezesPerMonth,
     bool IsFrozenToday,
-    IReadOnlyList<DateOnly> RecentFreezeDates);
+    IReadOnlyList<DateOnly> RecentFreezeDates,
+    int StreakFreezesAccumulated,
+    int MaxStreakFreezesAccumulated,
+    int DaysUntilNextFreeze,
+    int FreezesAvailableToUse,
+    bool CanEarnMore);
 
 public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoResponse>>;
 
@@ -31,15 +36,34 @@ public class GetStreakInfoQueryHandler(
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        // Query recent freezes within the rolling 30-day window
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var freezesThisMonth = await streakFreezeRepository.FindAsync(
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= monthStart && sf.UsedOnDate < monthEnd,
+            cancellationToken);
+
         var windowStart = today.AddDays(-29);
         var recentFreezes = await streakFreezeRepository.FindAsync(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
             cancellationToken);
 
         var isFrozenToday = recentFreezes.Any(sf => sf.UsedOnDate == today);
-        var freezesUsed = recentFreezes.Count;
-        var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - freezesUsed);
+        var freezesUsedThisMonth = freezesThisMonth.Count;
+        var remainingMonthlyQuota = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - freezesUsedThisMonth);
+
+        var freezesAvailableToUse = Math.Min(user.StreakFreezesAccumulated, remainingMonthlyQuota);
+
+        var daysSinceLastAward = Math.Max(0, user.CurrentStreak - user.LastFreezeAwardStreak);
+        var daysUntilNextFreeze = user.CurrentStreak <= 0
+            ? AppConstants.StreakDaysPerFreeze
+            : Math.Max(0, AppConstants.StreakDaysPerFreeze - (daysSinceLastAward % AppConstants.StreakDaysPerFreeze));
+        if (daysUntilNextFreeze == 0 && user.CurrentStreak > 0 && user.StreakFreezesAccumulated >= AppConstants.MaxStreakFreezesAccumulated)
+        {
+            daysUntilNextFreeze = AppConstants.StreakDaysPerFreeze;
+        }
+
+        var canEarnMore = user.StreakFreezesAccumulated < AppConstants.MaxStreakFreezesAccumulated;
+
         var recentFreezeDates = recentFreezes
             .Select(sf => sf.UsedOnDate)
             .OrderByDescending(d => d)
@@ -49,10 +73,15 @@ public class GetStreakInfoQueryHandler(
             user.CurrentStreak,
             user.LongestStreak,
             user.LastActiveDate,
-            freezesUsed,
-            freezesAvailable,
+            freezesUsedThisMonth,
+            freezesAvailableToUse,
             AppConstants.MaxStreakFreezesPerMonth,
             isFrozenToday,
-            recentFreezeDates));
+            recentFreezeDates,
+            user.StreakFreezesAccumulated,
+            AppConstants.MaxStreakFreezesAccumulated,
+            daysUntilNextFreeze,
+            freezesAvailableToUse,
+            canEarnMore));
     }
 }

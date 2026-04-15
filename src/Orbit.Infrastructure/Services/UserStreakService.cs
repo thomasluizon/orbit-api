@@ -51,6 +51,9 @@ public class UserStreakService(
         if (currentStreak > longestStreak) longestStreak = currentStreak;
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
+        user.AwardStreakFreezeIfEligible(
+            AppConstants.MaxStreakFreezesAccumulated,
+            AppConstants.StreakDaysPerFreeze);
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 
@@ -195,6 +198,9 @@ public class UserStreakService(
         }
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);
+        user.AwardStreakFreezeIfEligible(
+            AppConstants.MaxStreakFreezesAccumulated,
+            AppConstants.StreakDaysPerFreeze);
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 }

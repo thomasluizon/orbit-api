@@ -361,7 +361,7 @@ public class ChecklistUserFactPlatformToolTests
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AchievementsResponse([])));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new StreakInfoResponse(7, 10, new DateOnly(2026, 4, 14), 0, 3, 3, false, [])));
+            .Returns(Result.Success(new StreakInfoResponse(7, 10, new DateOnly(2026, 4, 14), 0, 3, 3, false, [], 3, 3, 0, 3, false)));
         var tool = new GetGamificationOverviewTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
@@ -408,7 +408,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new StreakFreezeResponse(1, new DateOnly(2026, 4, 14), 5)));
+            .Returns(Result.Success(new StreakFreezeResponse(1, new DateOnly(2026, 4, 14), 5, 0)));
         var tool = new ActivateStreakFreezeTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);

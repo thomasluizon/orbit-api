@@ -51,6 +51,8 @@ public partial class User : Entity
     public int CurrentStreak { get; private set; } = 0;
     public int LongestStreak { get; private set; } = 0;
     public DateOnly? LastActiveDate { get; private set; }
+    public int StreakFreezesAccumulated { get; private set; } = 0;
+    public int LastFreezeAwardStreak { get; private set; } = 0;
     public string? ThemePreference { get; private set; }
     public string? ColorScheme { get; private set; }
 
@@ -323,9 +325,45 @@ public partial class User : Entity
 
     public void SetStreakState(int currentStreak, int longestStreak, DateOnly? lastActiveDate)
     {
-        CurrentStreak = Math.Max(0, currentStreak);
+        var normalizedStreak = Math.Max(0, currentStreak);
+        if (normalizedStreak < CurrentStreak)
+        {
+            // Streak broke (went to 0, or restarted from a lower value such as 14 -> 1 after a missed day);
+            // reset the "last award" marker so the next 7-day run triggers a fresh award.
+            LastFreezeAwardStreak = 0;
+        }
+        CurrentStreak = normalizedStreak;
         LongestStreak = Math.Max(CurrentStreak, longestStreak);
         LastActiveDate = lastActiveDate;
+    }
+
+    public bool AwardStreakFreezeIfEligible(int maxAccumulated = 3, int daysPerFreeze = 7)
+    {
+        if (CurrentStreak < daysPerFreeze)
+            return false;
+
+        if (StreakFreezesAccumulated >= maxAccumulated)
+        {
+            // Cap reached; advance marker to the most recent earned milestone so we don't overshoot later.
+            LastFreezeAwardStreak = CurrentStreak - (CurrentStreak % daysPerFreeze);
+            return false;
+        }
+
+        var eligibleMilestone = CurrentStreak - (CurrentStreak % daysPerFreeze);
+        if (eligibleMilestone <= LastFreezeAwardStreak)
+            return false;
+
+        StreakFreezesAccumulated++;
+        LastFreezeAwardStreak = LastFreezeAwardStreak + daysPerFreeze;
+        return true;
+    }
+
+    public Result ConsumeStreakFreeze()
+    {
+        if (StreakFreezesAccumulated <= 0)
+            return Result.Failure("No streak freezes accumulated");
+        StreakFreezesAccumulated--;
+        return Result.Success();
     }
 
     /// <summary>
@@ -341,6 +379,8 @@ public partial class User : Entity
         CurrentStreak = 0;
         LongestStreak = 0;
         LastActiveDate = null;
+        StreakFreezesAccumulated = 0;
+        LastFreezeAwardStreak = 0;
         AiMessagesUsedThisMonth = 0;
         AiMessagesResetAt = null;
         AdRewardBonusMessages = 0;
