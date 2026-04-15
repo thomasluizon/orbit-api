@@ -70,10 +70,20 @@ public partial class HandleWebhookCommandHandler(
                     break;
             }
         }
+        catch (StripeException ex)
+        {
+            // Stripe SDK threw -- could be a transient call to GetAsync. Surface as a
+            // retryable failure so Stripe's webhook redelivery picks it up.
+            LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
+            return Result.Failure("Stripe API error processing webhook event");
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Non-Stripe error (DB write, etc.). Generic message; do NOT include the raw
+            // exception detail in the response body since Stripe will deliver it back to
+            // the webhook caller.
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
-            return Result.Failure("Error processing webhook event");
+            return Result.Failure("Webhook processing failed");
         }
 
         return Result.Success();
@@ -90,8 +100,13 @@ public partial class HandleWebhookCommandHandler(
         if (session?.Metadata?.TryGetValue("userId", out var userIdStr) != true
             || !Guid.TryParse(userIdStr, out var uid))
         {
+            // Silent skip on missing/malformed userId metadata previously hid lost subscriptions.
+            // Throw so the outer catch records the failure and Stripe retries the webhook with
+            // (hopefully) corrected metadata; if metadata was set incorrectly upstream, the
+            // operator will see the recurring error in logs instead of a silent data loss.
             LogCheckoutUserIdExtractionFailed(logger);
-            return;
+            throw new InvalidOperationException(
+                $"checkout.session.completed missing or invalid userId metadata (session: {session?.Id ?? "null"}).");
         }
 
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == uid, cancellationToken: ct);

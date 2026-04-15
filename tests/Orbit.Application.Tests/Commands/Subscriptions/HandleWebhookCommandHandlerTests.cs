@@ -111,15 +111,18 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_CheckoutSessionCompleted_NoUserIdInMetadata_DoesNotThrow()
+    public async Task Handle_CheckoutSessionCompleted_NoUserIdInMetadata_ReturnsFailureSoStripeRetries()
     {
+        // Previously this scenario silently returned success, hiding lost subscriptions when
+        // checkout metadata was set incorrectly upstream. Now it surfaces as a failure so
+        // Stripe redelivers the webhook (and the operator sees the recurring error).
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             null, "sub_test", "cus_test"));
 
         var command = new HandleWebhookCommand(json, signature);
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
+        result.IsFailure.Should().BeTrue();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

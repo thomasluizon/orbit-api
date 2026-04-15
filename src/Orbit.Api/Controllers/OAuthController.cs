@@ -64,15 +64,30 @@ public partial class OAuthController(
     {
         var clientName = body.TryGetProperty("client_name", out var name) ? name.GetString() : "MCP Client";
 
-        var redirectUris = Array.Empty<string>();
+        var requestedUris = Array.Empty<string>();
         if (body.TryGetProperty("redirect_uris", out var uris) && uris.ValueKind == JsonValueKind.Array)
-            redirectUris = uris.EnumerateArray().Select(u => u.GetString()!).ToArray();
+            requestedUris = uris.EnumerateArray().Select(u => u.GetString() ?? string.Empty).ToArray();
+
+        // Enforce the redirect-host allowlist at registration time, not just at /authorize.
+        // Otherwise a malicious caller can register an arbitrary client with attacker-controlled
+        // URIs and rely on downstream code to skip the check.
+        var rejected = requestedUris
+            .Where(u => !string.IsNullOrEmpty(u) && !IsRedirectUriAllowed(u))
+            .ToArray();
+        if (rejected.Length > 0)
+        {
+            return BadRequest(new
+            {
+                error = "invalid_redirect_uri",
+                error_description = "One or more redirect_uris are not in the allowlist."
+            });
+        }
 
         return StatusCode(201, new
         {
             client_id = Guid.NewGuid().ToString(),
             client_name = clientName,
-            redirect_uris = redirectUris,
+            redirect_uris = requestedUris,
             token_endpoint_auth_method = "none"
         });
     }
