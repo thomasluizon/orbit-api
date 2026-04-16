@@ -312,6 +312,83 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Success_ReconciliationSkipsAmbiguousHabitMatches()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var firstHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Daily standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 10),
+            DueTime: new TimeOnly(9, 0))).Value;
+        var secondHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Daily standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 10),
+            DueTime: new TimeOnly(9, 0))).Value;
+
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { firstHabit, secondHabit }.AsReadOnly());
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.ReconciledHabits.Should().Be(0);
+        firstHabit.GoogleEventId.Should().BeNull();
+        secondHabit.GoogleEventId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Success_ReconciliationSkipsAlreadyAssignedGoogleEventIds()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var assignedHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Daily standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 10),
+            DueTime: new TimeOnly(9, 0),
+            GoogleEventId: "evt_a")).Value;
+        var orphanHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Daily standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 10),
+            DueTime: new TimeOnly(9, 0))).Value;
+        var allHabits = new List<Habit> { assignedHabit, orphanHabit };
+
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.Arg<Expression<Func<Habit, bool>>>().Compile();
+                return allHabits.Where(predicate).ToList().AsReadOnly();
+            });
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.Arg<Expression<Func<Habit, bool>>>().Compile();
+                return allHabits.Where(predicate).ToList().AsReadOnly();
+            });
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.ReconciledHabits.Should().Be(0);
+        orphanHabit.GoogleEventId.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_OpportunisticSkipsDedupe()
     {
         var user = CreateEnabledProUser();

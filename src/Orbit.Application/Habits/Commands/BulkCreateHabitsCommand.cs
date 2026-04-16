@@ -84,34 +84,23 @@ public partial class BulkCreateHabitsCommandHandler(
             ? 0
             : existingRoots.Max(h => h.Position ?? -1) + 1;
 
-        // Use transaction so partial failures don't leave orphaned habits
-        await unitOfWork.BeginTransactionAsync(cancellationToken);
-
-        try
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             for (int i = 0; i < request.Habits.Count; i++)
             {
                 var itemResult = await CreateSingleHabit(
-                    request.UserId, request.Habits[i], i, userToday, rootPositionCursor + i, cancellationToken);
+                    request.UserId, request.Habits[i], i, userToday, rootPositionCursor + i, ct);
                 results.Add(itemResult);
             }
 
-            // Save all successful entities and commit
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveChangesAsync(ct);
 
             if (request.FromSyncReview)
             {
-                await MarkSyncSuggestionsImported(request.UserId, results, cancellationToken);
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                await MarkSyncSuggestionsImported(request.UserId, results, ct);
+                await unitOfWork.SaveChangesAsync(ct);
             }
-
-            await unitOfWork.CommitTransactionAsync(cancellationToken);
-        }
-        catch
-        {
-            await unitOfWork.RollbackTransactionAsync(cancellationToken);
-            throw;
-        }
+        }, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 

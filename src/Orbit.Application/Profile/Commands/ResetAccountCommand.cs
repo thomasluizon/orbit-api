@@ -24,27 +24,18 @@ public class ResetAccountCommandHandler(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
-        await unitOfWork.BeginTransactionAsync(cancellationToken);
-
-        try
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             // Delete all user-created data (habits, goals, tags, etc.)
-            await accountResetRepository.DeleteAllUserDataAsync(request.UserId, cancellationToken);
+            await accountResetRepository.DeleteAllUserDataAsync(request.UserId, ct);
 
             // Reset user profile fields to defaults
             user.ResetAccount();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
 
-            await unitOfWork.CommitTransactionAsync(cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
-
-            return Result.Success();
-        }
-        catch
-        {
-            await unitOfWork.RollbackTransactionAsync(cancellationToken);
-            throw;
-        }
+        return Result.Success();
     }
 }

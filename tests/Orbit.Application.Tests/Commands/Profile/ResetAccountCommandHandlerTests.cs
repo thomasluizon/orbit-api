@@ -21,6 +21,15 @@ public class ResetAccountCommandHandlerTests
     public ResetAccountCommandHandlerTests()
     {
         _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, _cache);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var ct = call.ArgAt<CancellationToken>(1);
+                return operation(ct);
+            });
     }
 
     private void SetupUserFound(User user)
@@ -56,8 +65,9 @@ public class ResetAccountCommandHandlerTests
         user.TotalXp.Should().Be(0);
         user.Level.Should().Be(1);
         await _accountResetRepo.Received(1).DeleteAllUserDataAsync(UserId, Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).BeginTransactionAsync(Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

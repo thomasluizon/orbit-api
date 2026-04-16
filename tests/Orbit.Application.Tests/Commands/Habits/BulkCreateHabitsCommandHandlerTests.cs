@@ -42,6 +42,15 @@ public class BulkCreateHabitsCommandHandlerTests
             .Returns(new List<Habit>().AsReadOnly());
         _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var ct = call.ArgAt<CancellationToken>(1);
+                return operation(ct);
+            });
     }
 
     [Fact]
@@ -62,7 +71,9 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -210,16 +221,16 @@ public class BulkCreateHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UsesTransaction()
+    public async Task Handle_UsesTransactionWrapper()
     {
         var items = new List<BulkHabitItem> { new("Habit", null, FrequencyUnit.Day, 1) };
         var command = new BulkCreateHabitsCommand(UserId, items);
 
         await _handler.Handle(command, CancellationToken.None);
 
-        await _unitOfWork.Received(1).BeginTransactionAsync(Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().RollbackTransactionAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

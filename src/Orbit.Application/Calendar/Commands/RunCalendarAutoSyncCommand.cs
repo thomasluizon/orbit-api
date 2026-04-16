@@ -133,23 +133,37 @@ public partial class RunCalendarAutoSyncCommandHandler(
     private async Task<int> ReconcileExistingHabits(
         User user, List<CalendarEventItem> fetched, DateTime utcNow, CancellationToken ct)
     {
-        var eventsByKey = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var ev in fetched)
+        var assignedEventIds = (await deps.HabitRepository.FindAsync(
+                h => h.UserId == user.Id && h.GoogleEventId != null, ct))
+            .Select(h => h.GoogleEventId!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var eventsByKey = fetched
+            .Where(ev => !assignedEventIds.Contains(ev.Id))
+            .GroupBy(ev => BuildLegacyMatchKey(ev.Title, ev.StartDate, ev.StartTime), StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single().Id, StringComparer.Ordinal);
+
+        if (eventsByKey.Count == 0)
         {
-            var key = BuildLegacyMatchKey(ev.Title, ev.StartDate, ev.StartTime);
-            eventsByKey.TryAdd(key, ev.Id);
+            user.MarkCalendarSyncReconciled(utcNow);
+            return 0;
         }
 
         var existingHabits = await deps.HabitRepository.FindTrackedAsync(
             h => h.UserId == user.Id && h.GoogleEventId == null, ct);
 
-        int reconciled = 0;
-        foreach (var habit in existingHabits)
-        {
-            var key = BuildLegacyMatchKey(
+        var habitsByKey = existingHabits
+            .GroupBy(habit => BuildLegacyMatchKey(
                 habit.Title,
                 habit.DueDate.ToString("yyyy-MM-dd"),
-                habit.DueTime?.ToString("HH:mm"));
+                habit.DueTime?.ToString("HH:mm")), StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single(), StringComparer.Ordinal);
+
+        int reconciled = 0;
+        foreach (var (key, habit) in habitsByKey)
+        {
             if (eventsByKey.TryGetValue(key, out var googleEventId))
             {
                 habit.SetGoogleEventId(googleEventId);
