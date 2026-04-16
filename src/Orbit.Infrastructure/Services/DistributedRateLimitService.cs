@@ -26,37 +26,57 @@ public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistribute
         if (!Policies.TryGetValue(policyName, out var policy))
             throw new InvalidOperationException($"Unknown rate-limit policy '{policyName}'.");
 
-        var supportsRetryableTransactions =
+        var useRelationalTransactionPath =
             dbContext.Database.IsRelational() &&
             dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true;
+
+        if (!useRelationalTransactionPath)
+            return await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
 
         const int maxAttempts = 3;
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            await using var transaction = supportsRetryableTransactions
-                ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-                : null;
-
             try
             {
-                var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
-
-                if (transaction is not null)
-                    await transaction.CommitAsync(cancellationToken);
-
-                return decision;
+                return await ExecuteRelationalAttemptAsync(policyName, partitionKey, policy, cancellationToken);
             }
-            catch (Exception ex) when (supportsRetryableTransactions && IsRetryableRateLimitConflict(ex) && attempt < maxAttempts - 1)
+            catch (Exception ex) when (IsRetryableRateLimitConflict(ex) && attempt < maxAttempts - 1)
             {
-                if (transaction is not null)
-                    await transaction.RollbackAsync(cancellationToken);
-
                 dbContext.ChangeTracker.Clear();
             }
         }
 
         throw new InvalidOperationException("Rate-limit acquisition failed after retrying transactional conflicts.");
+    }
+
+    private async Task<DistributedRateLimitDecision> ExecuteRelationalAttemptAsync(
+        string policyName,
+        string partitionKey,
+        RateLimitPolicy policy,
+        CancellationToken cancellationToken)
+    {
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+
+            try
+            {
+                var decision = await TryAcquireCoreAsync(policyName, partitionKey, policy, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return decision;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                dbContext.ChangeTracker.Clear();
+                throw;
+            }
+        });
     }
 
     private async Task<DistributedRateLimitDecision> TryAcquireCoreAsync(
