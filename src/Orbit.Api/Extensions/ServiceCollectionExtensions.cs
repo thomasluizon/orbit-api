@@ -442,6 +442,7 @@ public static class ServiceCollectionExtensions
 
         // Exception Handling
         builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+        builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
         builder.Services.AddProblemDetails(options =>
         {
             options.CustomizeProblemDetails = ctx =>

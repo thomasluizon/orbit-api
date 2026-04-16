@@ -26,6 +26,7 @@ public static class WebApplicationExtensions
         // Security & Forwarded Headers
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
         app.UseForwardedHeaders(BuildForwardedHeadersOptions(app));
+        app.UseMiddleware<Orbit.Api.Middleware.RequestCorrelationMiddleware>();
 
         if (app.Environment.IsDevelopment())
         {
