@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Orbit.Application.Calendar.Queries;
 using NSubstitute;
-using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;

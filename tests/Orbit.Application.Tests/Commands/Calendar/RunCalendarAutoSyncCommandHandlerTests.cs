@@ -389,6 +389,63 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Success_ReconciliationSkipsDuplicateFetchedEventIdsAcrossDifferentKeys()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var firstHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Daily standup", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 10),
+            DueTime: new TimeOnly(9, 0))).Value;
+        var secondHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Review", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 4, 11),
+            DueTime: new TimeOnly(10, 0))).Value;
+
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { firstHabit, secondHabit }.AsReadOnly());
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_dup", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
+                new("evt_dup", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.ReconciledHabits.Should().Be(1);
+        firstHabit.GoogleEventId.Should().Be("evt_dup");
+        secondHabit.GoogleEventId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_Success_CreateSuggestionsSkipsDuplicateFetchedEventIds()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_dup", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
+                new("evt_dup", "Daily standup duplicate", null, "2026-04-10", "09:30", "10:00", true, null, [])
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.NewSuggestions.Should().Be(1);
+        await _suggestionRepo.Received(1).AddAsync(
+            Arg.Any<GoogleCalendarSyncSuggestion>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_OpportunisticSkipsDedupe()
     {
         var user = CreateEnabledProUser();

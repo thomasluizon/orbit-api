@@ -103,6 +103,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         try
         {
             fetched = await deps.EventFetcher.FetchAsync(accessToken, updatedMin: null, ct);
+            fetched = NormalizeFetchedEvents(user.Id, fetched);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -137,6 +138,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
                 h => h.UserId == user.Id && h.GoogleEventId != null, ct))
             .Select(h => h.GoogleEventId!)
             .ToHashSet(StringComparer.Ordinal);
+        var reservedEventIds = new HashSet<string>(assignedEventIds, StringComparer.Ordinal);
 
         var eventsByKey = fetched
             .Where(ev => !assignedEventIds.Contains(ev.Id))
@@ -164,11 +166,17 @@ public partial class RunCalendarAutoSyncCommandHandler(
         int reconciled = 0;
         foreach (var (key, habit) in habitsByKey)
         {
-            if (eventsByKey.TryGetValue(key, out var googleEventId))
+            if (!eventsByKey.TryGetValue(key, out var googleEventId))
+                continue;
+
+            if (!reservedEventIds.Add(googleEventId))
             {
-                habit.SetGoogleEventId(googleEventId);
-                reconciled++;
+                LogDuplicateReconciliationEventId(logger, user.Id, habit.Id, googleEventId);
+                continue;
             }
+
+            habit.SetGoogleEventId(googleEventId);
+            reconciled++;
         }
 
         user.MarkCalendarSyncReconciled(utcNow);
@@ -189,13 +197,14 @@ public partial class RunCalendarAutoSyncCommandHandler(
                 s => s.UserId == user.Id && s.ImportedAtUtc == null && s.DismissedAtUtc == null, ct))
             .Select(s => s.GoogleEventId)
             .ToHashSet(StringComparer.Ordinal);
+        var reservedEventIds = new HashSet<string>(habitEventIds, StringComparer.Ordinal);
+        reservedEventIds.UnionWith(existingSuggestionEventIds);
 
         int created = 0;
         foreach (var ev in fetched)
         {
             if (created >= MaxSuggestionsPerTick) break;
-            if (habitEventIds.Contains(ev.Id)) continue;
-            if (existingSuggestionEventIds.Contains(ev.Id)) continue;
+            if (!reservedEventIds.Add(ev.Id)) continue;
 
             var startDateUtc = ParseStartDateUtc(ev);
             var rawJson = JsonSerializer.Serialize(ev);
@@ -271,6 +280,34 @@ public partial class RunCalendarAutoSyncCommandHandler(
         return $"{title.Trim().ToLowerInvariant()}|{startDate ?? ""}|{startTime ?? ""}";
     }
 
+    private List<CalendarEventItem> NormalizeFetchedEvents(Guid userId, List<CalendarEventItem> fetched)
+    {
+        if (fetched.Count <= 1)
+            return fetched;
+
+        var unique = new List<CalendarEventItem>(fetched.Count);
+        var seenEventIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var ev in fetched)
+        {
+            if (!seenEventIds.Add(ev.Id))
+            {
+                LogDuplicateFetchedEventId(logger, userId, ev.Id);
+                continue;
+            }
+
+            unique.Add(ev);
+        }
+
+        return unique;
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Google API error during auto-sync for user {UserId}")]
     private static partial void LogGoogleApiError(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id skipped during auto-sync for user {UserId}: {GoogleEventId}")]
+    private static partial void LogDuplicateFetchedEventId(ILogger logger, Guid userId, string googleEventId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id reconciliation skipped for user {UserId}, habit {HabitId}: {GoogleEventId}")]
+    private static partial void LogDuplicateReconciliationEventId(ILogger logger, Guid userId, Guid habitId, string googleEventId);
 }
