@@ -333,7 +333,7 @@ public class OrbitDbContext : DbContext
 
             entity.Property(h => h.GoogleEventId).HasMaxLength(256);
             entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
-                .HasFilter("\"GoogleEventId\" IS NOT NULL")
+                .HasFilter("\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE")
                 .IsUnique();
 
             entity.HasMany(h => h.Logs)
