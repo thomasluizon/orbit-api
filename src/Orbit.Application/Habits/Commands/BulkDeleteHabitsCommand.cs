@@ -35,8 +35,7 @@ public class BulkDeleteHabitsCommandHandler(
             cancellationToken);
         var habitDict = habits.ToDictionary(h => h.Id);
 
-        await unitOfWork.BeginTransactionAsync(cancellationToken);
-        try
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             for (int i = 0; i < request.HabitIds.Count; i++)
             {
@@ -59,19 +58,13 @@ public class BulkDeleteHabitsCommandHandler(
                     HabitId: habitId));
             }
 
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await unitOfWork.SaveChangesAsync(ct);
             if (results.Any(r => r.Status == BulkItemStatus.Success))
             {
-                await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
-                await unitOfWork.SaveChangesAsync(cancellationToken);
+                await userStreakService.RecalculateAsync(request.UserId, ct);
+                await unitOfWork.SaveChangesAsync(ct);
             }
-            await unitOfWork.CommitTransactionAsync(cancellationToken);
-        }
-        catch
-        {
-            await unitOfWork.RollbackTransactionAsync(cancellationToken);
-            throw;
-        }
+        }, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 

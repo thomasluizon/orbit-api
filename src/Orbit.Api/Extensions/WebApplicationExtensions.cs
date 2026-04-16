@@ -37,11 +37,8 @@ public static class WebApplicationExtensions
         app.UseExceptionHandler();
         app.UseCors();
         app.UseCookiePolicy();
-
-        if (app.Environment.IsProduction())
-        {
-            app.UseHttpsRedirection();
-        }
+        // Render terminates TLS before the app, so internal HTTP requests should not be
+        // redirected again inside the container.
 
         // MCP selective auth
         app.UseMcpSelectiveAuth();

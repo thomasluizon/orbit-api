@@ -1,54 +1,62 @@
-using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Persistence;
 
 public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisposable
 {
-    private IDbContextTransaction? _transaction;
-
-    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return await context.SaveChangesAsync(cancellationToken);
+        return context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
+    public async Task ExecuteInTransactionAsync(
+        Func<CancellationToken, Task> operation,
+        CancellationToken cancellationToken = default)
     {
-        _transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-    }
+        ArgumentNullException.ThrowIfNull(operation);
 
-    public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
-    {
-        if (_transaction is not null)
+        if (!UseRelationalTransactionPath())
         {
-            await _transaction.CommitAsync(cancellationToken);
-            await _transaction.DisposeAsync();
-            _transaction = null;
+            await operation(cancellationToken);
+            return;
         }
-    }
 
-    public async Task RollbackTransactionAsync(CancellationToken cancellationToken = default)
-    {
-        if (_transaction is not null)
+        var strategy = context.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
         {
-            await _transaction.RollbackAsync(cancellationToken);
-            await _transaction.DisposeAsync();
-            _transaction = null;
-        }
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+            try
+            {
+                await operation(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                context.ChangeTracker.Clear();
+                throw;
+            }
+        });
     }
 
     public void Dispose()
     {
-        _transaction?.Dispose();
         context.Dispose();
         GC.SuppressFinalize(this);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_transaction is not null)
-            await _transaction.DisposeAsync();
         await context.DisposeAsync();
         GC.SuppressFinalize(this);
+    }
+
+    private bool UseRelationalTransactionPath()
+    {
+        return context.Database.IsRelational()
+            && context.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) != true;
     }
 }

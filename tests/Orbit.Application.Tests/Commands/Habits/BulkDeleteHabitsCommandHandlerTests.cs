@@ -26,6 +26,15 @@ public class BulkDeleteHabitsCommandHandlerTests
         _handler = new BulkDeleteHabitsCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _cache);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var ct = call.ArgAt<CancellationToken>(1);
+                return operation(ct);
+            });
     }
 
     [Fact]
@@ -49,7 +58,9 @@ public class BulkDeleteHabitsCommandHandlerTests
         habit1.IsDeleted.Should().BeTrue();
         habit2.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -112,7 +123,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UsesTransaction()
+    public async Task Handle_UsesTransactionWrapper()
     {
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -123,7 +134,8 @@ public class BulkDeleteHabitsCommandHandlerTests
 
         await _handler.Handle(command, CancellationToken.None);
 
-        await _unitOfWork.Received(1).BeginTransactionAsync(Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).CommitTransactionAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<CancellationToken>());
     }
 }
