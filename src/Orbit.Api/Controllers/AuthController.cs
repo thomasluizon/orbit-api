@@ -40,11 +40,11 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogVerificationCodeSent(logger, request.Email);
+            LogVerificationCodeSent(logger, request.Email, HttpContext.GetRequestId());
             return Ok(new { message = "Verification code sent" });
         }
 
-        LogFailedToSendCode(logger, request.Email, result.Error);
+        LogFailedToSendCode(logger, request.Email, result.Error, HttpContext.GetRequestId());
         return BadRequest(new { error = result.Error });
     }
 
@@ -89,11 +89,11 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaCode(logger, request.Email);
+            LogUserLoggedInViaCode(logger, request.Email, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogCodeVerificationFailed(logger, request.Email, result.Error);
+        LogCodeVerificationFailed(logger, request.Email, result.Error, HttpContext.GetRequestId());
         return Unauthorized(new { error = result.Error });
     }
 
@@ -150,11 +150,11 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaGoogle(logger);
+            LogUserLoggedInViaGoogle(logger, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogGoogleAuthFailed(logger, result.Error);
+        LogGoogleAuthFailed(logger, result.Error, HttpContext.GetRequestId());
         return Unauthorized(new { error = result.Error });
     }
 
@@ -216,11 +216,11 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogSessionRefreshed(logger);
+            LogSessionRefreshed(logger, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
-        LogSessionRefreshFailed(logger, result.Error);
+        LogSessionRefreshFailed(logger, result.Error, HttpContext.GetRequestId());
         return Unauthorized(new { error = result.Error });
     }
 
@@ -269,11 +269,11 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogSessionRevoked(logger);
+            LogSessionRevoked(logger, HttpContext.GetRequestId());
             return Ok(new { message = "Logged out" });
         }
 
-        LogSessionRevocationFailed(logger, result.Error);
+        LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
         return Unauthorized(new { error = result.Error });
     }
 
@@ -347,20 +347,20 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         return BadRequest(new { error = result.Error });
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent to {Email}")]
-    private static partial void LogVerificationCodeSent(ILogger logger, string email);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent to {Email}. RequestId={RequestId}")]
+    private static partial void LogVerificationCodeSent(ILogger logger, string email, string requestId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code to {Email}: {Error}")]
-    private static partial void LogFailedToSendCode(ILogger logger, string email, string? error);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code to {Email}: {Error}. RequestId={RequestId}")]
+    private static partial void LogFailedToSendCode(ILogger logger, string email, string? error, string requestId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code {Email}")]
-    private static partial void LogUserLoggedInViaCode(ILogger logger, string email);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code {Email}. RequestId={RequestId}")]
+    private static partial void LogUserLoggedInViaCode(ILogger logger, string email, string requestId);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed for {Email}: {Error}")]
-    private static partial void LogCodeVerificationFailed(ILogger logger, string email, string? error);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed for {Email}: {Error}. RequestId={RequestId}")]
+    private static partial void LogCodeVerificationFailed(ILogger logger, string email, string? error, string requestId);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Google auth failed: {Error}")]
-    private static partial void LogGoogleAuthFailed(ILogger logger, string? error);
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Google auth failed: {Error}. RequestId={RequestId}")]
+    private static partial void LogGoogleAuthFailed(ILogger logger, string? error, string requestId);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Account deletion requested by {UserId}")]
     private static partial void LogAccountDeletionRequested(ILogger logger, Guid userId);
@@ -374,20 +374,20 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "Deletion confirmation failed for {UserId}: {Error}")]
     private static partial void LogDeletionConfirmationFailed(ILogger logger, Guid userId, string? error);
 
-    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "User logged in via Google")]
-    private static partial void LogUserLoggedInViaGoogle(ILogger logger);
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "User logged in via Google. RequestId={RequestId}")]
+    private static partial void LogUserLoggedInViaGoogle(ILogger logger, string requestId);
 
-    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Session refreshed")]
-    private static partial void LogSessionRefreshed(ILogger logger);
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Session refreshed. RequestId={RequestId}")]
+    private static partial void LogSessionRefreshed(ILogger logger, string requestId);
 
-    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Session refresh failed: {Error}")]
-    private static partial void LogSessionRefreshFailed(ILogger logger, string? error);
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Session refresh failed: {Error}. RequestId={RequestId}")]
+    private static partial void LogSessionRefreshFailed(ILogger logger, string? error, string requestId);
 
-    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Session revoked")]
-    private static partial void LogSessionRevoked(ILogger logger);
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Session revoked. RequestId={RequestId}")]
+    private static partial void LogSessionRevoked(ILogger logger, string requestId);
 
-    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}")]
-    private static partial void LogSessionRevocationFailed(ILogger logger, string? error);
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}. RequestId={RequestId}")]
+    private static partial void LogSessionRevocationFailed(ILogger logger, string? error, string requestId);
 
     private static AgentExecuteOperationResponse BuildOperationResponse(
         string operationId,

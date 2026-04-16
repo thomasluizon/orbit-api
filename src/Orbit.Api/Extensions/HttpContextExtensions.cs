@@ -7,6 +7,8 @@ namespace Orbit.Api.Extensions;
 
 public static class HttpContextExtensions
 {
+    public const string RequestIdHeaderName = "X-Orbit-Request-Id";
+
     public static Guid GetUserId(this HttpContext context)
     {
         var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -99,6 +101,19 @@ public static class HttpContextExtensions
         return NormalizeIpAddress(context.Connection.RemoteIpAddress);
     }
 
+    public static string GetRequestId(this HttpContext context)
+    {
+        return context.TraceIdentifier;
+    }
+
+    public static string? GetIncomingRequestId(this HttpContext context)
+    {
+        var requestId = context.Request.Headers[RequestIdHeaderName].ToString().Trim();
+        return IsSafeRequestId(requestId)
+            ? requestId
+            : null;
+    }
+
     private static string? NormalizeCountryCode(string? countryCode)
     {
         if (string.IsNullOrWhiteSpace(countryCode))
@@ -161,5 +176,13 @@ public static class HttpContextExtensions
             : ipAddress;
 
         return normalizedIpAddress.ToString();
+    }
+
+    private static bool IsSafeRequestId(string? requestId)
+    {
+        if (string.IsNullOrWhiteSpace(requestId) || requestId.Length > 128)
+            return false;
+
+        return requestId.All(ch => !char.IsControl(ch));
     }
 }

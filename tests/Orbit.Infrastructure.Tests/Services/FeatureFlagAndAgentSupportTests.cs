@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -128,8 +130,10 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     public void DistributedRateLimitAttribute_CreatesFilterWithResolvedService()
     {
         var rateLimitService = Substitute.For<IDistributedRateLimitService>();
+        var logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
         var serviceProvider = Substitute.For<IServiceProvider>();
         serviceProvider.GetService(typeof(IDistributedRateLimitService)).Returns(rateLimitService);
+        serviceProvider.GetService(typeof(ILogger<DistributedRateLimitFilter>)).Returns(logger);
         var attribute = new DistributedRateLimitAttribute("chat");
 
         var filter = attribute.CreateInstance(serviceProvider);
@@ -142,9 +146,10 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     {
         var userId = Guid.NewGuid();
         var rateLimitService = Substitute.For<IDistributedRateLimitService>();
+        var logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
         rateLimitService.TryAcquireAsync("chat", $"user:{userId}", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 20, 1, DateTime.UtcNow.AddSeconds(30)));
-        var filter = new DistributedRateLimitFilter("chat", rateLimitService);
+        var filter = new DistributedRateLimitFilter("chat", rateLimitService, logger);
         var context = CreateActionExecutingContext(new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -168,12 +173,14 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     public async Task DistributedRateLimitFilter_ReturnsTooManyRequestsForAnonymousIp()
     {
         var rateLimitService = Substitute.For<IDistributedRateLimitService>();
+        var logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
         var retryAt = DateTime.UtcNow.AddSeconds(15);
         rateLimitService.TryAcquireAsync("auth", "ip:203.0.113.10", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 5, 5, retryAt));
-        var filter = new DistributedRateLimitFilter("auth", rateLimitService);
+        var filter = new DistributedRateLimitFilter("auth", rateLimitService, logger);
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
+        httpContext.TraceIdentifier = "req_rate_limited";
         var context = CreateActionExecutingContext(httpContext);
 
         await filter.OnActionExecutionAsync(context, () =>
@@ -182,6 +189,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var result = context.Result.Should().BeOfType<ObjectResult>().Subject;
         result.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
         httpContext.Response.Headers.RetryAfter.Should().NotBeEmpty();
+        httpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName].ToString().Should().Be("req_rate_limited");
     }
 
     private static ActionExecutingContext CreateActionExecutingContext(HttpContext httpContext)
