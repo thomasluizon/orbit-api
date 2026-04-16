@@ -14,7 +14,7 @@ public class LogHabitTool(
     public string Name => "log_habit";
 
     public string Description =>
-        "Log a habit as completed for a specific date (defaults to today). If already logged for that date, this will unlog it (toggle behavior). Include a note if the user shares context about the activity. Use the date parameter to log overdue instances.";
+        "Log a habit as completed for a specific date (defaults to today). If already logged for that date, this will unlog it (toggle behavior). Use the date parameter to log overdue instances.";
 
     public object GetParameterSchema() => new
     {
@@ -22,7 +22,6 @@ public class LogHabitTool(
         properties = new
         {
             habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to log" },
-            note = new { type = JsonSchemaTypes.String, description = "Optional note about the completion" },
             date = new { type = JsonSchemaTypes.String, description = "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today." }
         },
         required = new[] { "habit_id" }
@@ -55,12 +54,8 @@ public class LogHabitTool(
         if (targetDate > today)
             return new ToolResult(false, Error: "Cannot log a future date.");
 
-        string? note = null;
-        if (args.TryGetProperty("note", out var noteEl) && noteEl.ValueKind == JsonValueKind.String)
-            note = noteEl.GetString();
-
         var shouldAdvanceDueDate = targetDate >= today;
-        var logResult = habit.Log(targetDate, note, advanceDueDate: shouldAdvanceDueDate);
+        var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
         if (logResult.IsFailure)
             return new ToolResult(false, Error: logResult.Error);
 

@@ -67,12 +67,15 @@ public class UserStreakService(
         LoadStreakDataAsync(Guid userId, DateOnly lookbackStart, CancellationToken cancellationToken)
     {
         var allHabits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
-        var allHabitIds = allHabits.Select(h => h.Id).ToHashSet();
+        var streakEligibleHabitIds = allHabits
+            .Where(h => !h.IsDeleted && !h.IsBadHabit)
+            .Select(h => h.Id)
+            .ToHashSet();
 
-        var completionDateSet = allHabitIds.Count == 0
+        var completionDateSet = streakEligibleHabitIds.Count == 0
             ? new HashSet<DateOnly>()
             : (await habitLogRepository.FindAsync(
-                l => allHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
+                l => streakEligibleHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
                 cancellationToken))
                 .Select(log => log.Date)
                 .ToHashSet();

@@ -240,16 +240,15 @@ public class UserStreakServiceTests
     }
 
     [Fact]
-    public async Task RecalculateAsync_NoRecurringHabits_FallsBackToCalendarAdjacency()
+    public async Task RecalculateAsync_OnlyBadHabits_DoesNotIncreaseStreak()
     {
-        // User only has bad habits -> no contributing recurring habits -> calendar fallback kicks in.
+        // Bad habits must never contribute to user streak calculation.
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var bad = Habit.Create(new HabitCreateParams(
             UserId, "Smoke", FrequencyUnit.Day, 1,
             IsBadHabit: true,
             DueDate: new DateOnly(2026, 4, 1))).Value;
 
-        // Also create a flexible habit; still not "contributing". Use its logs for the fallback.
         bad.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
         bad.Log(new DateOnly(2026, 4, 2), advanceDueDate: false);
         bad.Log(new DateOnly(2026, 4, 3), advanceDueDate: false);
@@ -261,6 +260,6 @@ public class UserStreakServiceTests
         var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.CurrentStreak.Should().Be(3);
+        result!.CurrentStreak.Should().Be(0);
     }
 }

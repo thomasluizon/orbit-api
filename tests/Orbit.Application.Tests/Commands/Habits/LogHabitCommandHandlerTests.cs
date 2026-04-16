@@ -68,7 +68,7 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        var command = new LogHabitCommand(UserId, habit.Id, "Great session");
+        var command = new LogHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -353,7 +353,7 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithNote_PassesNoteToLog()
+    public async Task Handle_LogCommand_DoesNotPersistNotes()
     {
         var habit = CreateTestHabit();
         _habitRepo.FindOneTrackedAsync(
@@ -362,13 +362,13 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        var command = new LogHabitCommand(UserId, habit.Id, Note: "Felt great today");
+        var command = new LogHabitCommand(UserId, habit.Id);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _habitLogRepo.Received(1).AddAsync(
-            Arg.Is<HabitLog>(l => l.Note == "Felt great today"),
+            Arg.Is<HabitLog>(l => l.Note == null),
             Arg.Any<CancellationToken>());
     }
 

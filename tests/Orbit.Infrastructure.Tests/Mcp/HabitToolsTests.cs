@@ -513,7 +513,7 @@ public class HabitToolsTests
     {
         var logs = new List<HabitLogResponse>
         {
-            new(Guid.NewGuid(), new DateOnly(2026, 4, 1), 1, "Done", DateTime.UtcNow)
+            new(Guid.NewGuid(), new DateOnly(2026, 4, 1), 1, DateTime.UtcNow)
         };
         _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<HabitLogResponse>>(logs));
@@ -521,7 +521,6 @@ public class HabitToolsTests
         var result = await _tools.GetHabitLogs(_user, Guid.NewGuid().ToString());
 
         result.Should().Contain("2026-04-01");
-        result.Should().Contain("Done");
     }
 
     [Fact]
@@ -552,7 +551,7 @@ public class HabitToolsTests
         var habitId = Guid.NewGuid();
         var dict = new Dictionary<Guid, List<HabitLogResponse>>
         {
-            [habitId] = [new HabitLogResponse(Guid.NewGuid(), new DateOnly(2026, 4, 1), 1, null, DateTime.UtcNow)]
+            [habitId] = [new HabitLogResponse(Guid.NewGuid(), new DateOnly(2026, 4, 1), 1, DateTime.UtcNow)]
         };
         _mediator.Send(Arg.Any<GetAllHabitLogsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(dict));

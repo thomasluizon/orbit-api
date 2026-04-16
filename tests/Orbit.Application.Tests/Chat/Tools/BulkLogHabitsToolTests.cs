@@ -100,7 +100,7 @@ public class BulkLogHabitsToolTests
     }
 
     [Fact]
-    public async Task WithNote_PassesNoteToLogs()
+    public async Task IgnoresUnknownNoteArgument_AndLogsSuccessfully()
     {
         var h1 = CreateHabit("Water");
         SetupHabitsFound(h1);
@@ -108,7 +108,9 @@ public class BulkLogHabitsToolTests
         var result = await Execute($$$"""{"habit_ids": ["{{{h1.Id}}}"], "note": "Morning routine"}""");
 
         result.Success.Should().BeTrue();
-        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _habitLogRepo.Received(1).AddAsync(
+            Arg.Is<HabitLog>(l => l.Note == null),
+            Arg.Any<CancellationToken>());
     }
 
     private static Habit CreateHabit(string title)

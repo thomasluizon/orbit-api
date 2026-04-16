@@ -98,10 +98,11 @@ public partial class ProcessUserChatCommandHandler(
         LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var activeHabits = await data.HabitRepository.FindAsync(
+        var userHabits = await data.HabitRepository.FindAsync(
             h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
             cancellationToken);
+        var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
         var aiMemoryEnabled = hasProAccess && (user?.AiMemoryEnabled ?? true);
@@ -140,7 +141,7 @@ public partial class ProcessUserChatCommandHandler(
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
-        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
+        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, userHabits.Count, userFacts.Count);
 
         // 2. Build slim system prompt (habit/goal indexes only, details fetched via read tools)
         var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(

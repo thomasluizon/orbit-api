@@ -11,7 +11,6 @@ public record HabitLogResponse(
     Guid Id,
     DateOnly Date,
     decimal Value,
-    string? Note,
     DateTime CreatedAtUtc);
 
 public record GetHabitLogsQuery(Guid UserId, Guid HabitId) : IRequest<Result<IReadOnlyList<HabitLogResponse>>>;
@@ -43,7 +42,7 @@ public class GetHabitLogsQueryHandler(
 
         var result = logs
             .OrderByDescending(l => l.Date)
-            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.Note, l.CreatedAtUtc))
+            .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
             .ToList();
 
         return Result.Success<IReadOnlyList<HabitLogResponse>>(result);

@@ -122,7 +122,7 @@ public class ActiveHabitsSectionTests
     }
 
     [Fact]
-    public void Build_CompletedHabit_ShowsCompletedLabel()
+    public void Build_CompletedHabit_IsExcludedFromIndex()
     {
         // Arrange -- use a one-time task, which becomes IsCompleted when logged
         var oneTimeHabit = Habit.Create(new HabitCreateParams(
@@ -136,7 +136,9 @@ public class ActiveHabitsSectionTests
         var result = _sut.Build(context);
 
         // Assert
-        result.Should().Contain("COMPLETED");
+        result.Should().NotContain("Done Task");
+        result.Should().NotContain("COMPLETED");
+        result.Should().Contain("0 total");
     }
 
     [Fact]

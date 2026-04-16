@@ -8,8 +8,7 @@ namespace Orbit.Application.Habits.Services;
 public record HabitInstanceItem(
     DateOnly Date,
     InstanceStatus Status,
-    Guid? LogId,
-    string? Note);
+    Guid? LogId);
 
 public static class HabitScheduleService
 {
@@ -331,7 +330,7 @@ public static class HabitScheduleService
 
         var log = habit.Logs.FirstOrDefault(l => l.Date == habit.DueDate);
         var status = ResolveInstanceStatus(log, habit.DueDate, userToday, habit.IsBadHabit);
-        return [new HabitInstanceItem(habit.DueDate, status, log?.Id, log?.Note)];
+        return [new HabitInstanceItem(habit.DueDate, status, log?.Id)];
     }
 
     private static List<HabitInstanceItem> GetRecurringInstances(
@@ -350,7 +349,7 @@ public static class HabitScheduleService
         {
             logsByDate.TryGetValue(date, out var log);
             var status = ResolveInstanceStatus(log, date, userToday, habit.IsBadHabit);
-            instances.Add(new HabitInstanceItem(date, status, log?.Id, log?.Note));
+            instances.Add(new HabitInstanceItem(date, status, log?.Id));
         }
 
         return instances;

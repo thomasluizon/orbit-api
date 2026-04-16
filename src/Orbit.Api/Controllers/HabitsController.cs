@@ -62,7 +62,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
     public record UpdateChecklistRequest(IReadOnlyList<ChecklistItem> ChecklistItems);
 
-    public record LogHabitRequest(string? Note = null, DateOnly? Date = null);
+    public record LogHabitRequest(DateOnly? Date = null);
 
     public record SkipHabitRequest(DateOnly? Date = null);
 
@@ -309,7 +309,6 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new LogHabitCommand(
             HttpContext.GetUserId(),
             id,
-            request?.Note,
             request?.Date);
 
         var result = await mediator.Send(command, cancellationToken);

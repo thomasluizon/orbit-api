@@ -70,7 +70,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         DateTime CreatedAtUtc,
         DateTime UpdatedAtUtc);
 
-    public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, string? Note, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
+    public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
     public record SyncGoalDto(
         Guid Id,
@@ -208,7 +208,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             Habits: BuildEntitySet(
                 habits.Where(h => !h.IsDeleted).Cast<object>().ToList(),
                 habits.Where(h => h.IsDeleted).Select(h => new SyncDeletedRef(h.Id, h.DeletedAtUtc!.Value)).ToList()),
-            HabitLogs: new SyncEntitySet(habitLogs.Cast<object>().ToList(), []),
+            HabitLogs: new SyncEntitySet(habitLogs.Select(MapHabitLog).Cast<object>().ToList(), []),
             Goals: BuildEntitySet(
                 goals.Where(g => !g.IsDeleted).Cast<object>().ToList(),
                 goals.Where(g => g.IsDeleted).Select(g => new SyncDeletedRef(g.Id, g.DeletedAtUtc!.Value)).ToList()),
@@ -510,7 +510,6 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habitLog.HabitId,
             habitLog.Date,
             habitLog.Value,
-            habitLog.Note,
             habitLog.CreatedAtUtc,
             habitLog.UpdatedAtUtc);
     }
