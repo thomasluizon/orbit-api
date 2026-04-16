@@ -122,7 +122,7 @@ public class ActiveHabitsSectionTests
     }
 
     [Fact]
-    public void Build_CompletedHabit_ShowsCompletedLabel()
+    public void Build_CompletedHabit_IsExcludedFromIndex()
     {
         // Arrange -- use a one-time task, which becomes IsCompleted when logged
         var oneTimeHabit = Habit.Create(new HabitCreateParams(
@@ -136,7 +136,29 @@ public class ActiveHabitsSectionTests
         var result = _sut.Build(context);
 
         // Assert
+        result.Should().NotContain("Done Task");
+        result.Should().Contain("0 total");
+    }
+
+    [Fact]
+    public void Build_CompletedParentWithActiveChild_KeepsHierarchyInIndex()
+    {
+        // Arrange
+        var parent = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Fitness", null, null,
+            DueDate: Today)).Value;
+        parent.Log(Today);
+        var child = CreateHabit("Push-ups", parentId: parent.Id);
+        var context = CreateContext(habits: [parent, child]);
+
+        // Act
+        var result = _sut.Build(context);
+
+        // Assert
+        result.Should().Contain("Fitness");
+        result.Should().Contain("Push-ups");
         result.Should().Contain("COMPLETED");
+        result.Should().Contain("1 total");
     }
 
     [Fact]

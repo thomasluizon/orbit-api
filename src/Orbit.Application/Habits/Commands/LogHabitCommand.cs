@@ -26,7 +26,6 @@ public record LogHabitResponse(
 public record LogHabitCommand(
     Guid UserId,
     Guid HabitId,
-    string? Note = null,
     DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>;
 
 /// <summary>
@@ -141,7 +140,7 @@ public partial class LogHabitCommandHandler(
                 cancellationToken);
 
         var shouldAdvanceDueDate = targetDate >= today;
-        var logResult = habit.Log(targetDate, request.Note, advanceDueDate: shouldAdvanceDueDate);
+        var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
         if (logResult.IsFailure)
             return Result.Failure<LogHabitResponse>(logResult.Error);
 

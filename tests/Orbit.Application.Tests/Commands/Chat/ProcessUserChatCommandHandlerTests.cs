@@ -11,6 +11,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Tests.Commands.Chat;
 
@@ -36,6 +37,21 @@ public class ProcessUserChatCommandHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
+
+    private static Habit CreateHabit(string title, bool isCompleted = false)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            title,
+            null,
+            null,
+            DueDate: Today)).Value;
+
+        if (isCompleted)
+            habit.Log(Today);
+
+        return habit;
+    }
 
     private ProcessUserChatCommandHandler CreateHandler(params IAiTool[] tools)
     {
@@ -238,6 +254,94 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Hello! How can I help?");
         result.Value.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_PromptBuilderReceivesOnlyActiveHabits()
+    {
+        SetupUserAndPayGate();
+        var activeHabit = CreateHabit("Morning Walk");
+        var completedHabit = CreateHabit("Morning Walk", isCompleted: true);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { activeHabit, completedHabit });
+
+        SetupAiResponse(new AiResponse { TextMessage = "Done", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create morning walk"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+            request.ActiveHabits.Count == 1 &&
+            request.ActiveHabits[0].Id == activeHabit.Id));
+    }
+
+    [Fact]
+    public async Task Handle_PromptBuilderIncludesCompletedParentsForActiveSubHabits()
+    {
+        SetupUserAndPayGate();
+        var completedParent = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Fitness",
+            null,
+            null,
+            DueDate: Today)).Value;
+        completedParent.Log(Today);
+
+        var activeChild = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Push-ups",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            ParentHabitId: completedParent.Id)).Value;
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { completedParent, activeChild });
+
+        SetupAiResponse(new AiResponse { TextMessage = "Done", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Update my push-ups habit"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+            request.ActiveHabits.Select(habit => habit.Id).ToHashSet().SetEquals(new[]
+            {
+                completedParent.Id,
+                activeChild.Id,
+            })));
+    }
+
+    [Fact]
+    public async Task Handle_AgentSnapshotExcludesCompletedHabitTitles()
+    {
+        SetupUserAndPayGate();
+        var activeHabit = CreateHabit("Read Book");
+        var completedHabit = CreateHabit("Completed Habit", isCompleted: true);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { activeHabit, completedHabit });
+
+        SetupAiResponse(new AiResponse { TextMessage = "Done", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create read book"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _catalogService.Received(1).BuildPromptSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>
+            snapshot.RecentHabitTitles != null &&
+            snapshot.RecentHabitTitles.Count == 1 &&
+            snapshot.RecentHabitTitles[0] == "Read Book" &&
+            !snapshot.RecentHabitTitles.Contains("Completed Habit")));
     }
 
     [Fact]

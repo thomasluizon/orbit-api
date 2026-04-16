@@ -64,7 +64,7 @@ public class LogHabitToolTests
     }
 
     [Fact]
-    public async Task WithNote_PassesNoteToLog()
+    public async Task IgnoresUnknownNoteArgument_AndLogsSuccessfully()
     {
         var habit = CreateHabit("Exercise", FrequencyUnit.Day, 1);
         SetupHabitFound(habit);
@@ -72,7 +72,9 @@ public class LogHabitToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "note": "30 min run"}""");
 
         result.Success.Should().BeTrue();
-        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _habitLogRepo.Received(1).AddAsync(
+            Arg.Is<HabitLog>(l => l.Note == null),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

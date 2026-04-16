@@ -52,28 +52,15 @@ public class LogHabitCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_NoteOver500Chars_HasError()
+    public void Validate_WithOptionalDate_NoErrors()
     {
         // Arrange
-        var command = ValidCommand() with { Note = new string('n', 501) };
+        var command = ValidCommand() with { Date = new DateOnly(2026, 4, 16) };
 
         // Act
         var result = _validator.TestValidate(command);
 
         // Assert
-        result.ShouldHaveValidationErrorFor(x => x.Note);
-    }
-
-    [Fact]
-    public void Validate_NullNote_NoError()
-    {
-        // Arrange
-        var command = ValidCommand() with { Note = null };
-
-        // Act
-        var result = _validator.TestValidate(command);
-
-        // Assert
-        result.ShouldNotHaveValidationErrorFor(x => x.Note);
+        result.ShouldNotHaveAnyValidationErrors();
     }
 }

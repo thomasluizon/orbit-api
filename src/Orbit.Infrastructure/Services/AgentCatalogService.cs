@@ -1308,7 +1308,6 @@ public class AgentCatalogService : IAgentCatalogService
                     new UserDataFieldDescriptor("Habit.Title", "Habit or task title.", true, true),
                     new UserDataFieldDescriptor("Habit.Description", "Optional habit description.", true, true),
                     new UserDataFieldDescriptor("Habit.Schedule", "Frequency, due date, due time, reminders, and flags.", true, true),
-                    new UserDataFieldDescriptor("HabitLog.Note", "Optional completion note.", true, false),
                     new UserDataFieldDescriptor("Tag.Name", "Tag name.", true, true),
                     new UserDataFieldDescriptor("ChecklistTemplate.Items", "Reusable checklist item text.", true, true)
                 ]),

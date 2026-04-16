@@ -142,7 +142,7 @@ public class GetCalendarMonthQueryHandler(
                 h => h.Logs
                     .Where(l => l.Date >= dateFrom && l.Date <= dateTo)
                     .OrderByDescending(l => l.Date)
-                    .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.Note, l.CreatedAtUtc))
+                    .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
                     .ToList());
     }
 

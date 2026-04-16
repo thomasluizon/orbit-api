@@ -180,7 +180,6 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     public async Task<string> LogHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
-        [Description("Optional note about the completion")] string? note = null,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
@@ -188,7 +187,6 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         var command = new LogHabitCommand(
             userId,
             McpInputParser.ParseGuid(habitId, "habitId"),
-            note,
             McpInputParser.ParseOptionalDate(date, "date"));
 
         var result = await mediator.Send(command, cancellationToken);
@@ -278,7 +276,6 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
 
         var lines = logs.Take(50).Select(l =>
             $"- {l.Date:yyyy-MM-dd}" +
-            (l.Note is not null ? $" | {l.Note}" : "") +
             $" (id: {l.Id})");
 
         return $"Logs ({logs.Count} total, showing up to 50):\n{string.Join("\n", lines)}";
