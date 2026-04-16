@@ -280,6 +280,46 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PromptBuilderIncludesCompletedParentsForActiveSubHabits()
+    {
+        SetupUserAndPayGate();
+        var completedParent = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Fitness",
+            null,
+            null,
+            DueDate: Today)).Value;
+        completedParent.Log(Today);
+
+        var activeChild = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Push-ups",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            ParentHabitId: completedParent.Id)).Value;
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { completedParent, activeChild });
+
+        SetupAiResponse(new AiResponse { TextMessage = "Done", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Update my push-ups habit"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+            request.ActiveHabits.Select(habit => habit.Id).ToHashSet().SetEquals(new[]
+            {
+                completedParent.Id,
+                activeChild.Id,
+            })));
+    }
+
+    [Fact]
     public async Task Handle_AgentSnapshotExcludesCompletedHabitTitles()
     {
         SetupUserAndPayGate();

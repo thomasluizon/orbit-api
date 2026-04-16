@@ -137,8 +137,28 @@ public class ActiveHabitsSectionTests
 
         // Assert
         result.Should().NotContain("Done Task");
-        result.Should().NotContain("COMPLETED");
         result.Should().Contain("0 total");
+    }
+
+    [Fact]
+    public void Build_CompletedParentWithActiveChild_KeepsHierarchyInIndex()
+    {
+        // Arrange
+        var parent = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Fitness", null, null,
+            DueDate: Today)).Value;
+        parent.Log(Today);
+        var child = CreateHabit("Push-ups", parentId: parent.Id);
+        var context = CreateContext(habits: [parent, child]);
+
+        // Act
+        var result = _sut.Build(context);
+
+        // Assert
+        result.Should().Contain("Fitness");
+        result.Should().Contain("Push-ups");
+        result.Should().Contain("COMPLETED");
+        result.Should().Contain("1 total");
     }
 
     [Fact]

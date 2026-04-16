@@ -103,6 +103,7 @@ public partial class ProcessUserChatCommandHandler(
             q => q.Include(h => h.Tags),
             cancellationToken);
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
+        var promptHabits = BuildPromptHabitIndex(userHabits);
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
         var aiMemoryEnabled = hasProAccess && (user?.AiMemoryEnabled ?? true);
@@ -141,11 +142,11 @@ public partial class ProcessUserChatCommandHandler(
         var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
-        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, userHabits.Count, userFacts.Count);
+        LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
 
         // 2. Build slim system prompt (habit/goal indexes only, details fetched via read tools)
         var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(
-            activeHabits, userFacts,
+            promptHabits, userFacts,
             HasImage: request.ImageData is not null,
             UserTags: userTags, UserToday: userToday, ActiveGoals: activeGoals));
         systemPrompt += Environment.NewLine + ai.CatalogService.BuildPromptSupplement(
@@ -475,6 +476,31 @@ public partial class ProcessUserChatCommandHandler(
                     .ToList()
                 : [],
             ClientContext: clientContext);
+    }
+
+    private static List<Habit> BuildPromptHabitIndex(IReadOnlyCollection<Habit> userHabits)
+    {
+        if (userHabits.Count == 0)
+            return [];
+
+        var habitsById = userHabits.ToDictionary(habit => habit.Id);
+        var indexedHabitIds = new HashSet<Guid>();
+
+        foreach (var habit in userHabits.Where(habit => !habit.IsCompleted))
+        {
+            var current = habit;
+
+            while (indexedHabitIds.Add(current.Id) &&
+                   current.ParentHabitId is Guid parentId &&
+                   habitsById.TryGetValue(parentId, out var parent))
+            {
+                current = parent;
+            }
+        }
+
+        return userHabits
+            .Where(habit => indexedHabitIds.Contains(habit.Id))
+            .ToList();
     }
 
     private static string BuildOperationSummary(AiToolCall call)
