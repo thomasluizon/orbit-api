@@ -36,6 +36,7 @@ public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<Hab
 
 public class GetHabitByIdQueryHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IUserDateService userDateService) : IRequestHandler<GetHabitByIdQuery, Result<HabitDetailResponse>>
 {
     public async Task<Result<HabitDetailResponse>> Handle(GetHabitByIdQuery request, CancellationToken cancellationToken)
@@ -43,9 +44,7 @@ public class GetHabitByIdQueryHandler(
         // Load the specific habit directly by ID + UserId (no need to load all user habits)
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Children).ThenInclude(c => c.Children)
-                  .Include(h => h.Children).ThenInclude(c => c.Logs)
-                  .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(gc => gc.Logs),
+            q => q.Include(h => h.Children).ThenInclude(c => c.Children),
             cancellationToken);
 
         var habit = habits.Count > 0 ? habits[0] : null;
@@ -53,7 +52,12 @@ public class GetHabitByIdQueryHandler(
             return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var children = HabitDetailChildMapper.MapChildren(habit, userToday);
+        var descendantLogsByHabitId = await HabitDetailDescendantLogLoader.LoadAsync(
+            habitLogRepository,
+            habit,
+            userToday,
+            cancellationToken);
+        var children = HabitDetailChildMapper.MapChildren(habit, userToday, descendantLogsByHabitId);
 
         return Result.Success(new HabitDetailResponse(
             habit.Id,
@@ -80,16 +84,61 @@ public class GetHabitByIdQueryHandler(
     }
 }
 
+internal static class HabitDetailDescendantLogLoader
+{
+    private const int DescendantLogLookbackDays = AppConstants.MaxRangeDays;
+
+    public static async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>> LoadAsync(
+        IGenericRepository<HabitLog> habitLogRepository,
+        Habit root,
+        DateOnly userToday,
+        CancellationToken cancellationToken)
+    {
+        var descendantIds = new HashSet<Guid>();
+        CollectDescendantIds(root, descendantIds);
+        if (descendantIds.Count == 0)
+            return new Dictionary<Guid, IReadOnlyCollection<HabitLog>>();
+
+        var descendantLogCutoff = userToday.AddDays(-DescendantLogLookbackDays);
+        var descendantLogs = await habitLogRepository.FindAsync(
+            l => descendantIds.Contains(l.HabitId)
+                && l.Date >= descendantLogCutoff
+                && l.Date < userToday,
+            cancellationToken);
+
+        return descendantLogs
+            .GroupBy(log => log.HabitId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyCollection<HabitLog>)group.ToList());
+    }
+
+    private static void CollectDescendantIds(Habit parent, ISet<Guid> descendantIds)
+    {
+        foreach (var child in parent.Children)
+        {
+            if (descendantIds.Add(child.Id))
+                CollectDescendantIds(child, descendantIds);
+        }
+    }
+}
+
 internal static class HabitDetailChildMapper
 {
-    public static List<HabitChildResponse> MapChildren(Habit parent, DateOnly userToday) =>
+    public static List<HabitChildResponse> MapChildren(
+        Habit parent,
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId = null) =>
         parent.Children
             .OrderBy(c => c.Position ?? int.MaxValue)
             .ThenBy(c => c.CreatedAtUtc)
-            .Select(c => MapChild(c, userToday))
+            .Select(c => MapChild(c, userToday, descendantLogsByHabitId))
             .ToList();
 
-    private static HabitChildResponse MapChild(Habit child, DateOnly userToday) => new(
+    private static HabitChildResponse MapChild(
+        Habit child,
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId) => new(
         child.Id,
         child.Title,
         child.Description,
@@ -106,10 +155,13 @@ internal static class HabitDetailChildMapper
         child.EndDate,
         child.Position,
         child.ChecklistItems,
-        DetermineOverdueStatus(child, userToday),
-        MapChildren(child, userToday));
+        DetermineOverdueStatus(child, userToday, descendantLogsByHabitId),
+        MapChildren(child, userToday, descendantLogsByHabitId));
 
-    private static bool DetermineOverdueStatus(Habit habit, DateOnly userToday)
+    private static bool DetermineOverdueStatus(
+        Habit habit,
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
         if (habit.IsCompleted || habit.IsFlexible || habit.IsBadHabit)
             return false;
@@ -123,10 +175,13 @@ internal static class HabitDetailChildMapper
         if (HabitScheduleService.GetScheduledDates(habit, userToday, userToday).Contains(userToday))
             return false;
 
-        return HasMissedRecentOccurrence(habit, userToday);
+        return HasMissedRecentOccurrence(habit, userToday, descendantLogsByHabitId);
     }
 
-    private static bool HasMissedRecentOccurrence(Habit habit, DateOnly userToday)
+    private static bool HasMissedRecentOccurrence(
+        Habit habit,
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
     {
         var qty = habit.FrequencyQuantity ?? 1;
         var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
@@ -136,8 +191,20 @@ internal static class HabitDetailChildMapper
             lookbackStart = habit.DueDate;
 
         var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, userToday.AddDays(-1));
-        var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
+        var logDates = GetLogs(habit, descendantLogsByHabitId).Select(l => l.Date).ToHashSet();
 
         return pastDates.Any(d => !logDates.Contains(d));
+    }
+
+    private static IReadOnlyCollection<HabitLog> GetLogs(
+        Habit habit,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
+    {
+        if (descendantLogsByHabitId is null)
+            return habit.Logs;
+
+        return descendantLogsByHabitId.TryGetValue(habit.Id, out var logs)
+            ? logs
+            : Array.Empty<HabitLog>();
     }
 }

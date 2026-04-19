@@ -32,10 +32,7 @@ public class GetHabitFullDetailQueryHandler(
         // Load habit with children for detail
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
-            q => q.Include(h => h.Children).ThenInclude(c => c.Children)
-                  .Include(h => h.Children).ThenInclude(c => c.Logs)
-                  .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(gc => gc.Logs)
-                  .Include(h => h.Logs),
+            q => q.Include(h => h.Children).ThenInclude(c => c.Children),
             cancellationToken);
 
         var habit = habits.Count > 0 ? habits[0] : null;
@@ -50,7 +47,15 @@ public class GetHabitFullDetailQueryHandler(
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
             : TimeZoneInfo.Utc;
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var children = HabitDetailChildMapper.MapChildren(habit, userToday);
+        var descendantLogsByHabitId = await HabitDetailDescendantLogLoader.LoadAsync(
+            habitLogRepository,
+            habit,
+            userToday,
+            cancellationToken);
+        var children = HabitDetailChildMapper.MapChildren(habit, userToday, descendantLogsByHabitId);
+        var allRootLogs = await habitLogRepository.FindAsync(
+            l => l.HabitId == request.HabitId,
+            cancellationToken);
 
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
@@ -61,16 +66,12 @@ public class GetHabitFullDetailQueryHandler(
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
             habit.ChecklistItems, habit.CreatedAtUtc, children);
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, userToday, userTimeZone);
+        var metrics = HabitMetricsCalculator.Calculate(habit, allRootLogs, userToday, userTimeZone);
 
         // Build logs (365-day lookback, same as GetHabitLogsQueryHandler)
         var cutoff = userToday.AddDays(-DefaultLookbackDays);
-
-        var allLogs = await habitLogRepository.FindAsync(
-            l => l.HabitId == request.HabitId && l.Date >= cutoff,
-            cancellationToken);
-
-        var logs = allLogs
+        var logs = allRootLogs
+            .Where(l => l.Date >= cutoff)
             .OrderByDescending(l => l.Date)
             .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
             .ToList();
