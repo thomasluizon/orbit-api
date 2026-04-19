@@ -199,6 +199,11 @@ public class GetCalendarMonthQueryHandler(
             .ThenBy(c => c.CreatedAtUtc)
             .Select(c => MapChildItem(c, ctx))
             .ToList();
+        var scheduledDates = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue)
+            ? HabitScheduleService.GetScheduledDates(child, ctx.DateFrom.Value, ctx.DateTo.Value)
+            : [];
+        var isOverdue = ctx.DateFrom.HasValue
+            && DetermineOverdueStatus(child, ctx.DateFrom.Value, scheduledDates);
 
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue &&
             child.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
@@ -219,7 +224,7 @@ public class GetCalendarMonthQueryHandler(
             child.Id, child.Title, child.Description,
             child.FrequencyUnit, child.FrequencyQuantity,
             child.IsBadHabit, child.IsCompleted, child.IsGeneral, child.IsFlexible,
-            child.Days.ToList(), child.DueDate, child.DueTime, child.DueEndTime, child.EndDate,
+            child.Days.ToList(), child.DueDate, child.DueTime, child.DueEndTime, child.EndDate, scheduledDates, isOverdue,
             child.Position, child.ChecklistItems,
             child.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             grandchildren, grandchildren.Count > 0,
@@ -231,7 +236,8 @@ public class GetCalendarMonthQueryHandler(
         foreach (var child in lookup[parentId])
         {
             var childDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo);
-            if (childDates.Count > 0) return true;
+            var childIsOverdue = DetermineOverdueStatus(child, dateFrom, childDates);
+            if (childDates.Count > 0 || childIsOverdue) return true;
             if (HasAnyDescendantDue(child.Id, lookup, dateFrom, dateTo)) return true;
         }
         return false;

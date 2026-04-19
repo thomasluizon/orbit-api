@@ -33,6 +33,8 @@ public class GetHabitFullDetailQueryHandler(
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Children).ThenInclude(c => c.Children)
+                  .Include(h => h.Children).ThenInclude(c => c.Logs)
+                  .Include(h => h.Children).ThenInclude(c => c.Children).ThenInclude(gc => gc.Logs)
                   .Include(h => h.Logs),
             cancellationToken);
 
@@ -40,12 +42,15 @@ public class GetHabitFullDetailQueryHandler(
         if (habit is null)
             return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
-        // Build detail (same mapping as GetHabitByIdQueryHandler)
-        var children = habit.Children
-            .OrderBy(c => c.Position ?? int.MaxValue)
-            .ThenBy(c => c.CreatedAtUtc)
-            .Select(c => MapChild(c))
-            .ToList();
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        if (user is null)
+            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+
+        var userTimeZone = user.TimeZone is not null
+            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
+            : TimeZoneInfo.Utc;
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var children = HabitDetailChildMapper.MapChildren(habit, userToday);
 
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
@@ -56,15 +61,6 @@ public class GetHabitFullDetailQueryHandler(
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
             habit.ChecklistItems, habit.CreatedAtUtc, children);
 
-        // Build metrics
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
-        if (user is null)
-            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
-
-        var userTimeZone = user.TimeZone is not null
-            ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)
-            : TimeZoneInfo.Utc;
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var metrics = HabitMetricsCalculator.Calculate(habit, userToday, userTimeZone);
 
         // Build logs (365-day lookback, same as GetHabitLogsQueryHandler)
@@ -81,17 +77,4 @@ public class GetHabitFullDetailQueryHandler(
 
         return Result.Success(new HabitFullDetailResponse(detail, metrics, logs));
     }
-
-    private static HabitChildResponse MapChild(Habit c) => new(
-        c.Id, c.Title, c.Description,
-        c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
-        c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
-        c.Position, c.ChecklistItems, MapChildren(c));
-
-    private static List<HabitChildResponse> MapChildren(Habit parent) =>
-        parent.Children
-            .OrderBy(c => c.Position ?? int.MaxValue)
-            .ThenBy(c => c.CreatedAtUtc)
-            .Select(c => MapChild(c))
-            .ToList();
 }

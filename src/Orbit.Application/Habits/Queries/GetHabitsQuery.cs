@@ -43,6 +43,7 @@ public record HabitChildResponse(
     DateOnly? EndDate,
     int? Position,
     IReadOnlyList<ChecklistItem> ChecklistItems,
+    bool IsOverdue,
     IReadOnlyList<HabitChildResponse> Children);
 
 public record GetHabitsQuery(
@@ -127,6 +128,6 @@ public class GetHabitsQueryHandler(
                 c.Id, c.Title, c.Description,
                 c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
                 c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
-                c.Position, c.ChecklistItems, MapChildren(c.Id, lookup)))
+                c.Position, c.ChecklistItems, false, MapChildren(c.Id, lookup)))
             .ToList();
 }

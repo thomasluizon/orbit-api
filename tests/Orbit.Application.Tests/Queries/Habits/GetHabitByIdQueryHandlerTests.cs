@@ -5,12 +5,14 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
 public class GetHabitByIdQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetHabitByIdQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -19,7 +21,8 @@ public class GetHabitByIdQueryHandlerTests
 
     public GetHabitByIdQueryHandlerTests()
     {
-        _handler = new GetHabitByIdQueryHandler(_habitRepo);
+        _handler = new GetHabitByIdQueryHandler(_habitRepo, _userDateService);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
     private static Habit CreateTestHabit(string title = "Test Habit")
@@ -27,6 +30,25 @@ public class GetHabitByIdQueryHandlerTests
         return Habit.Create(new HabitCreateParams(
             UserId, title, FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
+    }
+
+    private static Habit CreateOneTimeHabit(string title, DateOnly dueDate, Guid? parentHabitId = null)
+    {
+        return Habit.Create(new HabitCreateParams(
+            UserId,
+            title,
+            null,
+            null,
+            DueDate: dueDate,
+            ParentHabitId: parentHabitId)).Value;
+    }
+
+    private static void AttachChild(Habit parent, Habit child)
+    {
+        var field = typeof(Habit).GetField("_children", BindingFlags.Instance | BindingFlags.NonPublic);
+        var children = field?.GetValue(parent) as IList<Habit>;
+        children.Should().NotBeNull();
+        children!.Add(child);
     }
 
     [Fact]
@@ -109,5 +131,28 @@ public class GetHabitByIdQueryHandlerTests
         detail.IsBadHabit.Should().BeFalse();
         detail.Children.Should().BeEmpty();
         detail.ChecklistItems.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_OverdueChild_ReturnsChildIsOverdue()
+    {
+        var parent = CreateTestHabit("Parent Habit");
+        var child = CreateOneTimeHabit("Overdue Child", Today.AddDays(-2), parent.Id);
+        AttachChild(parent, child);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+
+        var query = new GetHabitByIdQuery(UserId, HabitId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Children.Should().ContainSingle();
+        result.Value.Children[0].Title.Should().Be("Overdue Child");
+        result.Value.Children[0].IsOverdue.Should().BeTrue();
     }
 }
