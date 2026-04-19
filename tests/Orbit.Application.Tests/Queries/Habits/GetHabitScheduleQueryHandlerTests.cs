@@ -555,4 +555,57 @@ public class GetHabitScheduleQueryHandlerTests
         if (result.Value.Items.Count > 0)
             result.Value.Items.Where(h => h.IsOverdue).Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Handle_ParentWithOverdueOneTimeChild_IncludesChildAsOverdue()
+    {
+        var parent = CreateTestHabit(
+            title: "Project",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            dueDate: Today.AddDays(30));
+        var child = CreateTestHabit(
+            title: "Past step",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            dueDate: Today.AddDays(-2),
+            parentHabitId: parent.Id);
+        SetupHabits(parent, child);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.Items[0].Children.Should().ContainSingle();
+        result.Value.Items[0].Children[0].Title.Should().Be("Past step");
+        result.Value.Items[0].Children[0].IsOverdue.Should().BeTrue();
+        result.Value.Items[0].Children[0].ScheduledDates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ParentWithOverdueRecurringChild_IncludesChildAsOverdue()
+    {
+        var parent = CreateTestHabit(
+            title: "Project",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            dueDate: Today.AddDays(30));
+        var child = CreateTestHabit(
+            title: "Weekly step",
+            frequencyUnit: FrequencyUnit.Week,
+            frequencyQuantity: 1,
+            dueDate: Today.AddDays(-2),
+            parentHabitId: parent.Id);
+        SetupHabits(parent, child);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.Items[0].Children.Should().ContainSingle();
+        result.Value.Items[0].Children[0].Title.Should().Be("Weekly step");
+        result.Value.Items[0].Children[0].IsOverdue.Should().BeTrue();
+    }
 }

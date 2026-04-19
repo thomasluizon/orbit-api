@@ -8,7 +8,16 @@ public static class HabitMetricsCalculator
 {
     public static HabitMetrics Calculate(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
     {
-        var logDates = habit.Logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
+        return Calculate(habit, habit.Logs, today, userTimeZone);
+    }
+
+    public static HabitMetrics Calculate(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        DateOnly today,
+        TimeZoneInfo? userTimeZone = null)
+    {
+        var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
         var expectedDates = GenerateExpectedDates(habit, today, userTimeZone).ToList();
 
         var currentStreak = CalculateCurrentStreak(habit, expectedDates, logDates, today);
