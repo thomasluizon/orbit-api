@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Referrals.Commands;
 using Orbit.Domain.Common;
@@ -203,19 +204,19 @@ public partial class LogHabitCommandHandler(
 
         // Load all linked goals in a single query instead of one per goal
         var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
-            g => goalIds.Contains(g.Id), ct);
-
-        HabitMetrics? metrics = null;
+            g => goalIds.Contains(g.Id),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            ct);
 
         var updates = new List<LinkedGoalUpdate>();
         foreach (var trackedGoal in trackedGoals)
         {
             if (trackedGoal.Type == GoalType.Streak && trackedGoal.Status == GoalStatus.Active)
             {
-                // Compute streak lazily (once per call) since all streak goals share the same habit
-                metrics ??= HabitMetricsCalculator.Calculate(habit, today);
-                trackedGoal.SyncStreakProgress(metrics.CurrentStreak);
-                updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, metrics.CurrentStreak, trackedGoal.TargetValue));
+                if (GoalStreakSyncService.SyncCurrentStreak(trackedGoal, today))
+                {
+                    updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, trackedGoal.CurrentValue, trackedGoal.TargetValue));
+                }
             }
             else if (trackedGoal.Status == GoalStatus.Active)
             {

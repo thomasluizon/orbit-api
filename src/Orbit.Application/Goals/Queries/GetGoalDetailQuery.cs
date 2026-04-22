@@ -2,10 +2,8 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
-using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -43,27 +41,9 @@ public class GetGoalDetailQueryHandler(
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        // Passive streak sync: update streak progress if this is a streak goal and hasn't been synced today
-        if (goal.Type == GoalType.Streak && goal.Status == GoalStatus.Active)
+        if (GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday))
         {
-            var syncedDate = goal.StreakSyncedAtUtc.HasValue
-                ? DateOnly.FromDateTime(goal.StreakSyncedAtUtc.Value)
-                : (DateOnly?)null;
-
-            if (syncedDate is null || syncedDate < userToday)
-            {
-                var streakHabits = goal.Habits.ToList();
-                if (streakHabits.Count > 0)
-                {
-                    // Use minimum streak across all linked habits so a broken streak
-                    // on any habit resets the goal (deterministic for multi-link scenarios).
-                    var minStreak = streakHabits
-                        .Select(h => HabitMetricsCalculator.Calculate(h, userToday).CurrentStreak)
-                        .Min();
-                    goal.SyncStreakProgress(minStreak);
-                    await unitOfWork.SaveChangesAsync(cancellationToken);
-                }
-            }
+            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
         // Build detail DTO (same as GetGoalByIdQueryHandler)

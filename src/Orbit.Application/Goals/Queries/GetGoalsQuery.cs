@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -36,7 +37,8 @@ public record GetGoalsQuery(
 public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IUserDateService userDateService) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
+    IUserDateService userDateService,
+    IUnitOfWork unitOfWork) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
     public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
@@ -44,12 +46,13 @@ public class GetGoalsQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<PaginatedResponse<GoalDto>>();
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        await SyncStaleStreakGoalsAsync(request.UserId, userToday, cancellationToken);
+
         var allGoals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId,
             q => q.Include(g => g.Habits),
             cancellationToken);
-
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         IEnumerable<Goal> filtered = allGoals;
 
@@ -71,6 +74,38 @@ public class GetGoalsQueryHandler(
             .ToList();
 
         return Result.Success(new PaginatedResponse<GoalDto>(items, request.Page, request.PageSize, totalCount, totalPages));
+    }
+
+    private async Task SyncStaleStreakGoalsAsync(Guid userId, DateOnly userToday, CancellationToken cancellationToken)
+    {
+        var activeStreakGoals = await goalRepository.FindAsync(
+            g => g.UserId == userId && g.Type == GoalType.Streak && g.Status == GoalStatus.Active,
+            q => q.Include(g => g.Habits),
+            cancellationToken);
+
+        var staleGoalIds = activeStreakGoals
+            .Where(goal => GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
+            .Select(goal => goal.Id)
+            .ToList();
+
+        if (staleGoalIds.Count == 0)
+            return;
+
+        var staleTrackedGoals = await goalRepository.FindTrackedAsync(
+            g => staleGoalIds.Contains(g.Id),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            cancellationToken);
+
+        var syncedAnyGoals = false;
+        foreach (var goal in staleTrackedGoals)
+        {
+            syncedAnyGoals |= GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday);
+        }
+
+        if (syncedAnyGoals)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static GoalDto MapToDto(Goal g, DateOnly userToday) => new(

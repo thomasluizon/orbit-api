@@ -19,13 +19,19 @@ public class AuthSessionService(
 {
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
+    private DateTime? GetRefreshExpiry(DateTime nowUtc) =>
+        _jwtSettings.RefreshExpiryDays.HasValue
+            ? nowUtc.AddDays(_jwtSettings.RefreshExpiryDays.Value)
+            : null;
+
     public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken = default)
     {
         var refreshToken = GenerateRefreshToken();
+        var nowUtc = DateTime.UtcNow;
         var sessionResult = UserSession.Create(
             userId,
             HashToken(refreshToken),
-            DateTime.UtcNow.AddDays(_jwtSettings.RefreshExpiryDays));
+            GetRefreshExpiry(nowUtc));
 
         if (sessionResult.IsFailure)
             return Result.Failure<SessionTokens>(sessionResult.Error, ErrorCodes.SessionCreationFailed);
@@ -57,7 +63,7 @@ public class AuthSessionService(
         var newRefreshToken = GenerateRefreshToken();
         session.Rotate(
             HashToken(newRefreshToken),
-            nowUtc.AddDays(_jwtSettings.RefreshExpiryDays),
+            GetRefreshExpiry(nowUtc),
             nowUtc);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

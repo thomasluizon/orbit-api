@@ -12,15 +12,16 @@ public class GetGoalMetricsQueryHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetGoalMetricsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid GoalId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 4, 3);
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public GetGoalMetricsQueryHandlerTests()
     {
-        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _payGate, _userDateService);
+        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _payGate, _userDateService, _unitOfWork);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -29,6 +30,13 @@ public class GetGoalMetricsQueryHandlerTests
     private static Goal CreateTestGoal()
     {
         return Goal.Create(UserId, "Test Goal", 100, "pages").Value;
+    }
+
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -99,5 +107,41 @@ public class GetGoalMetricsQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
+    }
+
+    [Fact]
+    public async Task Handle_WithBadHabitLinkedStreakGoal_PersistsSyncedGoalBeforeCalculatingMetrics()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId,
+            "Avoid doom scrolling",
+            7,
+            "days",
+            Type: Orbit.Domain.Enums.GoalType.Streak)).Value;
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Doom scrolling",
+            Orbit.Domain.Enums.FrequencyUnit.Day,
+            1,
+            IsBadHabit: true,
+            DueDate: Today)).Value;
+
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+        badHabit.AddGoal(goal);
+        goal.AddHabit(badHabit);
+
+        _goalRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goal);
+
+        var result = await _handler.Handle(new GetGoalMetricsQuery(UserId, GoalId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(2);
+        goal.StreakSyncedAtUtc.Should().NotBeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
