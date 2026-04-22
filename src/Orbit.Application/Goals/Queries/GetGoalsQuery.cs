@@ -46,12 +46,13 @@ public class GetGoalsQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<PaginatedResponse<GoalDto>>();
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        await SyncStaleStreakGoalsAsync(request.UserId, userToday, cancellationToken);
+
         var allGoals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId,
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.Habits),
             cancellationToken);
-
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         IEnumerable<Goal> filtered = allGoals;
 
@@ -66,13 +67,37 @@ public class GetGoalsQueryHandler(
         var totalCount = ordered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
 
-        var pageGoals = ordered
+        var items = ordered
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
+            .Select(g => MapToDto(g, userToday))
             .ToList();
 
+        return Result.Success(new PaginatedResponse<GoalDto>(items, request.Page, request.PageSize, totalCount, totalPages));
+    }
+
+    private async Task SyncStaleStreakGoalsAsync(Guid userId, DateOnly userToday, CancellationToken cancellationToken)
+    {
+        var activeStreakGoals = await goalRepository.FindAsync(
+            g => g.UserId == userId && g.Type == GoalType.Streak && g.Status == GoalStatus.Active,
+            q => q.Include(g => g.Habits),
+            cancellationToken);
+
+        var staleGoalIds = activeStreakGoals
+            .Where(goal => GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
+            .Select(goal => goal.Id)
+            .ToList();
+
+        if (staleGoalIds.Count == 0)
+            return;
+
+        var staleTrackedGoals = await goalRepository.FindTrackedAsync(
+            g => staleGoalIds.Contains(g.Id),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            cancellationToken);
+
         var syncedAnyGoals = false;
-        foreach (var goal in pageGoals)
+        foreach (var goal in staleTrackedGoals)
         {
             syncedAnyGoals |= GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday);
         }
@@ -81,12 +106,6 @@ public class GetGoalsQueryHandler(
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
-
-        var items = pageGoals
-            .Select(g => MapToDto(g, userToday))
-            .ToList();
-
-        return Result.Success(new PaginatedResponse<GoalDto>(items, request.Page, request.PageSize, totalCount, totalPages));
     }
 
     private static GoalDto MapToDto(Goal g, DateOnly userToday) => new(

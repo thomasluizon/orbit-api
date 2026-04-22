@@ -25,6 +25,11 @@ public class GetGoalsQueryHandlerTests
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal>().AsReadOnly());
     }
 
     private static Goal CreateTestGoal(string title = "Test Goal", decimal target = 100, decimal current = 0)
@@ -207,6 +212,11 @@ public class GetGoalsQueryHandlerTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal }.AsReadOnly());
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal }.AsReadOnly());
 
         var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
@@ -215,6 +225,52 @@ public class GetGoalsQueryHandlerTests
         result.Value.Items[0].CurrentValue.Should().Be(2);
         goal.CurrentValue.Should().Be(2);
         goal.StreakSyncedAtUtc.Should().NotBeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_StatusFilter_ReappliesAfterPassiveSyncCompletesGoal()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId,
+            "Avoid doom scrolling",
+            2,
+            "days",
+            Type: GoalType.Streak)).Value;
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Doom scrolling",
+            FrequencyUnit.Day,
+            1,
+            IsBadHabit: true,
+            DueDate: Today)).Value;
+
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+        badHabit.AddGoal(goal);
+        goal.AddHabit(badHabit);
+
+        var goals = new List<Goal> { goal }.AsReadOnly();
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goals);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goals);
+
+        var result = await _handler.Handle(
+            new GetGoalsQuery(UserId, StatusFilter: GoalStatus.Active),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().BeEmpty();
+        result.Value.TotalCount.Should().Be(0);
+        goal.Status.Should().Be(GoalStatus.Completed);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
