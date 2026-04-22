@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -36,7 +37,8 @@ public record GetGoalsQuery(
 public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IUserDateService userDateService) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
+    IUserDateService userDateService,
+    IUnitOfWork unitOfWork) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
     public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
@@ -46,7 +48,7 @@ public class GetGoalsQueryHandler(
 
         var allGoals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId,
-            q => q.Include(g => g.Habits),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
             cancellationToken);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
@@ -64,9 +66,23 @@ public class GetGoalsQueryHandler(
         var totalCount = ordered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
 
-        var items = ordered
+        var pageGoals = ordered
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
+            .ToList();
+
+        var syncedAnyGoals = false;
+        foreach (var goal in pageGoals)
+        {
+            syncedAnyGoals |= GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday);
+        }
+
+        if (syncedAnyGoals)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        var items = pageGoals
             .Select(g => MapToDto(g, userToday))
             .ToList();
 

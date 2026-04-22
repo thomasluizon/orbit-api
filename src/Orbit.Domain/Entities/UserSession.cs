@@ -6,14 +6,14 @@ public class UserSession : Entity
 {
     public Guid UserId { get; private set; }
     public string TokenHash { get; private set; } = null!;
-    public DateTime ExpiresAtUtc { get; private set; }
+    public DateTime? ExpiresAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime LastUsedAtUtc { get; private set; }
     public DateTime? RevokedAtUtc { get; private set; }
 
     private UserSession() { }
 
-    public static Result<UserSession> Create(Guid userId, string tokenHash, DateTime expiresAtUtc)
+    public static Result<UserSession> Create(Guid userId, string tokenHash, DateTime? expiresAtUtc)
     {
         if (userId == Guid.Empty)
             return Result.Failure<UserSession>("User ID is required.");
@@ -31,9 +31,11 @@ public class UserSession : Entity
         });
     }
 
-    public bool CanUse(DateTime nowUtc) => RevokedAtUtc is null && ExpiresAtUtc > nowUtc;
+    public bool CanUse(DateTime nowUtc) =>
+        RevokedAtUtc is null &&
+        (!ExpiresAtUtc.HasValue || ExpiresAtUtc.Value > nowUtc);
 
-    public void Rotate(string newTokenHash, DateTime newExpiresAtUtc, DateTime usedAtUtc)
+    public void Rotate(string newTokenHash, DateTime? newExpiresAtUtc, DateTime usedAtUtc)
     {
         TokenHash = newTokenHash;
         ExpiresAtUtc = newExpiresAtUtc;

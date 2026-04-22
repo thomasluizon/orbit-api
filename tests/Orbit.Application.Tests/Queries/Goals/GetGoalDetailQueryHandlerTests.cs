@@ -17,7 +17,7 @@ public class GetGoalDetailQueryHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid GoalId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 4, 3);
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public GetGoalDetailQueryHandlerTests()
     {
@@ -30,6 +30,13 @@ public class GetGoalDetailQueryHandlerTests
     private static Goal CreateTestGoal()
     {
         return Goal.Create(new Goal.CreateGoalParams(UserId, "Test Goal", 100, "pages", "Read 100 pages")).Value;
+    }
+
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -124,5 +131,41 @@ public class GetGoalDetailQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
+    }
+
+    [Fact]
+    public async Task Handle_WithBadHabitLinkedStreakGoal_ReturnsSyncedCurrentValue()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId,
+            "Avoid doom scrolling",
+            7,
+            "days",
+            Type: Orbit.Domain.Enums.GoalType.Streak)).Value;
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Doom scrolling",
+            Orbit.Domain.Enums.FrequencyUnit.Day,
+            1,
+            IsBadHabit: true,
+            DueDate: Today)).Value;
+
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+        badHabit.AddGoal(goal);
+        goal.AddHabit(badHabit);
+
+        _goalRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goal);
+
+        var result = await _handler.Handle(new GetGoalDetailQuery(UserId, GoalId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Goal.CurrentValue.Should().Be(2);
+        goal.CurrentValue.Should().Be(2);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

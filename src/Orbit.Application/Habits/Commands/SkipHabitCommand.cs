@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -112,7 +113,9 @@ public class SkipHabitCommandHandler(
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
         var trackedGoals = await goalRepository.FindTrackedAsync(
-            g => goalIds.Contains(g.Id), cancellationToken);
+            g => goalIds.Contains(g.Id),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            cancellationToken);
 
         var streakGoals = trackedGoals
             .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active)
@@ -120,8 +123,7 @@ public class SkipHabitCommandHandler(
 
         if (streakGoals.Count == 0) return;
 
-        var metrics = HabitMetricsCalculator.Calculate(habit, today);
         foreach (var streakGoal in streakGoals)
-            streakGoal.SyncStreakProgress(metrics.CurrentStreak);
+            GoalStreakSyncService.SyncCurrentStreak(streakGoal, today);
     }
 }

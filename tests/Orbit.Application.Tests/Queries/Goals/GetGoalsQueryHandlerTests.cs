@@ -13,14 +13,15 @@ public class GetGoalsQueryHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetGoalsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 4, 3);
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public GetGoalsQueryHandlerTests()
     {
-        _handler = new GetGoalsQueryHandler(_goalRepo, _payGate, _userDateService);
+        _handler = new GetGoalsQueryHandler(_goalRepo, _payGate, _userDateService, _unitOfWork);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -31,6 +32,13 @@ public class GetGoalsQueryHandlerTests
         var goal = Goal.Create(new Goal.CreateGoalParams(UserId, title, target, "units", Deadline: Today.AddDays(30))).Value;
         if (current > 0) goal.UpdateProgress(current);
         return goal;
+    }
+
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -170,5 +178,43 @@ public class GetGoalsQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
+    }
+
+    [Fact]
+    public async Task Handle_WithBadHabitLinkedStreakGoal_PassivelySyncsQuietDayProgress()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId,
+            "Avoid doom scrolling",
+            7,
+            "days",
+            Type: GoalType.Streak)).Value;
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Doom scrolling",
+            FrequencyUnit.Day,
+            1,
+            IsBadHabit: true,
+            DueDate: Today)).Value;
+
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+        badHabit.AddGoal(goal);
+        goal.AddHabit(badHabit);
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle();
+        result.Value.Items[0].CurrentValue.Should().Be(2);
+        goal.CurrentValue.Should().Be(2);
+        goal.StreakSyncedAtUtc.Should().NotBeNull();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

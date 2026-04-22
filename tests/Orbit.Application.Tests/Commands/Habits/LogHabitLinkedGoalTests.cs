@@ -31,7 +31,7 @@ public class LogHabitLinkedGoalTests
     private readonly LogHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 3, 20);
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public LogHabitLinkedGoalTests()
     {
@@ -53,6 +53,13 @@ public class LogHabitLinkedGoalTests
             .Returns(user);
     }
 
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+    }
+
     [Fact]
     public async Task Handle_WithLinkedStandardGoal_UpdatesGoalProgress()
     {
@@ -71,6 +78,7 @@ public class LogHabitLinkedGoalTests
 
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
@@ -85,6 +93,61 @@ public class LogHabitLinkedGoalTests
     }
 
     [Fact]
+    public async Task Handle_WithLinkedStreakGoal_UsesMinimumStreakAcrossAllLinkedHabits()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId,
+            "Avoid doom scrolling",
+            7,
+            "days",
+            Type: GoalType.Streak)).Value;
+
+        var completedHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Read",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today)).Value;
+        SetCreatedAtUtc(completedHabit, Today.AddDays(-3));
+        completedHabit.Log(Today.AddDays(-3), advanceDueDate: false);
+        completedHabit.Log(Today.AddDays(-2), advanceDueDate: false);
+        completedHabit.Log(Today.AddDays(-1), advanceDueDate: false);
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Doom scrolling",
+            FrequencyUnit.Day,
+            1,
+            IsBadHabit: true,
+            DueDate: Today)).Value;
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+
+        completedHabit.AddGoal(goal);
+        badHabit.AddGoal(goal);
+        goal.AddHabit(completedHabit);
+        goal.AddHabit(badHabit);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(completedHabit);
+
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal });
+
+        var result = await _handler.Handle(new LogHabitCommand(UserId, completedHabit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.LinkedGoalUpdates.Should().ContainSingle();
+        result.Value.LinkedGoalUpdates![0].NewProgress.Should().Be(2);
+        goal.CurrentValue.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Handle_WithLinkedStreakGoal_SyncsStreakProgress()
     {
         var goal = Goal.Create(new Goal.CreateGoalParams(UserId, "7-day streak", 7, "days", Type: GoalType.Streak)).Value;
@@ -92,6 +155,7 @@ public class LogHabitLinkedGoalTests
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         habit.AddGoal(goal);
+        goal.AddHabit(habit);
 
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -101,6 +165,7 @@ public class LogHabitLinkedGoalTests
 
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
@@ -109,6 +174,7 @@ public class LogHabitLinkedGoalTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.LinkedGoalUpdates.Should().NotBeNull();
+        result.Value.LinkedGoalUpdates![0].NewProgress.Should().Be(1);
     }
 
     [Fact]

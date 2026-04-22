@@ -22,7 +22,7 @@ public class SkipHabitCommandHandlerTests
     private readonly SkipHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly Today = new(2026, 3, 20); // Friday
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public SkipHabitCommandHandlerTests()
     {
@@ -31,6 +31,13 @@ public class SkipHabitCommandHandlerTests
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+    }
+
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -172,6 +179,54 @@ public class SkipHabitCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         _cache.TryGetValue(cacheKey, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_WithLinkedStreakGoal_UsesMinimumStreakAcrossAllLinkedHabits()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId,
+            "Avoid doom scrolling",
+            7,
+            "days",
+            Type: GoalType.Streak)).Value;
+
+        var skippedHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Read",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today)).Value;
+        SetCreatedAtUtc(skippedHabit, Today.AddDays(-3));
+        skippedHabit.Log(Today.AddDays(-3), advanceDueDate: false);
+        skippedHabit.Log(Today.AddDays(-2), advanceDueDate: false);
+        skippedHabit.Log(Today.AddDays(-1), advanceDueDate: false);
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Doom scrolling",
+            FrequencyUnit.Day,
+            1,
+            IsBadHabit: true,
+            DueDate: Today)).Value;
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+
+        skippedHabit.AddGoal(goal);
+        badHabit.AddGoal(goal);
+        goal.AddHabit(skippedHabit);
+        goal.AddHabit(badHabit);
+
+        SetupHabitFound(skippedHabit);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal });
+
+        var result = await _handler.Handle(new SkipHabitCommand(UserId, skippedHabit.Id, Today), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(2);
     }
 
     private void SetupHabitFound(Habit habit)

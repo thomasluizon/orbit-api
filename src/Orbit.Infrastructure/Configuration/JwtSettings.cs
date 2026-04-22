@@ -9,7 +9,7 @@ public sealed class JwtSettings
     public required string Audience { get; init; }
     public int ExpiryHours { get; init; } = 168;
     public int ExpiryMinutes { get; init; }
-    public int RefreshExpiryDays { get; init; } = 90;
+    public int? RefreshExpiryDays { get; init; }
 
     /// <summary>
     /// Throws if the configured secret is too weak for HMAC-SHA256. Call once at startup.
