@@ -18,7 +18,8 @@ public record CreateSubHabitCommand(
     bool IsBadHabit = false,
     DateOnly? DueDate = null,
     HabitCommandOptions? Options = null,
-    IReadOnlyList<Guid>? TagIds = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<Guid>? TagIds = null,
+    string? Emoji = null) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -70,6 +71,7 @@ public class CreateSubHabitCommandHandler(
             request.FrequencyUnit ?? parent.FrequencyUnit,
             request.FrequencyQuantity ?? parent.FrequencyQuantity,
             request.Description,
+            Emoji: request.Emoji,
             Days: opts.Days,
             IsBadHabit: request.IsBadHabit,
             DueDate: childDueDate,

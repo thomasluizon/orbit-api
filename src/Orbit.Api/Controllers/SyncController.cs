@@ -68,7 +68,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         int? Position,
         Guid? ParentHabitId,
         DateTime CreatedAtUtc,
-        DateTime UpdatedAtUtc);
+        DateTime UpdatedAtUtc,
+        string? Emoji = null);
 
     public record SyncHabitLogDto(Guid Id, Guid HabitId, DateOnly Date, decimal Value, DateTime CreatedAtUtc, DateTime UpdatedAtUtc);
 
@@ -500,7 +501,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             habit.Position,
             habit.ParentHabitId,
             habit.CreatedAtUtc,
-            habit.UpdatedAtUtc);
+            habit.UpdatedAtUtc,
+            Emoji: habit.Emoji);
     }
 
     private static SyncHabitLogDto MapHabitLog(HabitLog habitLog)
