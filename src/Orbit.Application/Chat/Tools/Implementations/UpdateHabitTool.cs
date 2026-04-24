@@ -24,6 +24,7 @@ public class UpdateHabitTool(
             habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to update" },
             title = new { type = JsonSchemaTypes.String, description = "New title" },
             description = new { type = JsonSchemaTypes.String, description = "New description", nullable = true },
+            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the habit icon. Set to null to clear.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
@@ -130,7 +131,8 @@ public class UpdateHabitTool(
             IsFlexible: ResolveOptionalBool(args, "is_flexible"),
             EndDate: endDate,
             ClearEndDate: clearEndDate,
-            ScheduledReminders: ResolveOptionalScheduledReminders(args));
+            ScheduledReminders: ResolveOptionalScheduledReminders(args),
+            Emoji: ResolveEmoji(args, habit));
     }
 
     private static string ResolveTitle(JsonElement args, Habit habit) =>
@@ -142,6 +144,11 @@ public class UpdateHabitTool(
         JsonArgumentParser.PropertyExists(args, "description")
             ? JsonArgumentParser.GetNullableString(args, "description")
             : habit.Description;
+
+    private static string? ResolveEmoji(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "emoji")
+            ? JsonArgumentParser.GetNullableString(args, "emoji")
+            : habit.Emoji;
 
     private static (FrequencyUnit? Unit, int? Quantity) ResolveFrequency(JsonElement args, Habit habit)
     {
