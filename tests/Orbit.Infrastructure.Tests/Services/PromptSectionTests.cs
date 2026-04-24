@@ -77,7 +77,8 @@ public class GlobalRulesSectionTests
 
         result.Should().Contain("HABIT EMOJIS");
         result.Should().Contain("make all habit emojis sensible");
-        result.Should().Contain("update_habit once per habit");
+        result.Should().Contain("bulk_update_habit_emojis");
+        result.Should().Contain("Do not call update_habit once per habit");
     }
 }
 
