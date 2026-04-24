@@ -19,7 +19,8 @@ public class ActiveHabitsSectionTests
         Guid? parentId = null,
         bool isBadHabit = false,
         bool isGeneral = false,
-        DateOnly? dueDate = null)
+        DateOnly? dueDate = null,
+        string? emoji = null)
     {
         var effectiveDueDate = dueDate ?? Today;
 
@@ -29,14 +30,16 @@ public class ActiveHabitsSectionTests
                 ValidUserId, title, null, null,
                 DueDate: effectiveDueDate,
                 ParentHabitId: parentId,
-                IsGeneral: true)).Value;
+                IsGeneral: true,
+                Emoji: emoji)).Value;
         }
 
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, title, FrequencyUnit.Day, 1,
             IsBadHabit: isBadHabit,
             DueDate: effectiveDueDate,
-            ParentHabitId: parentId)).Value;
+            ParentHabitId: parentId,
+            Emoji: emoji)).Value;
 
         if (isCompleted)
             habit.Log(effectiveDueDate);
@@ -102,6 +105,17 @@ public class ActiveHabitsSectionTests
         // Assert
         result.Should().Contain("Morning Routine");
         result.Should().Contain("Exercise");
+    }
+
+    [Fact]
+    public void Build_WithEmoji_IncludesEmojiLabel()
+    {
+        var habit = CreateHabit("Gym", emoji: "💪");
+        var context = CreateContext(habits: [habit]);
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("Emoji: 💪");
     }
 
     [Fact]

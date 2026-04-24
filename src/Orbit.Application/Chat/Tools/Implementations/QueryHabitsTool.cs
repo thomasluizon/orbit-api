@@ -17,7 +17,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Query and filter the user's habits. Use this tool whenever you need to look up, list, or find habits. Supports filtering by date, search text, frequency, tags, completion status, general habits, bad habits, and more. Always call this before answering questions about habits.";
+        "Query and filter the user's habits. Use this tool whenever you need to look up, list, or find habits. Supports filtering by date, search text, frequency, tags, completion status, general habits, bad habits, and more. Always call this before answering questions about habits or before bulk-updating habit emojis.";
 
     public object GetParameterSchema() => new
     {
@@ -189,7 +189,8 @@ public class QueryHabitsTool(
         var freqLabel = FormatFrequencyLabel(habit);
         var labels = BuildLabels(habit, today, includeMetrics);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
-        return $"- \"{habit.Title}\" | ID: {habit.Id} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
+        var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
+        return $"- \"{habit.Title}\" | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
     }
 
     private static List<string> BuildLabels(Habit habit, DateOnly today, bool includeMetrics)
@@ -248,7 +249,8 @@ public class QueryHabitsTool(
             if (includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
             if (child.IsCompleted) childLabels.Add("COMPLETED");
             var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
-            sb.AppendLine($"{indent}- \"{child.Title}\" | ID: {child.Id}{childLabelStr}");
+            var emojiLabel = string.IsNullOrWhiteSpace(child.Emoji) ? "No emoji" : $"Emoji: {child.Emoji}";
+            sb.AppendLine($"{indent}- \"{child.Title}\" | ID: {child.Id} | {emojiLabel}{childLabelStr}");
             AppendChildren(sb, allHabits, child.Id, today, includeMetrics, depth + 1);
         }
     }

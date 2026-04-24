@@ -37,7 +37,7 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine();
 
         sb.AppendLine("When user mentions an existing habit -> find its ID from the list above. Call query_habits for detailed info (metrics, dates, etc.).");
-        sb.AppendLine("When user mentions a NEW activity -> use create_habit");
+        sb.AppendLine("When user mentions a NEW activity -> use create_habit. Include a relevant emoji when clear.");
 
         return sb.ToString();
     }
@@ -72,6 +72,7 @@ public class ActiveHabitsSection : IPromptSection
     private static string BuildHabitLabel(Habit habit, DateOnly? userToday)
     {
         var labels = new List<string>();
+        if (!string.IsNullOrWhiteSpace(habit.Emoji)) labels.Add($"Emoji: {habit.Emoji}");
         if (habit.IsGeneral) labels.Add("GENERAL");
         else if (!habit.IsCompleted && userToday.HasValue && habit.DueDate < userToday.Value) labels.Add("OVERDUE");
         else if (!habit.IsCompleted && userToday.HasValue && habit.DueDate == userToday.Value) labels.Add("TODAY");
@@ -104,7 +105,8 @@ public class ActiveHabitsSection : IPromptSection
             .OrderBy(h => h.Position);
         foreach (var child in children)
         {
-            sb.AppendLine($"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)} | {child.Id}");
+            var labelStr = BuildHabitLabel(child, null);
+            sb.AppendLine($"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)} | {child.Id}{labelStr}");
             AppendChildren(sb, allHabits, child.Id, depth + 1);
         }
     }

@@ -68,6 +68,17 @@ public class GlobalRulesSectionTests
         result.Should().Contain("ONE targeted question");
         result.Should().Contain("Structuring Strategy");
     }
+
+    [Fact]
+    public void Build_ContainsHabitEmojiRule()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().Contain("HABIT EMOJIS");
+        result.Should().Contain("make all habit emojis sensible");
+        result.Should().Contain("update_habit once per habit");
+    }
 }
 
 public class StructuringStrategySectionTests

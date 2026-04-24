@@ -14,7 +14,7 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null. Set is_flexible to true for window-based tracking (e.g. '3x per week, any days').";
+        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. Use emoji to set a user-requested emoji or a sensible emoji for the habit. To update all habit emojis, call this once per habit after identifying them. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null. Set is_flexible to true for window-based tracking (e.g. '3x per week, any days').";
 
     public object GetParameterSchema() => new
     {

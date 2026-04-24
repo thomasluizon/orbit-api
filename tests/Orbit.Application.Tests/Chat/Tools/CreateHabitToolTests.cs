@@ -296,6 +296,17 @@ public class CreateHabitToolTests
         result.EntityName.Should().Be("Read");
     }
 
+    [Fact]
+    public async Task WithEmoji_CreatesHabitWithEmoji()
+    {
+        var result = await Execute("""{"title": "Gym", "frequency_unit": "Day", "emoji": "💪"}""");
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit => habit.Title == "Gym" && habit.Emoji == "💪"),
+            Arg.Any<CancellationToken>());
+    }
+
     // ── Reminder times ──
 
     [Fact]
@@ -420,6 +431,29 @@ public class CreateHabitToolTests
 
         result.Success.Should().BeTrue();
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WithSubHabitsWithEmoji_CreatesParentAndChildrenWithEmoji()
+    {
+        var result = await Execute("""
+        {
+            "title": "Workout",
+            "frequency_unit": "Day",
+            "emoji": "🏋️",
+            "sub_habits": [
+                {"title": "Push-ups", "emoji": "💪"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit => habit.Title == "Workout" && habit.Emoji == "🏋️"),
+            Arg.Any<CancellationToken>());
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit => habit.Title == "Push-ups" && habit.Emoji == "💪"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

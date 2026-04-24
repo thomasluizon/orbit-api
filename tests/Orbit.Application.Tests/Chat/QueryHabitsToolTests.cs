@@ -54,6 +54,20 @@ public class QueryHabitsToolTests
     }
 
     [Fact]
+    public async Task NoFilters_IncludesEmojiState()
+    {
+        var withEmoji = CreateHabit("Gym", FrequencyUnit.Day, 1, dueDate: Today, emoji: "💪");
+        var withoutEmoji = CreateHabit("Read", FrequencyUnit.Day, 1, dueDate: Today);
+        SetupHabits(withEmoji, withoutEmoji);
+
+        var result = await Execute("{}");
+
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("Emoji: 💪");
+        result.EntityName.Should().Contain("No emoji");
+    }
+
+    [Fact]
     public async Task NoFilters_ExcludesChildHabitsFromTopLevel()
     {
         var parent = CreateHabit("Before Bed", FrequencyUnit.Day, 1, dueDate: Today, position: 0);
@@ -446,11 +460,12 @@ public class QueryHabitsToolTests
         string title, FrequencyUnit? freq, int? qty,
         DateOnly? dueDate = null, int? position = null,
         bool isBadHabit = false, bool isGeneral = false,
-        Guid? parentId = null)
+        Guid? parentId = null,
+        string? emoji = null)
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, title, freq, qty,
             DueDate: dueDate, IsBadHabit: isBadHabit, IsGeneral: isGeneral,
-            ParentHabitId: parentId)).Value;
+            ParentHabitId: parentId, Emoji: emoji)).Value;
         if (position.HasValue) habit.SetPosition(position.Value);
         return habit;
     }
