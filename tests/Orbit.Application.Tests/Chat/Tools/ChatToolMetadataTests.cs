@@ -22,6 +22,7 @@ public class ChatToolMetadataTests
         var logger = Substitute.For<ILogger<UpdateGoalStatusTool>>();
 
         var assignTagsTool = new AssignTagsTool(Repo<Habit>(), Repo<Tag>(), unitOfWork);
+        var bulkUpdateHabitEmojisTool = new BulkUpdateHabitEmojisTool(Repo<Habit>());
         var bulkLogHabitsTool = new BulkLogHabitsTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var bulkSkipHabitsTool = new BulkSkipHabitsTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var createGoalTool = new CreateGoalTool(Repo<Goal>(), unitOfWork);
@@ -44,6 +45,7 @@ public class ChatToolMetadataTests
         var updateHabitTool = new UpdateHabitTool(Repo<Habit>());
 
         AssertTool(assignTagsTool, "assign_tags", "tag", "tag_names");
+        AssertTool(bulkUpdateHabitEmojisTool, "bulk_update_habit_emojis", "emojis", "infer_from_title");
         AssertTool(bulkLogHabitsTool, "bulk_log_habits", "multiple", "habit_ids");
         AssertTool(bulkSkipHabitsTool, "bulk_skip_habits", "multiple", "habit_ids");
         AssertTool(createGoalTool, "create_goal", "goal", "goal_type");

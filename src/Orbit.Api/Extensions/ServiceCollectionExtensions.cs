@@ -159,6 +159,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, SuggestBreakdownTool>();
         builder.Services.AddScoped<IAiTool, DuplicateHabitTool>();
         builder.Services.AddScoped<IAiTool, MoveHabitTool>();
+        builder.Services.AddScoped<IAiTool, BulkUpdateHabitEmojisTool>();
         builder.Services.AddScoped<IAiTool, BulkLogHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkSkipHabitsTool>();
         builder.Services.AddScoped<IAiTool, QueryHabitsTool>();

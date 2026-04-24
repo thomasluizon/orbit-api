@@ -467,7 +467,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["create_habit", "update_habit", "create_sub_habit", "duplicate_habit", "move_habit", "log_habit", "skip_habit", "suggest_breakdown"],
+                chatTools: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "log_habit", "skip_habit", "suggest_breakdown"],
                 mcpTools:
                 [
                     "create_habit",
