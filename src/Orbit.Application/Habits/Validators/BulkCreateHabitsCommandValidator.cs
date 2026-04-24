@@ -21,6 +21,8 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
         {
             SharedHabitRules.AddTitleRules(habit.RuleFor(h => h.Title));
 
+            SharedHabitRules.AddEmojiRules(habit.RuleFor(h => h.Emoji));
+
             habit.RuleFor(h => h.FrequencyQuantity)
                 .GreaterThan(0)
                 .When(h => h.FrequencyQuantity is not null);

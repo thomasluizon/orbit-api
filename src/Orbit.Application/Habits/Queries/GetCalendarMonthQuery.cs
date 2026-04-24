@@ -176,7 +176,8 @@ public class GetCalendarMonthQueryHandler(
             habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
             children, children.Count > 0,
-            flexibleTarget, flexibleCompleted, instances);
+            flexibleTarget, flexibleCompleted, instances,
+            Emoji: habit.Emoji);
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
@@ -228,7 +229,8 @@ public class GetCalendarMonthQueryHandler(
             child.Position, child.ChecklistItems,
             child.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             grandchildren, grandchildren.Count > 0,
-            flexTarget, flexCompleted, isLoggedInRange, instances);
+            flexTarget, flexCompleted, isLoggedInRange, instances,
+            Emoji: child.Emoji);
     }
 
     private static bool HasAnyDescendantDue(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly dateFrom, DateOnly dateTo)

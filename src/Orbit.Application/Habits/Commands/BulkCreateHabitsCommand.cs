@@ -33,7 +33,8 @@ public record BulkHabitItem(
     bool IsFlexible = false,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
-    string? GoogleEventId = null);
+    string? GoogleEventId = null,
+    string? Emoji = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -119,6 +120,7 @@ public partial class BulkCreateHabitsCommandHandler(
                 item.FrequencyUnit,
                 item.FrequencyQuantity,
                 item.Description,
+                Emoji: item.Emoji,
                 Days: item.Days,
                 IsBadHabit: item.IsBadHabit,
                 DueDate: item.DueDate ?? userToday,
@@ -158,6 +160,7 @@ public partial class BulkCreateHabitsCommandHandler(
                         subItem.FrequencyUnit ?? item.FrequencyUnit,
                         subItem.FrequencyQuantity ?? item.FrequencyQuantity,
                         subItem.Description,
+                        Emoji: subItem.Emoji,
                         Days: subItem.Days ?? item.Days,
                         IsBadHabit: subItem.IsBadHabit,
                         DueDate: subItem.DueDate ?? item.DueDate ?? userToday,

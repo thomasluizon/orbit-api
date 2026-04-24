@@ -30,7 +30,8 @@ public record HabitDetailResponse(
     IReadOnlyList<ScheduledReminderTime> ScheduledReminders,
     IReadOnlyList<ChecklistItem> ChecklistItems,
     DateTime CreatedAtUtc,
-    IReadOnlyList<HabitChildResponse> Children);
+    IReadOnlyList<HabitChildResponse> Children,
+    string? Emoji = null);
 
 public record GetHabitByIdQuery(Guid UserId, Guid HabitId) : IRequest<Result<HabitDetailResponse>>;
 
@@ -80,7 +81,8 @@ public class GetHabitByIdQueryHandler(
             habit.ScheduledReminders,
             habit.ChecklistItems,
             habit.CreatedAtUtc,
-            children));
+            children,
+            Emoji: habit.Emoji));
     }
 }
 
@@ -156,7 +158,8 @@ internal static class HabitDetailChildMapper
         child.Position,
         child.ChecklistItems,
         DetermineOverdueStatus(child, userToday, descendantLogsByHabitId),
-        MapChildren(child, userToday, descendantLogsByHabitId));
+        MapChildren(child, userToday, descendantLogsByHabitId),
+        Emoji: child.Emoji);
 
     private static bool DetermineOverdueStatus(
         Habit habit,

@@ -15,6 +15,8 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
 
         SharedHabitRules.AddDescriptionRules(RuleFor(x => x.Description));
 
+        SharedHabitRules.AddEmojiRules(RuleFor(x => x.Emoji));
+
         SharedHabitRules.AddChecklistItemRules(RuleFor(x => x.Options != null ? x.Options.ChecklistItems : null));
 
         RuleFor(x => x.FrequencyQuantity)

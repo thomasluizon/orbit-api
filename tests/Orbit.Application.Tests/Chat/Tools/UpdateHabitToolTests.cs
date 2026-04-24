@@ -223,6 +223,42 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
+    public async Task UpdateEmoji_ChangesEmoji()
+    {
+        var habit = CreateHabit("Gym", FrequencyUnit.Day, 1);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "emoji": "💪"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Emoji.Should().Be("💪");
+    }
+
+    [Fact]
+    public async Task ClearEmoji_SetsToNull()
+    {
+        var habit = CreateHabitWithEmoji("Gym", "💪");
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "emoji": null}""");
+
+        result.Success.Should().BeTrue();
+        habit.Emoji.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AbsentEmoji_PreservesExisting()
+    {
+        var habit = CreateHabitWithEmoji("Gym", "💪");
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "title": "Gym Daily"}""");
+
+        result.Success.Should().BeTrue();
+        habit.Emoji.Should().Be("💪");
+    }
+
+    [Fact]
     public async Task ClearDescription_SetsToNull()
     {
         var habit = CreateHabit("Read", FrequencyUnit.Day, 1);
@@ -399,6 +435,11 @@ public class UpdateHabitToolTests
     private static Habit CreateHabitWithTime(string title, FrequencyUnit? freq, int? qty, TimeOnly dueTime)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today, DueTime: dueTime)).Value;
+    }
+
+    private static Habit CreateHabitWithEmoji(string title, string emoji)
+    {
+        return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today, Emoji: emoji)).Value;
     }
 
     private void SetupHabitFound(Habit habit)

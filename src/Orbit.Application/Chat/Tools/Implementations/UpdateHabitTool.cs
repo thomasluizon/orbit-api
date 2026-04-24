@@ -14,7 +14,7 @@ public class UpdateHabitTool(
     public string Name => "update_habit";
 
     public string Description =>
-        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null. Set is_flexible to true for window-based tracking (e.g. '3x per week, any days').";
+        "Update an existing habit's properties. Only include fields you want to change - omit fields to keep their current values. Use emoji to set a user-requested emoji or a sensible emoji for the habit. To update all habit emojis, call this once per habit after identifying them. To convert a recurring habit to a one-time task, explicitly set frequency_unit to null. To clear the due time, set due_time to null. Set is_flexible to true for window-based tracking (e.g. '3x per week, any days').";
 
     public object GetParameterSchema() => new
     {
@@ -24,6 +24,7 @@ public class UpdateHabitTool(
             habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to update" },
             title = new { type = JsonSchemaTypes.String, description = "New title" },
             description = new { type = JsonSchemaTypes.String, description = "New description", nullable = true },
+            emoji = new { type = JsonSchemaTypes.String, description = "Emoji used as the habit icon. Set to null to clear.", nullable = true },
             frequency_unit = new
             {
                 type = JsonSchemaTypes.String,
@@ -130,7 +131,8 @@ public class UpdateHabitTool(
             IsFlexible: ResolveOptionalBool(args, "is_flexible"),
             EndDate: endDate,
             ClearEndDate: clearEndDate,
-            ScheduledReminders: ResolveOptionalScheduledReminders(args));
+            ScheduledReminders: ResolveOptionalScheduledReminders(args),
+            Emoji: ResolveEmoji(args, habit));
     }
 
     private static string ResolveTitle(JsonElement args, Habit habit) =>
@@ -142,6 +144,11 @@ public class UpdateHabitTool(
         JsonArgumentParser.PropertyExists(args, "description")
             ? JsonArgumentParser.GetNullableString(args, "description")
             : habit.Description;
+
+    private static string? ResolveEmoji(JsonElement args, Habit habit) =>
+        JsonArgumentParser.PropertyExists(args, "emoji")
+            ? JsonArgumentParser.GetNullableString(args, "emoji")
+            : habit.Emoji;
 
     private static (FrequencyUnit? Unit, int? Quantity) ResolveFrequency(JsonElement args, Habit habit)
     {

@@ -16,6 +16,11 @@ public static class SharedHabitRules
         rule.MaximumLength(AppConstants.MaxHabitDescriptionLength);
     }
 
+    public static void AddEmojiRules<T>(IRuleBuilder<T, string?> rule)
+    {
+        rule.MaximumLength(AppConstants.MaxHabitEmojiLength);
+    }
+
     public static void AddChecklistItemRules<T>(IRuleBuilder<T, IReadOnlyList<ChecklistItem>?> rule)
     {
         rule.Must(items => items is null || items.All(i => i.Text.Length <= AppConstants.MaxChecklistItemTextLength))

@@ -21,7 +21,8 @@ public record CreateHabitCommand(
     bool IsGeneral = false,
     HabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? TagIds = null,
-    IReadOnlyList<Guid>? GoalIds = null) : IRequest<Result<Guid>>;
+    IReadOnlyList<Guid>? GoalIds = null,
+    string? Emoji = null) : IRequest<Result<Guid>>;
 
 /// <summary>
 /// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).
@@ -92,6 +93,7 @@ public partial class CreateHabitCommandHandler(
             request.FrequencyUnit,
             request.FrequencyQuantity,
             request.Description,
+            Emoji: request.Emoji,
             Days: opts.Days,
             IsBadHabit: request.IsBadHabit,
             DueDate: dueDate,

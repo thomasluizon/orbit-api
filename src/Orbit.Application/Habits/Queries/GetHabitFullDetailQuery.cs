@@ -64,7 +64,8 @@ public class GetHabitFullDetailQueryHandler(
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
-            habit.ChecklistItems, habit.CreatedAtUtc, children);
+            habit.ChecklistItems, habit.CreatedAtUtc, children,
+            Emoji: habit.Emoji);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, allRootLogs, userToday, userTimeZone);
 

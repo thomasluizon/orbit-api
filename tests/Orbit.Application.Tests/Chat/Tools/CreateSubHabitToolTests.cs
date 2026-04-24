@@ -93,6 +93,21 @@ public class CreateSubHabitToolTests
     }
 
     [Fact]
+    public async Task WithEmoji_SendsCommandWithEmoji()
+    {
+        var newId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(newId));
+
+        var result = await Execute($$$"""{"parent_habit_id": "{{{ParentId}}}", "title": "Floss", "emoji": "🦷"}""");
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd => cmd.Title == "Floss" && cmd.Emoji == "🦷"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task WithBooleanFlags_ParsesCorrectly()
     {
         var newId = Guid.NewGuid();
