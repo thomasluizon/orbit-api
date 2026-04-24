@@ -90,6 +90,34 @@ public class BulkUpdateHabitEmojisToolTests
         result.Error.Should().Contain("No matching habits");
     }
 
+    [Fact]
+    public async Task EmptyHabitIds_ReturnsErrorWithoutUpdatingAllHabits()
+    {
+        var gym = CreateHabit("Gym");
+        SetupHabits(gym);
+
+        var result = await Execute("""{"habit_ids": [], "infer_from_title": true}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("habit_ids");
+        gym.Emoji.Should().BeNull();
+        await _habitRepo.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task InvalidHabitIds_ReturnsErrorWithoutUpdatingAllHabits()
+    {
+        var gym = CreateHabit("Gym");
+        SetupHabits(gym);
+
+        var result = await Execute("""{"habit_ids": ["not-a-guid"], "infer_from_title": true}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("habit_ids");
+        gym.Emoji.Should().BeNull();
+        await _habitRepo.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default);
+    }
+
     private static Habit CreateHabit(string title, string? emoji = null)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today, Emoji: emoji)).Value;

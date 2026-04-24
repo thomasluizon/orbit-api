@@ -47,7 +47,10 @@ public class BulkUpdateHabitEmojisTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var habitIds = JsonArgumentParser.ParseGuidArray(args, "habit_ids") ?? [];
+        var habitIds = ParseHabitIds(args, out var habitIdsError);
+        if (habitIdsError is not null)
+            return new ToolResult(false, Error: habitIdsError);
+
         var includeCompleted = JsonArgumentParser.GetOptionalBool(args, "include_completed") ?? false;
         var hasEmojiArgument = JsonArgumentParser.PropertyExists(args, "emoji");
         var requestedEmoji = hasEmojiArgument ? JsonArgumentParser.GetNullableString(args, "emoji") : null;
@@ -66,6 +69,37 @@ public class BulkUpdateHabitEmojisTool(
             return new ToolResult(false, Error: "No matching habits found to update.");
 
         return UpdateHabitEmojis(habits, inferFromTitle, requestedEmoji);
+    }
+
+    private static List<Guid> ParseHabitIds(JsonElement args, out string? error)
+    {
+        error = null;
+        if (!args.TryGetProperty("habit_ids", out var habitIdsElement))
+            return [];
+
+        if (habitIdsElement.ValueKind != JsonValueKind.Array)
+        {
+            error = "habit_ids must be omitted or provided as a non-empty array of valid habit IDs.";
+            return [];
+        }
+
+        var habitIds = new List<Guid>();
+        foreach (var habitIdElement in habitIdsElement.EnumerateArray())
+        {
+            if (habitIdElement.ValueKind != JsonValueKind.String ||
+                !Guid.TryParse(habitIdElement.GetString(), out var habitId))
+            {
+                error = "habit_ids must contain only valid habit IDs.";
+                return [];
+            }
+
+            habitIds.Add(habitId);
+        }
+
+        if (habitIds.Count == 0)
+            error = "habit_ids must contain at least one valid habit ID when provided.";
+
+        return habitIds;
     }
 
     private static ToolResult UpdateHabitEmojis(
