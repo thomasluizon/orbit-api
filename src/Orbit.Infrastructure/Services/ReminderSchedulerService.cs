@@ -160,11 +160,11 @@ public partial class ReminderSchedulerService(
     private async Task<bool> ProcessScheduledReminders(OrbitDbContext dbContext, IPushNotificationService pushService, CancellationToken ct)
     {
         var minLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-        var maxLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var maxDayBeforeDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2));
         var habits = await dbContext.Habits
             .AsNoTracking()
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null
-                && h.DueDate <= maxLocalDate
+                && h.DueDate <= maxDayBeforeDate
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
 

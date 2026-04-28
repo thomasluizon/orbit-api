@@ -81,7 +81,7 @@ public class GetHabitWidgetQueryHandler(
         DateOnly today,
         CancellationToken cancellationToken)
     {
-        var logFrom = today.AddDays(-31);
+        var logFrom = today.AddDays(-AppConstants.MaxRangeDays);
         var logTo = today.AddDays(1);
 
         return await habitRepository.FindAsync(
@@ -169,7 +169,9 @@ public class GetHabitWidgetQueryHandler(
             return false;
 
         var quantity = habit.FrequencyQuantity ?? 1;
-        var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, quantity);
+        var lookbackDays = Math.Min(
+            HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, quantity),
+            AppConstants.MaxRangeDays);
         var lookbackStart = date.AddDays(-lookbackDays);
         if (habit.DueDate > lookbackStart)
             lookbackStart = habit.DueDate;
