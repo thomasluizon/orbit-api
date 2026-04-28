@@ -189,11 +189,12 @@ public class GetHabitScheduleQueryHandler(
         var overdueLookbackDays = request.IncludeOverdue ? 31 : AppConstants.DefaultOverdueWindowDays;
         var logFrom = (request.DateFrom ?? today).AddDays(-overdueLookbackDays);
         var logTo = request.DateTo ?? today;
-        var allHabits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && !h.IsGeneral,
-            q => q.Include(h => h.Tags)
-                  .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo))
-                  .Include(h => h.Goals),
+        var allHabits = await LoadScheduleHabits(
+            request.UserId,
+            logFrom,
+            logTo,
+            includeTags: NeedsTagsForFiltering(request),
+            includeGoals: false,
             cancellationToken);
 
         var lookup = allHabits.ToLookup(h => h.ParentHabitId);
@@ -207,7 +208,7 @@ public class GetHabitScheduleQueryHandler(
 
         // No date range: return all habits without schedule computation (used by "all" view)
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
-            return BuildNonDateResponse(topLevel, request, lookup, today);
+            return await BuildNonDateResponse(topLevel, request, lookup, today, logFrom, logTo, cancellationToken);
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
@@ -226,8 +227,20 @@ public class GetHabitScheduleQueryHandler(
         foreach (var item in filtered)
             scheduledDatesCache[item.habit.Id] = item.scheduledDates;
 
-        var ctx = new ScheduleMapContext(
+        var pageItems = filtered
+            .Skip((page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToList();
+        var pagedLookup = await LoadPageHabitLookup(
+            pageItems.Select(x => x.habit),
             lookup,
+            logFrom,
+            logTo,
+            includeGoals: true,
+            cancellationToken);
+
+        var ctx = new ScheduleMapContext(
+            pagedLookup,
             IncludeOverdue: request.IncludeOverdue,
             DateFrom: dateFrom,
             DateTo: dateTo,
@@ -235,10 +248,13 @@ public class GetHabitScheduleQueryHandler(
             UserToday: today,
             Search: request.Search,
             ScheduledDatesCache: scheduledDatesCache);
-        var pagedItems = filtered
-            .Skip((page - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(x => MapToScheduleItem(x.habit, x.scheduledDates, x.isOverdue, ctx))
+        var pagedHabitsById = pagedLookup.SelectMany(group => group).ToDictionary(h => h.Id);
+        var pagedItems = pageItems
+            .Select(x => MapToScheduleItem(
+                pagedHabitsById.TryGetValue(x.habit.Id, out var hydratedHabit) ? hydratedHabit : x.habit,
+                x.scheduledDates,
+                x.isOverdue,
+                ctx))
             .ToList();
 
         // When IncludeGeneral is true, append general habits after the scheduled ones
@@ -268,28 +284,118 @@ public class GetHabitScheduleQueryHandler(
         return habits;
     }
 
-    private static Result<PaginatedResponse<HabitScheduleItem>> BuildNonDateResponse(
+    private static bool NeedsTagsForFiltering(GetHabitScheduleQuery request)
+    {
+        return !string.IsNullOrWhiteSpace(request.Search)
+            || request.TagIds is { Count: > 0 };
+    }
+
+    private async Task<IReadOnlyList<Habit>> LoadScheduleHabits(
+        Guid userId,
+        DateOnly logFrom,
+        DateOnly logTo,
+        bool includeTags,
+        bool includeGoals,
+        CancellationToken cancellationToken)
+    {
+        return await habitRepository.FindAsync(
+            h => h.UserId == userId && !h.IsGeneral,
+            q => IncludeHabitGraph(q, logFrom, logTo, includeTags, includeGoals),
+            cancellationToken);
+    }
+
+    private async Task<ILookup<Guid?, Habit>> LoadPageHabitLookup(
+        IEnumerable<Habit> pageTopLevelHabits,
+        ILookup<Guid?, Habit> baseLookup,
+        DateOnly logFrom,
+        DateOnly logTo,
+        bool includeGoals,
+        CancellationToken cancellationToken)
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var habit in pageTopLevelHabits)
+            AddSubtreeIds(habit.Id, baseLookup, ids);
+
+        if (ids.Count == 0)
+            return Enumerable.Empty<Habit>().ToLookup(h => h.ParentHabitId);
+
+        var pageHabits = await habitRepository.FindAsync(
+            h => ids.Contains(h.Id),
+            q => IncludeHabitGraph(q, logFrom, logTo, includeTags: true, includeGoals: includeGoals),
+            cancellationToken);
+
+        return pageHabits
+            .Where(h => ids.Contains(h.Id))
+            .ToLookup(h => h.ParentHabitId);
+    }
+
+    private static void AddSubtreeIds(Guid habitId, ILookup<Guid?, Habit> lookup, HashSet<Guid> ids)
+    {
+        if (!ids.Add(habitId))
+            return;
+
+        foreach (var child in lookup[habitId])
+            AddSubtreeIds(child.Id, lookup, ids);
+    }
+
+    private static IQueryable<Habit> IncludeHabitGraph(
+        IQueryable<Habit> query,
+        DateOnly logFrom,
+        DateOnly logTo,
+        bool includeTags,
+        bool includeGoals)
+    {
+        query = query.Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= logTo));
+
+        if (includeTags)
+            query = query.Include(h => h.Tags);
+
+        if (includeGoals)
+            query = query.Include(h => h.Goals);
+
+        return query;
+    }
+
+    private async Task<Result<PaginatedResponse<HabitScheduleItem>>> BuildNonDateResponse(
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
-        DateOnly today)
+        DateOnly today,
+        DateOnly logFrom,
+        DateOnly logTo,
+        CancellationToken cancellationToken)
     {
         var allFiltered = topLevel.ToList();
         var allTotalCount = allFiltered.Count;
         var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);
         var allPage = Math.Max(1, Math.Min(request.Page, Math.Max(1, allTotalPages)));
 
-        var ctx = new ScheduleMapContext(
+        var pageHabits = allFiltered
+            .Skip((allPage - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToList();
+        var pagedLookup = await LoadPageHabitLookup(
+            pageHabits,
             lookup,
+            logFrom,
+            logTo,
+            includeGoals: true,
+            cancellationToken);
+        var pagedHabitsById = pagedLookup.SelectMany(group => group).ToDictionary(h => h.Id);
+
+        var ctx = new ScheduleMapContext(
+            pagedLookup,
             IncludeAllChildren: true,
             IncludeOverdue: request.IncludeOverdue,
             ReferenceDate: today,
             UserToday: today,
             Search: request.Search);
-        var allPagedItems = allFiltered
-            .Skip((allPage - 1) * request.PageSize)
-            .Take(request.PageSize)
-            .Select(h => MapToScheduleItem(h, [], false, ctx))
+        var allPagedItems = pageHabits
+            .Select(h => MapToScheduleItem(
+                pagedHabitsById.TryGetValue(h.Id, out var hydratedHabit) ? hydratedHabit : h,
+                [],
+                false,
+                ctx))
             .ToList();
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(

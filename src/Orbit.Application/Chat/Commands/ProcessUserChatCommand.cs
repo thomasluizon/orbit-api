@@ -100,7 +100,7 @@ public partial class ProcessUserChatCommandHandler(
 
         var userHabits = await data.HabitRepository.FindAsync(
             h => h.UserId == request.UserId,
-            q => q.Include(h => h.Tags),
+            q => q,
             cancellationToken);
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
         var promptHabits = BuildPromptHabitIndex(userHabits);

@@ -33,7 +33,7 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
     {
         IQueryable<T> query = _dbSet.AsNoTracking();
         if (includes is not null)
-            query = includes(query);
+            query = includes(query).AsSplitQuery();
         return await query.Where(predicate).ToListAsync(cancellationToken);
     }
 
@@ -44,7 +44,7 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
     {
         IQueryable<T> query = _dbSet;
         if (includes is not null)
-            query = includes(query);
+            query = includes(query).AsSplitQuery();
         return await query.FirstOrDefaultAsync(predicate, cancellationToken);
     }
 
@@ -62,7 +62,7 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
     {
         IQueryable<T> query = _dbSet;
         if (includes is not null)
-            query = includes(query);
+            query = includes(query).AsSplitQuery();
         return await query.Where(predicate).ToListAsync(cancellationToken);
     }
 

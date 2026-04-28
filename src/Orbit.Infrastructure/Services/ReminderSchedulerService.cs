@@ -67,25 +67,33 @@ public partial class ReminderSchedulerService(
 
     private async Task<bool> ProcessRelativeReminders(OrbitDbContext dbContext, IPushNotificationService pushService, CancellationToken ct)
     {
+        var minLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var maxLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         var habits = await dbContext.Habits
-            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null)
+            .AsNoTracking()
+            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null
+                && h.DueDate <= maxLocalDate
+                && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
 
         if (habits.Count == 0) return false;
 
         var userIds = habits.Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
+            .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
         var loggedHabitIds = (await dbContext.HabitLogs
+            .AsNoTracking()
             .Where(l => habitIds.Contains(l.HabitId) && l.Date == utcToday)
             .Select(l => l.HabitId)
             .ToListAsync(ct)).ToHashSet();
 
         var sentReminderKeys = await dbContext.SentReminders
+            .AsNoTracking()
             .Where(r => habitIds.Contains(r.HabitId) && r.Date == utcToday && r.ReminderTimeUtc == null)
             .Select(r => new { r.HabitId, r.MinutesBefore })
             .ToListAsync(ct);
@@ -151,8 +159,13 @@ public partial class ReminderSchedulerService(
 
     private async Task<bool> ProcessScheduledReminders(OrbitDbContext dbContext, IPushNotificationService pushService, CancellationToken ct)
     {
+        var minLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var maxLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         var habits = await dbContext.Habits
-            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null)
+            .AsNoTracking()
+            .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null
+                && h.DueDate <= maxLocalDate
+                && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
 
         // Filter to habits that actually have scheduled reminders (can't do jsonb length check in EF)
@@ -162,6 +175,7 @@ public partial class ReminderSchedulerService(
 
         var userIds = habits.Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
+            .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
@@ -170,6 +184,7 @@ public partial class ReminderSchedulerService(
 
         // Pre-load sent scheduled reminders (those with ReminderTimeUtc set)
         var sentScheduledKeys = await dbContext.SentReminders
+            .AsNoTracking()
             .Where(r => habitIds.Contains(r.HabitId) && r.ReminderTimeUtc != null
                 && (r.Date == utcToday || r.Date == utcToday.AddDays(-1) || r.Date == utcToday.AddDays(1)))
             .Select(r => new { r.HabitId, r.Date, r.ReminderTimeUtc })

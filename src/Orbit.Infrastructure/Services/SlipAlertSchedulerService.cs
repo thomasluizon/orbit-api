@@ -60,6 +60,7 @@ public partial class SlipAlertSchedulerService(
         // The per-user timezone check (userToday) below is the authoritative active/ended guard.
         var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var habits = await dbContext.Habits
+            .AsNoTracking()
             .Where(h => !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled
                 && (!h.EndDate.HasValue || h.EndDate.Value >= utcDate.AddDays(-1)))
             .ToListAsync(ct);
@@ -69,25 +70,32 @@ public partial class SlipAlertSchedulerService(
         // Group by user to handle timezones
         var userIds = habits.Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
+            .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        // Batch-load all relevant habit logs upfront (avoid per-habit query in loop)
         var habitIds = habits.Select(h => h.Id).ToList();
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60));
-        var allLogs = await dbContext.HabitLogs
-            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= cutoff)
-            .ToListAsync(ct);
-        var logsByHabit = allLogs.GroupBy(l => l.HabitId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
         // Batch-load sent slip alerts for this week
         var daysToMondayUtc = ((int)DateTime.UtcNow.DayOfWeek - 1 + 7) % 7;
         var currentWeekStart = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-daysToMondayUtc));
         var sentAlertHabitIds = (await dbContext.SentSlipAlerts
+            .AsNoTracking()
             .Where(a => habitIds.Contains(a.HabitId) && a.WeekStart == currentWeekStart)
             .Select(a => a.HabitId)
             .ToListAsync(ct)).ToHashSet();
+
+        habits = habits.Where(h => !sentAlertHabitIds.Contains(h.Id)).ToList();
+        if (habits.Count == 0) return;
+
+        // Batch-load all relevant habit logs upfront (avoid per-habit query in loop)
+        habitIds = habits.Select(h => h.Id).ToList();
+        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60));
+        var allLogs = await dbContext.HabitLogs
+            .AsNoTracking()
+            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= cutoff)
+            .ToListAsync(ct);
+        var logsByHabit = allLogs.GroupBy(l => l.HabitId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var anyChanges = false;
 
