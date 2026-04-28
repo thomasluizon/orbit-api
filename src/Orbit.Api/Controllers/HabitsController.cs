@@ -143,6 +143,27 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         string? Emoji = null);
     public record LinkGoalsRequest(List<Guid> GoalIds);
 
+    [HttpGet("count")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetHabitCount(CancellationToken cancellationToken = default)
+    {
+        var query = new GetHabitCountQuery(HttpContext.GetUserId());
+        var result = await mediator.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("widget")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetHabitWidget(CancellationToken cancellationToken = default)
+    {
+        var query = new GetHabitWidgetQuery(HttpContext.GetUserId());
+        var result = await mediator.Send(query, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+    }
+
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
