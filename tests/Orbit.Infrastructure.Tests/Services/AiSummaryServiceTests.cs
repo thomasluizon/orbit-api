@@ -253,6 +253,18 @@ public class AiSummaryServiceTests
     }
 
     [Fact]
+    public void BuildSummaryPrompt_EveningContext_TellsAiNotToFrameMorningHabitsAsStartOfDay()
+    {
+        var habits = new List<Habit> { CreateHabit("Morning routine") };
+
+        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en", new TimeOnly(19, 0));
+
+        result.Should().Contain("Current local time: 19:00 (Evening)");
+        result.Should().Contain("Morning routine (pending) [title suggests Morning, earlier today]");
+        result.Should().Contain("do NOT frame earlier morning habits as a way to start the day");
+    }
+
+    [Fact]
     public void BuildSummaryPrompt_UpperCaseLanguage_StillMapsCorrectly()
     {
         var habits = new List<Habit> { CreateHabit("Test") };
@@ -421,17 +433,21 @@ public class AiSummaryServiceTests
     }
 
     private static string InvokeBuildSummaryPrompt(
-        List<Habit> scheduledHabits, List<Habit> overdueHabits, DateOnly date, string language)
+        List<Habit> scheduledHabits,
+        List<Habit> overdueHabits,
+        DateOnly date,
+        string language,
+        TimeOnly? currentLocalTime = null)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildSummaryPrompt", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits, overdueHabits, date, language])!;
+        return (string)method.Invoke(null, [scheduledHabits, overdueHabits, date, date, language, currentLocalTime])!;
     }
 
     private static string InvokeBuildHabitSection(List<Habit> scheduledHabits)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildHabitSection", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits])!;
+        return (string)method.Invoke(null, [scheduledHabits, Today, Today, null])!;
     }
 }

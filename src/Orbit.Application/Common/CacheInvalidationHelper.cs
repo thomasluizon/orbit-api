@@ -5,6 +5,7 @@ namespace Orbit.Application.Common;
 public static class CacheInvalidationHelper
 {
     private static readonly string[] RetrospectivePeriods = ["week", "month", "quarter", "semester", "year"];
+    private static readonly string[] SummaryTimeBuckets = ["morning", "afternoon", "evening", "night", "timeless"];
 
     public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId)
     {
@@ -14,8 +15,13 @@ public static class CacheInvalidationHelper
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (int i = -2; i <= 2; i++)
         {
+            var date = today.AddDays(i);
             foreach (var lang in AppConstants.SupportedLanguages)
-                cache.Remove($"summary:{userId}:{today.AddDays(i):yyyy-MM-dd}:{lang}");
+            {
+                cache.Remove($"summary:{userId}:{date:yyyy-MM-dd}:{lang}");
+                foreach (var bucket in SummaryTimeBuckets)
+                    cache.Remove($"summary:{userId}:{date:yyyy-MM-dd}:{lang}:{bucket}");
+            }
         }
     }
 

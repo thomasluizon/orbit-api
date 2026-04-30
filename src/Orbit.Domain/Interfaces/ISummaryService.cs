@@ -11,5 +11,6 @@ public interface ISummaryService
         DateOnly dateTo,
         bool includeOverdue,
         string language,
+        TimeOnly? currentLocalTime,
         CancellationToken cancellationToken = default);
 }
