@@ -342,10 +342,22 @@ public static class HabitScheduleService
             lookbackStart = habit.DueDate;
 
         var scheduledDates = GetScheduledDates(habit, lookbackStart, dateTo);
-        var logsByDate = habit.Logs.ToDictionary(l => l.Date, l => l);
-        var instances = new List<HabitInstanceItem>(scheduledDates.Count);
+        var completedLogDatesInRange = habit.Logs
+            .Where(l => l.Value > 0 && l.Date >= dateFrom && l.Date <= dateTo)
+            .Select(l => l.Date);
+        var instanceDates = scheduledDates
+            .Concat(completedLogDatesInRange)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+        var logsByDate = habit.Logs
+            .GroupBy(l => l.Date)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(l => l.Value > 0).ThenByDescending(l => l.CreatedAtUtc).First());
+        var instances = new List<HabitInstanceItem>(instanceDates.Count);
 
-        foreach (var date in scheduledDates)
+        foreach (var date in instanceDates)
         {
             logsByDate.TryGetValue(date, out var log);
             var status = ResolveInstanceStatus(log, date, userToday, habit.IsBadHabit);

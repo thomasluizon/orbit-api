@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -49,7 +50,18 @@ public class GetDailySummaryQueryHandler(
         else
             effectiveLanguage = "en";
 
-        var cacheKey = CacheKey(request.UserId, request.DateFrom, effectiveLanguage);
+        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, userTimeZone);
+        var userToday = DateOnly.FromDateTime(userNow);
+        var currentLocalTime = request.DateFrom == userToday && request.DateTo == request.DateFrom
+            ? TimeOnly.FromDateTime(userNow)
+            : (TimeOnly?)null;
+
+        var cacheKey = CacheKey(
+            request.UserId,
+            request.DateFrom,
+            effectiveLanguage,
+            SummaryTimeBucket(currentLocalTime));
 
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
         {
@@ -58,14 +70,20 @@ public class GetDailySummaryQueryHandler(
 
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
+            q => q.Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo)),
             cancellationToken);
 
+        var summaryHabits = habits
+            .Where(h => !HasSkipLogInRange(h, request.DateFrom, request.DateTo))
+            .ToList();
+
         var summaryResult = await summaryService.GenerateSummaryAsync(
-            habits,
+            summaryHabits,
             request.DateFrom,
             request.DateTo,
             request.IncludeOverdue,
             effectiveLanguage,
+            currentLocalTime,
             cancellationToken);
 
         if (summaryResult.IsFailure)
@@ -85,6 +103,20 @@ public class GetDailySummaryQueryHandler(
         return Result.Success(new DailySummaryResponse(summaryResult.Value, FromCache: false));
     }
 
-    private static string CacheKey(Guid userId, DateOnly date, string language) =>
-        $"summary:{userId}:{date:yyyy-MM-dd}:{language}";
+    private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
+        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value == 0);
+
+    private static string SummaryTimeBucket(TimeOnly? currentLocalTime)
+    {
+        if (!currentLocalTime.HasValue) return "timeless";
+
+        var hour = currentLocalTime.Value.Hour;
+        if (hour < 11) return "morning";
+        if (hour < 17) return "afternoon";
+        if (hour < 21) return "evening";
+        return "night";
+    }
+
+    private static string CacheKey(Guid userId, DateOnly date, string language, string timeBucket) =>
+        $"summary:{userId}:{date:yyyy-MM-dd}:{language}:{timeBucket}";
 }

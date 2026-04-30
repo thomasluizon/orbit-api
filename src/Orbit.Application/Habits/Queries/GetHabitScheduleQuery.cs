@@ -44,6 +44,7 @@ public record HabitScheduleItem(
     bool HasSubHabits,
     int? FlexibleTarget,
     int? FlexibleCompleted,
+    bool IsLoggedInRange,
     IReadOnlyList<HabitInstanceItem> Instances,
     IReadOnlyList<SearchMatchField>? SearchMatches = null,
     string? Emoji = null);
@@ -413,8 +414,12 @@ public class GetHabitScheduleQueryHandler(
 
         foreach (var habit in topLevel)
         {
+            var hasCompletedLogInRange = HasCompletedLogInRange(habit, dateFrom, dateTo);
+
             // Flexible habits that have met their window target should not appear
-            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
+            if (habit.IsFlexible
+                && !hasCompletedLogInRange
+                && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
                 continue;
 
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
@@ -426,12 +431,15 @@ public class GetHabitScheduleQueryHandler(
                 dateTo,
                 includeOverdue);
 
-            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue)
+            if (scheduledDates.Count > 0 || isOverdue || hasDescendantDue || hasCompletedLogInRange)
                 filtered.Add((habit, scheduledDates, isOverdue));
         }
 
         return filtered;
     }
+
+    private static bool HasCompletedLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
+        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
 
     /// <summary>
     /// Determines whether a habit is overdue based on its type and schedule.
@@ -622,6 +630,10 @@ public class GetHabitScheduleQueryHandler(
             ? HabitScheduleService.GetInstances(h, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
             : [];
 
+        var isLoggedInRange = ctx.DateFrom.HasValue
+            && ctx.DateTo.HasValue
+            && HasCompletedLogInRange(h, ctx.DateFrom.Value, ctx.DateTo.Value);
+
         return new HabitScheduleItem(
             h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
             h.IsBadHabit, h.IsCompleted, h.IsGeneral, h.IsFlexible,
@@ -633,7 +645,7 @@ public class GetHabitScheduleQueryHandler(
             MapChildren(h.Id, ctx),
             ctx.ChildLookup[h.Id].Any(),
             flexibleTarget, flexibleCompleted,
-            instances,
+            isLoggedInRange, instances,
             ComputeSearchMatches(h, ctx),
             Emoji: h.Emoji);
     }

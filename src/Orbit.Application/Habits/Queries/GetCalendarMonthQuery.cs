@@ -162,6 +162,9 @@ public class GetCalendarMonthQueryHandler(
             ? HabitScheduleService.GetInstances(habit, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
             : [];
 
+        var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue &&
+            habit.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
+
         var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(habit, ctx.ReferenceDate);
 
         return new HabitScheduleItem(
@@ -176,7 +179,7 @@ public class GetCalendarMonthQueryHandler(
             habit.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList(),
             habit.Goals.Select(g => new LinkedGoalDto(g.Id, g.Title)).ToList(),
             children, children.Count > 0,
-            flexibleTarget, flexibleCompleted, instances,
+            flexibleTarget, flexibleCompleted, isLoggedInRange, instances,
             Emoji: habit.Emoji);
     }
 

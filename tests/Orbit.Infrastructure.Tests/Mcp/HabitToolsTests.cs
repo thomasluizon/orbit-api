@@ -35,7 +35,7 @@ public class HabitToolsTests
         {
             new(Guid.NewGuid(), "Read", null, FrequencyUnit.Day, 1, false, false, false, false,
                 [], null, DateTime.UtcNow, DateOnly.FromDateTime(DateTime.UtcNow), null, null, null,
-                [], false, false, [], [], false, [], [], [], [], false, null, null, [])
+                [], false, false, [], [], false, [], [], [], [], false, null, null, false, [])
         };
         var paginated = new PaginatedResponse<HabitScheduleItem>(items, 1, 50, 1, 1);
         _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())

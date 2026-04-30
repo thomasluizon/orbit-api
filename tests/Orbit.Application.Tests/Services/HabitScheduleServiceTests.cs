@@ -834,6 +834,19 @@ public class HabitScheduleServiceTests
         instances[0].Status.Should().Be(Orbit.Domain.Enums.InstanceStatus.Completed);
     }
 
+    [Fact]
+    public void GetInstances_RecurringHabit_LoggedDateStillReturnedAfterDueDateAdvances()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        habit.Log(Anchor);
+
+        var instances = HabitScheduleService.GetInstances(habit, Anchor, Anchor, Anchor);
+
+        instances.Should().ContainSingle();
+        instances[0].Date.Should().Be(Anchor);
+        instances[0].Status.Should().Be(Orbit.Domain.Enums.InstanceStatus.Completed);
+    }
+
     // --- GetSkippedInWindow ---
 
     [Fact]

@@ -208,6 +208,24 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items.Should().OnlyContain(h => !h.IsCompleted);
     }
 
+    [Fact]
+    public async Task Handle_RecurringHabitLoggedInRange_ReturnsCompletedInstanceAfterDueDateAdvances()
+    {
+        var habit = CreateTestHabit(title: "Daily run", frequencyUnit: FrequencyUnit.Day, dueDate: Today);
+        habit.Log(Today);
+        SetupHabits(habit);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle();
+        result.Value.Items[0].IsCompleted.Should().BeFalse();
+        result.Value.Items[0].IsLoggedInRange.Should().BeTrue();
+        result.Value.Items[0].Instances.Should().ContainSingle(i =>
+            i.Date == Today && i.Status == InstanceStatus.Completed);
+    }
+
     // --- New tests: Parent-child habit grouping ---
 
     [Fact]

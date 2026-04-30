@@ -7,27 +7,31 @@ namespace Orbit.Application.Tests.Common;
 public class CacheInvalidationHelperTests
 {
     [Fact]
-    public void InvalidateSummaryCache_RemovesSixKeys()
+    public void InvalidateSummaryCache_RemovesSummaryKeys()
     {
         // Arrange
         var cache = new MemoryCache(new MemoryCacheOptions());
         var userId = Guid.NewGuid();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Populate 6 cache keys: yesterday, today, tomorrow x 2 languages
         var keys = new List<string>();
         for (int i = -1; i <= 1; i++)
         {
             var dateKey = today.AddDays(i).ToString("yyyy-MM-dd");
             var enKey = $"summary:{userId}:{dateKey}:en";
             var ptKey = $"summary:{userId}:{dateKey}:pt-BR";
+            var eveningKey = $"summary:{userId}:{dateKey}:en:evening";
+            var timelessKey = $"summary:{userId}:{dateKey}:pt-BR:timeless";
             cache.Set(enKey, "cached-en");
             cache.Set(ptKey, "cached-pt");
+            cache.Set(eveningKey, "cached-evening");
+            cache.Set(timelessKey, "cached-timeless");
             keys.Add(enKey);
             keys.Add(ptKey);
+            keys.Add(eveningKey);
+            keys.Add(timelessKey);
         }
 
-        // Verify all 6 keys exist before invalidation
         foreach (var key in keys)
         {
             cache.TryGetValue(key, out _).Should().BeTrue($"key '{key}' should exist before invalidation");
@@ -36,7 +40,6 @@ public class CacheInvalidationHelperTests
         // Act
         CacheInvalidationHelper.InvalidateSummaryCache(cache, userId);
 
-        // Assert - all 6 keys should be removed
         foreach (var key in keys)
         {
             cache.TryGetValue(key, out _).Should().BeFalse($"key '{key}' should be removed after invalidation");
