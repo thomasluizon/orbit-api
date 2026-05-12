@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write
 
 jobs:
   review:
@@ -20,6 +21,9 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
             Review this pull request for correctness, code quality, security, and compliance with CLAUDE.md / AGENTS.md.
 
             Pay special attention to:
@@ -28,5 +32,8 @@ jobs:
             - Database changes: entity/migration correctness, indexes for new query patterns, N+1 risks.
             - Validation, error handling at boundaries, and test coverage for new behavior.
 
-            Post inline review comments on specific lines for issues you find. Keep the overall summary brief.
-          claude_args: "--max-turns 6"
+            The PR branch is already checked out in the current working directory.
+            Use `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`) to post inline review comments on specific lines for any issues you find.
+            Use `gh pr comment` for an overall summary at the end. Keep the summary brief.
+            Only post GitHub comments — do not submit review text as a chat message.
+          claude_args: '--max-turns 30 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"'
