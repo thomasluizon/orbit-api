@@ -1,0 +1,32 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review this pull request for correctness, code quality, security, and compliance with CLAUDE.md / AGENTS.md.
+
+            Pay special attention to:
+            - API contract changes: request/response shapes, status codes, breaking changes for the web and mobile clients.
+            - Authentication and authorization on endpoints (no accidentally public routes, correct user scoping).
+            - Database changes: entity/migration correctness, indexes for new query patterns, N+1 risks.
+            - Validation, error handling at boundaries, and test coverage for new behavior.
+
+            Post inline review comments on specific lines for issues you find. Keep the overall summary brief.
+          claude_args: "--max-turns 6"
