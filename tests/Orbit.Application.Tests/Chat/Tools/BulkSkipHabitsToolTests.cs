@@ -58,12 +58,12 @@ public class BulkSkipHabitsToolTests
     {
         var id1 = Guid.NewGuid();
         var id2 = Guid.NewGuid();
-        // Return null for all lookups
-        _habitRepo.FindOneTrackedAsync(
+        // Batch lookup returns no matches
+        _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns((Habit?)null);
+        ).Returns(new List<Habit>());
 
         var result = await Execute($$$"""{"habit_ids": ["{{{id1}}}", "{{{id2}}}"]}""");
 
@@ -116,6 +116,23 @@ public class BulkSkipHabitsToolTests
         task.DueDate.Should().Be(Today.AddDays(1));
     }
 
+    [Fact]
+    public async Task DifferentUserHabit_IsNotSkipped()
+    {
+        // Ownership scoping: the production query filters on `h.UserId == userId`.
+        // The mock applies that predicate, so a habit belonging to another user
+        // is filtered out before the skip loop sees it.
+        var otherUserId = Guid.NewGuid();
+        var otherUserHabit = Habit.Create(
+            new HabitCreateParams(otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitLookup(otherUserHabit);
+
+        var result = await Execute($$$"""{"habit_ids": ["{{{otherUserHabit.Id}}}"]}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("No habits were skipped");
+    }
+
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty, DateOnly dueDate)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: dueDate)).Value;
@@ -123,14 +140,16 @@ public class BulkSkipHabitsToolTests
 
     private void SetupHabitLookup(params Habit[] habits)
     {
-        _habitRepo.FindOneTrackedAsync(
+        // Apply the predicate so the production query's `h.UserId == userId`
+        // ownership check is still exercised by the unit tests.
+        _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
         ).Returns(callInfo =>
         {
             var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
-            return habits.FirstOrDefault(predicate);
+            return habits.Where(predicate).ToList();
         });
     }
 

@@ -14,7 +14,7 @@ public class BulkSkipHabitsTool(
     public string Name => "bulk_skip_habits";
 
     public string Description =>
-        "Skip multiple habits for today in a single operation. For recurring habits, advances due date to next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are due today or overdue.";
+        "Skip multiple habits for today in a single operation. Use this only for habits the user EXPLICITLY mentioned skipping - never include extra habits that share a tag, parent, routine, or theme but were not named. For recurring habits, advances due date to next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are due today or overdue.";
 
     public object GetParameterSchema() => new
     {
@@ -49,13 +49,15 @@ public class BulkSkipHabitsTool(
         var today = await userDateService.GetUserTodayAsync(userId, ct);
         var skippedNames = new List<string>();
 
+        // Batch-load all requested habits in a single query instead of N+1
+        var habits = await habitRepository.FindTrackedAsync(
+            h => habitIds.Contains(h.Id) && h.UserId == userId,
+            q => q.Include(h => h.Logs),
+            ct);
+
         foreach (var habitId in habitIds)
         {
-            var habit = await habitRepository.FindOneTrackedAsync(
-                h => h.Id == habitId && h.UserId == userId,
-                q => q.Include(h => h.Logs),
-                ct);
-
+            var habit = habits.FirstOrDefault(h => h.Id == habitId);
             if (habit is not null && await TrySkipHabit(habit, today, ct))
                 skippedNames.Add(habit.Title);
         }
