@@ -58,12 +58,12 @@ public class BulkSkipHabitsToolTests
     {
         var id1 = Guid.NewGuid();
         var id2 = Guid.NewGuid();
-        // Return null for all lookups
-        _habitRepo.FindOneTrackedAsync(
+        // Batch lookup returns no matches
+        _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns((Habit?)null);
+        ).Returns(new List<Habit>());
 
         var result = await Execute($$$"""{"habit_ids": ["{{{id1}}}", "{{{id2}}}"]}""");
 
@@ -123,15 +123,11 @@ public class BulkSkipHabitsToolTests
 
     private void SetupHabitLookup(params Habit[] habits)
     {
-        _habitRepo.FindOneTrackedAsync(
+        _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns(callInfo =>
-        {
-            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
-            return habits.FirstOrDefault(predicate);
-        });
+        ).Returns(habits.ToList());
     }
 
     private async Task<ToolResult> Execute(string json)
