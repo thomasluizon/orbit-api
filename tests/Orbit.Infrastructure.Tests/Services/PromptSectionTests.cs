@@ -88,7 +88,10 @@ public class GlobalRulesSectionTests
         var result = new GlobalRulesSection().Build(ctx);
 
         result.Should().Contain("NO HABIT SUBSTITUTION FOR LOG / COMPLETE / SKIP");
+        result.Should().Contain("log_habit");
         result.Should().Contain("bulk_log_habits");
+        result.Should().Contain("skip_habit");
+        result.Should().Contain("bulk_skip_habits");
         result.Should().Contain("no more, no fewer");
         result.Should().Contain("Indirect references");
     }

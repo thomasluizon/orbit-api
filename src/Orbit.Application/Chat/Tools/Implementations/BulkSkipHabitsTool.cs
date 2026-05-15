@@ -14,7 +14,7 @@ public class BulkSkipHabitsTool(
     public string Name => "bulk_skip_habits";
 
     public string Description =>
-        "Skip multiple habits for today in a single operation. For recurring habits, advances due date to next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are due today or overdue.";
+        "Skip multiple habits for today in a single operation. Use this only for habits the user EXPLICITLY mentioned skipping - never include extra habits that share a tag, parent, routine, or theme but were not named. For recurring habits, advances due date to next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are due today or overdue.";
 
     public object GetParameterSchema() => new
     {
