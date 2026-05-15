@@ -80,6 +80,18 @@ public class GlobalRulesSectionTests
         result.Should().Contain("bulk_update_habit_emojis");
         result.Should().Contain("Do not call update_habit once per habit");
     }
+
+    [Fact]
+    public void Build_ContainsNoSubstitutionRule()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().Contain("NO HABIT SUBSTITUTION FOR LOG / COMPLETE / SKIP");
+        result.Should().Contain("bulk_log_habits");
+        result.Should().Contain("no more, no fewer");
+        result.Should().Contain("Indirect references");
+    }
 }
 
 public class StructuringStrategySectionTests

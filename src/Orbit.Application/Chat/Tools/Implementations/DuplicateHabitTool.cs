@@ -9,7 +9,7 @@ public class DuplicateHabitTool(
     public string Name => "duplicate_habit";
 
     public string Description =>
-        "Create an exact copy of an existing habit with all its properties.";
+        "Duplicate an existing habit, creating an exact copy with all its properties.";
 
     public object GetParameterSchema() => new
     {

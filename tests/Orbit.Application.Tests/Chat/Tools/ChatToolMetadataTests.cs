@@ -62,7 +62,7 @@ public class ChatToolMetadataTests
         AssertTool(queryHabitsTool, "query_habits", "habits", "include_metrics", expectReadOnly: true);
         AssertTool(skipHabitTool, "skip_habit", "Skip", "date");
         AssertTool(suggestBreakdownTool, "suggest_breakdown", "Suggest", "suggested_sub_habits");
-        AssertTool(updateGoalProgressTool, "update_goal_progress", "goal", "delta");
+        AssertTool(updateGoalProgressTool, "update_goal_progress", "goal", "current_value");
         AssertTool(updateGoalStatusTool, "update_goal_status", "goal", "status");
         AssertTool(updateGoalTool, "update_goal", "goal", "target_value");
         AssertTool(updateHabitTool, "update_habit", "habit", "frequency_unit");
@@ -72,8 +72,13 @@ public class ChatToolMetadataTests
     {
         tool.Name.Should().Be(expectedName);
         tool.Description.Should().NotBeNullOrWhiteSpace();
+        tool.Description.ToLowerInvariant().Should().Contain(descriptionFragment.ToLowerInvariant(),
+            $"tool '{expectedName}' description should mention '{descriptionFragment}'");
         tool.IsReadOnly.Should().Be(expectReadOnly);
-        JsonSerializer.Serialize(tool.GetParameterSchema()).Should().Contain("\"type\"");
+        var schema = JsonSerializer.Serialize(tool.GetParameterSchema());
+        schema.Should().Contain("\"type\"");
+        schema.Should().Contain(schemaFragment,
+            $"tool '{expectedName}' parameter schema should include '{schemaFragment}'");
     }
 
     private static IGenericRepository<T> Repo<T>()
