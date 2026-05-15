@@ -14,7 +14,7 @@ public class BulkLogHabitsTool(
     public string Name => "bulk_log_habits";
 
     public string Description =>
-        "Log multiple habits as completed for today in a single operation. Use this when the user mentions completing several activities at once.";
+        "Log multiple habits as completed for today in a single operation. Use this only for habits the user EXPLICITLY mentioned completing - never include extra habits that share a tag, parent, routine, or theme but were not named.";
 
     public object GetParameterSchema() => new
     {
