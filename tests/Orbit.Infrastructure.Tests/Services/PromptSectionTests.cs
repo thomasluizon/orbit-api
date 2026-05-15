@@ -87,7 +87,7 @@ public class GlobalRulesSectionTests
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
         var result = new GlobalRulesSection().Build(ctx);
 
-        result.Should().Contain("NO HABIT SUBSTITUTION FOR LOG / COMPLETE / SKIP");
+        result.Should().Contain("NO HABIT SUBSTITUTION FOR LOG / SKIP");
         result.Should().Contain("log_habit");
         result.Should().Contain("bulk_log_habits");
         result.Should().Contain("skip_habit");

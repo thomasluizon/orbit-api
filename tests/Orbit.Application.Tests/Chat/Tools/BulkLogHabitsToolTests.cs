@@ -113,6 +113,23 @@ public class BulkLogHabitsToolTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task DifferentUserHabit_IsNotLogged()
+    {
+        // Ownership scoping: the production query filters on `h.UserId == userId`.
+        // The mock applies that predicate, so a habit belonging to another user
+        // is filtered out before the log loop sees it.
+        var otherUserId = Guid.NewGuid();
+        var otherUserHabit = Habit.Create(
+            new HabitCreateParams(otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsFound(otherUserHabit);
+
+        var result = await Execute($$$"""{"habit_ids": ["{{{otherUserHabit.Id}}}"]}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("No habits were logged");
+    }
+
     private static Habit CreateHabit(string title)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
@@ -120,11 +137,17 @@ public class BulkLogHabitsToolTests
 
     private void SetupHabitsFound(params Habit[] habits)
     {
+        // Apply the predicate so the production query's `h.UserId == userId`
+        // ownership check is still exercised by the unit tests.
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns(habits.ToList());
+        ).Returns(callInfo =>
+        {
+            var predicate = callInfo.ArgAt<Expression<Func<Habit, bool>>>(0).Compile();
+            return habits.Where(predicate).ToList();
+        });
     }
 
     private async Task<ToolResult> Execute(string json)
