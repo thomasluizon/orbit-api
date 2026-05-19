@@ -387,10 +387,28 @@ public partial class ProcessUserChatCommandHandler(
                 ? "[]"
                 : JsonSerializer.Serialize(payload.QuickActions);
 
+            // Cap the stashed args so a runaway tool argument can't bloat the table.
+            // 16 KB covers realistic create_habit calls (a few sub_habits with checklists
+            // and descriptions); larger blows past expected payloads.
+            var partialArgsJson = call.Args.GetRawText();
+            if (partialArgsJson.Length > AppConstants.MaxClarificationArgsLength)
+            {
+                LogClarificationDroppedOnFailedTool(logger, call.Name, "args_too_large");
+                return (
+                    toolResult,
+                    new ActionResult(
+                        ToolNameToPascalCase(call.Name),
+                        ActionStatus.Failed,
+                        Error: "Tool arguments exceeded the clarification stash limit."),
+                    operationResult,
+                    executionResponse.PolicyDenial,
+                    executionResponse.PendingOperation);
+            }
+
             var stashedId = await execution.PendingClarificationStore.CreateAsync(
                 request.UserId,
                 call.Name,
-                call.Args.GetRawText(),
+                partialArgsJson,
                 payload.MissingArgumentKey,
                 payload.Question,
                 quickActionsJson,

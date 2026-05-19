@@ -50,11 +50,21 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         Guid userId,
         CancellationToken cancellationToken = default)
     {
+        // Push the expiry + resolved filters into SQL so an unusable row never crosses
+        // the wire. Collapses "not found", "expired", and "already resolved" into a
+        // single null return — the controller treats all three as "not available" and
+        // distinguishes them later via the atomic MarkResolved + ExpiresAtUtc field.
+        var now = DateTime.UtcNow;
         var entity = await dbContext.PendingClarifications
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == operationId && item.UserId == userId, cancellationToken);
+            .FirstOrDefaultAsync(
+                item => item.Id == operationId
+                    && item.UserId == userId
+                    && item.ResolvedAtUtc == null
+                    && item.ExpiresAtUtc > now,
+                cancellationToken);
 
-        if (entity is null || entity.IsExpired(DateTime.UtcNow) || entity.IsResolved)
+        if (entity is null)
             return null;
 
         return new PendingClarificationData(

@@ -328,8 +328,10 @@ public class CreateHabitTool(
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 
     // Whole-word "habit" so "inhabit", "habitual", "cohabit" don't false-positive.
-    // "rotina" and "hábito" / "habito" are PT-BR and rare as substrings in unrelated
-    // words, so substring matching is fine for them.
+    // "rotina" and "hábito" are PT-BR and don't collide with common words. The
+    // unaccented "habito" was previously included but conflicts with the verb
+    // habitar (e.g., "Eu habito em Lisboa" = "I live in Lisbon"), so we don't
+    // match it — users typing pt-BR properly will use the accent.
     private static readonly System.Text.RegularExpressions.Regex HabitWordRegex =
         new(@"\bhabit\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -337,8 +339,7 @@ public class CreateHabitTool(
     {
         return HabitWordRegex.IsMatch(title)
             || title.Contains("rotina", StringComparison.OrdinalIgnoreCase)
-            || title.Contains("hábito", StringComparison.OrdinalIgnoreCase)
-            || title.Contains("habito", StringComparison.OrdinalIgnoreCase);
+            || title.Contains("hábito", StringComparison.OrdinalIgnoreCase);
     }
 
     private static NeedsClarificationPayload BuildFrequencyClarification()
