@@ -327,11 +327,10 @@ public class CreateHabitTool(
             || title.Contains("hábito", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static ClarificationRequest BuildFrequencyClarification()
+    private static NeedsClarificationPayload BuildFrequencyClarification()
     {
-        return new ClarificationRequest(
+        return new NeedsClarificationPayload(
             Question: "habits.clarification.questionFallback",
-            OperationId: Guid.Empty,
             MissingArgumentKey: "frequency_unit",
             QuickActions: new List<QuickAction>
             {

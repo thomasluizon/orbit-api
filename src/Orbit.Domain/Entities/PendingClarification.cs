@@ -49,9 +49,4 @@ public class PendingClarification : Entity
     public bool IsExpired(DateTime utcNow) => utcNow >= ExpiresAtUtc;
 
     public bool IsResolved => ResolvedAtUtc.HasValue;
-
-    public void MarkResolved()
-    {
-        ResolvedAtUtc = DateTime.UtcNow;
-    }
 }

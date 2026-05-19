@@ -49,24 +49,24 @@ public class CreateHabitToolClarificationTests
         var result = await Execute($$"""{"title": "{{title}}"}""");
 
         result.Success.Should().BeTrue();
-        result.Payload.Should().BeOfType<ClarificationRequest>();
-        var clarification = (ClarificationRequest)result.Payload!;
-        clarification.MissingArgumentKey.Should().Be("frequency_unit");
-        clarification.QuickActions.Should().HaveCount(4);
+        result.Payload.Should().BeOfType<NeedsClarificationPayload>();
+        var payload = (NeedsClarificationPayload)result.Payload!;
+        payload.MissingArgumentKey.Should().Be("frequency_unit");
+        payload.QuickActions.Should().HaveCount(4);
 
         // Assert on the JSON merge patches (the load-bearing contract), not the i18n key labels.
         // Each patch is what gets shallow-merged into the partial args at resolve time.
-        clarification.QuickActions.Should().Contain(a =>
+        payload.QuickActions.Should().Contain(a =>
             a.Value.Contains("\"frequency_unit\":\"Day\"") && a.Value.Contains("\"frequency_quantity\":1"));
-        clarification.QuickActions.Should().Contain(a =>
+        payload.QuickActions.Should().Contain(a =>
             a.Value.Contains("\"frequency_unit\":\"Week\"")
             && a.Value.Contains("\"frequency_quantity\":1")
             && !a.Value.Contains("is_flexible"));
-        clarification.QuickActions.Should().Contain(a =>
+        payload.QuickActions.Should().Contain(a =>
             a.Value.Contains("\"frequency_unit\":\"Week\"")
             && a.Value.Contains("\"frequency_quantity\":3")
             && a.Value.Contains("\"is_flexible\":true"));
-        clarification.QuickActions.Should().Contain(a =>
+        payload.QuickActions.Should().Contain(a =>
             a.Value.Contains("\"frequency_unit\":null"));
 
         // Tool must NOT have created a habit
@@ -124,8 +124,8 @@ public class CreateHabitToolClarificationTests
     {
         var result = await Execute("""{"title": "Morning habit"}""");
 
-        var clarification = (ClarificationRequest)result.Payload!;
-        foreach (var action in clarification.QuickActions)
+        var payload = (NeedsClarificationPayload)result.Payload!;
+        foreach (var action in payload.QuickActions)
         {
             var parsed = () => JsonDocument.Parse(action.Value);
             parsed.Should().NotThrow($"QuickAction '{action.Label}' value should be valid JSON");
@@ -133,14 +133,14 @@ public class CreateHabitToolClarificationTests
     }
 
     [Fact]
-    public async Task ClarificationOperationId_StartsEmpty_HandlerOverwrites()
+    public async Task ClarificationPayload_DoesNotCarryOperationId()
     {
-        // The tool emits Guid.Empty as a placeholder; the handler stashes via the store
-        // and overwrites with the stash row id.
+        // OperationId is owned by the chat handler — the tool's payload type doesn't
+        // even expose the field. Keeps the tool decoupled from the store's id minting.
         var result = await Execute("""{"title": "Morning habit"}""");
 
-        var clarification = (ClarificationRequest)result.Payload!;
-        clarification.OperationId.Should().Be(Guid.Empty);
+        result.Payload.Should().BeOfType<NeedsClarificationPayload>();
+        // No OperationId property on NeedsClarificationPayload — confirmed by the type.
     }
 
     private async Task<ToolResult> Execute(string argsJson)

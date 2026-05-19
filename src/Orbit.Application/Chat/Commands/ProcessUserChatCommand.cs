@@ -366,31 +366,36 @@ public partial class ProcessUserChatCommandHandler(
 
         var operationResult = executionResponse.Operation;
         var toolResult = BuildToolCallResult(call, operationResult);
+        var isClarification = operationResult.Payload is NeedsClarificationPayload;
 
-        if (operationResult.Status == AgentOperationStatus.Succeeded)
+        if (operationResult.Status == AgentOperationStatus.Succeeded && !isClarification)
             LogToolSucceeded(logger, call.Name, operationResult.TargetName);
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
             LogToolFailed(logger, call.Name, operationResult.PolicyReason);
 
         if (operationResult.Status == AgentOperationStatus.Succeeded
-            && operationResult.Payload is ClarificationRequest clarification)
+            && operationResult.Payload is NeedsClarificationPayload payload)
         {
             var stashedId = await execution.PendingClarificationStore.CreateAsync(
                 request.UserId,
                 call.Name,
                 call.Args.GetRawText(),
-                clarification.MissingArgumentKey,
-                clarification.Question,
-                JsonSerializer.Serialize(clarification.QuickActions),
+                payload.MissingArgumentKey,
+                payload.Question,
+                JsonSerializer.Serialize(payload.QuickActions),
                 cancellationToken);
-            var withId = clarification with { OperationId = stashedId };
+            var clarification = new ClarificationRequest(
+                payload.Question,
+                stashedId,
+                payload.MissingArgumentKey,
+                payload.QuickActions);
             return (
                 toolResult,
                 new ActionResult(
                     ToolNameToPascalCase(call.Name),
                     ActionStatus.NeedsClarification,
                     EntityName: call.Name,
-                    ClarificationRequest: withId),
+                    ClarificationRequest: clarification),
                 operationResult,
                 executionResponse.PolicyDenial,
                 executionResponse.PendingOperation);
