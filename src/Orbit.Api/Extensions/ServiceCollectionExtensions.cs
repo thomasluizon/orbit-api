@@ -142,6 +142,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
+        builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
         builder.Services.AddScoped<IAgentStepUpService, AgentStepUpService>();
         builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
@@ -255,7 +256,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IPayGateService>(),
                 sp.GetRequiredService<IUnitOfWork>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
-                sp.GetRequiredService<IAgentOperationExecutor>()));
+                sp.GetRequiredService<IAgentOperationExecutor>(),
+                sp.GetRequiredService<IPendingClarificationStore>()));
 
         return builder;
     }

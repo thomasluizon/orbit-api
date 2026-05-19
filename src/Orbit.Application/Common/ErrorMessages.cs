@@ -32,4 +32,10 @@ public static class ErrorMessages
     public const string SubjectRequired = "Subject is required";
     public const string MessageRequired = "Message is required";
     public const string InvalidSession = "Invalid or expired session.";
+    public const string ClarificationValueEmpty = "Clarification value cannot be empty.";
+    public const string ClarificationValueTooLong = "Clarification value cannot exceed {0} characters.";
+    public const string ClarificationValueNotJsonObject = "Clarification value must be a JSON object.";
+    public const string ClarificationValueNotOffered = "Clarification value is not one of the offered quick actions.";
+    public const string ClarificationNotFound = "Clarification not found or expired.";
+    public const string ClarificationAlreadyResolved = "Clarification already resolved.";
 }

@@ -33,6 +33,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly ILogger<ProcessUserChatCommandHandler> _logger = Substitute.For<ILogger<ProcessUserChatCommandHandler>>();
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -60,7 +61,7 @@ public class ProcessUserChatCommandHandlerTests
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor);
+            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);

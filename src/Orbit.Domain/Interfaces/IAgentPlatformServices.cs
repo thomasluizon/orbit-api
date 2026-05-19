@@ -45,6 +45,34 @@ public interface IPendingAgentOperationStore
         bool requireStepUp);
 }
 
+public interface IPendingClarificationStore
+{
+    Task<Guid> CreateAsync(
+        Guid userId,
+        string toolName,
+        string partialArgumentsJson,
+        string missingArgumentKey,
+        string question,
+        string quickActionsJson,
+        CancellationToken cancellationToken = default);
+
+    Task<PendingClarificationData?> GetForResolutionAsync(
+        Guid operationId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically claims the clarification as resolved. Returns true iff this caller
+    /// is the one that flipped <c>ResolvedAtUtc</c> from null to a value — closes the
+    /// TOCTOU window between get-and-resolve. Concurrent callers see false and must
+    /// short-circuit (e.g., 409 Conflict) without re-invoking the tool.
+    /// </summary>
+    Task<bool> MarkResolvedAsync(
+        Guid operationId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IAgentStepUpService
 {
     Task<Result<AgentStepUpChallenge>> IssueChallengeAsync(

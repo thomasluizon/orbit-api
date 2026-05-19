@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -42,9 +43,10 @@ public record ActionResult(
     string? EntityName = null,
     string? Error = null,
     string? Field = null,
-    IReadOnlyList<AiAction>? SuggestedSubHabits = null);
+    IReadOnlyList<AiAction>? SuggestedSubHabits = null,
+    ClarificationRequest? ClarificationRequest = null);
 
-public enum ActionStatus { Success, Failed, Suggestion }
+public enum ActionStatus { Success, Failed, Suggestion, NeedsClarification }
 
 /// <summary>
 /// Groups AI-related dependencies to reduce constructor parameter count (S107).
@@ -76,7 +78,8 @@ public record ChatExecutionDependencies(
     IPayGateService PayGateService,
     IUnitOfWork UnitOfWork,
     IServiceScopeFactory ServiceScopeFactory,
-    IAgentOperationExecutor OperationExecutor);
+    IAgentOperationExecutor OperationExecutor,
+    IPendingClarificationStore PendingClarificationStore);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -363,11 +366,70 @@ public partial class ProcessUserChatCommandHandler(
 
         var operationResult = executionResponse.Operation;
         var toolResult = BuildToolCallResult(call, operationResult);
+        var isClarification = operationResult.Payload is NeedsClarificationPayload;
 
-        if (operationResult.Status == AgentOperationStatus.Succeeded)
+        if (operationResult.Status == AgentOperationStatus.Succeeded && !isClarification)
             LogToolSucceeded(logger, call.Name, operationResult.TargetName);
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
+        {
             LogToolFailed(logger, call.Name, operationResult.PolicyReason);
+            if (isClarification)
+                LogClarificationDroppedOnFailedTool(logger, call.Name, operationResult.PolicyReason);
+        }
+
+        if (operationResult.Status == AgentOperationStatus.Succeeded
+            && operationResult.Payload is NeedsClarificationPayload payload)
+        {
+            // Serialize null as an empty array literal — JsonSerializer.Serialize(null)
+            // returns the string "null" which bypasses PendingClarification.Create's
+            // "[]" default and would break ExtractQuickActionValues on read.
+            var quickActionsJson = payload.QuickActions is null
+                ? "[]"
+                : JsonSerializer.Serialize(payload.QuickActions);
+
+            // Cap the stashed args so a runaway tool argument can't bloat the table.
+            // 16 KB covers realistic create_habit calls (a few sub_habits with checklists
+            // and descriptions); larger blows past expected payloads.
+            var partialArgsJson = call.Args.GetRawText();
+            if (partialArgsJson.Length > AppConstants.MaxClarificationArgsLength)
+            {
+                LogClarificationArgsTooLarge(logger, call.Name, partialArgsJson.Length);
+                return (
+                    toolResult,
+                    new ActionResult(
+                        ToolNameToPascalCase(call.Name),
+                        ActionStatus.Failed,
+                        Error: "Tool arguments exceeded the clarification stash limit."),
+                    operationResult,
+                    executionResponse.PolicyDenial,
+                    executionResponse.PendingOperation);
+            }
+
+            var stashedId = await execution.PendingClarificationStore.CreateAsync(
+                request.UserId,
+                call.Name,
+                partialArgsJson,
+                payload.MissingArgumentKey,
+                payload.Question,
+                quickActionsJson,
+                cancellationToken);
+            LogClarificationRequested(logger, call.Name, stashedId, payload.MissingArgumentKey);
+            var clarification = new ClarificationRequest(
+                payload.Question,
+                stashedId,
+                payload.MissingArgumentKey,
+                payload.QuickActions ?? Array.Empty<QuickAction>());
+            return (
+                toolResult,
+                new ActionResult(
+                    ToolNameToPascalCase(call.Name),
+                    ActionStatus.NeedsClarification,
+                    EntityName: call.Name,
+                    ClarificationRequest: clarification),
+                operationResult,
+                executionResponse.PolicyDenial,
+                executionResponse.PendingOperation);
+        }
 
         return operationResult.Status switch
         {
@@ -759,6 +821,15 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Background message counter increment failed")]
     private static partial void LogBackgroundMessageCounterFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "Tool {Name} requested clarification (operationId={OperationId}, missing={MissingKey})")]
+    private static partial void LogClarificationRequested(ILogger logger, string name, Guid operationId, string missingKey);
+
+    [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Tool {Name} emitted a clarification payload on a Failed/Denied result and it was dropped: {Reason}")]
+    private static partial void LogClarificationDroppedOnFailedTool(ILogger logger, string name, string? reason);
+
+    [LoggerMessage(EventId = 26, Level = LogLevel.Warning, Message = "Tool {Name} requested clarification with oversized partial args ({Length} chars) — dropped without stashing")]
+    private static partial void LogClarificationArgsTooLarge(ILogger logger, string name, int length);
 
     [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
     private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);

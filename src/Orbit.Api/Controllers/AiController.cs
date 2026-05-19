@@ -1,8 +1,13 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
+using Orbit.Application.Chat.Models;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -15,9 +20,11 @@ public class AiController(
     IAgentCatalogService catalogService,
     IAgentPolicyEvaluator policyEvaluator,
     IPendingAgentOperationStore pendingOperationStore,
+    IPendingClarificationStore pendingClarificationStore,
     IAgentStepUpService stepUpService,
     IAgentAuditService auditService,
-    IAgentOperationExecutor operationExecutor) : ControllerBase
+    IAgentOperationExecutor operationExecutor,
+    IValidator<ResolveClarificationRequest> resolveClarificationValidator) : ControllerBase
 {
     [HttpGet("capabilities")]
     public async Task<IActionResult> GetCapabilitiesMetadata(CancellationToken cancellationToken)
@@ -293,5 +300,197 @@ public class AiController(
             HttpContext.TraceIdentifier), cancellationToken);
 
         return Ok(result);
+    }
+
+    [HttpPost("clarifications/{operationId:guid}/resolve")]
+    [DistributedRateLimit("ai-resolve")]
+    public async Task<IActionResult> ResolveClarification(
+        Guid operationId,
+        [FromBody] ResolveClarificationRequest body,
+        CancellationToken cancellationToken)
+    {
+        // Clarification cards are a UI-only flow — API-key clients can't render or tap them.
+        // Mirrors the guard on ExecutePendingOperation and the step-up endpoints.
+        var authMethod = HttpContext.User.GetAgentAuthMethod();
+        if (authMethod == AgentAuthMethod.ApiKey)
+            return Forbid();
+
+        var userId = HttpContext.GetUserId();
+
+        var validation = await resolveClarificationValidator.ValidateAsync(body, cancellationToken);
+        if (!validation.IsValid)
+        {
+            var firstError = validation.Errors[0];
+            await RecordResolveAuditAsync(
+                userId,
+                authMethod,
+                operationId,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.Failed,
+                $"invalid_clarification_value:{firstError.PropertyName}",
+                cancellationToken);
+            return BadRequest(new { error = firstError.ErrorMessage });
+        }
+
+        var pending = await pendingClarificationStore.GetForResolutionAsync(operationId, userId, cancellationToken);
+        if (pending is null)
+        {
+            await RecordResolveAuditAsync(
+                userId,
+                authMethod,
+                operationId,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.Failed,
+                "clarification_not_found",
+                cancellationToken);
+            return NotFound(new { error = ErrorMessages.ClarificationNotFound });
+        }
+
+        // The patch must be one of the server-offered quick-action values. This is a
+        // defense-in-depth check: prevents a malicious client from hand-crafting a patch
+        // that overrides fields the contract never said could be changed.
+        if (!pending.AllowedValues.Contains(body.Value, StringComparer.Ordinal))
+        {
+            await RecordResolveAuditAsync(
+                userId,
+                authMethod,
+                operationId,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.Failed,
+                "clarification_value_not_offered",
+                cancellationToken);
+            return BadRequest(new { error = ErrorMessages.ClarificationValueNotOffered });
+        }
+
+        JsonElement mergedArgs;
+        try
+        {
+            mergedArgs = MergeClarificationValue(pending.PartialArgumentsJson, body.Value);
+        }
+        catch (JsonException)
+        {
+            await RecordResolveAuditAsync(
+                userId,
+                authMethod,
+                operationId,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.Failed,
+                "invalid_clarification_value",
+                cancellationToken);
+            return BadRequest(new { error = ErrorMessages.ClarificationValueNotJsonObject });
+        }
+
+        // Atomic one-shot claim: if this returns false, either another concurrent request
+        // already marked the row resolved OR the row expired in the (typically sub-ms)
+        // window between Get and MarkResolved. Bail before re-invoking.
+        //
+        // The clarification is intentionally consumed BEFORE ExecuteAsync runs. If the
+        // executor throws or the tool returns Failed/Denied, the clarification is gone —
+        // the user must re-initiate the request via chat. This is acceptable because:
+        //   (a) the alternative (un-claim on failure) reopens TOCTOU races on retry,
+        //   (b) tool Failed/Denied is surfaced in the response so the client can prompt
+        //       the user appropriately,
+        //   (c) re-asking in chat is a natural recovery path the user already understands.
+        var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
+        if (!claimed)
+        {
+            var auditError = pending.ExpiresAtUtc <= DateTime.UtcNow
+                ? "clarification_expired_mid_flight"
+                : "clarification_already_resolved";
+            await RecordResolveAuditAsync(
+                userId,
+                authMethod,
+                operationId,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.Failed,
+                auditError,
+                cancellationToken);
+            return Conflict(new { error = ErrorMessages.ClarificationAlreadyResolved });
+        }
+
+        var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
+            userId,
+            pending.ToolName,
+            mergedArgs,
+            AgentExecutionSurface.Chat,
+            authMethod,
+            HttpContext.User.GetGrantedAgentScopes(),
+            HttpContext.User.IsReadOnlyCredential(),
+            ConfirmationToken: null,
+            HttpContext.TraceIdentifier), cancellationToken);
+
+        await RecordResolveAuditAsync(
+            userId,
+            authMethod,
+            operationId,
+            result.Operation.Status == AgentOperationStatus.Succeeded
+                ? AgentPolicyDecisionStatus.Allowed
+                : AgentPolicyDecisionStatus.Denied,
+            result.Operation.Status,
+            result.Operation.PolicyReason,
+            cancellationToken,
+            targetName: result.Operation.TargetName);
+
+        return Ok(result);
+    }
+
+    private Task RecordResolveAuditAsync(
+        Guid userId,
+        AgentAuthMethod authMethod,
+        Guid operationId,
+        AgentPolicyDecisionStatus policyDecision,
+        AgentOperationStatus outcome,
+        string? error,
+        CancellationToken cancellationToken,
+        string? targetName = null)
+    {
+        return auditService.RecordAsync(new AgentAuditEntry(
+            userId,
+            AgentCapabilityIds.ChatInteract,
+            nameof(ResolveClarification),
+            AgentExecutionSurface.Chat,
+            authMethod,
+            AgentRiskClass.Low,
+            policyDecision,
+            outcome,
+            HttpContext.TraceIdentifier,
+            "Resolve clarification",
+            TargetId: operationId.ToString(),
+            TargetName: targetName,
+            Error: error), cancellationToken);
+    }
+
+    private static JsonElement MergeClarificationValue(string baseJson, string value)
+    {
+        // Fail closed if the stored args aren't a JSON object — silently coercing to {}
+        // would drop the original tool arguments and replay the tool with only the patch.
+        if (JsonNode.Parse(baseJson) is not JsonObject baseNode)
+            throw new JsonException("Stored partial arguments are not a JSON object.");
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            if (JsonNode.Parse(value) is not JsonObject patchNode)
+                throw new JsonException("Clarification value must be a JSON object.");
+
+            DeepMerge(baseNode, patchNode);
+        }
+
+        return JsonDocument.Parse(baseNode.ToJsonString()).RootElement.Clone();
+    }
+
+    // Deep merge: nested JsonObjects recurse instead of clobbering.
+    private static void DeepMerge(JsonObject target, JsonObject patch)
+    {
+        foreach (var kvp in patch.ToList())
+        {
+            if (target[kvp.Key] is JsonObject targetChild && kvp.Value is JsonObject patchChild)
+            {
+                DeepMerge(targetChild, patchChild);
+            }
+            else
+            {
+                target[kvp.Key] = kvp.Value?.DeepClone();
+            }
+        }
     }
 }

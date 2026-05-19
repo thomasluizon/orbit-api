@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -16,9 +18,12 @@ public class AiControllerTests
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentPolicyEvaluator _policyEvaluator = Substitute.For<IAgentPolicyEvaluator>();
     private readonly IPendingAgentOperationStore _pendingOperationStore = Substitute.For<IPendingAgentOperationStore>();
+    private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly IAgentStepUpService _stepUpService = Substitute.For<IAgentStepUpService>();
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IValidator<ResolveClarificationRequest> _resolveClarificationValidator =
+        Substitute.For<IValidator<ResolveClarificationRequest>>();
     private readonly AiController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -28,9 +33,11 @@ public class AiControllerTests
             _catalogService,
             _policyEvaluator,
             _pendingOperationStore,
+            _pendingClarificationStore,
             _stepUpService,
             _auditService,
-            _operationExecutor);
+            _operationExecutor,
+            _resolveClarificationValidator);
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
@@ -373,6 +380,143 @@ public class AiControllerTests
             CancellationToken.None);
 
         result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task ResolveClarification_ForApiKeyUser_ReturnsForbid()
+    {
+        SetUser(isApiKey: true);
+
+        var result = await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\"}"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task ResolveClarification_InvalidBody_ReturnsBadRequest()
+    {
+        StubValidatorOutcome(isValid: false, propertyName: "Value", message: "Clarification value cannot be empty.");
+
+        var result = await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest(""),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        await _pendingClarificationStore.DidNotReceiveWithAnyArgs()
+            .GetForResolutionAsync(default, default, default);
+    }
+
+    [Fact]
+    public async Task ResolveClarification_NotFound_ReturnsNotFound()
+    {
+        StubValidatorOutcome(isValid: true);
+        _pendingClarificationStore
+            .GetForResolutionAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns((PendingClarificationData?)null);
+
+        var result = await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\"}"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<NotFoundObjectResult>();
+        await _operationExecutor.DidNotReceiveWithAnyArgs()
+            .ExecuteAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveClarification_ValueNotOffered_ReturnsBadRequest()
+    {
+        StubValidatorOutcome(isValid: true);
+        StubPendingClarification(allowedValues: ["{\"frequency_unit\":\"Day\"}"]);
+
+        var result = await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"InjectedValue\"}"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        await _operationExecutor.DidNotReceiveWithAnyArgs()
+            .ExecuteAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveClarification_ClaimRaceLost_ReturnsConflict()
+    {
+        StubValidatorOutcome(isValid: true);
+        StubPendingClarification(allowedValues: ["{\"frequency_unit\":\"Day\"}"]);
+        _pendingClarificationStore
+            .MarkResolvedAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\"}"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<ConflictObjectResult>();
+        await _operationExecutor.DidNotReceiveWithAnyArgs()
+            .ExecuteAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task ResolveClarification_SuccessfulPath_DispatchesAndReturnsOk()
+    {
+        StubValidatorOutcome(isValid: true);
+        StubPendingClarification(
+            toolName: "create_habit",
+            partialArgs: "{\"title\":\"Morning habit\"}",
+            allowedValues: ["{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"]);
+        _pendingClarificationStore
+            .MarkResolvedAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var executorResponse = new AgentExecuteOperationResponse(new AgentOperationResult(
+            OperationId: "create_habit",
+            SourceName: "create_habit",
+            RiskClass: AgentRiskClass.Low,
+            ConfirmationRequirement: AgentConfirmationRequirement.None,
+            Status: AgentOperationStatus.Succeeded,
+            TargetName: "Morning habit"));
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(executorResponse);
+
+        var result = await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"),
+            CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().Be(executorResponse);
+    }
+
+    private void StubValidatorOutcome(bool isValid, string? propertyName = null, string? message = null)
+    {
+        var validationResult = isValid
+            ? new FluentValidation.Results.ValidationResult()
+            : new FluentValidation.Results.ValidationResult(
+                [new FluentValidation.Results.ValidationFailure(propertyName ?? "Value", message ?? "invalid")]);
+        _resolveClarificationValidator.ValidateAsync(Arg.Any<ResolveClarificationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(validationResult);
+    }
+
+    private void StubPendingClarification(
+        string toolName = "create_habit",
+        string partialArgs = "{}",
+        IReadOnlyList<string>? allowedValues = null)
+    {
+        var data = new PendingClarificationData(
+            toolName,
+            partialArgs,
+            "frequency_unit",
+            allowedValues ?? Array.Empty<string>(),
+            DateTime.UtcNow.AddMinutes(30));
+        _pendingClarificationStore
+            .GetForResolutionAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(data);
     }
 
     private void SetUser(bool isApiKey = false)
