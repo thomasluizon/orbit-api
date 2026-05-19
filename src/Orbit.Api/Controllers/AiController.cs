@@ -478,13 +478,7 @@ public class AiController(
         return JsonDocument.Parse(baseNode.ToJsonString()).RootElement.Clone();
     }
 
-    /// <summary>
-    /// Recursively merges <paramref name="patch"/> into <paramref name="target"/>. When a
-    /// key exists on both sides and both values are JsonObjects, the merge recurses into
-    /// the nested object instead of clobbering it. Other types (arrays, primitives) are
-    /// replaced as-is. Patches we currently emit are flat top-level keys, but the deep
-    /// merge keeps nested fields in <c>PartialArgumentsJson</c> safe under future patches.
-    /// </summary>
+    // Deep merge: nested JsonObjects recurse instead of clobbering.
     private static void DeepMerge(JsonObject target, JsonObject patch)
     {
         foreach (var kvp in patch.ToList())

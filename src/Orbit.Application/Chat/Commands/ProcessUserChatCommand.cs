@@ -371,7 +371,11 @@ public partial class ProcessUserChatCommandHandler(
         if (operationResult.Status == AgentOperationStatus.Succeeded && !isClarification)
             LogToolSucceeded(logger, call.Name, operationResult.TargetName);
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
+        {
             LogToolFailed(logger, call.Name, operationResult.PolicyReason);
+            if (isClarification)
+                LogClarificationDroppedOnFailedTool(logger, call.Name, operationResult.PolicyReason);
+        }
 
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
@@ -396,7 +400,7 @@ public partial class ProcessUserChatCommandHandler(
                 payload.Question,
                 stashedId,
                 payload.MissingArgumentKey,
-                payload.QuickActions);
+                payload.QuickActions ?? Array.Empty<QuickAction>());
             return (
                 toolResult,
                 new ActionResult(
@@ -760,6 +764,9 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "Tool {Name} requested clarification (operationId={OperationId}, missing={MissingKey})")]
     private static partial void LogClarificationRequested(ILogger logger, string name, Guid operationId, string missingKey);
+
+    [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Tool {Name} emitted a clarification payload on a Failed/Denied result and it was dropped: {Reason}")]
+    private static partial void LogClarificationDroppedOnFailedTool(ILogger logger, string name, string? reason);
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Tool {Name} threw an exception")]
     private static partial void LogToolThrewException(ILogger logger, Exception ex, string name);
