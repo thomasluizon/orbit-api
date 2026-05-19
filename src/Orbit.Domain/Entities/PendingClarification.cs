@@ -33,6 +33,19 @@ public class PendingClarification : Entity
         string quickActionsJson,
         DateTime expiresAtUtc)
     {
+        if (userId == Guid.Empty)
+            throw new ArgumentException("userId cannot be empty.", nameof(userId));
+        if (string.IsNullOrWhiteSpace(toolName))
+            throw new ArgumentException("toolName is required.", nameof(toolName));
+        if (string.IsNullOrWhiteSpace(missingArgumentKey))
+            throw new ArgumentException("missingArgumentKey is required.", nameof(missingArgumentKey));
+        if (string.IsNullOrWhiteSpace(question))
+            throw new ArgumentException("question is required.", nameof(question));
+
+        var createdAtUtc = DateTime.UtcNow;
+        if (expiresAtUtc <= createdAtUtc)
+            throw new ArgumentException("expiresAtUtc must be in the future.", nameof(expiresAtUtc));
+
         return new PendingClarification
         {
             UserId = userId,
@@ -41,7 +54,7 @@ public class PendingClarification : Entity
             MissingArgumentKey = missingArgumentKey,
             Question = question,
             QuickActionsJson = string.IsNullOrWhiteSpace(quickActionsJson) ? "[]" : quickActionsJson,
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = createdAtUtc,
             ExpiresAtUtc = expiresAtUtc
         };
     }

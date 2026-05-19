@@ -454,20 +454,41 @@ public class AiController(
 
     private static JsonElement MergeClarificationValue(string baseJson, string value)
     {
-        var baseNode = JsonNode.Parse(baseJson) as JsonObject ?? new JsonObject();
+        // Fail closed if the stored args aren't a JSON object — silently coercing to {}
+        // would drop the original tool arguments and replay the tool with only the patch.
+        if (JsonNode.Parse(baseJson) is not JsonObject baseNode)
+            throw new JsonException("Stored partial arguments are not a JSON object.");
 
         if (!string.IsNullOrWhiteSpace(value))
         {
-            var parsed = JsonNode.Parse(value);
-            if (parsed is not JsonObject patchNode)
+            if (JsonNode.Parse(value) is not JsonObject patchNode)
                 throw new JsonException("Clarification value must be a JSON object.");
 
-            foreach (var kvp in patchNode.ToList())
-            {
-                baseNode[kvp.Key] = kvp.Value?.DeepClone();
-            }
+            DeepMerge(baseNode, patchNode);
         }
 
         return JsonDocument.Parse(baseNode.ToJsonString()).RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Recursively merges <paramref name="patch"/> into <paramref name="target"/>. When a
+    /// key exists on both sides and both values are JsonObjects, the merge recurses into
+    /// the nested object instead of clobbering it. Other types (arrays, primitives) are
+    /// replaced as-is. Patches we currently emit are flat top-level keys, but the deep
+    /// merge keeps nested fields in <c>PartialArgumentsJson</c> safe under future patches.
+    /// </summary>
+    private static void DeepMerge(JsonObject target, JsonObject patch)
+    {
+        foreach (var kvp in patch.ToList())
+        {
+            if (target[kvp.Key] is JsonObject targetChild && kvp.Value is JsonObject patchChild)
+            {
+                DeepMerge(targetChild, patchChild);
+            }
+            else
+            {
+                target[kvp.Key] = kvp.Value?.DeepClone();
+            }
+        }
     }
 }

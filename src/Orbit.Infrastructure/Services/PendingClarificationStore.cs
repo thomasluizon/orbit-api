@@ -1,6 +1,6 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -11,6 +11,11 @@ namespace Orbit.Infrastructure.Services;
 
 public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClarificationStore
 {
+    private static readonly JsonSerializerOptions QuickActionDeserializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     public async Task<Guid> CreateAsync(
         Guid userId,
         string toolName,
@@ -80,27 +85,25 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         if (string.IsNullOrWhiteSpace(quickActionsJson))
             return Array.Empty<string>();
 
-        JsonNode? node;
         try
         {
-            node = JsonNode.Parse(quickActionsJson);
+            // Case-insensitive deserialize decouples this from whichever casing the
+            // serializer used when storing — defaults to PascalCase for records, but
+            // a global camelCase policy would silently break a manual JsonNode lookup.
+            var actions = JsonSerializer.Deserialize<List<QuickAction>>(quickActionsJson, QuickActionDeserializerOptions);
+            if (actions is null) return Array.Empty<string>();
+
+            var values = new List<string>(actions.Count);
+            foreach (var action in actions)
+            {
+                if (!string.IsNullOrEmpty(action?.Value))
+                    values.Add(action.Value);
+            }
+            return values;
         }
         catch (JsonException)
         {
             return Array.Empty<string>();
         }
-
-        if (node is not JsonArray array)
-            return Array.Empty<string>();
-
-        var values = new List<string>(array.Count);
-        foreach (var element in array)
-        {
-            // Records serialize as PascalCase by default; tolerate camelCase too.
-            var value = (element?["Value"] ?? element?["value"])?.GetValue<string>();
-            if (!string.IsNullOrEmpty(value))
-                values.Add(value);
-        }
-        return values;
     }
 }

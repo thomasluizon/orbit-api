@@ -323,11 +323,18 @@ public class CreateHabitTool(
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 
+    // Whole-word "habit" so "inhabit", "habitual", "cohabit" don't false-positive.
+    // "rotina" and "hábito" / "habito" are PT-BR and rare as substrings in unrelated
+    // words, so substring matching is fine for them.
+    private static readonly System.Text.RegularExpressions.Regex HabitWordRegex =
+        new(@"\bhabit\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private static bool IsHabitFlavoredTitle(string title)
     {
-        return title.Contains("habit", StringComparison.OrdinalIgnoreCase)
+        return HabitWordRegex.IsMatch(title)
             || title.Contains("rotina", StringComparison.OrdinalIgnoreCase)
-            || title.Contains("hábito", StringComparison.OrdinalIgnoreCase);
+            || title.Contains("hábito", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("habito", StringComparison.OrdinalIgnoreCase);
     }
 
     private static NeedsClarificationPayload BuildFrequencyClarification()
