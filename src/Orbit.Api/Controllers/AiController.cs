@@ -311,11 +311,11 @@ public class AiController(
     {
         // Clarification cards are a UI-only flow — API-key clients can't render or tap them.
         // Mirrors the guard on ExecutePendingOperation and the step-up endpoints.
-        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+        var authMethod = HttpContext.User.GetAgentAuthMethod();
+        if (authMethod == AgentAuthMethod.ApiKey)
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        var authMethod = HttpContext.User.GetAgentAuthMethod();
 
         var validation = await resolveClarificationValidator.ValidateAsync(body, cancellationToken);
         if (!validation.IsValid)
