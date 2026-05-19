@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -308,6 +309,11 @@ public class AiController(
         [FromBody] ResolveClarificationRequest body,
         CancellationToken cancellationToken)
     {
+        // Clarification cards are a UI-only flow — API-key clients can't render or tap them.
+        // Mirrors the guard on ExecutePendingOperation and the step-up endpoints.
+        if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
+            return Forbid();
+
         var userId = HttpContext.GetUserId();
         var authMethod = HttpContext.User.GetAgentAuthMethod();
 
@@ -337,7 +343,23 @@ public class AiController(
                 AgentOperationStatus.Failed,
                 "clarification_not_found",
                 cancellationToken);
-            return NotFound(new { error = "Clarification not found or expired." });
+            return NotFound(new { error = ErrorMessages.ClarificationNotFound });
+        }
+
+        // The patch must be one of the server-offered quick-action values. This is a
+        // defense-in-depth check: prevents a malicious client from hand-crafting a patch
+        // that overrides fields the contract never said could be changed.
+        if (!pending.AllowedValues.Contains(body.Value, StringComparer.Ordinal))
+        {
+            await RecordResolveAuditAsync(
+                userId,
+                authMethod,
+                operationId,
+                AgentPolicyDecisionStatus.Denied,
+                AgentOperationStatus.Failed,
+                "clarification_value_not_offered",
+                cancellationToken);
+            return BadRequest(new { error = ErrorMessages.ClarificationValueNotOffered });
         }
 
         JsonElement mergedArgs;
@@ -355,11 +377,12 @@ public class AiController(
                 AgentOperationStatus.Failed,
                 "invalid_clarification_value",
                 cancellationToken);
-            return BadRequest(new { error = "Invalid clarification value." });
+            return BadRequest(new { error = ErrorMessages.ClarificationValueNotJsonObject });
         }
 
         // Atomic one-shot claim: if this returns false, another concurrent request already
-        // marked the row resolved and may be executing the tool. Bail before re-invoking.
+        // marked the row resolved (or the row expired between get and claim) and may be
+        // executing the tool. Bail before re-invoking.
         var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
         if (!claimed)
         {
@@ -371,7 +394,7 @@ public class AiController(
                 AgentOperationStatus.Failed,
                 "clarification_already_resolved",
                 cancellationToken);
-            return Conflict(new { error = "Clarification already resolved." });
+            return Conflict(new { error = ErrorMessages.ClarificationAlreadyResolved });
         }
 
         var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(

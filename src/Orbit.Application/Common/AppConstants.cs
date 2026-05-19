@@ -33,6 +33,8 @@ public static class AppConstants
     public const int MaxLanguageLength = 10;
     public const int MaxVerificationAttempts = 3;
     public const int MaxChatMessageLength = 4000;
+    public const int MaxClarificationValueLength = 2048;
+    public const int PendingClarificationTtlMinutes = 30;
     public const int MaxChatHistoryLength = 50_000;
     public const int MaxChatHistoryMessages = 40;
     public const int MaxChatHistoryMessageLength = 4000;

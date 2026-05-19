@@ -1,18 +1,36 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentValidation;
 using Orbit.Application.Chat.Models;
+using Orbit.Application.Common;
 
 namespace Orbit.Application.Chat.Validators;
 
 public class ResolveClarificationRequestValidator : AbstractValidator<ResolveClarificationRequest>
 {
-    public const int MaxValueLength = 2048;
-
     public ResolveClarificationRequestValidator()
     {
         RuleFor(x => x.Value)
             .NotEmpty()
-            .WithMessage("Clarification value cannot be empty.")
-            .MaximumLength(MaxValueLength)
-            .WithMessage($"Clarification value cannot exceed {MaxValueLength} characters.");
+            .WithMessage(ErrorMessages.ClarificationValueEmpty)
+            .MaximumLength(AppConstants.MaxClarificationValueLength)
+            .WithMessage(string.Format(ErrorMessages.ClarificationValueTooLong, AppConstants.MaxClarificationValueLength))
+            .Must(BeJsonObject)
+            .WithMessage(ErrorMessages.ClarificationValueNotJsonObject);
+    }
+
+    private static bool BeJsonObject(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        try
+        {
+            return JsonNode.Parse(value) is JsonObject;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }
