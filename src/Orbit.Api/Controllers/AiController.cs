@@ -383,6 +383,14 @@ public class AiController(
         // Atomic one-shot claim: if this returns false, either another concurrent request
         // already marked the row resolved OR the row expired in the (typically sub-ms)
         // window between Get and MarkResolved. Bail before re-invoking.
+        //
+        // The clarification is intentionally consumed BEFORE ExecuteAsync runs. If the
+        // executor throws or the tool returns Failed/Denied, the clarification is gone —
+        // the user must re-initiate the request via chat. This is acceptable because:
+        //   (a) the alternative (un-claim on failure) reopens TOCTOU races on retry,
+        //   (b) tool Failed/Denied is surfaced in the response so the client can prompt
+        //       the user appropriately,
+        //   (c) re-asking in chat is a natural recovery path the user already understands.
         var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
         if (!claimed)
         {
