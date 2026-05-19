@@ -35,6 +35,11 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes));
 
         dbContext.PendingClarifications.Add(entity);
+        // SaveChangesAsync runs here (eagerly, before the chat command's UoW commits)
+        // so the OperationId is durably stored before the response is returned. If the
+        // surrounding chat command fails afterwards, the row is orphaned but the
+        // 30-minute TTL + index on ExpiresAtUtc reclaim it. Mirrors the eager-save
+        // pattern in PendingAgentOperationStore.
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return entity.Id;

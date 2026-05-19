@@ -154,6 +154,10 @@ public class CreateHabitTool(
         if (habitGate.IsFailure)
             return new ToolResult(false, Error: habitGate.Error);
 
+        // TryGetProperty returns true for an explicit null value, so this only fires when
+        // the key is genuinely absent. The "one-time task" quick action patches with
+        // {"frequency_unit":null}, which adds the key and bypasses this check on
+        // re-invocation. Don't change to a value-based check without preserving that.
         if (!args.TryGetProperty("frequency_unit", out _) && IsHabitFlavoredTitle(title))
         {
             return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification());

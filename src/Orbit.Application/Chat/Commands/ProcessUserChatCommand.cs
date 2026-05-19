@@ -762,12 +762,6 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Tool {Name} failed: {Error}")]
     private static partial void LogToolFailed(ILogger logger, string name, string? error);
 
-    [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "Tool {Name} requested clarification (operationId={OperationId}, missing={MissingKey})")]
-    private static partial void LogClarificationRequested(ILogger logger, string name, Guid operationId, string missingKey);
-
-    [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Tool {Name} emitted a clarification payload on a Failed/Denied result and it was dropped: {Reason}")]
-    private static partial void LogClarificationDroppedOnFailedTool(ILogger logger, string name, string? reason);
-
     [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Tool {Name} threw an exception")]
     private static partial void LogToolThrewException(ILogger logger, Exception ex, string name);
 
@@ -809,6 +803,12 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Background message counter increment failed")]
     private static partial void LogBackgroundMessageCounterFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "Tool {Name} requested clarification (operationId={OperationId}, missing={MissingKey})")]
+    private static partial void LogClarificationRequested(ILogger logger, string name, Guid operationId, string missingKey);
+
+    [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Tool {Name} emitted a clarification payload on a Failed/Denied result and it was dropped: {Reason}")]
+    private static partial void LogClarificationDroppedOnFailedTool(ILogger logger, string name, string? reason);
 
     [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
     private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);
