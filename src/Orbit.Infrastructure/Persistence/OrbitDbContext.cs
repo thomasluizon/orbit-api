@@ -44,6 +44,7 @@ public class OrbitDbContext : DbContext
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
+    public DbSet<PendingClarification> PendingClarifications => Set<PendingClarification>();
     public DbSet<AgentStepUpChallengeState> AgentStepUpChallenges => Set<AgentStepUpChallengeState>();
     public DbSet<AgentAuditLog> AgentAuditLogs => Set<AgentAuditLog>();
     public DbSet<DistributedRateLimitBucket> DistributedRateLimitBuckets => Set<DistributedRateLimitBucket>();
@@ -173,6 +174,18 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(item => new { item.UserId, item.PendingOperationId, item.CreatedAtUtc });
             entity.Property(item => item.CodeHash).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<PendingClarification>(entity =>
+        {
+            entity.HasIndex(item => new { item.UserId, item.CreatedAtUtc });
+            entity.HasIndex(item => item.ExpiresAtUtc);
+            entity.Property(item => item.ToolName).HasMaxLength(100);
+            entity.Property(item => item.MissingArgumentKey).HasMaxLength(100);
+            entity.Property(item => item.Question).HasMaxLength(500);
+            entity.Property(item => item.PartialArgumentsJson).HasColumnType(JsonbColumnType);
+            entity.Property(item => item.QuickActionsJson).HasColumnType(JsonbColumnType);
+            entity.HasOne<User>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AgentAuditLog>(entity =>

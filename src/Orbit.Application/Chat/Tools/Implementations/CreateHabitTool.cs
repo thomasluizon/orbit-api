@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -20,7 +21,7 @@ public class CreateHabitTool(
     public string Name => "create_habit";
 
     public string Description =>
-        "Create a new habit or one-time task. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit. Structure: use checklist_items for atomic sub-steps done together in one execution (shopping lists, prep lists, packing lists); use sub_habits for sub-activities that need independent tracking, streaks, or different schedules. Never list items only in the description when checklist_items would preserve them. Frequency: when user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
+        "Create a new habit or one-time task. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit ONLY when the user explicitly described it as a one-time task (e.g., 'just once', 'this Friday only', 'one-time', 'uma vez', 'apenas uma vez'). If the user called it a habit/rotina/hábito or did not state a frequency, ASK FIRST via a NeedsClarification clarification card instead of guessing — the tool will refuse to silently create a one-time task in that case. Structure: use checklist_items for atomic sub-steps done together in one execution (shopping lists, prep lists, packing lists); use sub_habits for sub-activities that need independent tracking, streaks, or different schedules. Never list items only in the description when checklist_items would preserve them. Frequency: when user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
 
     public object GetParameterSchema() => new
     {
@@ -145,6 +146,11 @@ public class CreateHabitTool(
             return new ToolResult(false, Error: "title is required.");
 
         var title = titleEl.GetString() ?? string.Empty;
+
+        if (!args.TryGetProperty("frequency_unit", out _) && IsHabitFlavoredTitle(title))
+        {
+            return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification());
+        }
 
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
         if (habitGate.IsFailure)
@@ -313,4 +319,30 @@ public class CreateHabitTool(
 
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
+
+    private static bool IsHabitFlavoredTitle(string title)
+    {
+        return title.Contains("habit", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("rotina", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("hábito", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ClarificationRequest BuildFrequencyClarification()
+    {
+        return new ClarificationRequest(
+            Question: "habits.clarification.questionFallback",
+            OperationId: Guid.Empty,
+            MissingArgumentKey: "frequency_unit",
+            QuickActions: new List<QuickAction>
+            {
+                new("habits.clarification.quickAction.daily",
+                    """{"frequency_unit":"Day","frequency_quantity":1}"""),
+                new("habits.clarification.quickAction.weekly",
+                    """{"frequency_unit":"Week","frequency_quantity":1}"""),
+                new("habits.clarification.quickAction.threePerWeek",
+                    """{"frequency_unit":"Week","frequency_quantity":3,"is_flexible":true}"""),
+                new("habits.clarification.quickAction.oneTime",
+                    """{"frequency_unit":null}"""),
+            });
+    }
 }

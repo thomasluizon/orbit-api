@@ -167,7 +167,7 @@ public class CreateHabitToolTests
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("Habit limit reached."));
 
-        var result = await Execute("""{"title": "New Habit"}""");
+        var result = await Execute("""{"title": "New Workout"}""");
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("Habit limit reached");
@@ -382,7 +382,7 @@ public class CreateHabitToolTests
 
         var result = await Execute($$$"""
         {
-            "title": "Full Habit",
+            "title": "Full Workout",
             "tag_names": ["Health", "Fitness", "Morning"],
             "goal_ids": ["{{{goal1.Id}}}", "{{{goal2.Id}}}"]
         }

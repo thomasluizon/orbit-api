@@ -38,6 +38,7 @@ public class StructuringStrategySection : IPromptSection
             - User describes a SINGLE weekly occurrence (e.g., "weekly study routine", "every week I want to clean") with no specific day named -> ask which day of the week
             - User says a vague time like "morning" or "evening" without a specific hour
             - Structure is genuinely ambiguous between checklist and sub-habits -> ask "do you want these as a single checklist or individually trackable steps?"
+            - User calls something a "habit" / "rotina" / "hábito" without stating daily / weekly / X times per week / a specific schedule -> ASK before calling create_habit. Offer: daily, weekly with specific days, X times per week, or one-time task. Prefer returning a NeedsClarification clarification card from create_habit (with the four quick actions) over a plain-text question.
             - Pick the SINGLE most blocking question. NEVER ask more than one at a time.
             - NEVER ask if the user already gave a clear answer elsewhere in the message.
             - After the user answers, act immediately. Do not ask a second round of questions.

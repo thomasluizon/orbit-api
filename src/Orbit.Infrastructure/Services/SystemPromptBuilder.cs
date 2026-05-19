@@ -17,6 +17,7 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             new CoreIdentitySection(),
             new GlobalRulesSection(),
             new StructuringStrategySection(),
+            new ClarificationGuidanceSection(),
             new ActiveHabitsSection(),
             new ActiveGoalsSection(),
             new UserTagsSection(),

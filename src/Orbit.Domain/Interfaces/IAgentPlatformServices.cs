@@ -45,6 +45,28 @@ public interface IPendingAgentOperationStore
         bool requireStepUp);
 }
 
+public interface IPendingClarificationStore
+{
+    Task<Guid> CreateAsync(
+        Guid userId,
+        string toolName,
+        string partialArgumentsJson,
+        string missingArgumentKey,
+        string question,
+        string quickActionsJson,
+        CancellationToken cancellationToken = default);
+
+    Task<PendingClarificationData?> GetForResolutionAsync(
+        Guid operationId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task MarkResolvedAsync(
+        Guid operationId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IAgentStepUpService
 {
     Task<Result<AgentStepUpChallenge>> IssueChallengeAsync(

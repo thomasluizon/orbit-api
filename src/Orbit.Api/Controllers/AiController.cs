@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +17,7 @@ public class AiController(
     IAgentCatalogService catalogService,
     IAgentPolicyEvaluator policyEvaluator,
     IPendingAgentOperationStore pendingOperationStore,
+    IPendingClarificationStore pendingClarificationStore,
     IAgentStepUpService stepUpService,
     IAgentAuditService auditService,
     IAgentOperationExecutor operationExecutor) : ControllerBase
@@ -293,5 +296,59 @@ public class AiController(
             HttpContext.TraceIdentifier), cancellationToken);
 
         return Ok(result);
+    }
+
+    [HttpPost("clarifications/{operationId:guid}/resolve")]
+    public async Task<IActionResult> ResolveClarification(
+        Guid operationId,
+        [FromBody] ResolveClarificationRequest body,
+        CancellationToken cancellationToken)
+    {
+        var userId = HttpContext.GetUserId();
+        var pending = await pendingClarificationStore.GetForResolutionAsync(operationId, userId, cancellationToken);
+        if (pending is null)
+            return NotFound(new { error = "Clarification not found or expired." });
+
+        JsonElement mergedArgs;
+        try
+        {
+            mergedArgs = MergeClarificationValue(pending.PartialArgumentsJson, body.Value);
+        }
+        catch (JsonException)
+        {
+            return BadRequest(new { error = "Invalid clarification value." });
+        }
+
+        await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
+
+        var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
+            userId,
+            pending.ToolName,
+            mergedArgs,
+            AgentExecutionSurface.Chat,
+            HttpContext.User.GetAgentAuthMethod(),
+            HttpContext.User.GetGrantedAgentScopes(),
+            HttpContext.User.IsReadOnlyCredential(),
+            ConfirmationToken: null,
+            HttpContext.TraceIdentifier), cancellationToken);
+
+        return Ok(result);
+    }
+
+    public record ResolveClarificationRequest([property: JsonRequired] string Value);
+
+    private static JsonElement MergeClarificationValue(string baseJson, string value)
+    {
+        var baseNode = JsonNode.Parse(baseJson)?.AsObject() ?? new JsonObject();
+        var patchNode = string.IsNullOrWhiteSpace(value)
+            ? new JsonObject()
+            : JsonNode.Parse(value)?.AsObject() ?? new JsonObject();
+
+        foreach (var kvp in patchNode.ToList())
+        {
+            baseNode[kvp.Key] = kvp.Value?.DeepClone();
+        }
+
+        return JsonDocument.Parse(baseNode.ToJsonString()).RootElement.Clone();
     }
 }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -42,9 +43,10 @@ public record ActionResult(
     string? EntityName = null,
     string? Error = null,
     string? Field = null,
-    IReadOnlyList<AiAction>? SuggestedSubHabits = null);
+    IReadOnlyList<AiAction>? SuggestedSubHabits = null,
+    ClarificationRequest? ClarificationRequest = null);
 
-public enum ActionStatus { Success, Failed, Suggestion }
+public enum ActionStatus { Success, Failed, Suggestion, NeedsClarification }
 
 /// <summary>
 /// Groups AI-related dependencies to reduce constructor parameter count (S107).
@@ -76,7 +78,8 @@ public record ChatExecutionDependencies(
     IPayGateService PayGateService,
     IUnitOfWork UnitOfWork,
     IServiceScopeFactory ServiceScopeFactory,
-    IAgentOperationExecutor OperationExecutor);
+    IAgentOperationExecutor OperationExecutor,
+    IPendingClarificationStore PendingClarificationStore);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -368,6 +371,30 @@ public partial class ProcessUserChatCommandHandler(
             LogToolSucceeded(logger, call.Name, operationResult.TargetName);
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
             LogToolFailed(logger, call.Name, operationResult.PolicyReason);
+
+        if (operationResult.Status == AgentOperationStatus.Succeeded
+            && operationResult.Payload is ClarificationRequest clarification)
+        {
+            var stashedId = await execution.PendingClarificationStore.CreateAsync(
+                request.UserId,
+                call.Name,
+                call.Args.GetRawText(),
+                clarification.MissingArgumentKey,
+                clarification.Question,
+                JsonSerializer.Serialize(clarification.QuickActions),
+                cancellationToken);
+            var withId = clarification with { OperationId = stashedId };
+            return (
+                toolResult,
+                new ActionResult(
+                    ToolNameToPascalCase(call.Name),
+                    ActionStatus.NeedsClarification,
+                    EntityName: call.Name,
+                    ClarificationRequest: withId),
+                operationResult,
+                executionResponse.PolicyDenial,
+                executionResponse.PendingOperation);
+        }
 
         return operationResult.Status switch
         {

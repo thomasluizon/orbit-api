@@ -16,6 +16,7 @@ public class AiControllerTests
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentPolicyEvaluator _policyEvaluator = Substitute.For<IAgentPolicyEvaluator>();
     private readonly IPendingAgentOperationStore _pendingOperationStore = Substitute.For<IPendingAgentOperationStore>();
+    private readonly IPendingClarificationStore _pendingClarificationStore = Substitute.For<IPendingClarificationStore>();
     private readonly IAgentStepUpService _stepUpService = Substitute.For<IAgentStepUpService>();
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
@@ -28,6 +29,7 @@ public class AiControllerTests
             _catalogService,
             _policyEvaluator,
             _pendingOperationStore,
+            _pendingClarificationStore,
             _stepUpService,
             _auditService,
             _operationExecutor);
