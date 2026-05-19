@@ -303,7 +303,7 @@ public class AiController(
     }
 
     [HttpPost("clarifications/{operationId:guid}/resolve")]
-    [DistributedRateLimit("chat")]
+    [DistributedRateLimit("ai-resolve")]
     public async Task<IActionResult> ResolveClarification(
         Guid operationId,
         [FromBody] ResolveClarificationRequest body,

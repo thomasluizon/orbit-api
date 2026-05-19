@@ -393,7 +393,7 @@ public partial class ProcessUserChatCommandHandler(
             var partialArgsJson = call.Args.GetRawText();
             if (partialArgsJson.Length > AppConstants.MaxClarificationArgsLength)
             {
-                LogClarificationDroppedOnFailedTool(logger, call.Name, "args_too_large");
+                LogClarificationArgsTooLarge(logger, call.Name, partialArgsJson.Length);
                 return (
                     toolResult,
                     new ActionResult(
@@ -827,6 +827,9 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Tool {Name} emitted a clarification payload on a Failed/Denied result and it was dropped: {Reason}")]
     private static partial void LogClarificationDroppedOnFailedTool(ILogger logger, string name, string? reason);
+
+    [LoggerMessage(EventId = 26, Level = LogLevel.Warning, Message = "Tool {Name} requested clarification with oversized partial args ({Length} chars) — dropped without stashing")]
+    private static partial void LogClarificationArgsTooLarge(ILogger logger, string name, int length);
 
     [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
     private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);

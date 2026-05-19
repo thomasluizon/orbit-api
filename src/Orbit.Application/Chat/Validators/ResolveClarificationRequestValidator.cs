@@ -10,7 +10,11 @@ public class ResolveClarificationRequestValidator : AbstractValidator<ResolveCla
 {
     public ResolveClarificationRequestValidator()
     {
+        // Stop on first failure so an empty string doesn't also trip the JSON-object
+        // check — the controller surfaces only Errors[0] anyway, and the redundant
+        // failure is noise.
         RuleFor(x => x.Value)
+            .Cascade(CascadeMode.Stop)
             .NotEmpty()
             .WithMessage(ErrorMessages.ClarificationValueEmpty)
             .MaximumLength(AppConstants.MaxClarificationValueLength)
