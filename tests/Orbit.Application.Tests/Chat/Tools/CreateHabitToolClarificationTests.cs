@@ -53,10 +53,21 @@ public class CreateHabitToolClarificationTests
         var clarification = (ClarificationRequest)result.Payload!;
         clarification.MissingArgumentKey.Should().Be("frequency_unit");
         clarification.QuickActions.Should().HaveCount(4);
-        clarification.QuickActions.Should().Contain(a => a.Label.Contains("daily"));
-        clarification.QuickActions.Should().Contain(a => a.Label.Contains("weekly"));
-        clarification.QuickActions.Should().Contain(a => a.Label.Contains("threePerWeek"));
-        clarification.QuickActions.Should().Contain(a => a.Label.Contains("oneTime"));
+
+        // Assert on the JSON merge patches (the load-bearing contract), not the i18n key labels.
+        // Each patch is what gets shallow-merged into the partial args at resolve time.
+        clarification.QuickActions.Should().Contain(a =>
+            a.Value.Contains("\"frequency_unit\":\"Day\"") && a.Value.Contains("\"frequency_quantity\":1"));
+        clarification.QuickActions.Should().Contain(a =>
+            a.Value.Contains("\"frequency_unit\":\"Week\"")
+            && a.Value.Contains("\"frequency_quantity\":1")
+            && !a.Value.Contains("is_flexible"));
+        clarification.QuickActions.Should().Contain(a =>
+            a.Value.Contains("\"frequency_unit\":\"Week\"")
+            && a.Value.Contains("\"frequency_quantity\":3")
+            && a.Value.Contains("\"is_flexible\":true"));
+        clarification.QuickActions.Should().Contain(a =>
+            a.Value.Contains("\"frequency_unit\":null"));
 
         // Tool must NOT have created a habit
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());

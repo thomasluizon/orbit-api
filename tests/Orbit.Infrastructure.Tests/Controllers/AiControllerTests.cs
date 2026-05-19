@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Chat.Models;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -20,6 +22,8 @@ public class AiControllerTests
     private readonly IAgentStepUpService _stepUpService = Substitute.For<IAgentStepUpService>();
     private readonly IAgentAuditService _auditService = Substitute.For<IAgentAuditService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
+    private readonly IValidator<ResolveClarificationRequest> _resolveClarificationValidator =
+        Substitute.For<IValidator<ResolveClarificationRequest>>();
     private readonly AiController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
@@ -32,7 +36,8 @@ public class AiControllerTests
             _pendingClarificationStore,
             _stepUpService,
             _auditService,
-            _operationExecutor);
+            _operationExecutor,
+            _resolveClarificationValidator);
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");

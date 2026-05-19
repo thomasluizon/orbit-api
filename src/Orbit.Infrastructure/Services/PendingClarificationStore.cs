@@ -49,18 +49,20 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         return new PendingClarificationData(entity.ToolName, entity.PartialArgumentsJson, entity.MissingArgumentKey);
     }
 
-    public async Task MarkResolvedAsync(
+    public async Task<bool> MarkResolvedAsync(
         Guid operationId,
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        var entity = await dbContext.PendingClarifications
-            .FirstOrDefaultAsync(item => item.Id == operationId && item.UserId == userId, cancellationToken);
+        var rows = await dbContext.PendingClarifications
+            .Where(item =>
+                item.Id == operationId &&
+                item.UserId == userId &&
+                item.ResolvedAtUtc == null)
+            .ExecuteUpdateAsync(
+                setter => setter.SetProperty(item => item.ResolvedAtUtc, DateTime.UtcNow),
+                cancellationToken);
 
-        if (entity is null)
-            return;
-
-        entity.MarkResolved();
-        await dbContext.SaveChangesAsync(cancellationToken);
+        return rows > 0;
     }
 }
