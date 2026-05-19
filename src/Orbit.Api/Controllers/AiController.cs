@@ -380,19 +380,22 @@ public class AiController(
             return BadRequest(new { error = ErrorMessages.ClarificationValueNotJsonObject });
         }
 
-        // Atomic one-shot claim: if this returns false, another concurrent request already
-        // marked the row resolved (or the row expired between get and claim) and may be
-        // executing the tool. Bail before re-invoking.
+        // Atomic one-shot claim: if this returns false, either another concurrent request
+        // already marked the row resolved OR the row expired in the (typically sub-ms)
+        // window between Get and MarkResolved. Bail before re-invoking.
         var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
         if (!claimed)
         {
+            var auditError = pending.ExpiresAtUtc <= DateTime.UtcNow
+                ? "clarification_expired_mid_flight"
+                : "clarification_already_resolved";
             await RecordResolveAuditAsync(
                 userId,
                 authMethod,
                 operationId,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Failed,
-                "clarification_already_resolved",
+                auditError,
                 cancellationToken);
             return Conflict(new { error = ErrorMessages.ClarificationAlreadyResolved });
         }

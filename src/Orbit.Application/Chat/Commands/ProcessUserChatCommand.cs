@@ -391,6 +391,7 @@ public partial class ProcessUserChatCommandHandler(
                 payload.Question,
                 quickActionsJson,
                 cancellationToken);
+            LogClarificationRequested(logger, call.Name, stashedId, payload.MissingArgumentKey);
             var clarification = new ClarificationRequest(
                 payload.Question,
                 stashedId,
@@ -756,6 +757,9 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Tool {Name} failed: {Error}")]
     private static partial void LogToolFailed(ILogger logger, string name, string? error);
+
+    [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "Tool {Name} requested clarification (operationId={OperationId}, missing={MissingKey})")]
+    private static partial void LogClarificationRequested(ILogger logger, string name, Guid operationId, string missingKey);
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Error, Message = "Tool {Name} threw an exception")]
     private static partial void LogToolThrewException(ILogger logger, Exception ex, string name);

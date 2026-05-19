@@ -147,14 +147,17 @@ public class CreateHabitTool(
 
         var title = titleEl.GetString() ?? string.Empty;
 
+        // Check PayGate BEFORE the clarification heuristic so a user at their habit
+        // limit gets the "limit reached" error immediately, not after picking a
+        // schedule on the card and waiting for the re-invocation to fail.
+        var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
+        if (habitGate.IsFailure)
+            return new ToolResult(false, Error: habitGate.Error);
+
         if (!args.TryGetProperty("frequency_unit", out _) && IsHabitFlavoredTitle(title))
         {
             return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification());
         }
-
-        var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
-        if (habitGate.IsFailure)
-            return new ToolResult(false, Error: habitGate.Error);
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 

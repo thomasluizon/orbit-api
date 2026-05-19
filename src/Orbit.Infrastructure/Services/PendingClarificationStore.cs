@@ -51,7 +51,8 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             entity.ToolName,
             entity.PartialArgumentsJson,
             entity.MissingArgumentKey,
-            ExtractQuickActionValues(entity.QuickActionsJson));
+            ExtractQuickActionValues(entity.QuickActionsJson),
+            entity.ExpiresAtUtc);
     }
 
     public async Task<bool> MarkResolvedAsync(
