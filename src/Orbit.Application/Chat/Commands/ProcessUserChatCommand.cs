@@ -376,13 +376,20 @@ public partial class ProcessUserChatCommandHandler(
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
         {
+            // Serialize null as an empty array literal — JsonSerializer.Serialize(null)
+            // returns the string "null" which bypasses PendingClarification.Create's
+            // "[]" default and would break ExtractQuickActionValues on read.
+            var quickActionsJson = payload.QuickActions is null
+                ? "[]"
+                : JsonSerializer.Serialize(payload.QuickActions);
+
             var stashedId = await execution.PendingClarificationStore.CreateAsync(
                 request.UserId,
                 call.Name,
                 call.Args.GetRawText(),
                 payload.MissingArgumentKey,
                 payload.Question,
-                JsonSerializer.Serialize(payload.QuickActions),
+                quickActionsJson,
                 cancellationToken);
             var clarification = new ClarificationRequest(
                 payload.Question,
