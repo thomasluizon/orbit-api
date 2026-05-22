@@ -1,0 +1,30 @@
+# Build outputs
+bin/
+obj/
+TestResults/
+coverage-report/
+*.dll
+*.pdb
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+Orbit.sln.DotSettings.user
+
+# Secrets / local config
+.env
+.env.*
+appsettings.Development.json
+appsettings.*.local.json
+*.pfx
+*.p12
+
+# Coverage
+coverage/
+*.coverage
+*.coveragexml
+
+# Logs
+*.log

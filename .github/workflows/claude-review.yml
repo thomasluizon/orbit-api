@@ -43,7 +43,7 @@ jobs:
             2. **Security vulnerability** — auth bypass, injection, data leak, race condition, missing audit on a mutating endpoint, missing input validation at a trust boundary.
             3. **API contract break** — request/response shape changes that break the web or mobile client; status code changes that callers depend on.
             4. **Missing test for new code that mutates state** — not "more tests would be nice", but "this codepath has zero coverage and changes user data".
-            5. **Hard-rule violation** of CLAUDE.md / AGENTS.md.
+            5. **Hard-rule violation** of CLAUDE.md (root or any scoped `src/Orbit.*/CLAUDE.md` / `tests/CLAUDE.md`).
 
             **EXPLICITLY NOT high-signal — do NOT post:**
             - Style preferences, comment wording, doc-string polish, EventId ordering, naming nits.
