@@ -265,6 +265,25 @@ public class HabitDueDateAdvancementServiceTests
     }
 
     [Fact]
+    public void QueryFilter_OnlyBadHabitsAdvanced()
+    {
+        // The service now requires h.IsBadHabit. Non-bad recurring habits intentionally
+        // rest on their oldest unresolved occurrence so the Today view surfaces them as
+        // overdue (DueDate < today); only bad habits roll forward to their next day.
+        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var nonBad = CreateRecurringHabit(FrequencyUnit.Day, 1, cutoff.AddDays(-1));
+        var bad = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: cutoff.AddDays(-1))).Value;
+
+        bool ShouldAdvance(Habit h) =>
+            !h.IsCompleted && h.FrequencyUnit != null && h.FrequencyQuantity != null
+            && !h.IsFlexible && h.IsBadHabit && h.DueDate < cutoff;
+
+        ShouldAdvance(nonBad).Should().BeFalse();
+        ShouldAdvance(bad).Should().BeTrue();
+    }
+
+    [Fact]
     public void QueryFilter_ConservativeCutoff_IsYesterdayUtc()
     {
         // The service uses: cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1))

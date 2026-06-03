@@ -96,8 +96,12 @@ public class BulkSkipHabitsCommandHandler(
                 Error: "Cannot skip a habit that is not yet due.");
 
         if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
-            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: "Habit is not scheduled on this date.");
+        {
+            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            if (!isOverdue)
+                return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                    Error: "Habit is not scheduled on this date.");
+        }
 
         if (habit.IsFlexible)
         {

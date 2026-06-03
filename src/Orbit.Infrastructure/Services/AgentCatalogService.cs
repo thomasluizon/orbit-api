@@ -381,7 +381,8 @@ public class AgentCatalogService : IAgentCatalogService
                     "AiController.ConfirmPendingOperation",
                     "AiController.MarkPendingOperationStepUp",
                     "AiController.VerifyPendingOperationStepUp",
-                    "AiController.ExecutePendingOperation"
+                    "AiController.ExecutePendingOperation",
+                    "AiController.ResolveClarification"
                 ]),
 
             CreateCapability(
@@ -450,6 +451,8 @@ public class AgentCatalogService : IAgentCatalogService
                 controllerActions:
                 [
                     "HabitsController.GetHabits",
+                    "HabitsController.GetHabitCount",
+                    "HabitsController.GetHabitWidget",
                     "HabitsController.GetCalendarMonth",
                     "HabitsController.GetHabitById",
                     "HabitsController.GetHabitDetail",

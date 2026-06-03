@@ -80,7 +80,11 @@ public class SkipHabitCommandHandler(
             return Result.Failure("Cannot skip a habit that is not yet due.");
 
         if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
-            return Result.Failure("Habit is not scheduled on this date.");
+        {
+            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            if (!isOverdue)
+                return Result.Failure("Habit is not scheduled on this date.");
+        }
 
         return null;
     }

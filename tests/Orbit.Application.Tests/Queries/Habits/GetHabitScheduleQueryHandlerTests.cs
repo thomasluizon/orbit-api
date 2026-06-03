@@ -111,6 +111,43 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RecurringOverdue_WhenIncludeOverdue_ReturnsAsOverdue()
+    {
+        // Weekly habit whose occurrence fell 4 days ago (today is not its weekday).
+        // DueDate-authoritative model: DueDate < today => overdue.
+        var habit = CreateTestHabit(title: "Overdue Weekly", frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: Today.AddDays(-4));
+        SetupHabits(habit);
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
+        var result = await _handler.Handle(query, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.Items[0].IsOverdue.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_RecurringOverdueLongAgo_StillReturnsAsOverdue()
+    {
+        // 60 days overdue: the old fixed lookback window would have hidden this.
+        var habit = CreateTestHabit(title: "Long Overdue", frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: Today.AddDays(-60));
+        SetupHabits(habit);
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
+        var result = await _handler.Handle(query, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items[0].IsOverdue.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_RecurringDueToday_NotOverdue()
+    {
+        var habit = CreateTestHabit(title: "Due Today", frequencyUnit: FrequencyUnit.Day, frequencyQuantity: 1, dueDate: Today);
+        SetupHabits(habit);
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
+        var result = await _handler.Handle(query, CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items[0].IsOverdue.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Handle_Pagination_ReturnsCorrectPage()
     {
         var habits = Enumerable.Range(1, 5).Select(i => CreateTestHabit(title: "Habit" + i, dueDate: Today)).ToArray();

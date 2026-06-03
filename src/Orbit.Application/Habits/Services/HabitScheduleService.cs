@@ -196,31 +196,19 @@ public static class HabitScheduleService
     }
 
     /// <summary>
-    /// Checks if a recurring habit has at least one missed past occurrence (before today, no log).
-    /// Used to allow logging overdue recurring habits on today's date.
+    /// True when a recurring, non-flexible, non-bad habit has an unresolved past
+    /// occurrence — i.e. its <see cref="Habit.DueDate"/> has fallen before today.
+    /// This is the single overdue signal shared by the schedule query and the
+    /// log/skip commands. It relies on DueDate resting on the oldest unresolved
+    /// occurrence: the background advancement service no longer rolls non-bad
+    /// recurring habits forward, and Log/Skip advance DueDate past today on resolve.
     /// </summary>
     public static bool HasMissedPastOccurrence(Habit habit, DateOnly today)
     {
-        if (habit.FrequencyUnit is null || habit.IsBadHabit) return false;
+        if (habit.FrequencyUnit is null || habit.IsBadHabit || habit.IsFlexible)
+            return false;
 
-        var qty = habit.FrequencyQuantity ?? 1;
-        var lookbackDays = habit.FrequencyUnit switch
-        {
-            FrequencyUnit.Day => qty,
-            FrequencyUnit.Week => qty * 7,
-            FrequencyUnit.Month => qty * 31,
-            FrequencyUnit.Year => Math.Min(qty * 366, 366),
-            _ => 7
-        };
-
-        var lookbackStart = today.AddDays(-lookbackDays);
-        if (habit.DueDate > lookbackStart)
-            lookbackStart = habit.DueDate;
-
-        var pastDates = GetScheduledDates(habit, lookbackStart, today.AddDays(-1));
-        var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
-
-        return pastDates.Any(d => !logDates.Contains(d));
+        return habit.DueDate < today;
     }
 
     // --- Flexible habit methods ---

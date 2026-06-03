@@ -58,6 +58,23 @@ public class BulkSkipHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OverdueHabit_NotScheduledToday_SkipsAsToday()
+    {
+        // Weekly habit overdue 4 days ago (today is not its weekday): bulk-skip resolves it.
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
+        SetupHabitsForUser(new List<Habit> { habit });
+
+        var items = new List<BulkSkipItem> { new(habit.Id) };
+        var command = new BulkSkipHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
+        habit.DueDate.Should().BeAfter(Today);
+    }
+
+    [Fact]
     public async Task Handle_OneTimeTask_PostponesToTomorrow()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;

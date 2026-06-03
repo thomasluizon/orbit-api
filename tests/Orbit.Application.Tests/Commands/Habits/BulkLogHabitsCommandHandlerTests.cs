@@ -88,6 +88,41 @@ public class BulkLogHabitsCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OverdueHabit_LogsAsToday()
+    {
+        // Weekly habit overdue 4 days ago (today is not its scheduled weekday).
+        // Bulk-log resolves it as today via the same overdue allowance single-log has.
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
+        SetupHabitsForUser(new List<Habit> { habit });
+
+        var items = new List<BulkLogItem> { new(habit.Id) };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
+        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NotScheduledNotOverdue_ReportsFailedItem()
+    {
+        // Weekly habit due in the future: today is neither scheduled nor overdue,
+        // so the overdue allowance must NOT permit logging it.
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Future", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
+        SetupHabitsForUser(new List<Habit> { habit });
+
+        var items = new List<BulkLogItem> { new(habit.Id) };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
+        result.Value.Results[0].Error.Should().Contain("not scheduled");
+    }
+
+    [Fact]
     public async Task Handle_FutureDate_ReportsFailedItem()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
