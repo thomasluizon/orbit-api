@@ -48,13 +48,18 @@ public partial class HabitDueDateAdvancementService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        // Conservative cutoff: UTC today - 1 day to avoid timezone false positives
+        // Conservative cutoff: UTC today - 1 day to avoid timezone false positives.
+        // Only BAD habits are auto-advanced here: a missed bad-habit occurrence should roll
+        // forward to its next scheduled day. Non-bad recurring habits intentionally rest on
+        // their oldest unresolved occurrence so the Today view can surface them as overdue
+        // (DueDate < today) until the user logs or skips them.
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
         var habits = await dbContext.Habits
             .Where(h => !h.IsCompleted
                 && h.FrequencyUnit != null
                 && h.FrequencyQuantity != null
                 && !h.IsFlexible
+                && h.IsBadHabit
                 && h.DueDate < cutoff)
             .ToListAsync(ct);
 
@@ -97,7 +102,7 @@ public partial class HabitDueDateAdvancementService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in habit due date advancement")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Advanced DueDate for {Count} recurring habits")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Advanced DueDate for {Count} bad habits")]
     private static partial void LogDueDatesAdvanced(ILogger logger, int count);
 
 }

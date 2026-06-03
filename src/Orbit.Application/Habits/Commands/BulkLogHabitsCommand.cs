@@ -115,11 +115,17 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound);
 
-        // Validate schedule for recurring non-flexible habits
+        // Validate schedule for recurring non-flexible habits. Allow logging an overdue
+        // habit as today (DueDate < today) even when today is not a scheduled day, so single
+        // and bulk log behave identically (mirrors LogHabitCommand.ValidateTargetDate).
         if (habit.FrequencyUnit is not null && !habit.IsFlexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
-            return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: "Habit is not scheduled on this date.");
+        {
+            var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
+            if (!isOverdue)
+                return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                    Error: "Habit is not scheduled on this date.");
+        }
 
         // Skip if already logged for target date (no toggle -- just skip)
         if (habit.Logs.Any(l => l.Date == targetDate))

@@ -75,6 +75,23 @@ public class SkipHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OverdueHabit_NotScheduledToday_SkipsAndResolves()
+    {
+        // Weekly habit overdue 4 days ago (today is not its weekday). Skipping as today
+        // must be allowed and advance DueDate past today so it stops being overdue.
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
+        SetupHabitFound(habit);
+
+        var command = new SkipHabitCommand(UserId, habit.Id);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().BeAfter(Today);
+    }
+
+    [Fact]
     public async Task Handle_HabitNotFound_ReturnsFailure()
     {
         _habitRepo.FindOneTrackedAsync(

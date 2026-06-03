@@ -459,29 +459,12 @@ public class GetHabitScheduleQueryHandler(
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom);
         }
 
-        // Recurring habits: overdue if a past occurrence was missed and habit is not due today
+        // Recurring habits: overdue when there is an unresolved past occurrence
+        // (DueDate has fallen before the reference date) and the habit is not due today.
         if (scheduledDates.Contains(dateFrom))
             return false;
 
-        return HasMissedRecentOccurrence(habit, dateFrom);
-    }
-
-    /// <summary>
-    /// Checks whether a recurring habit has any missed occurrence in its lookback window.
-    /// </summary>
-    private static bool HasMissedRecentOccurrence(Habit habit, DateOnly dateFrom)
-    {
-        var qty = habit.FrequencyQuantity ?? 1;
-        var lookbackDays = HabitScheduleService.GetLookbackDays(habit.FrequencyUnit, qty);
-
-        var lookbackStart = dateFrom.AddDays(-lookbackDays);
-        if (habit.DueDate > lookbackStart)
-            lookbackStart = habit.DueDate;
-
-        var pastDates = HabitScheduleService.GetScheduledDates(habit, lookbackStart, dateFrom.AddDays(-1));
-        var logDates = habit.Logs.Select(l => l.Date).ToHashSet();
-
-        return pastDates.Any(d => !logDates.Contains(d));
+        return HabitScheduleService.HasMissedPastOccurrence(habit, dateFrom);
     }
 
     private async Task AppendGeneralHabits(

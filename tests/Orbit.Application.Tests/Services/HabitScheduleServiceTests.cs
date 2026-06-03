@@ -703,12 +703,37 @@ public class HabitScheduleServiceTests
     public void HasMissedPastOccurrence_DailyHabitAllLogged_ReturnsFalse()
     {
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
-        // Log all days from anchor to today-1
-        habit.Log(Anchor, advanceDueDate: false);
-        habit.Log(Anchor.AddDays(1), advanceDueDate: false);
+        // Logging advances DueDate; once it has caught up to today the habit is not overdue.
+        habit.Log(Anchor);
+        habit.Log(Anchor.AddDays(1));
         var today = Anchor.AddDays(2);
 
         HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasMissedPastOccurrence_DueToday_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasMissedPastOccurrence_DueInFuture_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor.AddDays(7));
+
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasMissedPastOccurrence_FlexibleHabit_ReturnsFalse()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Flex", FrequencyUnit.Week, 3, IsFlexible: true, DueDate: Anchor)).Value;
+
+        HabitScheduleService.HasMissedPastOccurrence(habit, Anchor.AddDays(10)).Should().BeFalse();
     }
 
     [Fact]
