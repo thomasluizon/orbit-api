@@ -34,6 +34,11 @@ public static class ServiceCollectionExtensions
         var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
         jwtSettings?.Validate();
 
+        // A blank price ID silently degrades affected users to the wrong currency, so this
+        // check applies in every environment -- the same reasoning as the JWT secret above.
+        var stripeSettings = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>();
+        stripeSettings?.ValidatePriceIds();
+
         if (!builder.Environment.IsProduction())
             return builder;
 
@@ -330,6 +335,7 @@ public static class ServiceCollectionExtensions
         // IBillingService wraps every Stripe SDK call used by checkout, portal, plans,
         // and billing-details so the Application layer has no Stripe imports.
         builder.Services.AddScoped<Orbit.Application.Common.IBillingService, Orbit.Infrastructure.Services.StripeBillingService>();
+        builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
 
         // Push Notifications (VAPID + FCM)
         builder.Services.Configure<VapidSettings>(

@@ -6,6 +6,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -36,6 +37,7 @@ public class CreateCheckoutCommandHandlerTests
         _handler = new CreateCheckoutCommandHandler(
             _userRepo, _unitOfWork, _geoLocationService, settings,
             _billingService,
+            new PriceResolver(settings),
             Substitute.For<ILogger<CreateCheckoutCommandHandler>>());
 
         _geoLocationService.GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())

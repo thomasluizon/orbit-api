@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Queries;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -30,7 +31,8 @@ public class GetPlansQueryHandlerTests
             MonthlyPriceIdBrl = "price_monthly_brl",
             YearlyPriceIdBrl = "price_yearly_brl"
         });
-        _handler = new GetPlansQueryHandler(_userRepo, _geoLocationService, _stripeSettings, _billingService, _logger);
+        _handler = new GetPlansQueryHandler(
+            _userRepo, _geoLocationService, _billingService, new PriceResolver(_stripeSettings), _logger);
     }
 
     private static User CreateTestUser()
