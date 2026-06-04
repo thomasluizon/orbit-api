@@ -1,13 +1,14 @@
 using System.ComponentModel;
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
+using MediatR;
 using ModelContextProtocol.Server;
-using Orbit.Infrastructure.Persistence;
+using Orbit.Application.Notifications.Commands;
+using Orbit.Application.Notifications.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
 
 [McpServerToolType]
-public class NotificationTools(OrbitDbContext dbContext)
+public class NotificationTools(IMediator mediator)
 {
     [McpServerTool(Name = "get_notifications"), Description("Get the user's notifications (up to 50, newest first) with unread count.")]
     public async Task<string> GetNotifications(
@@ -15,23 +16,19 @@ public class NotificationTools(OrbitDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
+        var result = await mediator.Send(new GetNotificationsQuery(userId), cancellationToken);
 
-        var notifications = await dbContext.Notifications
-            .Where(n => n.UserId == userId)
-            .OrderByDescending(n => n.CreatedAtUtc)
-            .Take(50)
-            .ToListAsync(cancellationToken);
+        if (result.IsFailure)
+            return $"Error: {result.Error}";
 
-        var unreadCount = await dbContext.Notifications
-            .CountAsync(n => n.UserId == userId && !n.IsRead, cancellationToken);
-
-        if (notifications.Count == 0)
+        var items = result.Value.Items;
+        if (items.Count == 0)
             return "No notifications.";
 
-        var lines = notifications.Select(n =>
+        var lines = items.Select(n =>
             $"- [{(n.IsRead ? " " : "NEW")}] {n.Title}: {n.Body} (id: {n.Id}, {n.CreatedAtUtc:yyyy-MM-dd HH:mm})");
 
-        return $"Notifications ({notifications.Count}, {unreadCount} unread):\n{string.Join("\n", lines)}";
+        return $"Notifications ({items.Count}, {result.Value.UnreadCount} unread):\n{string.Join("\n", lines)}";
     }
 
     [McpServerTool(Name = "mark_notification_read"), Description("Mark a single notification as read.")]
@@ -41,15 +38,12 @@ public class NotificationTools(OrbitDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var notification = await dbContext.Notifications
-            .FirstOrDefaultAsync(n => n.Id == McpInputParser.ParseGuid(notificationId, "notificationId") && n.UserId == userId, cancellationToken);
+        var command = new MarkNotificationReadCommand(userId, McpInputParser.ParseGuid(notificationId, "notificationId"));
+        var result = await mediator.Send(command, cancellationToken);
 
-        if (notification is null)
-            return "Error: Notification not found.";
-
-        notification.MarkAsRead();
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return $"Marked notification {notificationId} as read.";
+        return result.IsSuccess
+            ? $"Marked notification {notificationId} as read."
+            : $"Error: {result.Error}";
     }
 
     [McpServerTool(Name = "mark_all_notifications_read"), Description("Mark all notifications as read.")]
@@ -58,11 +52,11 @@ public class NotificationTools(OrbitDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var count = await dbContext.Notifications
-            .Where(n => n.UserId == userId && !n.IsRead)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), cancellationToken);
+        var result = await mediator.Send(new MarkAllNotificationsReadCommand(userId), cancellationToken);
 
-        return $"Marked {count} notifications as read.";
+        return result.IsSuccess
+            ? $"Marked {result.Value} notifications as read."
+            : $"Error: {result.Error}";
     }
 
     [McpServerTool(Name = "delete_notification"), Description("Delete a specific notification.")]
@@ -72,15 +66,12 @@ public class NotificationTools(OrbitDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         var userId = GetUserId(user);
-        var notification = await dbContext.Notifications
-            .FirstOrDefaultAsync(n => n.Id == McpInputParser.ParseGuid(notificationId, "notificationId") && n.UserId == userId, cancellationToken);
+        var command = new DeleteNotificationCommand(userId, McpInputParser.ParseGuid(notificationId, "notificationId"));
+        var result = await mediator.Send(command, cancellationToken);
 
-        if (notification is null)
-            return "Error: Notification not found.";
-
-        dbContext.Notifications.Remove(notification);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return $"Deleted notification {notificationId}.";
+        return result.IsSuccess
+            ? $"Deleted notification {notificationId}."
+            : $"Error: {result.Error}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

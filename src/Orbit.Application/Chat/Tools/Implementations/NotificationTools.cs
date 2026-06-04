@@ -60,7 +60,7 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         return action switch
         {
             "mark_read" => await MarkReadAsync(args, userId, ct),
-            "mark_all_read" => await ExecuteAsync(new MarkAllNotificationsReadCommand(userId), userId, "Marked all notifications as read", new { action }, ct),
+            "mark_all_read" => await MarkAllReadAsync(userId, ct),
             "subscribe_push" => await SubscribeAsync(args, userId, ct),
             "unsubscribe_push" => await UnsubscribeAsync(args, userId, ct),
             "test_push" => await TestPushAsync(userId, ct),
@@ -111,6 +111,14 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
             "Push subscription removed",
             new { action = "unsubscribe_push", endpoint },
             ct);
+    }
+
+    private async Task<ToolResult> MarkAllReadAsync(Guid userId, CancellationToken ct)
+    {
+        var result = await mediator.Send(new MarkAllNotificationsReadCommand(userId), ct);
+        return result.IsSuccess
+            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Marked all notifications as read", Payload: new { action = "mark_all_read", markedCount = result.Value })
+            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
     }
 
     private async Task<ToolResult> TestPushAsync(Guid userId, CancellationToken ct)

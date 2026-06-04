@@ -85,7 +85,7 @@ public class NotificationControllerTests
     public async Task MarkAllAsRead_Success_ReturnsNoContent()
     {
         _mediator.Send(Arg.Any<MarkAllNotificationsReadCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+            .Returns(Result.Success(0));
 
         var result = await _controller.MarkAllAsRead(CancellationToken.None);
 
@@ -96,7 +96,7 @@ public class NotificationControllerTests
     public async Task MarkAllAsRead_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<MarkAllNotificationsReadCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Error"));
+            .Returns(Result.Failure<int>("Error"));
 
         var result = await _controller.MarkAllAsRead(CancellationToken.None);
 

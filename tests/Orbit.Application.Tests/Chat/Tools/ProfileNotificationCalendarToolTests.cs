@@ -406,7 +406,7 @@ public class ProfileNotificationCalendarToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<MarkAllNotificationsReadCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+            .Returns(Result.Success(0));
         var tool = new UpdateNotificationsTool(mediator);
 
         var result = await tool.ExecuteAsync(Parse("""{"action":"mark_all_read"}"""), UserId, CancellationToken.None);
