@@ -1,7 +1,7 @@
 ---
 key: freezes
 display_name: Streak Freezes
-related_capabilities: [gamification.read, gamification.write]
+related_capabilities: [gamification.read]
 related_surfaces: [gamification]
 version: 1
 derived_from:
@@ -17,20 +17,10 @@ A streak freeze protects your streak on a day you couldn't complete a habit. **S
 
 ## Earning freezes
 
-You earn **1 freeze for every 7 streak-days** (`StreakDaysPerFreeze` = 7). You can hold up to **3** freezes at once (`MaxStreakFreezesAccumulated` = 3); once you're at the cap, new milestones don't add more until you spend one.
+You earn **1 freeze for every 7 streak-days** (`StreakDaysPerFreeze` = 7). You can bank up to **3** freezes at once (`MaxStreakFreezesAccumulated` = 3); once you're at the cap, new milestones don't add more until one is spent.
 
-## What a freeze does
+## How freezes are used
 
-A freeze **preserves** your streak across a missed day — it bridges the gap so the next completion continues the run. It does **not** extend or increase the streak; it only stops a missed day from breaking it.
+Freezes are **automatic** — there's nothing to tap. When you miss a day on your streak, a banked freeze is spent for you to bridge the gap, so the next completion continues the run instead of starting over. A freeze only **preserves** the streak across a missed day; it does not extend or increase it.
 
-## Activating a freeze
-
-Activation is blocked, and you'll get a clear reason, if any of these are true:
-
-- your current streak is 0 (there's nothing to protect),
-- you have no freezes accumulated,
-- you've already completed a habit today (no freeze needed),
-- you already used a freeze today, or
-- you've already used **3** freezes this month (`MaxStreakFreezesPerMonth` = 3).
-
-When a freeze is used, one is consumed from your accumulated balance and the day is marked as frozen.
+A freeze is spent automatically only when there's a streak worth protecting and you actually missed the day. It won't be used if your current streak is 0, if you already completed a habit that day, or if you've run out of banked freezes. At most **one** freeze is spent per day, and at most **3** are spent per calendar month (`MaxStreakFreezesPerMonth` = 3) — beyond that, a missed day breaks the streak as usual.
