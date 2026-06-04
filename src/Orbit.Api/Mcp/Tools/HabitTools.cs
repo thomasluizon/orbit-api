@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
+using Orbit.Api.Mcp;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
@@ -12,10 +12,24 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Api.Mcp.Tools;
 
+/// <summary>
+/// MCP habit tools. Mutations route through <see cref="McpExecutorBridge"/> →
+/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
+/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/>, so they share the policy
+/// evaluation (read-only-credential denial, ownership pre-check, confirmation gating) and the
+/// <c>AgentAuditLogs</c> trail used by every other agent surface; each mutation forwards a
+/// snake_case argument object matching its backing <c>IAiTool</c> schema and formats the
+/// returned <see cref="McpExecutorResult"/> into the legacy string contract. Read/query tools
+/// stay on MediatR. Other MCP toolsets mirror this routing for the same policy + audit coverage.
+/// <para>
+/// <c>bulk_log_habits</c> and <c>bulk_skip_habits</c> intentionally stay on MediatR: their MCP
+/// contract accepts an explicit per-instance date that the current chat <c>IAiTool</c>s do not
+/// model, so routing them would silently drop that capability.
+/// </para>
+/// </summary>
 [McpServerToolType]
-public class HabitTools(IMediator mediator, IUserDateService userDateService)
+public class HabitTools(IMediator mediator, IUserDateService userDateService, McpExecutorBridge executorBridge)
 {
-    private static readonly System.Text.Json.JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
     private const string HabitIdDescription = "The habit ID (GUID)";
     private const string DateFromDescription = "Start date in YYYY-MM-DD format";
     private const string DateToDescription = "End date in YYYY-MM-DD format";
@@ -107,26 +121,25 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Due time in HH:mm format")] string? dueTime = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        FrequencyUnit? freqUnit = frequencyUnit is not null ? Enum.Parse<FrequencyUnit>(frequencyUnit, true) : null;
-
-        var command = new CreateHabitCommand(
-            userId,
+        var result = await executorBridge.ExecuteAsync(user, "create_habit", new
+        {
             title,
+            due_date = dueDate,
             description,
-            freqUnit,
-            frequencyQuantity,
-            IsBadHabit: isBadHabit,
-            DueDate: McpInputParser.ParseDate(dueDate, "dueDate"),
-            IsGeneral: isGeneral,
-            Options: new HabitCommandOptions(
-                DueTime: McpInputParser.ParseOptionalTime(dueTime, "dueTime"),
-                IsFlexible: isFlexible));
+            frequency_unit = frequencyUnit,
+            frequency_quantity = frequencyQuantity,
+            is_bad_habit = isBadHabit,
+            is_general = isGeneral,
+            is_flexible = isFlexible,
+            due_time = dueTime
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Created habit '{title}' (id: {result.Value})"
-            : $"Error: {result.Error}";
+        if (!result.Succeeded)
+            return result.Message;
+
+        return result.TargetId is not null
+            ? $"Created habit '{title}' (id: {result.TargetId})"
+            : $"More detail needed before creating '{title}': specify a frequency (e.g. Day, Week) or mark it as a one-time task.";
     }
 
     [McpServerTool(Name = "update_habit"), Description("Update an existing habit's properties. Title is required (pass current title if unchanged). Only change fields you need to modify.")]
@@ -142,38 +155,33 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("New due time in HH:mm format")] string? dueTime = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        FrequencyUnit? freqUnit = frequencyUnit is not null ? Enum.Parse<FrequencyUnit>(frequencyUnit, true) : null;
-
-        var command = new UpdateHabitCommand(
-            userId,
-            McpInputParser.ParseGuid(habitId, "habitId"),
+        var result = await executorBridge.ExecuteAsync(user, "update_habit", new
+        {
+            habit_id = habitId,
             title,
             description,
-            freqUnit,
-            frequencyQuantity,
-            DueDate: McpInputParser.ParseOptionalDate(dueDate, "dueDate"),
-            Options: new UpdateHabitCommandOptions(
-                DueTime: McpInputParser.ParseOptionalTime(dueTime, "dueTime")));
+            frequency_unit = frequencyUnit,
+            frequency_quantity = frequencyQuantity,
+            due_date = dueDate,
+            due_time = dueTime
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Updated habit {habitId}"
-            : $"Error: {result.Error}";
+        return result.Succeeded ? $"Updated habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "delete_habit"), Description("Delete a habit by ID.")]
     public async Task<string> DeleteHabit(
         ClaimsPrincipal user,
         [Description(HabitIdDescription)] string habitId,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: deleting a habit is destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new DeleteHabitCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"));
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Deleted habit {habitId}"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "delete_habit", new
+        {
+            habit_id = habitId
+        }, confirmationToken, cancellationToken);
+
+        return result.Succeeded ? $"Deleted habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "log_habit"), Description("Log a habit as completed (or toggle it off if already logged today).")]
@@ -183,16 +191,13 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new LogHabitCommand(
-            userId,
-            McpInputParser.ParseGuid(habitId, "habitId"),
-            McpInputParser.ParseOptionalDate(date, "date"));
+        var result = await executorBridge.ExecuteAsync(user, "log_habit", new
+        {
+            habit_id = habitId,
+            date
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Logged habit {habitId} (log id: {result.Value})"
-            : $"Error: {result.Error}";
+        return result.Succeeded ? $"Logged habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "get_habit_metrics"), Description("Get streak, completion rate, and other metrics for a habit.")]
@@ -225,16 +230,13 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new SkipHabitCommand(
-            userId,
-            McpInputParser.ParseGuid(habitId, "habitId"),
-            McpInputParser.ParseOptionalDate(date, "date"));
+        var result = await executorBridge.ExecuteAsync(user, "skip_habit", new
+        {
+            habit_id = habitId,
+            date
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Skipped habit {habitId}"
-            : $"Error: {result.Error}";
+        return result.Succeeded ? $"Skipped habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "update_checklist"), Description("Update the checklist items for a habit. Pass the full list of items with their checked state.")]
@@ -244,17 +246,15 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("JSON array of checklist items, each with 'text' (string) and 'isChecked' (boolean)")] string checklistItemsJson,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var items = System.Text.Json.JsonSerializer.Deserialize<List<ChecklistItem>>(
-            checklistItemsJson,
-            CaseInsensitiveJsonOptions)
-            ?? [];
+        var items = DeserializeJson<List<ChecklistItem>>(checklistItemsJson) ?? [];
 
-        var command = new UpdateChecklistCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"), items);
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Updated checklist for habit {habitId} ({items.Count} items)"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "update_checklist", new
+        {
+            habit_id = habitId,
+            checklist_items = items.Select(item => new { text = item.Text, is_checked = item.IsChecked })
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Updated checklist for habit {habitId} ({items.Count} items)" : result.Message;
     }
 
     [McpServerTool(Name = "get_habit_logs"), Description("Get completion logs for a specific habit (last 365 days).")]
@@ -320,26 +320,22 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Due date override in YYYY-MM-DD format")] string? dueDate = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        FrequencyUnit? freqUnit = frequencyUnit is not null ? Enum.Parse<FrequencyUnit>(frequencyUnit, true) : null;
-
-        var command = new CreateSubHabitCommand(
-            userId,
-            McpInputParser.ParseGuid(parentHabitId, "parentHabitId"),
+        var result = await executorBridge.ExecuteAsync(user, "create_sub_habit", new
+        {
+            parent_habit_id = parentHabitId,
             title,
             description,
-            freqUnit,
-            frequencyQuantity,
-            IsBadHabit: isBadHabit,
-            DueDate: McpInputParser.ParseOptionalDate(dueDate, "dueDate"),
-            Options: new HabitCommandOptions(
-                DueTime: McpInputParser.ParseOptionalTime(dueTime, "dueTime"),
-                IsFlexible: isFlexible));
+            frequency_unit = frequencyUnit,
+            frequency_quantity = frequencyQuantity,
+            due_time = dueTime,
+            is_bad_habit = isBadHabit,
+            is_flexible = isFlexible,
+            due_date = dueDate
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Created sub-habit '{title}' (id: {result.Value}) under parent {parentHabitId}"
-            : $"Error: {result.Error}";
+        return result.Succeeded
+            ? $"Created sub-habit '{title}' (id: {result.TargetId}) under parent {parentHabitId}"
+            : result.Message;
     }
 
     [McpServerTool(Name = "duplicate_habit"), Description("Duplicate a habit (including its sub-habits and tags).")]
@@ -348,37 +344,37 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("The habit ID to duplicate (GUID)")] string habitId,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new DuplicateHabitCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"));
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Duplicated habit {habitId} (new id: {result.Value})"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "duplicate_habit", new
+        {
+            habit_id = habitId
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Duplicated habit {habitId} (new id: {result.TargetId})" : result.Message;
     }
 
     [McpServerTool(Name = "bulk_create_habits"), Description("Create multiple habits at once. Each habit can have sub-habits.")]
     public async Task<string> BulkCreateHabits(
         ClaimsPrincipal user,
         [Description("JSON array of habit objects. Each with: title (required), description, frequencyUnit (Day/Week/Month/Year), frequencyQuantity, isBadHabit, dueDate (YYYY-MM-DD), dueTime (HH:mm), isGeneral, isFlexible")] string habitsJson,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk create is a destructive batch operation)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var items = System.Text.Json.JsonSerializer.Deserialize<List<BulkHabitItemDto>>(
-            habitsJson,
-            CaseInsensitiveJsonOptions)
-            ?? [];
+        var parsedHabits = DeserializeJson<List<BulkHabitItemDto>>(habitsJson) ?? [];
 
-        var bulkItems = items.Select(MapToBulkHabitItem).ToList();
-        var command = new BulkCreateHabitsCommand(userId, bulkItems);
-        var result = await mediator.Send(command, cancellationToken);
+        var result = await executorBridge.ExecuteAsync(user, "bulk_create_habits", new
+        {
+            habits = parsedHabits.Select(ToBulkHabitArgs)
+        }, confirmationToken, cancellationToken);
 
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
+        if (!result.Succeeded)
+            return result.Message;
 
-        var r = result.Value;
-        var successCount = r.Results.Count(x => x.Status == BulkItemStatus.Success);
-        var failCount = r.Results.Count(x => x.Status == BulkItemStatus.Failed);
-        var lines = r.Results.Select(x =>
+        if (result.Payload is not BulkCreateResult bulk)
+            return $"Bulk create: {result.TargetName}";
+
+        var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);
+        var failCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Failed);
+        var lines = bulk.Results.Select(x =>
             x.Status == BulkItemStatus.Success
                 ? $"- OK: {x.Title} (id: {x.HabitId})"
                 : $"- FAILED: {x.Title} - {x.Error}");
@@ -390,20 +386,23 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
     public async Task<string> BulkDeleteHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs)")] string habitIds,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: bulk delete is destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Guid.Parse).ToList();
+        var ids = ParseGuidCsv(habitIds);
 
-        var command = new BulkDeleteHabitsCommand(userId, ids);
-        var result = await mediator.Send(command, cancellationToken);
+        var result = await executorBridge.ExecuteAsync(user, "bulk_delete_habits", new
+        {
+            habit_ids = ids.Select(id => id.ToString())
+        }, confirmationToken, cancellationToken);
 
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
+        if (!result.Succeeded)
+            return result.Message;
 
-        var r = result.Value;
-        var successCount = r.Results.Count(x => x.Status == BulkItemStatus.Success);
+        if (result.Payload is not BulkDeleteResult bulk)
+            return $"Bulk delete: {result.TargetName}";
+
+        var successCount = bulk.Results.Count(x => x.Status == BulkItemStatus.Success);
         return $"Bulk delete: {successCount}/{ids.Count} deleted successfully";
     }
 
@@ -461,18 +460,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("JSON array of objects with 'habitId' (GUID) and 'position' (int)")] string positionsJson,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var items = System.Text.Json.JsonSerializer.Deserialize<List<HabitPositionDto>>(
-            positionsJson,
-            CaseInsensitiveJsonOptions)
-            ?? [];
+        var positions = DeserializeJson<List<HabitPositionDto>>(positionsJson) ?? [];
 
-        var positions = items.Select(p => new HabitPositionUpdate(McpInputParser.ParseGuid(p.HabitId, "habitId"), p.Position)).ToList();
-        var command = new ReorderHabitsCommand(userId, positions);
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Reordered {positions.Count} habits"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "reorder_habits", new
+        {
+            positions = positions.Select(p => new { habit_id = p.HabitId, position = p.Position })
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Reordered {positions.Count} habits" : result.Message;
     }
 
     [McpServerTool(Name = "move_habit_parent"), Description("Move a habit under a different parent, or promote it to top-level by passing null parentId.")]
@@ -482,15 +477,14 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("New parent habit ID (GUID), or omit/null to make top-level")] string? parentId = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new MoveHabitParentCommand(
-            userId,
-            McpInputParser.ParseGuid(habitId, "habitId"),
-            McpInputParser.ParseOptionalGuid(parentId, "parentId"));
+        var result = await executorBridge.ExecuteAsync(user, "move_habit_parent", new
+        {
+            habit_id = habitId,
+            parent_id = parentId
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        if (!result.IsSuccess)
-            return $"Error: {result.Error}";
+        if (!result.Succeeded)
+            return result.Message;
 
         return parentId is not null
             ? $"Moved habit {habitId} under parent {parentId}"
@@ -504,15 +498,15 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         [Description("Comma-separated goal IDs (GUIDs)")] string goalIds,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var ids = goalIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Guid.Parse).ToList();
+        var ids = ParseGuidCsv(goalIds);
 
-        var command = new LinkGoalsToHabitCommand(userId, McpInputParser.ParseGuid(habitId, "habitId"), ids);
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Linked {ids.Count} goals to habit {habitId}"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "link_goals_to_habit", new
+        {
+            habit_id = habitId,
+            goal_ids = ids.Select(id => id.ToString())
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Linked {ids.Count} goals to habit {habitId}" : result.Message;
     }
 
     [McpServerTool(Name = "get_daily_summary"), Description("Get an AI-generated daily summary of habits. Requires Pro subscription and AI summary enabled.")]
@@ -579,7 +573,31 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         return userId;
     }
 
-    // DTOs for JSON deserialization
+    private static List<Guid> ParseGuidCsv(string value) =>
+        value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(Guid.Parse)
+            .ToList();
+
+    private static readonly System.Text.Json.JsonSerializerOptions CaseInsensitiveJsonOptions =
+        new() { PropertyNameCaseInsensitive = true };
+
+    private static T? DeserializeJson<T>(string json) =>
+        System.Text.Json.JsonSerializer.Deserialize<T>(json, CaseInsensitiveJsonOptions);
+
+    private static object ToBulkHabitArgs(BulkHabitItemDto dto) => new
+    {
+        title = dto.Title,
+        description = dto.Description,
+        frequency_unit = dto.FrequencyUnit,
+        frequency_quantity = dto.FrequencyQuantity,
+        is_bad_habit = dto.IsBadHabit,
+        due_date = dto.DueDate,
+        due_time = dto.DueTime,
+        is_general = dto.IsGeneral,
+        is_flexible = dto.IsFlexible,
+        sub_habits = dto.SubHabits?.Select(ToBulkHabitArgs)
+    };
+
     private sealed record BulkHabitItemDto(
         string Title,
         string? Description = null,
@@ -591,6 +609,8 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
         bool IsGeneral = false,
         bool IsFlexible = false,
         List<BulkHabitItemDto>? SubHabits = null);
+
+    private sealed record HabitPositionDto(string HabitId, int Position);
 
     private sealed record HabitLineData(
         Guid Id, string Title, FrequencyUnit? FreqUnit, int? FreqQty,
@@ -624,25 +644,5 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService)
             if (c.Children.Count > 0)
                 AppendChildren(lines, c.Children, indent + 1);
         }
-    }
-
-    private sealed record HabitPositionDto(string HabitId, int Position);
-
-    private static BulkHabitItem MapToBulkHabitItem(BulkHabitItemDto dto)
-    {
-        FrequencyUnit? freqUnit = dto.FrequencyUnit is not null
-            ? Enum.Parse<FrequencyUnit>(dto.FrequencyUnit, true) : null;
-
-        return new BulkHabitItem(
-            dto.Title,
-            dto.Description,
-            freqUnit,
-            dto.FrequencyQuantity,
-            IsBadHabit: dto.IsBadHabit,
-            DueDate: McpInputParser.ParseOptionalDate(dto.DueDate, "dueDate"),
-            DueTime: McpInputParser.ParseOptionalTime(dto.DueTime, "dueTime"),
-            IsGeneral: dto.IsGeneral,
-            IsFlexible: dto.IsFlexible,
-            SubHabits: dto.SubHabits?.Select(MapToBulkHabitItem).ToList());
     }
 }

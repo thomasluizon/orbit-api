@@ -148,6 +148,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
         builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
+        builder.Services.AddScoped<Orbit.Api.Mcp.McpExecutorBridge>();
 
         // AI Tool Registration
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
@@ -196,6 +197,12 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, ManageApiKeysTool>();
         builder.Services.AddScoped<IAiTool, SendSupportRequestTool>();
         builder.Services.AddScoped<IAiTool, ManageAccountTool>();
+        builder.Services.AddScoped<IAiTool, UpdateChecklistTool>();
+        builder.Services.AddScoped<IAiTool, ReorderHabitsTool>();
+        builder.Services.AddScoped<IAiTool, MoveHabitParentTool>();
+        builder.Services.AddScoped<IAiTool, LinkGoalsToHabitTool>();
+        builder.Services.AddScoped<IAiTool, BulkCreateHabitsTool>();
+        builder.Services.AddScoped<IAiTool, BulkDeleteHabitsTool>();
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
