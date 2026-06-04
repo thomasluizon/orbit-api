@@ -211,6 +211,9 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, LinkGoalsToHabitTool>();
         builder.Services.AddScoped<IAiTool, BulkCreateHabitsTool>();
         builder.Services.AddScoped<IAiTool, BulkDeleteHabitsTool>();
+        builder.Services.AddScoped<IAiTool, GetDailySummaryTool>();
+        builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
+        builder.Services.AddScoped<IAiTool, GetHabitMetricsTool>();
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
 
