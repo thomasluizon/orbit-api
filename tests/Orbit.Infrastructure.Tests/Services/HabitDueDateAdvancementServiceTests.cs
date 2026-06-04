@@ -1,14 +1,20 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
 /// Tests the CatchUpDueDate logic on the Habit entity that the
-/// HabitDueDateAdvancementService relies on, plus the service's
-/// query filter conditions and cutoff logic.
-/// The background service loop and DB interactions are integration concerns.
+/// HabitDueDateAdvancementService relies on, the service's query filter
+/// conditions and cutoff logic, and a DB-backed regression covering the
+/// real advancement query (bad habits advance; non-bad stay overdue).
 /// </summary>
 public class HabitDueDateAdvancementServiceTests
 {
@@ -281,6 +287,55 @@ public class HabitDueDateAdvancementServiceTests
 
         ShouldAdvance(nonBad).Should().BeFalse();
         ShouldAdvance(bad).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AdvanceStaleDueDates_AdvancesBadHabitOnly_LeavesNonBadOverdue()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var staleDueDate = Today.AddDays(-3);
+        var nonBadHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Non-bad recurring", FrequencyUnit.Day, 1,
+            IsBadHabit: false, DueDate: staleDueDate)).Value;
+        var badHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Bad recurring", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: staleDueDate)).Value;
+        dbContext.Users.Add(user);
+        dbContext.Habits.AddRange(nonBadHabit, badHabit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext);
+        await service.AdvanceStaleDueDates(CancellationToken.None);
+
+        var reloadedNonBad = await dbContext.Habits.AsNoTracking()
+            .SingleAsync(h => h.Id == nonBadHabit.Id);
+        var reloadedBad = await dbContext.Habits.AsNoTracking()
+            .SingleAsync(h => h.Id == badHabit.Id);
+
+        reloadedBad.DueDate.Should().BeOnOrAfter(Today);
+        reloadedNonBad.DueDate.Should().Be(staleDueDate);
+        reloadedNonBad.DueDate.Should().BeBefore(Today);
+    }
+
+    private static OrbitDbContext CreateInMemoryDbContext()
+    {
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"HabitDueDateAdvancementServiceTests_{Guid.NewGuid()}")
+            .Options;
+        return new OrbitDbContext(options);
+    }
+
+    private static HabitDueDateAdvancementService CreateService(OrbitDbContext dbContext)
+    {
+        var serviceProvider = new ServiceCollection()
+            .AddSingleton(dbContext)
+            .BuildServiceProvider();
+        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        return new HabitDueDateAdvancementService(
+            scopeFactory,
+            NullLogger<HabitDueDateAdvancementService>.Instance,
+            new ConfigurationBuilder().Build());
     }
 
     [Fact]
