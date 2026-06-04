@@ -345,6 +345,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
+        builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
         builder.Services.AddHostedService<DataEncryptionMigrationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
