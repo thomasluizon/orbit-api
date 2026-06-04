@@ -879,21 +879,6 @@ public class AgentCatalogService : IAgentCatalogService
                 ]),
 
             CreateCapability(
-                AgentCapabilityIds.GamificationWrite,
-                "Write Gamification",
-                "Uses streak-freeze or equivalent game-state mutations.",
-                "gamification",
-                AgentScopes.WriteGamification,
-                AgentRiskClass.Low,
-                isMutation: true,
-                isPhaseOneReadOnly: false,
-                AgentConfirmationRequirement.None,
-                planRequirement: "Pro",
-                chatTools: ["activate_streak_freeze"],
-                mcpTools: ["activate_streak_freeze"],
-                controllerActions: ["GamificationController.ActivateStreakFreeze"]),
-
-            CreateCapability(
                 AgentCapabilityIds.ChecklistTemplatesRead,
                 "Read Checklist Templates",
                 "Reads reusable checklist templates.",
@@ -1228,8 +1213,8 @@ public class AgentCatalogService : IAgentCatalogService
                 "Shows streaks, freezes, XP, levels, and achievements.",
                 ["Open streak profile or achievements.", "Review freeze availability.", "Activate a freeze when needed."],
                 ["Freeze activation is a mutation.", "Level and XP are derived state."],
-                [AgentCapabilityIds.GamificationRead, AgentCapabilityIds.GamificationWrite],
-                ["GamificationController.GetProfile", "GamificationController.ActivateStreakFreeze"]),
+                [AgentCapabilityIds.GamificationRead],
+                ["GamificationController.GetProfile"]),
 
             new AppSurface(
                 "referrals",

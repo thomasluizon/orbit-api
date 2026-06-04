@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Orbit.Api.Controllers;
-using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
 
@@ -99,30 +98,6 @@ public class GamificationControllerTests
             .Returns(Result.Failure<StreakInfoResponse>("Error"));
 
         var result = await _controller.GetStreakInfo(CancellationToken.None);
-
-        result.Should().BeOfType<BadRequestObjectResult>();
-    }
-
-    // --- ActivateStreakFreeze ---
-
-    [Fact]
-    public async Task ActivateStreakFreeze_Success_ReturnsOk()
-    {
-        _mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(default(StreakFreezeResponse)!));
-
-        var result = await _controller.ActivateStreakFreeze(CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task ActivateStreakFreeze_Failure_ReturnsBadRequest()
-    {
-        _mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<StreakFreezeResponse>("No freeze available"));
-
-        var result = await _controller.ActivateStreakFreeze(CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }

@@ -3,7 +3,6 @@ using FluentAssertions;
 using MediatR;
 using NSubstitute;
 using Orbit.Api.Mcp.Tools;
-using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
 
@@ -122,31 +121,6 @@ public class GamificationToolsTests
             .Returns(Result.Failure<StreakInfoResponse>("Not found"));
 
         var result = await _tools.GetStreakInfo(_user);
-
-        result.Should().StartWith("Error: ");
-    }
-
-    [Fact]
-    public async Task ActivateStreakFreeze_Success_ReturnsActivatedMessage()
-    {
-        var response = new StreakFreezeResponse(1, new DateOnly(2026, 4, 3), 15, 0);
-        _mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(response));
-
-        var result = await _tools.ActivateStreakFreeze(_user);
-
-        result.Should().Contain("Streak freeze activated");
-        result.Should().Contain("streak preserved: 15 days");
-        result.Should().Contain("Freezes remaining this month: 1");
-    }
-
-    [Fact]
-    public async Task ActivateStreakFreeze_Failure_ReturnsError()
-    {
-        _mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<StreakFreezeResponse>("No freezes remaining"));
-
-        var result = await _tools.ActivateStreakFreeze(_user);
 
         result.Should().StartWith("Error: ");
     }

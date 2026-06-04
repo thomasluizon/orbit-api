@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
-using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 
 namespace Orbit.Api.Mcp.Tools;
@@ -89,24 +88,6 @@ public class GamificationTools(IMediator mediator)
                $"Freezes Available: {s.FreezesAvailable}/{s.MaxFreezesPerMonth} this month\n" +
                $"Freezes Used: {s.FreezesUsedThisMonth}\n" +
                (s.RecentFreezeDates.Count > 0 ? $"Recent freeze dates: {string.Join(", ", s.RecentFreezeDates)}" : "");
-    }
-
-    [McpServerTool(Name = "activate_streak_freeze"), Description("Activate a streak freeze to protect the current streak. Limited to 2 per month.")]
-    public async Task<string> ActivateStreakFreeze(
-        ClaimsPrincipal user,
-        CancellationToken cancellationToken = default)
-    {
-        var userId = GetUserId(user);
-        var command = new ActivateStreakFreezeCommand(userId);
-        var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var r = result.Value;
-        return $"Streak freeze activated for {r.FrozenDate}\n" +
-               $"Current streak preserved: {r.CurrentStreak} days\n" +
-               $"Freezes remaining this month: {r.FreezesRemainingThisMonth}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

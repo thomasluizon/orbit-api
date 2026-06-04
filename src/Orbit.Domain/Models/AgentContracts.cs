@@ -264,7 +264,6 @@ public static class AgentCapabilityIds
     public const string CalendarRead = "calendar.read";
     public const string CalendarSyncManage = "calendar.sync.manage";
     public const string GamificationRead = "gamification.read";
-    public const string GamificationWrite = "gamification.write";
     public const string ChecklistTemplatesRead = "checklist-templates.read";
     public const string ChecklistTemplatesWrite = "checklist-templates.write";
     public const string UserFactsRead = "user-facts.read";
@@ -305,7 +304,6 @@ public static class AgentScopes
     public const string ReadCalendar = "read_calendar";
     public const string ManageCalendarSync = "manage_calendar_sync";
     public const string ReadGamification = "read_gamification";
-    public const string WriteGamification = "write_gamification";
     public const string ReadChecklistTemplates = "read_checklist_templates";
     public const string WriteChecklistTemplates = "write_checklist_templates";
     public const string ReadUserFacts = "read_user_facts";
@@ -344,7 +342,6 @@ public static class AgentScopes
         ReadCalendar,
         ManageCalendarSync,
         ReadGamification,
-        WriteGamification,
         ReadChecklistTemplates,
         WriteChecklistTemplates,
         ReadUserFacts,

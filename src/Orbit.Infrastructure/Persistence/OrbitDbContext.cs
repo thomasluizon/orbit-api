@@ -35,6 +35,7 @@ public class OrbitDbContext : DbContext
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
+    public DbSet<SentStreakFreezeAlert> SentStreakFreezeAlerts => Set<SentStreakFreezeAlert>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<GoalProgressLog> GoalProgressLogs => Set<GoalProgressLog>();
@@ -100,6 +101,12 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<SentSlipAlert>(entity =>
         {
             entity.HasIndex(a => new { a.HabitId, a.WeekStart }).IsUnique();
+        });
+
+        modelBuilder.Entity<SentStreakFreezeAlert>(entity =>
+        {
+            entity.HasIndex(a => new { a.UserId, a.FrozenDate }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Notification>(entity =>

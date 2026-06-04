@@ -9,7 +9,6 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Application.ChecklistTemplates.Queries;
-using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Profile.Commands;
@@ -37,7 +36,6 @@ public class ChecklistUserFactPlatformToolTests
         var userFactsTool = new GetUserFactsTool(mediator);
         var deleteUserFactsTool = new DeleteUserFactsTool(mediator);
         var gamificationTool = new GetGamificationOverviewTool(mediator);
-        var activateStreakFreezeTool = new ActivateStreakFreezeTool(mediator);
         var referralTool = new GetReferralOverviewTool(mediator);
         var subscriptionOverviewTool = new GetSubscriptionOverviewTool(mediator);
         var manageSubscriptionTool = new ManageSubscriptionTool(mediator);
@@ -66,9 +64,6 @@ public class ChecklistUserFactPlatformToolTests
         gamificationTool.Name.Should().Be("get_gamification_overview");
         gamificationTool.IsReadOnly.Should().BeTrue();
         JsonSerializer.Serialize(gamificationTool.GetParameterSchema()).Should().Contain("include_achievements");
-
-        activateStreakFreezeTool.Name.Should().Be("activate_streak_freeze");
-        JsonSerializer.Serialize(activateStreakFreezeTool.GetParameterSchema()).Should().Contain("properties");
 
         referralTool.Name.Should().Be("get_referral_overview");
         referralTool.IsReadOnly.Should().BeTrue();
@@ -401,34 +396,6 @@ public class ChecklistUserFactPlatformToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("streak_failed");
-    }
-
-    [Fact]
-    public async Task ActivateStreakFreezeTool_ReturnsSuccess()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new StreakFreezeResponse(1, new DateOnly(2026, 4, 14), 5, 0)));
-        var tool = new ActivateStreakFreezeTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
-
-        result.Success.Should().BeTrue();
-        result.EntityName.Should().Be("Activated streak freeze");
-    }
-
-    [Fact]
-    public async Task ActivateStreakFreezeTool_ReturnsFailure()
-    {
-        var mediator = Substitute.For<IMediator>();
-        mediator.Send(Arg.Any<ActivateStreakFreezeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<StreakFreezeResponse>("freeze_failed"));
-        var tool = new ActivateStreakFreezeTool(mediator);
-
-        var result = await tool.ExecuteAsync(Parse("{}"), UserId, CancellationToken.None);
-
-        result.Success.Should().BeFalse();
-        result.Error.Should().Be("freeze_failed");
     }
 
     [Fact]
