@@ -1089,7 +1089,8 @@ public class AgentCatalogService : IAgentCatalogService
                 [
                     "AuthController.RequestDeletion",
                     "AuthController.ConfirmDeletion",
-                    "ProfileController.ResetAccount"
+                    "ProfileController.ResetAccount",
+                    "ProfileController.ExportUserData"
                 ]),
 
             CreateCapability(

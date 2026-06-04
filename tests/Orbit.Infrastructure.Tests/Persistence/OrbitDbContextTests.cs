@@ -1,11 +1,14 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
 
@@ -45,6 +48,36 @@ public class OrbitDbContextTests
         context.Model.FindEntityType(typeof(UserFact))!.FindProperty(nameof(UserFact.FactText))!.GetValueConverter().Should().NotBeNull();
         context.Model.FindEntityType(typeof(Goal))!.FindProperty(nameof(Goal.Title))!.GetValueConverter().Should().NotBeNull();
         context.Model.FindEntityType(typeof(GoalProgressLog))!.FindProperty(nameof(GoalProgressLog.Note))!.GetValueConverter().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Model_WithEncryptionService_WiresUserGoogleTokensToNullableEncryptingConverter()
+    {
+        var encryptionService = Substitute.For<IEncryptionService>();
+
+        using var context = CreateContext(encryptionService);
+        var user = context.Model.FindEntityType(typeof(User))!;
+
+        user.FindProperty(nameof(User.GoogleAccessToken))!.GetValueConverter()
+            .Should().BeOfType<NullableEncryptionValueConverter>();
+        user.FindProperty(nameof(User.GoogleRefreshToken))!.GetValueConverter()
+            .Should().BeOfType<NullableEncryptionValueConverter>();
+    }
+
+    [Fact]
+    public void NullableEncryptingConverter_WithRealEncryption_ProducesCiphertextAtRestAndDecryptsOnRead()
+    {
+        var encryptionService = new EncryptionService(
+            Options.Create(new EncryptionSettings { Key = "DdyUCjjdK326cB9lY00tyUvRDpCQcYJOJIpu21I1D8c=" }),
+            NullLogger<EncryptionService>.Instance);
+        var converter = new NullableEncryptionValueConverter(encryptionService);
+
+        const string plaintext = "ya29.PLAINTEXT-GOOGLE-TOKEN";
+        var atRest = (string?)converter.ConvertToProvider(plaintext);
+
+        atRest.Should().StartWith("enc:").And.NotBe(plaintext);
+        converter.ConvertFromProvider(atRest).Should().Be(plaintext);
+        converter.ConvertToProvider(null).Should().BeNull();
     }
 
     [Fact]
