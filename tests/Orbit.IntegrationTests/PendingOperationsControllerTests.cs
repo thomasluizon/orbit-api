@@ -43,7 +43,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
 
         // The api_keys.manage capability is plan-gated to Pro; an active trial grants Pro access
         // so policy evaluation reaches the step-up gate instead of denying on plan.
-        await GrantProAccessAsync();
+        await GrantProAccessAsync(_factory, _userId);
     }
 
     public Task DisposeAsync()
@@ -57,7 +57,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     [Fact]
     public async Task Confirm_PersistsConfirmationToken()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
 
         var response = await _client.PostAsync($"/api/ai/pending-operations/{pendingOperationId}/confirm", null);
 
@@ -91,7 +91,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     [Fact]
     public async Task StepUp_IssuesChallenge_AndEmailsCode()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
 
         var response = await PostStepUpAsync(pendingOperationId);
 
@@ -108,7 +108,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     [Fact]
     public async Task StepUp_SecondRequestWithinCooldown_ReturnsBadRequest()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
 
         var first = await PostStepUpAsync(pendingOperationId);
         first.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -125,7 +125,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     [Fact]
     public async Task StepUpVerify_ValidCode_Succeeds()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
         var challenge = await IssueChallengeAsync(pendingOperationId);
 
         var response = await PostStepUpVerifyAsync(pendingOperationId, challenge.ChallengeId, _factory.Email.LastVerificationCode!);
@@ -143,7 +143,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     [Fact]
     public async Task StepUpVerify_InvalidCode_ReturnsBadRequest()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
         var challenge = await IssueChallengeAsync(pendingOperationId);
 
         var response = await PostStepUpVerifyAsync(pendingOperationId, challenge.ChallengeId, "000000");
@@ -153,34 +153,12 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         body!.Error.Should().Be("Invalid step-up code.");
     }
 
-    [Fact]
-    public async Task StepUpVerify_ExceedsAuthRateLimit_ReturnsTooManyRequests()
-    {
-        // The auth limiter (5/min, partitioned by user) guards the verify endpoint and trips
-        // before the service-level max-attempts gate can ever be reached over HTTP, so the
-        // HTTP boundary's repeated-verify protection is the rate limiter, not max-attempts.
-        var pendingOperationId = SeedStepUpPendingOperation();
-        var challenge = await IssueChallengeAsync(pendingOperationId);
-
-        HttpStatusCode? rateLimited = null;
-        for (var attempt = 0; attempt < 6 && rateLimited is null; attempt++)
-        {
-            var response = await PostStepUpVerifyAsync(pendingOperationId, challenge.ChallengeId, "000000");
-            if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                rateLimited = response.StatusCode;
-            else
-                response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        }
-
-        rateLimited.Should().Be(HttpStatusCode.TooManyRequests);
-    }
-
     // ── execute ──────────────────────────────────────────────
 
     [Fact]
     public async Task Execute_WithoutStepUpSatisfied_IsNotExecuted()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
         var confirmationToken = await ConfirmAsync(pendingOperationId);
 
         var response = await PostExecuteAsync(pendingOperationId, confirmationToken);
@@ -195,7 +173,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     [Fact]
     public async Task Execute_AfterConfirmAndStepUp_Succeeds()
     {
-        var pendingOperationId = SeedStepUpPendingOperation();
+        var pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
         var confirmationToken = await ConfirmAsync(pendingOperationId);
         var challenge = await IssueChallengeAsync(pendingOperationId);
 
@@ -227,9 +205,9 @@ public class PendingOperationsControllerTests : IAsyncLifetime
 
     // ── helpers ──────────────────────────────────────────────
 
-    private Guid SeedStepUpPendingOperation()
+    private static Guid SeedStepUpPendingOperation(IntegrationTestWebApplicationFactory factory, Guid userId)
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = factory.Services.CreateScope();
         var catalog = scope.ServiceProvider.GetRequiredService<IAgentCatalogService>();
         var store = scope.ServiceProvider.GetRequiredService<IPendingAgentOperationStore>();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
@@ -242,7 +220,7 @@ public class PendingOperationsControllerTests : IAsyncLifetime
 
         var capability = catalog.GetCapability(AgentCapabilityIds.ApiKeysManage)!;
         var pendingOperation = store.Create(
-            _userId,
+            userId,
             capability,
             CreateApiKeyOperationId,
             canonicalArguments,
@@ -277,11 +255,11 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         }
     }
 
-    private async Task GrantProAccessAsync()
+    private static async Task GrantProAccessAsync(IntegrationTestWebApplicationFactory factory, Guid userId)
     {
-        using var scope = _factory.Services.CreateScope();
+        using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var user = await dbContext.Users.SingleAsync(item => item.Id == _userId);
+        var user = await dbContext.Users.SingleAsync(item => item.Id == userId);
         user.StartTrial(DateTime.UtcNow.AddDays(1));
         await dbContext.SaveChangesAsync();
     }
@@ -323,4 +301,69 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     private record ExecuteResponse(OperationResult Operation);
     private record ApiKeyListItem(Guid Id, string Name);
     private record ErrorResponse(string Error);
+
+    // The auth limiter (5/min, partitioned by user) is shared across every step-up and
+    // verify call. Exhausting it on the class-wide account would bleed 429s into the other
+    // pending-ops tests whenever they share a clock-minute, so this case gets its own user
+    // and its own exhausted bucket.
+    [Collection("Sequential")]
+    public sealed class RateLimitTests : IAsyncLifetime
+    {
+        private readonly IntegrationTestWebApplicationFactory _factory;
+        private readonly HttpClient _client;
+        private readonly string _email = $"pendingops-ratelimit-test-{Guid.NewGuid()}@integration.test";
+        private Guid _userId;
+        private Guid _pendingOperationId;
+        private Guid _challengeId;
+
+        public RateLimitTests(IntegrationTestWebApplicationFactory factory)
+        {
+            _factory = factory;
+            _client = factory.CreateClient();
+            IntegrationTestHelpers.RegisterTestAccount(_email, TestCode);
+        }
+
+        public async Task InitializeAsync()
+        {
+            var login = await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
+            _userId = login.UserId;
+            await GrantProAccessAsync(_factory, _userId);
+
+            _pendingOperationId = SeedStepUpPendingOperation(_factory, _userId);
+
+            var challengeResponse = await _client.PostAsJsonAsync(
+                $"/api/ai/pending-operations/{_pendingOperationId}/step-up",
+                new { });
+            challengeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+            var challenge = await challengeResponse.Content.ReadFromJsonAsync<StepUpChallengeResponse>(JsonOptions);
+            _challengeId = challenge!.ChallengeId;
+        }
+
+        public Task DisposeAsync()
+        {
+            _client.Dispose();
+            return Task.CompletedTask;
+        }
+
+        [Fact]
+        public async Task StepUpVerify_ExceedsAuthRateLimit_ReturnsTooManyRequests()
+        {
+            // The auth limiter trips before the service-level max-attempts gate can ever be
+            // reached over HTTP, so the HTTP boundary's repeated-verify protection is the rate
+            // limiter, not max-attempts.
+            HttpStatusCode? rateLimited = null;
+            for (var attempt = 0; attempt < 6 && rateLimited is null; attempt++)
+            {
+                var response = await _client.PostAsJsonAsync(
+                    $"/api/ai/pending-operations/{_pendingOperationId}/step-up/verify",
+                    new { challengeId = _challengeId, code = "000000" });
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                    rateLimited = response.StatusCode;
+                else
+                    response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            }
+
+            rateLimited.Should().Be(HttpStatusCode.TooManyRequests);
+        }
+    }
 }
