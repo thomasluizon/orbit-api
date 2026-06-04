@@ -5,13 +5,13 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Notifications.Commands;
 
-public record MarkAllNotificationsReadCommand(Guid UserId) : IRequest<Result>;
+public record MarkAllNotificationsReadCommand(Guid UserId) : IRequest<Result<int>>;
 
 public class MarkAllNotificationsReadCommandHandler(
     IGenericRepository<Notification> notificationRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<MarkAllNotificationsReadCommand, Result>
+    IUnitOfWork unitOfWork) : IRequestHandler<MarkAllNotificationsReadCommand, Result<int>>
 {
-    public async Task<Result> Handle(MarkAllNotificationsReadCommand request, CancellationToken cancellationToken)
+    public async Task<Result<int>> Handle(MarkAllNotificationsReadCommand request, CancellationToken cancellationToken)
     {
         var unreadNotifications = await notificationRepository.FindTrackedAsync(
             n => n.UserId == request.UserId && !n.IsRead,
@@ -22,6 +22,6 @@ public class MarkAllNotificationsReadCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success();
+        return Result.Success(unreadNotifications.Count);
     }
 }
