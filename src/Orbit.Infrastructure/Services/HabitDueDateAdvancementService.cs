@@ -43,7 +43,7 @@ public partial class HabitDueDateAdvancementService(
         }
     }
 
-    private async Task AdvanceStaleDueDates(CancellationToken ct)
+    internal async Task AdvanceStaleDueDates(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
