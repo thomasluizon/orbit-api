@@ -18,7 +18,11 @@ public sealed partial class DataEncryptionMigrationService(
     ILogger<DataEncryptionMigrationService> logger) : BackgroundService
 {
     private const int BatchSize = 50;
-    private const string MigrationFlag = "EncryptionMigrationComplete";
+
+    // Versioned so adding User to the backfill loop re-runs once in environments where the
+    // original "EncryptionMigrationComplete" flag was already set (existing User rows kept
+    // plaintext Google tokens until this pass).
+    private const string MigrationFlag = "EncryptionMigrationComplete_v2";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -40,6 +44,7 @@ public sealed partial class DataEncryptionMigrationService(
             success &= await MigrateUserFacts(stoppingToken);
             success &= await MigrateEntities<Goal>("Goals", stoppingToken);
             success &= await MigrateEntities<GoalProgressLog>("GoalProgressLogs", stoppingToken);
+            success &= await MigrateEntities<User>("Users", stoppingToken);
 
             if (success)
             {

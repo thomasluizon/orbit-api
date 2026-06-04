@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -22,6 +23,11 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record SetColorSchemeRequest(string? ColorScheme);
+
+    private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
 
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -209,6 +215,23 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         return result.IsSuccess
             ? Ok()
             : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("export")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportUserData(CancellationToken cancellationToken)
+    {
+        var query = new ExportUserDataQuery(HttpContext.GetUserId());
+        var result = await mediator.Send(query, cancellationToken);
+
+        if (!result.IsSuccess)
+            return NotFound(new { error = result.Error });
+
+        var fileName = $"orbit-data-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
+        var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
+        return File(json, "application/json", fileName);
     }
 
 
