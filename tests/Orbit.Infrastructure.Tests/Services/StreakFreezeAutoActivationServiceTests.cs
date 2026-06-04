@@ -1,8 +1,11 @@
 using System.Reflection;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -176,6 +179,56 @@ public class StreakFreezeAutoActivationServiceTests
         IsEligible(new EligibilityCase { StreakFreezesAccumulated = 0 }).Should().BeFalse();
     }
 
+    // --- Completion loading (LoadRecentCompletionsAsync excludes soft-deleted habits) ---
+
+    [Fact]
+    public async Task LoadRecentCompletions_SoftDeletedHabitLog_DoesNotMarkDateActive()
+    {
+        // A soft-deleted habit's completion log must not count as activity: otherwise it would
+        // falsely cover the missed date and suppress the auto-freeze even though no live habit
+        // was completed. Mirrors UserStreakService, which also excludes IsDeleted habits.
+        var userId = Guid.NewGuid();
+        var missedDate = new DateOnly(2026, 6, 3);
+        var since = missedDate.AddDays(-1);
+
+        await using var context = CreateInMemoryContext();
+
+        var activeHabit = CreateHabit(userId);
+        var deletedHabit = CreateHabit(userId);
+        deletedHabit.SoftDelete();
+        context.Habits.AddRange(activeHabit, deletedHabit);
+
+        deletedHabit.Log(missedDate);
+        context.HabitLogs.AddRange(deletedHabit.Logs);
+        await context.SaveChangesAsync();
+
+        var completionsByUser = await InvokeLoadRecentCompletions(context, [userId], since);
+
+        var completionDates = completionsByUser.GetValueOrDefault(userId) ?? [];
+        completionDates.Should().NotContain(missedDate);
+    }
+
+    [Fact]
+    public async Task LoadRecentCompletions_LiveHabitLog_MarksDateActive()
+    {
+        var userId = Guid.NewGuid();
+        var completedDate = new DateOnly(2026, 6, 3);
+        var since = completedDate.AddDays(-1);
+
+        await using var context = CreateInMemoryContext();
+
+        var activeHabit = CreateHabit(userId);
+        context.Habits.Add(activeHabit);
+
+        activeHabit.Log(completedDate);
+        context.HabitLogs.AddRange(activeHabit.Logs);
+        await context.SaveChangesAsync();
+
+        var completionsByUser = await InvokeLoadRecentCompletions(context, [userId], since);
+
+        completionsByUser.GetValueOrDefault(userId).Should().Contain(completedDate);
+    }
+
     // --- Helpers ---
 
     private static (string Title, string Body) InvokeBuildNotification(int currentStreak, string lang)
@@ -183,6 +236,28 @@ public class StreakFreezeAutoActivationServiceTests
         var method = typeof(StreakFreezeAutoActivationService)
             .GetMethod("BuildNotification", PrivateStatic)!;
         return ((string, string))method.Invoke(null, [currentStreak, lang])!;
+    }
+
+    private static OrbitDbContext CreateInMemoryContext()
+    {
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        return new OrbitDbContext(options);
+    }
+
+    private static Habit CreateHabit(Guid userId) =>
+        Habit.Create(new HabitCreateParams(
+            userId, "Habit", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 6, 3))).Value;
+
+    private static async Task<Dictionary<Guid, HashSet<DateOnly>>> InvokeLoadRecentCompletions(
+        OrbitDbContext context, List<Guid> userIds, DateOnly since)
+    {
+        var method = typeof(StreakFreezeAutoActivationService)
+            .GetMethod("LoadRecentCompletionsAsync", PrivateStatic)!;
+        var task = (Task<Dictionary<Guid, HashSet<DateOnly>>>)method.Invoke(
+            null, [context, userIds, since, CancellationToken.None])!;
+        return await task;
     }
 
     private static int GetConfiguredIntervalMinutesDefault()

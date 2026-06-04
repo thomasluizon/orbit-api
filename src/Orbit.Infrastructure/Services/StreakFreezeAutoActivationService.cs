@@ -105,7 +105,7 @@ public partial class StreakFreezeAutoActivationService(
         OrbitDbContext dbContext, List<Guid> userIds, DateOnly since, CancellationToken ct)
     {
         var habitOwners = await dbContext.Habits
-            .Where(h => userIds.Contains(h.UserId) && !h.IsBadHabit)
+            .Where(h => userIds.Contains(h.UserId) && !h.IsDeleted && !h.IsBadHabit)
             .Select(h => new { h.Id, h.UserId })
             .ToListAsync(ct);
 
