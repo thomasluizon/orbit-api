@@ -2,6 +2,7 @@ using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
+using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -10,7 +11,6 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
-using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -18,14 +18,45 @@ public class HabitToolsTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly HabitTools _tools;
     private readonly ClaimsPrincipal _user;
 
     public HabitToolsTests()
     {
-        _tools = new HabitTools(_mediator, _userDateService);
+        _tools = new HabitTools(_mediator, _userDateService, new McpExecutorBridge(_executor));
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()) };
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private void StubExecutor(AgentOperationStatus status, string? targetId = null, string? targetName = null,
+        string? policyReason = null, object? payload = null, Guid? pendingOperationId = null)
+    {
+        var response = new AgentExecuteOperationResponse(new AgentOperationResult(
+            "operation",
+            "operation",
+            AgentRiskClass.Low,
+            AgentConfirmationRequirement.None,
+            status,
+            Summary: "summary",
+            TargetId: targetId,
+            TargetName: targetName,
+            PolicyReason: policyReason,
+            PendingOperationId: pendingOperationId,
+            Payload: payload));
+
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
+    }
+
+    private async Task<AgentExecuteOperationRequest> CapturedRequestAsync(Func<Task> act)
+    {
+        await act();
+        var calls = _executor.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+            .ToList();
+        calls.Should().NotBeEmpty();
+        return (AgentExecuteOperationRequest)calls[^1].GetArguments()[0]!;
     }
 
     [Fact]
@@ -101,14 +132,17 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task CreateHabit_Success_ReturnsCreatedMessage()
+    public async Task CreateHabit_Success_RoutesThroughExecutorAndReturnsCreatedMessage()
     {
         var newId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(newId));
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString(), targetName: "New Habit");
 
-        var result = await _tools.CreateHabit(_user, "New Habit", "2026-04-01");
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.CreateHabit(_user, "New Habit", "2026-04-01"));
 
+        request.OperationId.Should().Be("create_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
         result.Should().Contain("Created habit 'New Habit'");
         result.Should().Contain(newId.ToString());
     }
@@ -116,8 +150,7 @@ public class HabitToolsTests
     [Fact]
     public async Task CreateHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Guid>("Title is required"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Title is required");
 
         var result = await _tools.CreateHabit(_user, "", "2026-04-01");
 
@@ -125,22 +158,35 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task UpdateHabit_Success_ReturnsUpdatedMessage()
+    public async Task CreateHabit_ReadOnlyCredentialDenied_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Denied, policyReason: "read_only_credential");
+
+        var result = await _tools.CreateHabit(_user, "New Habit", "2026-04-01");
+
+        result.Should().StartWith("Error: ");
+        result.Should().Contain("read_only_credential");
+    }
+
+    [Fact]
+    public async Task UpdateHabit_Success_RoutesThroughExecutor()
     {
         var habitId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
 
-        var result = await _tools.UpdateHabit(_user, habitId.ToString(), "Updated Title");
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.UpdateHabit(_user, habitId.ToString(), "Updated Title"));
 
+        request.OperationId.Should().Be("update_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
         result.Should().Contain("Updated habit");
     }
 
     [Fact]
     public async Task UpdateHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Habit not found");
 
         var result = await _tools.UpdateHabit(_user, Guid.NewGuid().ToString(), "Title");
 
@@ -148,22 +194,35 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task DeleteHabit_Success_ReturnsDeletedMessage()
+    public async Task DeleteHabit_Success_RoutesThroughExecutor()
     {
         var habitId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
 
-        var result = await _tools.DeleteHabit(_user, habitId.ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.DeleteHabit(_user, habitId.ToString()));
 
+        request.OperationId.Should().Be("delete_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
         result.Should().Contain("Deleted habit");
+    }
+
+    [Fact]
+    public async Task DeleteHabit_PendingConfirmation_ReturnsConfirmationPrompt()
+    {
+        StubExecutor(AgentOperationStatus.PendingConfirmation, pendingOperationId: Guid.NewGuid());
+
+        var result = await _tools.DeleteHabit(_user, Guid.NewGuid().ToString());
+
+        result.Should().Contain("Confirmation required");
+        result.Should().Contain("confirm_agent_operation_v2");
     }
 
     [Fact]
     public async Task DeleteHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Habit not found");
 
         var result = await _tools.DeleteHabit(_user, Guid.NewGuid().ToString());
 
@@ -171,23 +230,24 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task LogHabit_Success_ReturnsLoggedMessage()
+    public async Task LogHabit_Success_RoutesThroughExecutor()
     {
-        var logId = Guid.NewGuid();
-        var response = new LogHabitResponse(logId, true, 5);
-        _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(response));
+        var habitId = Guid.NewGuid();
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
 
-        var result = await _tools.LogHabit(_user, Guid.NewGuid().ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.LogHabit(_user, habitId.ToString()));
 
+        request.OperationId.Should().Be("log_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
         result.Should().Contain("Logged habit");
     }
 
     [Fact]
     public async Task LogHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<LogHabitResponse>("Habit not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Habit not found");
 
         var result = await _tools.LogHabit(_user, Guid.NewGuid().ToString());
 
@@ -195,21 +255,24 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task SkipHabit_Success_ReturnsSkippedMessage()
+    public async Task SkipHabit_Success_RoutesThroughExecutor()
     {
-        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        var habitId = Guid.NewGuid();
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: habitId.ToString());
 
-        var result = await _tools.SkipHabit(_user, Guid.NewGuid().ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.SkipHabit(_user, habitId.ToString()));
 
+        request.OperationId.Should().Be("skip_habit");
+        request.Surface.Should().Be(AgentExecutionSurface.Mcp);
         result.Should().Contain("Skipped habit");
     }
 
     [Fact]
     public async Task SkipHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Not a recurring habit"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not a recurring habit");
 
         var result = await _tools.SkipHabit(_user, Guid.NewGuid().ToString());
 
@@ -242,15 +305,17 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task DuplicateHabit_Success_ReturnsDuplicatedMessage()
+    public async Task DuplicateHabit_Success_RoutesThroughExecutor()
     {
         var newId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<DuplicateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(newId));
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString());
 
         var habitId = Guid.NewGuid();
-        var result = await _tools.DuplicateHabit(_user, habitId.ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.DuplicateHabit(_user, habitId.ToString()));
 
+        request.OperationId.Should().Be("duplicate_habit");
         result.Should().Contain("Duplicated habit");
         result.Should().Contain(newId.ToString());
     }
@@ -258,8 +323,7 @@ public class HabitToolsTests
     [Fact]
     public async Task DuplicateHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<DuplicateHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Guid>("Habit not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Habit not found");
 
         var result = await _tools.DuplicateHabit(_user, Guid.NewGuid().ToString());
 
@@ -269,13 +333,15 @@ public class HabitToolsTests
     [Fact]
     public async Task MoveHabitParent_Success_WithParent_ReturnsMovedMessage()
     {
-        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var habitId = Guid.NewGuid();
         var parentId = Guid.NewGuid();
-        var result = await _tools.MoveHabitParent(_user, habitId.ToString(), parentId.ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.MoveHabitParent(_user, habitId.ToString(), parentId.ToString()));
 
+        request.OperationId.Should().Be("move_habit_parent");
         result.Should().Contain("Moved habit");
         result.Should().Contain("under parent");
     }
@@ -283,8 +349,7 @@ public class HabitToolsTests
     [Fact]
     public async Task MoveHabitParent_Success_NoParent_ReturnsPromotedMessage()
     {
-        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var result = await _tools.MoveHabitParent(_user, Guid.NewGuid().ToString());
 
@@ -295,8 +360,7 @@ public class HabitToolsTests
     [Fact]
     public async Task MoveHabitParent_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Habit not found");
 
         var result = await _tools.MoveHabitParent(_user, Guid.NewGuid().ToString());
 
@@ -304,15 +368,17 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task CreateSubHabit_Success_ReturnsCreatedMessage()
+    public async Task CreateSubHabit_Success_RoutesThroughExecutor()
     {
         var newId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(newId));
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString(), targetName: "Sub Habit");
 
         var parentId = Guid.NewGuid();
-        var result = await _tools.CreateSubHabit(_user, parentId.ToString(), "Sub Habit");
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.CreateSubHabit(_user, parentId.ToString(), "Sub Habit"));
 
+        request.OperationId.Should().Be("create_sub_habit");
         result.Should().Contain("Created sub-habit 'Sub Habit'");
         result.Should().Contain(newId.ToString());
     }
@@ -320,8 +386,7 @@ public class HabitToolsTests
     [Fact]
     public async Task CreateSubHabit_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Guid>("Parent not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Parent not found");
 
         var result = await _tools.CreateSubHabit(_user, Guid.NewGuid().ToString(), "Sub");
 
@@ -329,25 +394,132 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task ReorderHabits_Success_ReturnsReorderedMessage()
+    public async Task ReorderHabits_Success_RoutesThroughExecutor()
     {
-        _mediator.Send(Arg.Any<ReorderHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var json = $"[{{\"habitId\":\"{Guid.NewGuid()}\",\"position\":0}}]";
-        var result = await _tools.ReorderHabits(_user, json);
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.ReorderHabits(_user, json));
 
+        request.OperationId.Should().Be("reorder_habits");
         result.Should().Contain("Reordered 1 habits");
     }
 
     [Fact]
     public async Task ReorderHabits_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<ReorderHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Invalid positions"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid positions");
 
         var json = "[]";
         var result = await _tools.ReorderHabits(_user, json);
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task UpdateChecklist_Success_RoutesThroughExecutor()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var json = "[{\"text\":\"Item 1\",\"isChecked\":true}]";
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.UpdateChecklist(_user, Guid.NewGuid().ToString(), json));
+
+        request.OperationId.Should().Be("update_checklist");
+        result.Should().Contain("Updated checklist");
+        result.Should().Contain("1 items");
+    }
+
+    [Fact]
+    public async Task UpdateChecklist_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Habit not found");
+
+        var json = "[]";
+        var result = await _tools.UpdateChecklist(_user, Guid.NewGuid().ToString(), json);
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task LinkGoalsToHabit_Success_RoutesThroughExecutor()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var goalId = Guid.NewGuid();
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), goalId.ToString()));
+
+        request.OperationId.Should().Be("link_goals_to_habit");
+        result.Should().Contain("Linked 1 goals");
+    }
+
+    [Fact]
+    public async Task LinkGoalsToHabit_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
+
+        var result = await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task BulkCreateHabits_Success_RoutesThroughExecutorAndFormatsBreakdown()
+    {
+        var id = Guid.NewGuid();
+        var bulkResult = new BulkCreateResult([
+            new BulkCreateItemResult(0, BulkItemStatus.Success, id, "Habit1")
+        ]);
+        StubExecutor(AgentOperationStatus.Succeeded, payload: bulkResult);
+
+        var json = "[{\"title\":\"Habit1\",\"dueDate\":\"2026-04-01\"}]";
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.BulkCreateHabits(_user, json));
+
+        request.OperationId.Should().Be("bulk_create_habits");
+        result.Should().Contain("1 succeeded, 0 failed");
+    }
+
+    [Fact]
+    public async Task BulkCreateHabits_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Limit exceeded");
+
+        var json = "[{\"title\":\"Habit1\",\"dueDate\":\"2026-04-01\"}]";
+        var result = await _tools.BulkCreateHabits(_user, json);
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task BulkDeleteHabits_Success_RoutesThroughExecutor()
+    {
+        var id = Guid.NewGuid();
+        var bulkResult = new BulkDeleteResult([
+            new BulkDeleteItemResult(0, BulkItemStatus.Success, id)
+        ]);
+        StubExecutor(AgentOperationStatus.Succeeded, payload: bulkResult);
+
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.BulkDeleteHabits(_user, id.ToString()));
+
+        request.OperationId.Should().Be("bulk_delete_habits");
+        result.Should().Contain("1/1 deleted successfully");
+    }
+
+    [Fact]
+    public async Task BulkDeleteHabits_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Error");
+
+        var result = await _tools.BulkDeleteHabits(_user, Guid.NewGuid().ToString());
 
         result.Should().StartWith("Error: ");
     }
@@ -396,60 +568,6 @@ public class HabitToolsTests
             .Returns(Result.Failure<BulkSkipResult>("Error"));
 
         var result = await _tools.BulkSkipHabits(_user, Guid.NewGuid().ToString());
-
-        result.Should().StartWith("Error: ");
-    }
-
-    [Fact]
-    public async Task BulkCreateHabits_Success_ReturnsBulkCreateMessage()
-    {
-        var id = Guid.NewGuid();
-        var bulkResult = new BulkCreateResult([
-            new BulkCreateItemResult(0, BulkItemStatus.Success, id, "Habit1")
-        ]);
-        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(bulkResult));
-
-        var json = "[{\"title\":\"Habit1\",\"dueDate\":\"2026-04-01\"}]";
-        var result = await _tools.BulkCreateHabits(_user, json);
-
-        result.Should().Contain("1 succeeded, 0 failed");
-    }
-
-    [Fact]
-    public async Task BulkCreateHabits_Failure_ReturnsError()
-    {
-        _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<BulkCreateResult>("Limit exceeded"));
-
-        var json = "[]";
-        var result = await _tools.BulkCreateHabits(_user, json);
-
-        result.Should().StartWith("Error: ");
-    }
-
-    [Fact]
-    public async Task BulkDeleteHabits_Success_ReturnsBulkDeleteMessage()
-    {
-        var id = Guid.NewGuid();
-        var bulkResult = new BulkDeleteResult([
-            new BulkDeleteItemResult(0, BulkItemStatus.Success, id)
-        ]);
-        _mediator.Send(Arg.Any<BulkDeleteHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(bulkResult));
-
-        var result = await _tools.BulkDeleteHabits(_user, id.ToString());
-
-        result.Should().Contain("1/1 deleted successfully");
-    }
-
-    [Fact]
-    public async Task BulkDeleteHabits_Failure_ReturnsError()
-    {
-        _mediator.Send(Arg.Any<BulkDeleteHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<BulkDeleteResult>("Error"));
-
-        var result = await _tools.BulkDeleteHabits(_user, Guid.NewGuid().ToString());
 
         result.Should().StartWith("Error: ");
     }
@@ -570,53 +688,5 @@ public class HabitToolsTests
         var result = await _tools.GetAllHabitLogs(_user, "2026-04-01", "2026-04-07");
 
         result.Should().Contain("No logs found");
-    }
-
-    [Fact]
-    public async Task UpdateChecklist_Success_ReturnsUpdatedMessage()
-    {
-        _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-
-        var json = "[{\"text\":\"Item 1\",\"isChecked\":true}]";
-        var result = await _tools.UpdateChecklist(_user, Guid.NewGuid().ToString(), json);
-
-        result.Should().Contain("Updated checklist");
-        result.Should().Contain("1 items");
-    }
-
-    [Fact]
-    public async Task UpdateChecklist_Failure_ReturnsError()
-    {
-        _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Habit not found"));
-
-        var json = "[]";
-        var result = await _tools.UpdateChecklist(_user, Guid.NewGuid().ToString(), json);
-
-        result.Should().StartWith("Error: ");
-    }
-
-    [Fact]
-    public async Task LinkGoalsToHabit_Success_ReturnsLinkedMessage()
-    {
-        _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-
-        var goalId = Guid.NewGuid();
-        var result = await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), goalId.ToString());
-
-        result.Should().Contain("Linked 1 goals");
-    }
-
-    [Fact]
-    public async Task LinkGoalsToHabit_Failure_ReturnsError()
-    {
-        _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Not found"));
-
-        var result = await _tools.LinkGoalsToHabit(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
-
-        result.Should().StartWith("Error: ");
     }
 }

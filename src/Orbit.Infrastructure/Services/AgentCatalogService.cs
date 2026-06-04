@@ -470,7 +470,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "log_habit", "skip_habit", "suggest_breakdown"],
+                chatTools: ["create_habit", "update_habit", "bulk_update_habit_emojis", "create_sub_habit", "duplicate_habit", "move_habit", "move_habit_parent", "log_habit", "skip_habit", "suggest_breakdown", "update_checklist", "reorder_habits", "link_goals_to_habit"],
                 mcpTools:
                 [
                     "create_habit",
@@ -522,7 +522,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                chatTools: ["bulk_log_habits", "bulk_skip_habits"],
+                chatTools: ["bulk_log_habits", "bulk_skip_habits", "bulk_create_habits"],
                 mcpTools: ["bulk_create_habits", "bulk_log_habits", "bulk_skip_habits"],
                 controllerActions: ["HabitsController.BulkCreate", "HabitsController.BulkLog", "HabitsController.BulkSkip"]),
 
@@ -536,6 +536,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
+                chatTools: ["bulk_delete_habits"],
                 mcpTools: ["bulk_delete_habits"],
                 controllerActions: ["HabitsController.BulkDelete"]),
 
