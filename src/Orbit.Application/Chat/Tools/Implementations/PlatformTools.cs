@@ -4,7 +4,6 @@ using MediatR;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
 using Orbit.Application.Chat.Tools;
-using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Subscriptions.Commands;
@@ -64,26 +63,6 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         }
 
         return new ToolResult(true, Payload: new { profile, achievements, streak });
-    }
-}
-
-public class ActivateStreakFreezeTool(IMediator mediator) : IAiTool
-{
-    public string Name => "activate_streak_freeze";
-    public string Description => "Activate one available streak freeze for the user.";
-
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new { }
-    };
-
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        var result = await mediator.Send(new ActivateStreakFreezeCommand(userId), ct);
-        return result.IsSuccess
-            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Activated streak freeze", Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
     }
 }
 

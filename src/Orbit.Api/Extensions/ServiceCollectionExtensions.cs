@@ -188,7 +188,6 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetUserFactsTool>();
         builder.Services.AddScoped<IAiTool, DeleteUserFactsTool>();
         builder.Services.AddScoped<IAiTool, GetGamificationOverviewTool>();
-        builder.Services.AddScoped<IAiTool, ActivateStreakFreezeTool>();
         builder.Services.AddScoped<IAiTool, GetReferralOverviewTool>();
         builder.Services.AddScoped<IAiTool, GetSubscriptionOverviewTool>();
         builder.Services.AddScoped<IAiTool, ManageSubscriptionTool>();
