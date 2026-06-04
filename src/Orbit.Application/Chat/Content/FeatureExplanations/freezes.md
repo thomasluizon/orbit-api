@@ -7,7 +7,7 @@ version: 1
 derived_from:
   - src/Orbit.Domain/Entities/User.cs AwardStreakFreezeIfEligible
   - src/Orbit.Domain/Entities/User.cs ApplyStreakFreeze
-  - src/Orbit.Application/Gamification/Commands/ActivateStreakFreezeCommand.cs Handle
+  - src/Orbit.Infrastructure/Services/StreakFreezeAutoActivationService.cs ProcessUserAsync
   - src/Orbit.Application/Common/AppConstants.cs MaxStreakFreezesAccumulated
 ---
 
