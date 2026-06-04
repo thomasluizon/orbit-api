@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace Orbit.IntegrationTests;
@@ -5,6 +6,11 @@ namespace Orbit.IntegrationTests;
 public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory<Program>
 {
     private static int _clientCounter;
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseSetting("Jwt:SecretKey", "OrbitIntegrationTestSecretKey-0123456789-ABCDEF");
+    }
 
     protected override void ConfigureClient(HttpClient client)
     {
