@@ -34,10 +34,14 @@ public static class ServiceCollectionExtensions
         var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
         jwtSettings?.Validate();
 
-        // A blank price ID silently degrades affected users to the wrong currency, so this
-        // check applies in every environment -- the same reasoning as the JWT secret above.
-        var stripeSettings = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>();
-        stripeSettings?.ValidatePriceIds();
+        // A blank price ID silently degrades affected users to the wrong currency, so we fail
+        // fast in deployed environments. Local Development is exempt -- booting the API shouldn't
+        // require full Stripe price config when you aren't touching checkout.
+        if (!builder.Environment.IsDevelopment())
+        {
+            var stripeSettings = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>();
+            stripeSettings?.ValidatePriceIds();
+        }
 
         if (!builder.Environment.IsProduction())
             return builder;
