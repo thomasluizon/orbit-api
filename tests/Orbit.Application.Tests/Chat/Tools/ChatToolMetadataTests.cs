@@ -46,8 +46,21 @@ public class ChatToolMetadataTests
         var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), gamificationService, unitOfWork, logger);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
         var updateHabitTool = new UpdateHabitTool(Repo<Habit>());
+        var listTagsTool = new ListTagsTool(mediator);
+        var createTagTool = new CreateTagTool(mediator);
+        var updateTagTool = new UpdateTagTool(mediator);
+        var deleteTagTool = new DeleteTagTool(mediator);
+        var reorderGoalsTool = new ReorderGoalsTool(mediator);
+        var getReferralCodeTool = new GetReferralCodeTool(mediator);
 
         AssertTool(assignTagsTool, "assign_tags", "tag", "tag_names");
+        JsonSerializer.Serialize(assignTagsTool.GetParameterSchema()).Should().Contain("tag_ids");
+        AssertTool(listTagsTool, "list_tags", "tag", "type", expectReadOnly: true);
+        AssertTool(createTagTool, "create_tag", "tag", "color");
+        AssertTool(updateTagTool, "update_tag", "tag", "tag_id");
+        AssertTool(deleteTagTool, "delete_tag", "tag", "tag_id");
+        AssertTool(reorderGoalsTool, "reorder_goals", "position", "goal_id");
+        AssertTool(getReferralCodeTool, "get_referral_code", "referral", "type");
         AssertTool(bulkUpdateHabitEmojisTool, "bulk_update_habit_emojis", "emojis", "infer_from_title");
         AssertTool(bulkLogHabitsTool, "bulk_log_habits", "multiple", "habit_ids");
         AssertTool(bulkSkipHabitsTool, "bulk_skip_habits", "multiple", "habit_ids");

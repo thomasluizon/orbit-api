@@ -216,6 +216,12 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
         builder.Services.AddScoped<IAiTool, GetHabitMetricsTool>();
         builder.Services.AddScoped<IAiTool, DescribeFeatureTool>();
+        builder.Services.AddScoped<IAiTool, ListTagsTool>();
+        builder.Services.AddScoped<IAiTool, CreateTagTool>();
+        builder.Services.AddScoped<IAiTool, UpdateTagTool>();
+        builder.Services.AddScoped<IAiTool, DeleteTagTool>();
+        builder.Services.AddScoped<IAiTool, ReorderGoalsTool>();
+        builder.Services.AddScoped<IAiTool, GetReferralCodeTool>();
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         builder.Services.AddSingleton<IFeatureExplanationService, FeatureExplanationService>();

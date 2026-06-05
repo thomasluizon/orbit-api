@@ -634,7 +634,7 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
                 featureFlagKeys: ["goal_tracking"],
-                chatTools: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal"],
+                chatTools: ["create_goal", "update_goal", "update_goal_status", "update_goal_progress", "link_habits_to_goal", "reorder_goals"],
                 mcpTools: ["create_goal", "update_goal", "update_goal_progress", "update_goal_status", "reorder_goals", "link_habits_to_goal"],
                 controllerActions:
                 [
@@ -672,6 +672,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
+                chatTools: ["list_tags"],
                 mcpTools: ["list_tags"],
                 controllerActions: ["TagsController.GetTags"]),
 
@@ -685,7 +686,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                chatTools: ["assign_tags"],
+                chatTools: ["assign_tags", "create_tag", "update_tag"],
                 mcpTools: ["create_tag", "update_tag", "assign_tags"],
                 controllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags"]),
 
@@ -699,6 +700,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
+                chatTools: ["delete_tag"],
                 mcpTools: ["delete_tag"],
                 controllerActions: ["TagsController.DeleteTag"]),
 
@@ -963,13 +965,26 @@ public class AgentCatalogService : IAgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_referral_overview"],
-                mcpTools: ["get_referral_stats", "get_referral_code"],
+                mcpTools: ["get_referral_stats"],
                 controllerActions:
                 [
-                    "ReferralController.GetOrCreateCode",
                     "ReferralController.GetStats",
                     "ReferralController.GetDashboard"
                 ]),
+
+            CreateCapability(
+                AgentCapabilityIds.ReferralsWrite,
+                "Write Referrals",
+                "Generates the user's referral code on demand.",
+                "referrals",
+                AgentScopes.WriteReferrals,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                chatTools: ["get_referral_code"],
+                mcpTools: ["get_referral_code"],
+                controllerActions: ["ReferralController.GetOrCreateCode"]),
 
             CreateCapability(
                 AgentCapabilityIds.SubscriptionsRead,

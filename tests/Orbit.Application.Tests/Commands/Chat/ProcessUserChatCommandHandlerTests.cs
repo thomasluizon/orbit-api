@@ -992,6 +992,7 @@ public class ProcessUserChatCommandHandlerTests
         createTool.Name.Returns("create_habit");
         createTool.Description.Returns("Creates");
         createTool.IsReadOnly.Returns(false);
+        createTool.Order.Returns(0);
         createTool.GetParameterSchema().Returns(new { type = "object" });
         createTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
             .Returns(callInfo =>
@@ -1004,6 +1005,7 @@ public class ProcessUserChatCommandHandlerTests
         subTool.Name.Returns("create_sub_habit");
         subTool.Description.Returns("Creates sub");
         subTool.IsReadOnly.Returns(false);
+        subTool.Order.Returns(1);
         subTool.GetParameterSchema().Returns(new { type = "object" });
         subTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
             .Returns(callInfo =>
@@ -1035,6 +1037,60 @@ public class ProcessUserChatCommandHandlerTests
         await handler.Handle(command, CancellationToken.None);
 
         executionOrder.Should().Equal("create_habit", "create_sub_habit");
+    }
+
+    [Fact]
+    public async Task Handle_ToolCallOrdering_RespectsToolOrderProperty()
+    {
+        SetupUserAndPayGate();
+
+        var executionOrder = new List<string>();
+
+        var createTool = OrderedTool("create_habit", 0, executionOrder);
+        var subTool = OrderedTool("create_sub_habit", 1, executionOrder);
+        var assignTool = OrderedTool("assign_tags", 2, executionOrder);
+
+        var handler = CreateHandler(createTool, subTool, assignTool);
+
+        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        // Fed in reverse to prove ordering is driven by Order, not call order.
+        var aiResponseWithTools = new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("assign_tags", "call_3", toolCallArgs),
+                new AiToolCall("create_sub_habit", "call_2", toolCallArgs),
+                new AiToolCall("create_habit", "call_1", toolCallArgs)
+            ],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTools);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
+
+        var command = new ProcessUserChatCommand(UserId, "Create parent, child, and tag");
+        await handler.Handle(command, CancellationToken.None);
+
+        executionOrder.Should().Equal("create_habit", "create_sub_habit", "assign_tags");
+    }
+
+    private static IAiTool OrderedTool(string name, int order, List<string> executionOrder)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns(name);
+        tool.IsReadOnly.Returns(false);
+        tool.Order.Returns(order);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                executionOrder.Add(name);
+                return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: name);
+            });
+        return tool;
     }
 
     // --- suggest_breakdown with no sub habits in args ---
@@ -1086,5 +1142,103 @@ public class ProcessUserChatCommandHandlerTests
         await handler.Handle(command, CancellationToken.None);
 
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // --- Correlation id ---
+
+    [Fact]
+    public async Task Handle_SuccessfulResponse_EchoesCorrelationId()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var command = new ProcessUserChatCommand(UserId, "Hello", CorrelationId: "req-abc-123");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CorrelationId.Should().Be("req-abc-123");
+    }
+
+    [Fact]
+    public async Task Handle_SupportRequestToolCall_AppendsTraceToMessage()
+    {
+        SetupUserAndPayGate();
+
+        JsonElement? dispatchedArgs = null;
+        var supportTool = Substitute.For<IAiTool>();
+        supportTool.Name.Returns("send_support_request");
+        supportTool.Description.Returns("Sends a support request");
+        supportTool.IsReadOnly.Returns(false);
+        supportTool.GetParameterSchema().Returns(new { type = "object" });
+        supportTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                dispatchedArgs = callInfo.ArgAt<JsonElement>(0);
+                return new ToolResult(true, EntityName: "Support request sent");
+            });
+
+        var handler = CreateHandler(supportTool);
+
+        var toolCallArgs = JsonDocument.Parse("""{"message":"My app keeps crashing."}""").RootElement;
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("send_support_request", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Sent!", ToolCalls = null }));
+
+        var command = new ProcessUserChatCommand(UserId, "Contact support", CorrelationId: "req-trace-9");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        dispatchedArgs.Should().NotBeNull();
+        var dispatchedMessage = dispatchedArgs!.Value.GetProperty("message").GetString();
+        dispatchedMessage.Should().Be("My app keeps crashing.\n\n[trace: req-trace-9]");
+    }
+
+    [Fact]
+    public async Task Handle_NonSupportToolCall_DispatchesArgsUnchangedWhenCorrelationIdPresent()
+    {
+        SetupUserAndPayGate();
+
+        JsonElement? dispatchedArgs = null;
+        var createTool = Substitute.For<IAiTool>();
+        createTool.Name.Returns("create_habit");
+        createTool.Description.Returns("Creates a habit");
+        createTool.IsReadOnly.Returns(false);
+        createTool.GetParameterSchema().Returns(new { type = "object" });
+        createTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                dispatchedArgs = callInfo.ArgAt<JsonElement>(0);
+                return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Run");
+            });
+
+        var handler = CreateHandler(createTool);
+
+        const string rawArgs = """{"message":"not a support message","title":"Run"}""";
+        var toolCallArgs = JsonDocument.Parse(rawArgs).RootElement;
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
+
+        var command = new ProcessUserChatCommand(UserId, "Create a habit", CorrelationId: "req-trace-9");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        dispatchedArgs.Should().NotBeNull();
+        dispatchedArgs!.Value.GetRawText().Should().Be(rawArgs);
     }
 }

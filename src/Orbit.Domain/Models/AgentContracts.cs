@@ -270,6 +270,7 @@ public static class AgentCapabilityIds
     public const string UserFactsRead = "user-facts.read";
     public const string UserFactsDelete = "user-facts.delete";
     public const string ReferralsRead = "referrals.read";
+    public const string ReferralsWrite = "referrals.write";
     public const string SubscriptionsRead = "subscriptions.read";
     public const string SubscriptionsManage = "subscriptions.manage";
     public const string ApiKeysRead = "api-keys.read";
@@ -310,6 +311,7 @@ public static class AgentScopes
     public const string ReadUserFacts = "read_user_facts";
     public const string DeleteUserFacts = "delete_user_facts";
     public const string ReadReferrals = "read_referrals";
+    public const string WriteReferrals = "write_referrals";
     public const string ReadSubscriptions = "read_subscriptions";
     public const string ManageSubscriptions = "manage_subscriptions";
     public const string ReadApiKeys = "read_api_keys";
@@ -348,6 +350,7 @@ public static class AgentScopes
         ReadUserFacts,
         DeleteUserFacts,
         ReadReferrals,
+        WriteReferrals,
         ReadSubscriptions
     ];
 }

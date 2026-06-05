@@ -11,6 +11,8 @@ public class CreateSubHabitTool(
 {
     public string Name => "create_sub_habit";
 
+    public int Order => 1;
+
     public string Description =>
         "Create a sub-habit under an existing parent habit. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user.";
 
