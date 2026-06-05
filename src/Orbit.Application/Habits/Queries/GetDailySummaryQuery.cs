@@ -14,7 +14,6 @@ public record GetDailySummaryQuery(
     Guid UserId,
     DateOnly DateFrom,
     DateOnly DateTo,
-    bool IncludeOverdue,
     string Language) : IRequest<Result<DailySummaryResponse>>;
 
 public class GetDailySummaryQueryHandler(
@@ -81,7 +80,6 @@ public class GetDailySummaryQueryHandler(
             summaryHabits,
             request.DateFrom,
             request.DateTo,
-            request.IncludeOverdue,
             effectiveLanguage,
             currentLocalTime,
             cancellationToken);
