@@ -60,6 +60,14 @@ public class McpExecutorBridge(IAgentOperationExecutor operationExecutor)
     private static string BuildPendingMessage(AgentOperationResult operation)
     {
         var pendingId = operation.PendingOperationId?.ToString() ?? "unknown";
+
+        if (operation.PolicyReason == "step_up_required")
+        {
+            return "Step-up verification required before this action runs. Request a code via " +
+                   $"step_up_agent_operation_v2 for pending operation {pendingId}, verify it with " +
+                   "verify_step_up_agent_operation_v2, then retry with the returned confirmation token.";
+        }
+
         return $"Confirmation required before this action runs. Confirm pending operation {pendingId} " +
                "via confirm_agent_operation_v2, then retry with the returned confirmation token.";
     }

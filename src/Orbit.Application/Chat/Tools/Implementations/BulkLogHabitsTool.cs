@@ -26,6 +26,12 @@ public class BulkLogHabitsTool(
                 type = JsonSchemaTypes.Array,
                 items = new { type = JsonSchemaTypes.String },
                 description = "Array of habit IDs to log as completed"
+            },
+            date = new
+            {
+                type = JsonSchemaTypes.String,
+                nullable = true,
+                description = "Date to log for in YYYY-MM-DD format (defaults to today)"
             }
         },
         required = new[] { "habit_ids" }
@@ -47,6 +53,7 @@ public class BulkLogHabitsTool(
             return new ToolResult(false, Error: "No valid habit IDs provided.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
         var loggedNames = new List<string>();
 
         // Batch-load all requested habits in a single query instead of N+1
@@ -58,7 +65,7 @@ public class BulkLogHabitsTool(
         foreach (var habitId in habitIds)
         {
             var habit = habits.FirstOrDefault(h => h.Id == habitId);
-            if (habit is not null && await TryLogHabit(habit, today, ct))
+            if (habit is not null && await TryLogHabit(habit, targetDate, ct))
                 loggedNames.Add(habit.Title);
         }
 
@@ -68,12 +75,12 @@ public class BulkLogHabitsTool(
         return new ToolResult(true, EntityName: string.Join(", ", loggedNames));
     }
 
-    private async Task<bool> TryLogHabit(Habit habit, DateOnly today, CancellationToken ct)
+    private async Task<bool> TryLogHabit(Habit habit, DateOnly targetDate, CancellationToken ct)
     {
-        if (habit.Logs.Any(l => l.Date == today))
+        if (habit.Logs.Any(l => l.Date == targetDate))
             return false;
 
-        var logResult = habit.Log(today);
+        var logResult = habit.Log(targetDate);
         if (logResult.IsFailure)
             return false;
 

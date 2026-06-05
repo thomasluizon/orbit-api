@@ -177,6 +177,44 @@ public class SubscriptionToolsTests
         result.Should().StartWith("Error: ");
     }
 
+    // --- ManageSubscription (high-risk, step-up) ---
+
+    [Fact]
+    public async Task ManageSubscription_Success_RoutesThroughExecutor()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded, targetName: "Created billing portal session");
+
+        var result = await _tools.ManageSubscription(_user, "create_portal");
+
+        var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+            .GetArguments()[0]!;
+        request.OperationId.Should().Be("manage_subscription");
+        result.Should().Contain("Created billing portal session");
+    }
+
+    [Fact]
+    public async Task ManageSubscription_StepUpRequired_ReturnsActionableStepUpMessage()
+    {
+        StubStepUp();
+
+        var result = await _tools.ManageSubscription(_user, "create_portal");
+
+        result.Should().Contain("Step-up verification required");
+        result.Should().Contain("step_up_agent_operation_v2");
+        result.Should().Contain("verify_step_up_agent_operation_v2");
+    }
+
+    private void StubStepUp()
+    {
+        var response = new AgentExecuteOperationResponse(new AgentOperationResult(
+            "manage_subscription", "manage_subscription", AgentRiskClass.High, AgentConfirmationRequirement.StepUp,
+            AgentOperationStatus.PendingConfirmation, PolicyReason: "step_up_required", PendingOperationId: Guid.NewGuid()));
+
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
+    }
+
     // --- GetUserId ---
 
     [Fact]

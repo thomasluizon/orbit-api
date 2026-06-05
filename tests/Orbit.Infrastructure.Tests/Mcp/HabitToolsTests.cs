@@ -525,23 +525,23 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task BulkLogHabits_Success_ReturnsBulkLogMessage()
+    public async Task BulkLogHabits_Success_RoutesThroughExecutor()
     {
         var id = Guid.NewGuid();
-        var bulkResult = new BulkLogResult([new BulkLogItemResult(0, BulkItemStatus.Success, id, Guid.NewGuid())]);
-        _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(bulkResult));
+        StubExecutor(AgentOperationStatus.Succeeded, targetName: "Read");
 
-        var result = await _tools.BulkLogHabits(_user, id.ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.BulkLogHabits(_user, id.ToString()));
 
-        result.Should().Contain("Bulk log: 1/1 logged successfully");
+        request.OperationId.Should().Be("bulk_log_habits");
+        result.Should().Contain("Bulk log: 1 habit(s) processed");
     }
 
     [Fact]
     public async Task BulkLogHabits_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<BulkLogResult>("Error"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Error");
 
         var result = await _tools.BulkLogHabits(_user, Guid.NewGuid().ToString());
 
@@ -549,23 +549,23 @@ public class HabitToolsTests
     }
 
     [Fact]
-    public async Task BulkSkipHabits_Success_ReturnsBulkSkipMessage()
+    public async Task BulkSkipHabits_Success_RoutesThroughExecutor()
     {
         var id = Guid.NewGuid();
-        var bulkResult = new BulkSkipResult([new BulkSkipItemResult(0, BulkItemStatus.Success, id)]);
-        _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(bulkResult));
+        StubExecutor(AgentOperationStatus.Succeeded, targetName: "Read");
 
-        var result = await _tools.BulkSkipHabits(_user, id.ToString());
+        AgentExecuteOperationRequest request = null!;
+        string result = string.Empty;
+        request = await CapturedRequestAsync(async () => result = await _tools.BulkSkipHabits(_user, id.ToString()));
 
-        result.Should().Contain("Bulk skip: 1/1 skipped successfully");
+        request.OperationId.Should().Be("bulk_skip_habits");
+        result.Should().Contain("Bulk skip: 1 habit(s) processed");
     }
 
     [Fact]
     public async Task BulkSkipHabits_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<BulkSkipResult>("Error"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Error");
 
         var result = await _tools.BulkSkipHabits(_user, Guid.NewGuid().ToString());
 

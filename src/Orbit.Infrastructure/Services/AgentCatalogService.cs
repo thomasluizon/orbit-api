@@ -812,7 +812,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["update_notifications"],
-                mcpTools: ["mark_notification_read", "mark_all_notifications_read"],
+                mcpTools: ["mark_notification_read", "mark_all_notifications_read", "subscribe_push", "unsubscribe_push", "test_push"],
                 controllerActions:
                 [
                     "NotificationController.MarkAsRead",
@@ -867,6 +867,7 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 featureFlagKeys: ["calendar_integration"],
                 chatTools: ["manage_calendar_sync"],
+                mcpTools: ["manage_calendar_sync"],
                 controllerActions:
                 [
                     "CalendarController.GetAutoSyncState",
@@ -908,6 +909,7 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["get_checklist_templates"],
+                mcpTools: ["get_checklist_templates"],
                 controllerActions: ["ChecklistTemplatesController.GetTemplates"]),
 
             CreateCapability(
@@ -922,6 +924,7 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["create_checklist_template", "delete_checklist_template"],
+                mcpTools: ["create_checklist_template", "delete_checklist_template"],
                 controllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"]),
 
             CreateCapability(
@@ -1016,6 +1019,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.StepUp,
                 chatTools: ["manage_subscription"],
+                mcpTools: ["manage_subscription"],
                 controllerActions:
                 [
                     "SubscriptionController.CreateCheckout",
@@ -1037,6 +1041,7 @@ public class AgentCatalogService : IAgentCatalogService
                 planRequirement: "Pro",
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["get_api_keys"],
+                mcpTools: ["get_api_keys"],
                 controllerActions: ["ApiKeysController.GetApiKeys"]),
 
             CreateCapability(
@@ -1052,6 +1057,7 @@ public class AgentCatalogService : IAgentCatalogService
                 planRequirement: "Pro",
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["manage_api_keys"],
+                mcpTools: ["manage_api_keys"],
                 controllerActions: ["ApiKeysController.CreateApiKey", "ApiKeysController.RevokeApiKey"]),
 
             CreateCapability(
@@ -1065,6 +1071,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["send_support_request"],
+                mcpTools: ["send_support_request"],
                 controllerActions: ["SupportController.SendSupport"]),
 
             CreateCapability(
@@ -1102,6 +1109,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.StepUp,
                 chatTools: ["manage_account"],
+                mcpTools: ["manage_account"],
                 controllerActions:
                 [
                     "AuthController.RequestDeletion",

@@ -26,6 +26,12 @@ public class BulkSkipHabitsTool(
                 type = JsonSchemaTypes.Array,
                 items = new { type = JsonSchemaTypes.String },
                 description = "Array of habit IDs to skip"
+            },
+            date = new
+            {
+                type = JsonSchemaTypes.String,
+                nullable = true,
+                description = "Date to skip in YYYY-MM-DD format (defaults to today)"
             }
         },
         required = new[] { "habit_ids" }
@@ -47,6 +53,7 @@ public class BulkSkipHabitsTool(
             return new ToolResult(false, Error: "No valid habit IDs provided.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
         var skippedNames = new List<string>();
 
         // Batch-load all requested habits in a single query instead of N+1
@@ -58,7 +65,7 @@ public class BulkSkipHabitsTool(
         foreach (var habitId in habitIds)
         {
             var habit = habits.FirstOrDefault(h => h.Id == habitId);
-            if (habit is not null && await TrySkipHabit(habit, today, ct))
+            if (habit is not null && await TrySkipHabit(habit, targetDate, today, ct))
                 skippedNames.Add(habit.Title);
         }
 
@@ -68,7 +75,7 @@ public class BulkSkipHabitsTool(
         return new ToolResult(true, EntityName: string.Join(", ", skippedNames));
     }
 
-    private async Task<bool> TrySkipHabit(Habit habit, DateOnly today, CancellationToken ct)
+    private async Task<bool> TrySkipHabit(Habit habit, DateOnly targetDate, DateOnly today, CancellationToken ct)
     {
         if (habit.IsCompleted)
             return false;
@@ -79,16 +86,16 @@ public class BulkSkipHabitsTool(
             return true;
         }
 
-        if (!habit.IsFlexible && habit.DueDate > today)
+        if (!habit.IsFlexible && habit.DueDate > targetDate)
             return false;
 
         if (habit.IsFlexible)
         {
-            var remaining = HabitScheduleService.GetRemainingCompletions(habit, today, habit.Logs);
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
             if (remaining <= 0)
                 return false;
 
-            var skipResult = habit.SkipFlexible(today);
+            var skipResult = habit.SkipFlexible(targetDate);
             if (skipResult.IsFailure)
                 return false;
 
@@ -96,7 +103,7 @@ public class BulkSkipHabitsTool(
         }
         else
         {
-            habit.AdvanceDueDate(today);
+            habit.AdvanceDueDate(targetDate);
         }
 
         return true;

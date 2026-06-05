@@ -45,6 +45,8 @@ Dev-only. `BearerSecuritySchemeTransformer` adds the JWT bearer scheme. New endp
 
 `Orbit.Api/Mcp/Tools/*Tools.cs` exposes MediatR commands/queries as MCP tools for the agent surface. When you add a new command/query, decide whether to expose it as an MCP tool — most write operations should be exposed so Astra can perform them.
 
+**MCP tools route MUTATIONS through `McpExecutorBridge` → `IAgentOperationExecutor`** so every mutation gets uniform policy evaluation (read-only-credential denial, scope/plan/feature-flag gates, confirmation + step-up gating) and an `AgentAuditLogs` row. `mediator.Send` inside an MCP tool is permitted ONLY for read queries (`*Query`). Dispatching a `*Command` (mutation) from an MCP tool bypasses that layer and fails the `McpToolsDoNotDispatchCommands` architecture guard (`tests/Orbit.Infrastructure.Tests/Mcp`). Each mutation wrapper forwards the backing chat tool's Name as the `operationId` plus a snake_case argument object matching that tool's schema; destructive/high-risk wrappers forward the caller's `confirmationToken`.
+
 ## Patterns to mirror
 
 | Want to add… | Look at… |
