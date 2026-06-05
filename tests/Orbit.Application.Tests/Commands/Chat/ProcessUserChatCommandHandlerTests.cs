@@ -1143,4 +1143,102 @@ public class ProcessUserChatCommandHandlerTests
 
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    // --- Correlation id ---
+
+    [Fact]
+    public async Task Handle_SuccessfulResponse_EchoesCorrelationId()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var command = new ProcessUserChatCommand(UserId, "Hello", CorrelationId: "req-abc-123");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CorrelationId.Should().Be("req-abc-123");
+    }
+
+    [Fact]
+    public async Task Handle_SupportRequestToolCall_AppendsTraceToMessage()
+    {
+        SetupUserAndPayGate();
+
+        JsonElement? dispatchedArgs = null;
+        var supportTool = Substitute.For<IAiTool>();
+        supportTool.Name.Returns("send_support_request");
+        supportTool.Description.Returns("Sends a support request");
+        supportTool.IsReadOnly.Returns(false);
+        supportTool.GetParameterSchema().Returns(new { type = "object" });
+        supportTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                dispatchedArgs = callInfo.ArgAt<JsonElement>(0);
+                return new ToolResult(true, EntityName: "Support request sent");
+            });
+
+        var handler = CreateHandler(supportTool);
+
+        var toolCallArgs = JsonDocument.Parse("""{"message":"My app keeps crashing."}""").RootElement;
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("send_support_request", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Sent!", ToolCalls = null }));
+
+        var command = new ProcessUserChatCommand(UserId, "Contact support", CorrelationId: "req-trace-9");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        dispatchedArgs.Should().NotBeNull();
+        var dispatchedMessage = dispatchedArgs!.Value.GetProperty("message").GetString();
+        dispatchedMessage.Should().Be("My app keeps crashing.\n\n[trace: req-trace-9]");
+    }
+
+    [Fact]
+    public async Task Handle_NonSupportToolCall_DispatchesArgsUnchangedWhenCorrelationIdPresent()
+    {
+        SetupUserAndPayGate();
+
+        JsonElement? dispatchedArgs = null;
+        var createTool = Substitute.For<IAiTool>();
+        createTool.Name.Returns("create_habit");
+        createTool.Description.Returns("Creates a habit");
+        createTool.IsReadOnly.Returns(false);
+        createTool.GetParameterSchema().Returns(new { type = "object" });
+        createTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                dispatchedArgs = callInfo.ArgAt<JsonElement>(0);
+                return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Run");
+            });
+
+        var handler = CreateHandler(createTool);
+
+        const string rawArgs = """{"message":"not a support message","title":"Run"}""";
+        var toolCallArgs = JsonDocument.Parse(rawArgs).RootElement;
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
+
+        var command = new ProcessUserChatCommand(UserId, "Create a habit", CorrelationId: "req-trace-9");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        dispatchedArgs.Should().NotBeNull();
+        dispatchedArgs!.Value.GetRawText().Should().Be(rawArgs);
+    }
 }
