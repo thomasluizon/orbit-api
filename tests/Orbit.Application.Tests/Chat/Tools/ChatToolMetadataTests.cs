@@ -31,6 +31,9 @@ public class ChatToolMetadataTests
         var deleteGoalTool = new DeleteGoalTool(Repo<Goal>(), unitOfWork);
         var deleteHabitTool = new DeleteHabitTool(Repo<Habit>());
         var duplicateHabitTool = new DuplicateHabitTool(mediator);
+        var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);
+        var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
+        var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
         var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService);
         var linkHabitsTool = new LinkHabitsToGoalTool(Repo<Goal>(), Repo<Habit>(), unitOfWork);
         var logHabitTool = new LogHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
@@ -54,6 +57,9 @@ public class ChatToolMetadataTests
         AssertTool(deleteGoalTool, "delete_goal", "goal", "goal_id");
         AssertTool(deleteHabitTool, "delete_habit", "habit", "habit_id");
         AssertTool(duplicateHabitTool, "duplicate_habit", "duplicate", "habit_id");
+        AssertTool(getDailySummaryTool, "get_daily_summary", "summary", "date_from", expectReadOnly: true);
+        AssertTool(getRetrospectiveTool, "get_retrospective", "retrospective", "period", expectReadOnly: true);
+        AssertTool(getHabitMetricsTool, "get_habit_metrics", "metrics", "habit_id", expectReadOnly: true);
         AssertTool(goalReviewTool, "review_goals", "review", "properties", expectReadOnly: true);
         AssertTool(linkHabitsTool, "link_habits_to_goal", "Link", "habit_ids");
         AssertTool(logHabitTool, "log_habit", "habit", "date");

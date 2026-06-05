@@ -550,6 +550,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
+                chatTools: ["get_habit_metrics"],
                 mcpTools: ["get_habit_metrics"],
                 controllerActions: ["HabitsController.GetMetrics"]),
 
@@ -565,6 +566,7 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 planRequirement: "Pro",
                 featureFlagKeys: ["ai_summary"],
+                chatTools: ["get_daily_summary"],
                 mcpTools: ["get_daily_summary"],
                 controllerActions: ["HabitsController.GetDailySummary"]),
 
@@ -580,6 +582,7 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 planRequirement: "YearlyPro",
                 featureFlagKeys: ["ai_retrospective"],
+                chatTools: ["get_retrospective"],
                 mcpTools: ["get_retrospective"],
                 controllerActions: ["HabitsController.GetRetrospective"]),
 
