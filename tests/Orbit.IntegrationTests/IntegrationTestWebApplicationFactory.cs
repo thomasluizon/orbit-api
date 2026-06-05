@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Orbit.Application.Common;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.IntegrationTests;
 
@@ -36,6 +38,8 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
     /// </summary>
     public CapturingBillingService BillingService { get; } = new();
 
+    public CapturingEmailService Email { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("Jwt:SecretKey", "OrbitIntegrationTestSecretKey-0123456789-ABCDEF");
@@ -43,6 +47,8 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
         builder.ConfigureTestServices(services =>
         {
             services.AddScoped<IBillingService>(_ => BillingService);
+            services.RemoveAll<IEmailService>();
+            services.AddSingleton<IEmailService>(Email);
         });
     }
 
@@ -71,4 +77,24 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
 
         return $"198.51.{thirdOctet}.{fourthOctet}";
     }
+}
+
+public sealed class CapturingEmailService : IEmailService
+{
+    public string? LastVerificationCode { get; private set; }
+
+    public Task SendWelcomeEmailAsync(string toEmail, string userName, string language = "en", CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task SendVerificationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
+    {
+        LastVerificationCode = code;
+        return Task.CompletedTask;
+    }
+
+    public Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task SendAccountDeletionCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }
