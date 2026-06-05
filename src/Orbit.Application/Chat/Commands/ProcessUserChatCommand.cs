@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -34,7 +35,8 @@ public record ChatResponse(
     IReadOnlyList<ActionResult> Actions,
     IReadOnlyList<AgentOperationResult>? Operations = null,
     IReadOnlyList<PendingAgentOperation>? PendingOperations = null,
-    IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null);
+    IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null,
+    string? CorrelationId = null);
 
 public record ActionResult(
     string Type,
@@ -89,6 +91,10 @@ public partial class ProcessUserChatCommandHandler(
 {
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
+
+    // Mirrors SendSupportCommandValidator's Message MaximumLength so the appended
+    // trace line never pushes the support body past what the command will accept.
+    private const int MaxSupportMessageLength = 5000;
 
     public async Task<Result<ChatResponse>> Handle(
         ProcessUserChatCommand request,
@@ -245,7 +251,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.ActionResults,
             executionResults.OperationResults,
             executionResults.PendingOperations,
-            executionResults.PolicyDenials));
+            executionResults.PolicyDenials,
+            request.CorrelationId));
     }
 
     /// <summary>
@@ -353,10 +360,14 @@ public partial class ProcessUserChatCommandHandler(
                 null);
         }
 
+        var dispatchArgs = call.Name == "send_support_request" && !string.IsNullOrWhiteSpace(request.CorrelationId)
+            ? AppendSupportTrace(call.Args, request.CorrelationId)
+            : call.Args;
+
         var executionResponse = await execution.OperationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             request.UserId,
             call.Name,
-            call.Args,
+            dispatchArgs,
             AgentExecutionSurface.Chat,
             request.AuthMethod,
             request.GrantedScopes,
@@ -843,6 +854,29 @@ public partial class ProcessUserChatCommandHandler(
         var parts = toolName.Split('_');
         return string.Concat(parts.Select(p =>
             string.IsNullOrEmpty(p) ? p : char.ToUpper(p[0], CultureInfo.InvariantCulture) + p[1..]));
+    }
+
+    /// <summary>
+    /// Returns a copy of the send_support_request args with the correlation id appended to
+    /// the message body as a "[trace: {id}]" line, so emailed support tickets carry the trace.
+    /// The append respects the support Message length cap; if there is no string message the
+    /// args are returned unchanged.
+    /// </summary>
+    private static JsonElement AppendSupportTrace(JsonElement args, string correlationId)
+    {
+        var node = JsonNode.Parse(args.GetRawText());
+        if (node is not JsonObject argsObject || argsObject["message"] is not JsonValue messageValue
+            || !messageValue.TryGetValue(out string? message) || message is null)
+        {
+            return args;
+        }
+
+        var suffix = $"\n\n[trace: {correlationId}]";
+        var available = MaxSupportMessageLength - suffix.Length;
+        var trimmedMessage = message.Length > available ? message[..Math.Max(0, available)] : message;
+        argsObject["message"] = trimmedMessage + suffix;
+
+        return JsonSerializer.Deserialize<JsonElement>(argsObject.ToJsonString());
     }
 
     /// <summary>
