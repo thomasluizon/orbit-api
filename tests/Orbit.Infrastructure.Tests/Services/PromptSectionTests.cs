@@ -95,6 +95,15 @@ public class GlobalRulesSectionTests
         result.Should().Contain("no more, no fewer");
         result.Should().Contain("Indirect references");
     }
+
+    [Fact]
+    public void Build_ContainsDescribeFeaturePointer()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().Contain("describe_feature");
+    }
 }
 
 public class StructuringStrategySectionTests

@@ -235,6 +235,7 @@ public static class AgentCapabilityIds
     public const string CatalogCapabilitiesRead = "catalog.capabilities.read";
     public const string CatalogDataRead = "catalog.data.read";
     public const string CatalogSurfacesRead = "catalog.surfaces.read";
+    public const string DescribeFeature = "feature.describe";
     public const string ConfigRead = "config.read";
     public const string HabitsRead = "habits.read";
     public const string HabitsWrite = "habits.write";
