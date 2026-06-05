@@ -4,19 +4,27 @@ using MediatR;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
 using Orbit.Application.Common;
-using Orbit.Application.Referrals.Commands;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.Mcp.Tools;
 
+/// <summary>
+/// MCP subscription and referral tools. <c>get_referral_code</c> is a mutation (it generates and
+/// persists a code on demand), so it routes through <see cref="McpExecutorBridge"/> →
+/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
+/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
+/// <c>AgentAuditLogs</c> trail; the chat tool returns the code as the result target name. The
+/// <c>get_subscription_status</c> and <c>get_referral_stats</c> reads stay on MediatR.
+/// </summary>
 [McpServerToolType]
 public class SubscriptionTools(
     IGenericRepository<User> userRepository,
     IPayGateService payGate,
     IMediator mediator,
-    IOptions<FrontendSettings> frontendSettings)
+    IOptions<FrontendSettings> frontendSettings,
+    McpExecutorBridge executorBridge)
 {
     [McpServerTool(Name = "get_subscription_status"), Description("Get the user's subscription status, plan, trial info, and AI message usage.")]
     public async Task<string> GetSubscriptionStatus(
@@ -63,13 +71,11 @@ public class SubscriptionTools(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var result = await mediator.Send(new GetOrCreateReferralCodeCommand(userId), cancellationToken);
+        var result = await executorBridge.ExecuteAsync(user, "get_referral_code", new { }, confirmationToken: null, cancellationToken);
 
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        return $"Referral Code: {result.Value}\nLink: {frontendSettings.Value.BaseUrl}/r/{result.Value}";
+        return result.Succeeded
+            ? $"Referral Code: {result.TargetName}\nLink: {frontendSettings.Value.BaseUrl}/r/{result.TargetName}"
+            : result.Message;
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

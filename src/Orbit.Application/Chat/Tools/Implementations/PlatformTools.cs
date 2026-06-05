@@ -5,6 +5,7 @@ using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Gamification.Queries;
+using Orbit.Application.Referrals.Commands;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Queries;
@@ -83,6 +84,26 @@ public class GetReferralOverviewTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetReferralDashboardQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
+            : new ToolResult(false, Error: result.Error);
+    }
+}
+
+public class GetReferralCodeTool(IMediator mediator) : IAiTool
+{
+    public string Name => "get_referral_code";
+    public string Description => "Get or create the user's referral code (generates one if absent).";
+
+    public object GetParameterSchema() => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new { }
+    };
+
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var result = await mediator.Send(new GetOrCreateReferralCodeCommand(userId), ct);
+        return result.IsSuccess
+            ? new ToolResult(true, EntityId: userId.ToString(), EntityName: result.Value, Payload: new { code = result.Value })
             : new ToolResult(false, Error: result.Error);
     }
 }

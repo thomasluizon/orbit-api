@@ -3,13 +3,14 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Application.Common;
-using Orbit.Application.Referrals.Commands;
 using Orbit.Application.Referrals.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
@@ -18,6 +19,7 @@ public class SubscriptionToolsTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly SubscriptionTools _tools;
     private readonly ClaimsPrincipal _user;
     private readonly Guid _userId = Guid.NewGuid();
@@ -25,10 +27,20 @@ public class SubscriptionToolsTests
     public SubscriptionToolsTests()
     {
         var frontendSettings = Options.Create(new FrontendSettings { BaseUrl = "https://app.useorbit.org" });
-        _tools = new SubscriptionTools(_userRepo, _payGate, _mediator, frontendSettings);
+        _tools = new SubscriptionTools(_userRepo, _payGate, _mediator, frontendSettings, new McpExecutorBridge(_executor));
 
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, _userId.ToString()) };
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private void StubExecutor(AgentOperationStatus status, string? targetName = null, string? policyReason = null)
+    {
+        var response = new AgentExecuteOperationResponse(new AgentOperationResult(
+            "operation", "operation", AgentRiskClass.Low, AgentConfirmationRequirement.None,
+            status, TargetName: targetName, PolicyReason: policyReason));
+
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
     }
 
     // --- GetSubscriptionStatus ---
@@ -141,13 +153,16 @@ public class SubscriptionToolsTests
     // --- GetReferralCode ---
 
     [Fact]
-    public async Task GetReferralCode_Success_ReturnsCodeAndLink()
+    public async Task GetReferralCode_Success_RoutesThroughExecutorAndReturnsCodeAndLink()
     {
-        _mediator.Send(Arg.Any<GetOrCreateReferralCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success("XYZ789"));
+        StubExecutor(AgentOperationStatus.Succeeded, targetName: "XYZ789");
 
         var result = await _tools.GetReferralCode(_user);
 
+        var request = (AgentExecuteOperationRequest)_executor.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+            .GetArguments()[0]!;
+        request.OperationId.Should().Be("get_referral_code");
         result.Should().Contain("Referral Code: XYZ789");
         result.Should().Contain("Link: https://app.useorbit.org/r/XYZ789");
     }
@@ -155,8 +170,7 @@ public class SubscriptionToolsTests
     [Fact]
     public async Task GetReferralCode_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<GetOrCreateReferralCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<string>("User not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "User not found");
 
         var result = await _tools.GetReferralCode(_user);
 
