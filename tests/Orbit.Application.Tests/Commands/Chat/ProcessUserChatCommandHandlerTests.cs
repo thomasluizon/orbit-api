@@ -562,6 +562,78 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().BeEmpty();
     }
 
+    // --- Read-only tool surfacing related surfaces ---
+
+    [Fact]
+    public async Task Handle_ReadOnlyToolWithRelatedSurfaces_SurfacesThemOnResponse()
+    {
+        SetupUserAndPayGate();
+
+        var describeTool = Substitute.For<IAiTool>();
+        describeTool.Name.Returns("describe_feature");
+        describeTool.Description.Returns("Explains a feature");
+        describeTool.IsReadOnly.Returns(true);
+        describeTool.GetParameterSchema().Returns(new { type = "object" });
+        describeTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, Payload: new
+            {
+                key = "streaks",
+                related_surfaces = new[] { "gamification", "today" },
+                markdown = "# Streaks"
+            }));
+
+        var handler = CreateHandler(describeTool);
+
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("describe_feature", "call_1", JsonDocument.Parse("{}").RootElement)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Streaks work like this.", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "How do streaks work?"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Actions.Should().BeEmpty();
+        result.Value.RelatedSurfaces.Should().Equal("gamification", "today");
+    }
+
+    [Fact]
+    public async Task Handle_MutatingOnlyTurn_LeavesRelatedSurfacesNull()
+    {
+        SetupUserAndPayGate();
+
+        var mockTool = Substitute.For<IAiTool>();
+        mockTool.Name.Returns("create_habit");
+        mockTool.Description.Returns("Creates a habit");
+        mockTool.IsReadOnly.Returns(false);
+        mockTool.GetParameterSchema().Returns(new { type = "object" });
+        mockTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Morning Run"));
+
+        var handler = CreateHandler(mockTool);
+
+        var aiResponseWithTool = new AiResponse
+        {
+            ToolCalls = [new AiToolCall("create_habit", "call_1", JsonDocument.Parse("{}").RootElement)],
+            ConversationContext = TestConversationContext
+        };
+        SetupAiResponse(aiResponseWithTool);
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create a habit"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RelatedSurfaces.Should().BeNull();
+    }
+
     // --- Multiple tool calls in sequence ---
 
     [Fact]
