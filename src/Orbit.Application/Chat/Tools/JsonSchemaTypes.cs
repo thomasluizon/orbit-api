@@ -14,4 +14,5 @@ internal static class JsonSchemaTypes
 
     internal static readonly string[] FrequencyUnitEnum = ["Day", "Week", "Month", "Year"];
     internal static readonly string[] ScheduledReminderWhenEnum = ["day_before", "same_day"];
+    internal static readonly string[] FeatureKeyEnum = ["ai-memory", "freezes", "frequencies", "gamification", "notifications", "paygate", "schedule-math", "streaks"];
 }

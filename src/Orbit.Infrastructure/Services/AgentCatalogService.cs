@@ -425,6 +425,19 @@ public class AgentCatalogService : IAgentCatalogService
                 controllerActions: ["AiController.GetAppSurfaces"]),
 
             CreateCapability(
+                AgentCapabilityIds.DescribeFeature,
+                "Describe Feature",
+                "Returns an authoritative explanation of an Orbit feature's mechanics.",
+                "catalog",
+                AgentScopes.CatalogRead,
+                AgentRiskClass.Low,
+                isMutation: false,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                chatTools: ["describe_feature"],
+                mcpTools: ["describe_feature"]),
+
+            CreateCapability(
                 AgentCapabilityIds.ConfigRead,
                 "Read App Config",
                 "Reads frontend-visible configuration needed by Orbit clients.",

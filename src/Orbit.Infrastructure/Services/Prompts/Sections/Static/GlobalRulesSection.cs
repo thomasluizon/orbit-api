@@ -36,6 +36,7 @@ public class GlobalRulesSection : IPromptSection
                 - If NO habit in the index clearly matches, do NOT substitute a related habit. Tell the user briefly that you don't see a matching habit and ask if they want to create one.
                 - When the user describes multiple activities, log exactly the habits they described - no more, no fewer.
                 - This rule restricts SUBSTITUTION ONLY. Indirect references like "log that one", "mark the first one done", "skip it", or "complete it" after you have already named a specific habit are still valid - resolve them to the habit you were just discussing, then act.
+            19. EXPLAIN MECHANICS WITH describe_feature. When the user asks how an Orbit mechanic actually works (streaks, freezes, frequencies, XP/levels/achievements, free-vs-pro limits, reminders/notifications, schedule/overdue rules, or AI memory), call describe_feature with the matching feature_key and base your answer on what it returns instead of guessing.
             """);
         return sb.ToString();
     }

@@ -11,6 +11,7 @@ using Orbit.Api.OAuth;
 using Orbit.Api.OpenApi;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Behaviors;
+using Orbit.Application.Chat.FeatureExplanations;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
@@ -214,6 +215,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetDailySummaryTool>();
         builder.Services.AddScoped<IAiTool, GetRetrospectiveTool>();
         builder.Services.AddScoped<IAiTool, GetHabitMetricsTool>();
+        builder.Services.AddScoped<IAiTool, DescribeFeatureTool>();
         builder.Services.AddScoped<IAiTool, ListTagsTool>();
         builder.Services.AddScoped<IAiTool, CreateTagTool>();
         builder.Services.AddScoped<IAiTool, UpdateTagTool>();
@@ -222,6 +224,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiTool, GetReferralCodeTool>();
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
+        builder.Services.AddSingleton<IFeatureExplanationService, FeatureExplanationService>();
 
         // Handler Parameter Objects
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitRepositories>(sp =>
@@ -460,7 +463,8 @@ public static class ServiceCollectionExtensions
             .WithTools<NotificationTools>()
             .WithTools<SubscriptionTools>()
             .WithTools<UserFactTools>()
-            .WithTools<CalendarTools>();
+            .WithTools<CalendarTools>()
+            .WithTools<FeatureTools>();
 
         // Controllers
         builder.Services.AddControllers()
