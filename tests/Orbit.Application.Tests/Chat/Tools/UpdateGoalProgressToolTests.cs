@@ -59,13 +59,31 @@ public class UpdateGoalProgressToolTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_MissingGoalName_ReturnsError()
+    public async Task ExecuteAsync_MissingGoalIdentifier_ReturnsError()
     {
         var args = JsonDocument.Parse("{\"current_value\": 5}").RootElement;
         var result = await _tool.ExecuteAsync(args, UserId, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("goal_name is required");
+        result.Error.Should().Contain("Provide either goal_id or goal_name");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GoalById_UpdatesProgress()
+    {
+        var goal = Goal.Create(UserId, "Lose Weight", 10, "kg").Value;
+        _goalRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goal);
+
+        var args = JsonDocument.Parse($"{{\"goal_id\": \"{goal.Id}\", \"current_value\": 5}}").RootElement;
+        var result = await _tool.ExecuteAsync(args, UserId, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.EntityId.Should().Be(goal.Id.ToString());
+        await _progressLogRepo.Received(1).AddAsync(Arg.Any<GoalProgressLog>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

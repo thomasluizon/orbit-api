@@ -13,7 +13,9 @@ public class AssignTagsTool(
     public string Name => "assign_tags";
 
     public string Description =>
-        "Assign tags to a habit by name. Existing tags with matching names will be reused. New tag names will be auto-created. Only use when the user explicitly asks to tag a habit. WARNING: This REPLACES all existing tags. To add tags, include the existing tags in the list.";
+        "Assign tags to a habit, replacing all existing tags. Provide either tag_names (existing names are reused, new names are auto-created) OR tag_ids (existing tag IDs, no auto-create). Only use when the user explicitly asks to tag a habit. WARNING: This REPLACES all existing tags. To add tags, include the existing tags in the list.";
+
+    public int Order => 2;
 
     public object GetParameterSchema() => new
     {
@@ -24,11 +26,17 @@ public class AssignTagsTool(
             tag_names = new
             {
                 type = JsonSchemaTypes.Array,
-                description = "Tag names to assign",
+                description = "Tag names to assign. Existing names are reused; new names are auto-created. Provide either tag_names OR tag_ids.",
+                items = new { type = JsonSchemaTypes.String }
+            },
+            tag_ids = new
+            {
+                type = JsonSchemaTypes.Array,
+                description = "Tag IDs (GUIDs). Provide either tag_ids OR tag_names. An empty array removes all tags.",
                 items = new { type = JsonSchemaTypes.String }
             }
         },
-        required = new[] { "habit_id", "tag_names" }
+        required = new[] { "habit_id" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -37,9 +45,32 @@ public class AssignTagsTool(
             !Guid.TryParse(habitIdEl.GetString(), out var habitId))
             return new ToolResult(false, Error: "habit_id is required and must be a valid GUID.");
 
-        if (!args.TryGetProperty("tag_names", out var tagNamesEl) || tagNamesEl.ValueKind != JsonValueKind.Array)
-            return new ToolResult(false, Error: "tag_names is required and must be an array.");
+        if (JsonArgumentParser.PropertyExists(args, "tag_ids"))
+            return await AssignByIdsAsync(habitId, args, userId, ct);
 
+        if (args.TryGetProperty("tag_names", out var tagNamesEl) && tagNamesEl.ValueKind == JsonValueKind.Array)
+            return await AssignByNamesAsync(habitId, tagNamesEl, userId, ct);
+
+        return new ToolResult(false, Error: "Provide either tag_ids or tag_names.");
+    }
+
+    private async Task<ToolResult> AssignByIdsAsync(Guid habitId, JsonElement args, Guid userId, CancellationToken ct)
+    {
+        var idList = JsonArgumentParser.ParseGuidArray(args, "tag_ids") ?? new List<Guid>();
+
+        var habit = await LoadHabitAsync(habitId, userId, ct);
+        if (habit is null)
+            return new ToolResult(false, Error: $"Habit {habitId} not found.");
+
+        var resolvedTags = idList.Count == 0
+            ? new List<Tag>()
+            : (await tagRepository.FindTrackedAsync(t => idList.Contains(t.Id) && t.UserId == userId, ct)).ToList();
+
+        return await ReplaceTagsAsync(habit, resolvedTags, ct);
+    }
+
+    private async Task<ToolResult> AssignByNamesAsync(Guid habitId, JsonElement tagNamesEl, Guid userId, CancellationToken ct)
+    {
         var tagNames = new List<string>();
         foreach (var t in tagNamesEl.EnumerateArray())
         {
@@ -51,17 +82,22 @@ public class AssignTagsTool(
         if (tagNames.Count == 0)
             return new ToolResult(false, Error: "At least one tag name is required.");
 
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == habitId && h.UserId == userId,
-            q => q.Include(h => h.Tags),
-            ct);
-
+        var habit = await LoadHabitAsync(habitId, userId, ct);
         if (habit is null)
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
 
         var resolvedTags = await ResolveTagsByNameAsync(tagNames, userId, ct);
+        return await ReplaceTagsAsync(habit, resolvedTags, ct);
+    }
 
-        // Clear existing and assign new
+    private Task<Habit?> LoadHabitAsync(Guid habitId, Guid userId, CancellationToken ct) =>
+        habitRepository.FindOneTrackedAsync(
+            h => h.Id == habitId && h.UserId == userId,
+            q => q.Include(h => h.Tags),
+            ct);
+
+    private async Task<ToolResult> ReplaceTagsAsync(Habit habit, List<Tag> resolvedTags, CancellationToken ct)
+    {
         foreach (var existing in habit.Tags.ToList())
             habit.RemoveTag(existing);
         foreach (var tag in resolvedTags)

@@ -1,16 +1,23 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Security.Claims;
 using MediatR;
 using ModelContextProtocol.Server;
-using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Enums;
 
 namespace Orbit.Api.Mcp.Tools;
 
+/// <summary>
+/// MCP goal tools. Mutations route through <see cref="McpExecutorBridge"/> →
+/// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
+/// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/>, sharing the policy evaluation
+/// (read-only-credential denial, ownership pre-check, Pro/feature-flag gating) and the
+/// <c>AgentAuditLogs</c> trail used by every other agent surface; each forwards a snake_case
+/// argument object matching its backing <c>IAiTool</c> schema and formats the result into the
+/// legacy string contract. Read/query tools stay on MediatR.
+/// </summary>
 [McpServerToolType]
-public class GoalTools(IMediator mediator)
+public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 {
     private static readonly System.Text.Json.JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
     [McpServerTool(Name = "list_goals"), Description("List all goals for the authenticated user.")]
@@ -55,24 +62,19 @@ public class GoalTools(IMediator mediator)
         [Description("Goal type: Standard (default) or Streak")] string type = "Standard",
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var goalType = Enum.TryParse<GoalType>(type, ignoreCase: true, out var parsedType)
-            ? parsedType
-            : GoalType.Standard;
-
-        var command = new CreateGoalCommand(
-            userId,
+        var result = await executorBridge.ExecuteAsync(user, "create_goal", new
+        {
             title,
-            description,
-            targetValue,
+            target_value = targetValue,
             unit,
-            McpInputParser.ParseOptionalDate(deadline, "deadline"),
-            Type: goalType);
+            description,
+            deadline,
+            goal_type = type
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Created goal '{title}' (id: {result.Value})"
-            : $"Error: {result.Error}";
+        return result.Succeeded
+            ? $"Created goal '{title}' (id: {result.TargetId})"
+            : result.Message;
     }
 
     [McpServerTool(Name = "get_goal"), Description("Get detailed information about a specific goal by ID, including progress history and linked habits.")]
@@ -113,34 +115,32 @@ public class GoalTools(IMediator mediator)
         [Description("Optional deadline in YYYY-MM-DD format")] string? deadline = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new UpdateGoalCommand(
-            userId,
-            McpInputParser.ParseGuid(goalId, "goalId"),
+        var result = await executorBridge.ExecuteAsync(user, "update_goal", new
+        {
+            goal_id = goalId,
             title,
-            description,
-            targetValue,
+            target_value = targetValue,
             unit,
-            McpInputParser.ParseOptionalDate(deadline, "deadline"));
+            description,
+            deadline
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Updated goal {goalId}"
-            : $"Error: {result.Error}";
+        return result.Succeeded ? $"Updated goal {goalId}" : result.Message;
     }
 
     [McpServerTool(Name = "delete_goal"), Description("Delete a goal by ID.")]
     public async Task<string> DeleteGoal(
         ClaimsPrincipal user,
         [Description("The goal ID (GUID)")] string goalId,
+        [Description("Confirmation token returned by confirm_agent_operation_v2 (required: deleting a goal is destructive)")] string? confirmationToken = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new DeleteGoalCommand(userId, McpInputParser.ParseGuid(goalId, "goalId"));
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Deleted goal {goalId}"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "delete_goal", new
+        {
+            goal_id = goalId
+        }, confirmationToken, cancellationToken);
+
+        return result.Succeeded ? $"Deleted goal {goalId}" : result.Message;
     }
 
     [McpServerTool(Name = "update_goal_progress"), Description("Update a goal's current progress value.")]
@@ -151,17 +151,16 @@ public class GoalTools(IMediator mediator)
         [Description("Optional note about this progress update")] string? note = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var command = new UpdateGoalProgressCommand(
-            userId,
-            McpInputParser.ParseGuid(goalId, "goalId"),
-            currentValue,
-            note);
+        var result = await executorBridge.ExecuteAsync(user, "update_goal_progress", new
+        {
+            goal_id = goalId,
+            current_value = currentValue,
+            note
+        }, confirmationToken: null, cancellationToken);
 
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
+        return result.Succeeded
             ? $"Updated progress for goal {goalId} to {currentValue}"
-            : $"Error: {result.Error}";
+            : result.Message;
     }
 
     [McpServerTool(Name = "update_goal_status"), Description("Change a goal's status (Active, Completed, or Abandoned).")]
@@ -171,13 +170,13 @@ public class GoalTools(IMediator mediator)
         [Description("New status: Active, Completed, or Abandoned")] string status,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var newStatus = Enum.Parse<GoalStatus>(status, true);
-        var command = new UpdateGoalStatusCommand(userId, McpInputParser.ParseGuid(goalId, "goalId"), newStatus);
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Updated goal {goalId} status to {status}"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "update_goal_status", new
+        {
+            goal_id = goalId,
+            status
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Updated goal {goalId} status to {status}" : result.Message;
     }
 
     [McpServerTool(Name = "reorder_goals"), Description("Reorder goals by setting new positions.")]
@@ -186,18 +185,17 @@ public class GoalTools(IMediator mediator)
         [Description("JSON array of objects with 'id' (GUID) and 'position' (int)")] string positionsJson,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
         var items = System.Text.Json.JsonSerializer.Deserialize<List<GoalPositionDto>>(
             positionsJson,
             CaseInsensitiveJsonOptions)
             ?? [];
 
-        var positions = items.Select(p => new GoalPositionUpdate(McpInputParser.ParseGuid(p.Id, "id"), p.Position)).ToList();
-        var command = new ReorderGoalsCommand(userId, positions);
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Reordered {positions.Count} goals"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "reorder_goals", new
+        {
+            positions = items.Select(p => new { goal_id = p.Id, position = p.Position })
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Reordered {items.Count} goals" : result.Message;
     }
 
     [McpServerTool(Name = "link_habits_to_goal"), Description("Link habits to a goal. Pass the full list of habit IDs (replaces existing links).")]
@@ -207,15 +205,16 @@ public class GoalTools(IMediator mediator)
         [Description("Comma-separated habit IDs (GUIDs)")] string habitIds,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
         var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(s => McpInputParser.ParseGuid(s, "habitIds")).ToList();
 
-        var command = new LinkHabitsToGoalCommand(userId, McpInputParser.ParseGuid(goalId, "goalId"), ids);
-        var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess
-            ? $"Linked {ids.Count} habits to goal {goalId}"
-            : $"Error: {result.Error}";
+        var result = await executorBridge.ExecuteAsync(user, "link_habits_to_goal", new
+        {
+            goal_id = goalId,
+            habit_ids = ids.Select(i => i.ToString())
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? $"Linked {ids.Count} habits to goal {goalId}" : result.Message;
     }
 
     [McpServerTool(Name = "get_goal_metrics"), Description("Get metrics for a goal: progress percentage, velocity, projected completion, and linked habit adherence.")]

@@ -2,12 +2,13 @@ using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
+using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Application.Common;
-using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
@@ -15,14 +16,36 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 public class GoalToolsTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly GoalTools _tools;
     private readonly ClaimsPrincipal _user;
 
     public GoalToolsTests()
     {
-        _tools = new GoalTools(_mediator);
+        _tools = new GoalTools(_mediator, new McpExecutorBridge(_executor));
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()) };
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private void StubExecutor(AgentOperationStatus status, string? targetId = null, string? targetName = null,
+        string? policyReason = null)
+    {
+        var response = new AgentExecuteOperationResponse(new AgentOperationResult(
+            "operation", "operation", AgentRiskClass.Low, AgentConfirmationRequirement.None,
+            status, TargetId: targetId, TargetName: targetName, PolicyReason: policyReason));
+
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
+    }
+
+    private async Task<AgentExecuteOperationRequest> CapturedRequestAsync(Func<Task> act)
+    {
+        await act();
+        var calls = _executor.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+            .ToList();
+        calls.Should().NotBeEmpty();
+        return (AgentExecuteOperationRequest)calls[^1].GetArguments()[0]!;
     }
 
     [Fact]
@@ -96,14 +119,15 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task CreateGoal_Success_ReturnsCreatedMessage()
+    public async Task CreateGoal_Success_RoutesThroughExecutorAndReturnsCreatedMessage()
     {
         var newId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<CreateGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(newId));
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString(), targetName: "New Goal");
 
-        var result = await _tools.CreateGoal(_user, "New Goal", 100, "km");
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.CreateGoal(_user, "New Goal", 100, "km"));
 
+        request.OperationId.Should().Be("create_goal");
         result.Should().Contain("Created goal 'New Goal'");
         result.Should().Contain(newId.ToString());
     }
@@ -111,8 +135,7 @@ public class GoalToolsTests
     [Fact]
     public async Task CreateGoal_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<CreateGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Guid>("Pro required"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Pro required");
 
         var result = await _tools.CreateGoal(_user, "Goal", 100, "km");
 
@@ -120,22 +143,22 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task UpdateGoal_Success_ReturnsUpdatedMessage()
+    public async Task UpdateGoal_Success_RoutesThroughExecutorAndReturnsUpdatedMessage()
     {
         var goalId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<UpdateGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: goalId.ToString());
 
-        var result = await _tools.UpdateGoal(_user, goalId.ToString(), "Updated", 200, "km");
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateGoal(_user, goalId.ToString(), "Updated", 200, "km"));
 
+        request.OperationId.Should().Be("update_goal");
         result.Should().Contain("Updated goal");
     }
 
     [Fact]
     public async Task UpdateGoal_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<UpdateGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Goal not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Goal not found");
 
         var result = await _tools.UpdateGoal(_user, Guid.NewGuid().ToString(), "Title", 100, "km");
 
@@ -143,21 +166,31 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task DeleteGoal_Success_ReturnsDeletedMessage()
+    public async Task DeleteGoal_Success_RoutesThroughExecutorAndReturnsDeletedMessage()
     {
-        _mediator.Send(Arg.Any<DeleteGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.DeleteGoal(_user, Guid.NewGuid().ToString()));
+
+        request.OperationId.Should().Be("delete_goal");
+        result.Should().Contain("Deleted goal");
+    }
+
+    [Fact]
+    public async Task DeleteGoal_PendingConfirmation_ReturnsConfirmationPrompt()
+    {
+        StubExecutor(AgentOperationStatus.PendingConfirmation);
 
         var result = await _tools.DeleteGoal(_user, Guid.NewGuid().ToString());
 
-        result.Should().Contain("Deleted goal");
+        result.Should().Contain("Confirmation required");
     }
 
     [Fact]
     public async Task DeleteGoal_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<DeleteGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Goal not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Goal not found");
 
         var result = await _tools.DeleteGoal(_user, Guid.NewGuid().ToString());
 
@@ -165,23 +198,23 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task LinkHabitsToGoal_Success_ReturnsLinkedMessage()
+    public async Task LinkHabitsToGoal_Success_RoutesThroughExecutorAndReturnsLinkedMessage()
     {
-        _mediator.Send(Arg.Any<LinkHabitsToGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var goalId = Guid.NewGuid();
         var habitId = Guid.NewGuid();
-        var result = await _tools.LinkHabitsToGoal(_user, goalId.ToString(), habitId.ToString());
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.LinkHabitsToGoal(_user, goalId.ToString(), habitId.ToString()));
 
+        request.OperationId.Should().Be("link_habits_to_goal");
         result.Should().Contain("Linked 1 habits");
     }
 
     [Fact]
     public async Task LinkHabitsToGoal_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<LinkHabitsToGoalCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
         var result = await _tools.LinkHabitsToGoal(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
 
@@ -189,14 +222,15 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task UpdateGoalProgress_Success_ReturnsUpdatedMessage()
+    public async Task UpdateGoalProgress_Success_RoutesThroughExecutorAndReturnsUpdatedMessage()
     {
         var goalId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<UpdateGoalProgressCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: goalId.ToString());
 
-        var result = await _tools.UpdateGoalProgress(_user, goalId.ToString(), 50);
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateGoalProgress(_user, goalId.ToString(), 50));
 
+        request.OperationId.Should().Be("update_goal_progress");
         result.Should().Contain("Updated progress");
         result.Should().Contain("50");
     }
@@ -204,8 +238,7 @@ public class GoalToolsTests
     [Fact]
     public async Task UpdateGoalProgress_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<UpdateGoalProgressCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
         var result = await _tools.UpdateGoalProgress(_user, Guid.NewGuid().ToString(), 50);
 
@@ -213,14 +246,15 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task UpdateGoalStatus_Success_ReturnsUpdatedMessage()
+    public async Task UpdateGoalStatus_Success_RoutesThroughExecutorAndReturnsUpdatedMessage()
     {
         var goalId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<UpdateGoalStatusCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: goalId.ToString());
 
-        var result = await _tools.UpdateGoalStatus(_user, goalId.ToString(), "Completed");
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateGoalStatus(_user, goalId.ToString(), "Completed"));
 
+        request.OperationId.Should().Be("update_goal_status");
         result.Should().Contain("Updated goal");
         result.Should().Contain("Completed");
     }
@@ -228,8 +262,7 @@ public class GoalToolsTests
     [Fact]
     public async Task UpdateGoalStatus_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<UpdateGoalStatusCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
         var result = await _tools.UpdateGoalStatus(_user, Guid.NewGuid().ToString(), "Completed");
 
@@ -286,22 +319,22 @@ public class GoalToolsTests
     }
 
     [Fact]
-    public async Task ReorderGoals_Success_ReturnsReorderedMessage()
+    public async Task ReorderGoals_Success_RoutesThroughExecutorAndReturnsReorderedMessage()
     {
-        _mediator.Send(Arg.Any<ReorderGoalsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var json = $"[{{\"id\":\"{Guid.NewGuid()}\",\"position\":0}}]";
-        var result = await _tools.ReorderGoals(_user, json);
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.ReorderGoals(_user, json));
 
+        request.OperationId.Should().Be("reorder_goals");
         result.Should().Contain("Reordered 1 goals");
     }
 
     [Fact]
     public async Task ReorderGoals_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<ReorderGoalsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Invalid"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Invalid");
 
         var json = "[]";
         var result = await _tools.ReorderGoals(_user, json);
