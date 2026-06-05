@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -16,6 +17,7 @@ public partial class CreateCheckoutCommandHandler(
     IGeoLocationService geoLocationService,
     IOptions<StripeSettings> stripeSettings,
     IBillingService billingService,
+    IPriceResolver priceResolver,
     ILogger<CreateCheckoutCommandHandler> logger) : IRequestHandler<CreateCheckoutCommand, Result<CheckoutResponse>>
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
@@ -39,14 +41,7 @@ public partial class CreateCheckoutCommandHandler(
         if (string.IsNullOrEmpty(interval) || !allowedIntervals.Contains(interval))
             return Result.Failure<CheckoutResponse>(ErrorMessages.InvalidBillingInterval, ErrorCodes.InvalidBillingInterval);
 
-        var priceId = (interval, isBrazil) switch
-        {
-            ("yearly", true) => _settings.YearlyPriceIdBrl,
-            ("yearly", false) => _settings.YearlyPriceIdUsd,
-            ("monthly", true) => _settings.MonthlyPriceIdBrl,
-            ("monthly", false) => _settings.MonthlyPriceIdUsd,
-            _ => _settings.MonthlyPriceIdBrl
-        };
+        var priceId = priceResolver.Resolve(interval, isBrazil);
 
         try
         {

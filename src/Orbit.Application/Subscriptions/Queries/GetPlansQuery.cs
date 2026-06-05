@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -13,12 +13,10 @@ public record GetPlansQuery(Guid UserId, string? CountryCode, string? IpAddress)
 public partial class GetPlansQueryHandler(
     IGenericRepository<User> userRepository,
     IGeoLocationService geoLocationService,
-    IOptions<StripeSettings> stripeSettings,
     IBillingService billingService,
+    IPriceResolver priceResolver,
     ILogger<GetPlansQueryHandler> logger) : IRequestHandler<GetPlansQuery, Result<PlansResponse>>
 {
-    private readonly StripeSettings _settings = stripeSettings.Value;
-
     public async Task<Result<PlansResponse>> Handle(GetPlansQuery request, CancellationToken cancellationToken)
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
@@ -33,8 +31,8 @@ public partial class GetPlansQueryHandler(
             cancellationToken);
         var isBrazil = countryCode == "BR";
 
-        var monthlyPriceId = isBrazil ? _settings.MonthlyPriceIdBrl : _settings.MonthlyPriceIdUsd;
-        var yearlyPriceId = isBrazil ? _settings.YearlyPriceIdBrl : _settings.YearlyPriceIdUsd;
+        var monthlyPriceId = priceResolver.Resolve("monthly", isBrazil);
+        var yearlyPriceId = priceResolver.Resolve("yearly", isBrazil);
         var currency = isBrazil ? "brl" : "usd";
 
         try
