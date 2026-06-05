@@ -2,24 +2,48 @@ using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
+using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
-using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
 public class TagToolsTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly TagTools _tools;
     private readonly ClaimsPrincipal _user;
 
     public TagToolsTests()
     {
-        _tools = new TagTools(_mediator);
+        _tools = new TagTools(_mediator, new McpExecutorBridge(_executor));
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()) };
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private void StubExecutor(AgentOperationStatus status, string? targetId = null, string? targetName = null,
+        string? policyReason = null)
+    {
+        var response = new AgentExecuteOperationResponse(new AgentOperationResult(
+            "operation", "operation", AgentRiskClass.Low, AgentConfirmationRequirement.None,
+            status, TargetId: targetId, TargetName: targetName, PolicyReason: policyReason));
+
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
+    }
+
+    private async Task<AgentExecuteOperationRequest> CapturedRequestAsync(Func<Task> act)
+    {
+        await act();
+        var calls = _executor.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+            .ToList();
+        calls.Should().NotBeEmpty();
+        return (AgentExecuteOperationRequest)calls[^1].GetArguments()[0]!;
     }
 
     [Fact]
@@ -62,14 +86,15 @@ public class TagToolsTests
     }
 
     [Fact]
-    public async Task CreateTag_Success_ReturnsCreatedMessage()
+    public async Task CreateTag_Success_RoutesThroughExecutorAndReturnsCreatedMessage()
     {
         var newId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<CreateTagCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(newId));
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: newId.ToString(), targetName: "Work");
 
-        var result = await _tools.CreateTag(_user, "Work", "#0000FF");
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.CreateTag(_user, "Work", "#0000FF"));
 
+        request.OperationId.Should().Be("create_tag");
         result.Should().Contain("Created tag 'Work'");
         result.Should().Contain(newId.ToString());
     }
@@ -77,8 +102,7 @@ public class TagToolsTests
     [Fact]
     public async Task CreateTag_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<CreateTagCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Guid>("Duplicate name"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Duplicate name");
 
         var result = await _tools.CreateTag(_user, "Work", "#0000FF");
 
@@ -86,22 +110,22 @@ public class TagToolsTests
     }
 
     [Fact]
-    public async Task UpdateTag_Success_ReturnsUpdatedMessage()
+    public async Task UpdateTag_Success_RoutesThroughExecutorAndReturnsUpdatedMessage()
     {
         var tagId = Guid.NewGuid();
-        _mediator.Send(Arg.Any<UpdateTagCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded, targetId: tagId.ToString());
 
-        var result = await _tools.UpdateTag(_user, tagId.ToString(), "Updated", "#00FF00");
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.UpdateTag(_user, tagId.ToString(), "Updated", "#00FF00"));
 
+        request.OperationId.Should().Be("update_tag");
         result.Should().Contain("Updated tag");
     }
 
     [Fact]
     public async Task UpdateTag_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<UpdateTagCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Tag not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Tag not found");
 
         var result = await _tools.UpdateTag(_user, Guid.NewGuid().ToString(), "Name", "#000");
 
@@ -109,21 +133,31 @@ public class TagToolsTests
     }
 
     [Fact]
-    public async Task DeleteTag_Success_ReturnsDeletedMessage()
+    public async Task DeleteTag_Success_RoutesThroughExecutorAndReturnsDeletedMessage()
     {
-        _mediator.Send(Arg.Any<DeleteTagCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.DeleteTag(_user, Guid.NewGuid().ToString()));
+
+        request.OperationId.Should().Be("delete_tag");
+        result.Should().Contain("Deleted tag");
+    }
+
+    [Fact]
+    public async Task DeleteTag_PendingConfirmation_ReturnsConfirmationPrompt()
+    {
+        StubExecutor(AgentOperationStatus.PendingConfirmation);
 
         var result = await _tools.DeleteTag(_user, Guid.NewGuid().ToString());
 
-        result.Should().Contain("Deleted tag");
+        result.Should().Contain("Confirmation required");
     }
 
     [Fact]
     public async Task DeleteTag_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<DeleteTagCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Tag not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Tag not found");
 
         var result = await _tools.DeleteTag(_user, Guid.NewGuid().ToString());
 
@@ -131,22 +165,23 @@ public class TagToolsTests
     }
 
     [Fact]
-    public async Task AssignTags_Success_WithTags_ReturnsAssignedMessage()
+    public async Task AssignTags_Success_WithTags_RoutesTagIdsAndReturnsAssignedMessage()
     {
-        _mediator.Send(Arg.Any<AssignTagsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var tagId = Guid.NewGuid();
-        var result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), tagId.ToString());
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), tagId.ToString()));
 
+        request.OperationId.Should().Be("assign_tags");
+        request.Arguments.GetRawText().Should().Contain("tag_ids");
         result.Should().Contain("Assigned 1 tags");
     }
 
     [Fact]
     public async Task AssignTags_Success_Empty_ReturnsRemovedMessage()
     {
-        _mediator.Send(Arg.Any<AssignTagsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
+        StubExecutor(AgentOperationStatus.Succeeded);
 
         var result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), "");
 
@@ -156,8 +191,7 @@ public class TagToolsTests
     [Fact]
     public async Task AssignTags_Failure_ReturnsError()
     {
-        _mediator.Send(Arg.Any<AssignTagsCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Not found"));
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "Not found");
 
         var result = await _tools.AssignTags(_user, Guid.NewGuid().ToString(), Guid.NewGuid().ToString());
 

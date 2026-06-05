@@ -103,13 +103,53 @@ public class AssignTagsToolTests
     }
 
     [Fact]
-    public async Task MissingTagNames_ReturnsError()
+    public async Task NeitherTagIdsNorTagNames_ReturnsError()
     {
         var id = Guid.NewGuid();
         var result = await Execute($$$"""{"habit_id": "{{{id}}}"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Contain("tag_names is required");
+        result.Error.Should().Contain("Provide either tag_ids or tag_names");
+    }
+
+    [Fact]
+    public async Task AssignByTagIds_ReplacesExistingTags_NoAutoCreate()
+    {
+        var habit = CreateHabit("Run");
+        var oldTag = Tag.Create(UserId, "Old", "#000000").Value;
+        habit.AddTag(oldTag);
+        SetupHabitFound(habit);
+
+        var health = Tag.Create(UserId, "Health", "#ff0000").Value;
+        var fitness = Tag.Create(UserId, "Fitness", "#00ff00").Value;
+        _tagRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Tag, bool>>>(),
+            Arg.Any<CancellationToken>()
+        ).Returns(new List<Tag> { health, fitness }.AsReadOnly());
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "tag_ids": ["{{{health.Id}}}", "{{{fitness.Id}}}"]}""");
+
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Be("Run");
+        habit.Tags.Should().BeEquivalentTo(new[] { health, fitness });
+        await _tagRepo.DidNotReceive().AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AssignByEmptyTagIds_RemovesAllTags()
+    {
+        var habit = CreateHabit("Run");
+        habit.AddTag(Tag.Create(UserId, "Old", "#000000").Value);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "tag_ids": []}""");
+
+        result.Success.Should().BeTrue();
+        habit.Tags.Should().BeEmpty();
+        await _tagRepo.DidNotReceive().FindTrackedAsync(
+            Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>());
+        await _tagRepo.DidNotReceive().AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

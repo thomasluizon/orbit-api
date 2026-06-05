@@ -263,14 +263,11 @@ public partial class ProcessUserChatCommandHandler(
 
         var toolResults = new List<AiToolCallResult>();
 
-        // Sort tool calls so parent habits are created before sub-habits
-        var orderedCalls = aiResponse.ToolCalls!.OrderBy(c => c.Name switch
-        {
-            "create_habit" => 0,
-            "create_sub_habit" => 1,
-            "assign_tags" => 2,
-            _ => 1
-        }).ToList();
+        // Sort tool calls by each tool's declared Order (parents before sub-habits, then tags);
+        // unordered tools default to int.MaxValue and run last, ties broken by stable OrderBy.
+        var orderedCalls = aiResponse.ToolCalls!
+            .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
+            .ToList();
 
         foreach (var call in orderedCalls)
         {

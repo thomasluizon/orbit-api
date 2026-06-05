@@ -20,6 +20,8 @@ public class CreateHabitTool(
 
     public string Name => "create_habit";
 
+    public int Order => 0;
+
     public string Description =>
         "Create a new habit or one-time task. Include a relevant emoji when the activity clearly suggests one, or the exact emoji requested by the user. For recurring habits, set frequency_unit and optionally days. For one-time tasks, omit frequency_unit ONLY when the user explicitly described it as a one-time task (e.g., 'just once', 'this Friday only', 'one-time', 'uma vez', 'apenas uma vez'). If the user called it a habit/rotina/hábito or did not state a frequency, ASK FIRST via a NeedsClarification clarification card instead of guessing — the tool will refuse to silently create a one-time task in that case. Structure: use checklist_items for atomic sub-steps done together in one execution (shopping lists, prep lists, packing lists); use sub_habits for sub-activities that need independent tracking, streaks, or different schedules. Never list items only in the description when checklist_items would preserve them. Frequency: when user says 'X times per week' without specifying days, set is_flexible=true, frequency_unit='Week', frequency_quantity=X. When user specifies exact days, use frequency_unit='Day', frequency_quantity=1, days=[specified days]. Example: '3x per week' (no days) = flexible Week/3. '3x per week on Mon/Wed/Fri' = Day/1/[Mon,Wed,Fri].";
 
