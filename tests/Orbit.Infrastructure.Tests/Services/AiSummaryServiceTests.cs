@@ -381,6 +381,70 @@ public class AiSummaryServiceTests
         result.Should().Be("{\"key\": \"value\"}");
     }
 
+    // ── CapToSentence ──
+
+    [Fact]
+    public void CapToSentence_UnderLimit_ReturnsUnchanged()
+    {
+        var text = "Nice work getting your run in today.";
+
+        AiSummaryService.CapToSentence(text, 200).Should().Be(text);
+    }
+
+    [Fact]
+    public void CapToSentence_ExactlyAtLimit_ReturnsUnchanged()
+    {
+        var text = new string('a', 200);
+
+        AiSummaryService.CapToSentence(text, 200).Should().Be(text);
+    }
+
+    [Fact]
+    public void CapToSentence_OverLimit_CutsAtLastSentenceBoundary()
+    {
+        var text = "You crushed the morning run. The afternoon reading is still open. Maybe stretch before bed too, no rush at all here.";
+
+        var result = AiSummaryService.CapToSentence(text, 70);
+
+        result.Should().Be("You crushed the morning run. The afternoon reading is still open.");
+        result.Length.Should().BeLessThanOrEqualTo(70);
+    }
+
+    [Fact]
+    public void CapToSentence_HonorsQuestionAndExclamationBoundaries()
+    {
+        var text = "Did you finish the run yet? You logged plenty already so take it easy now.";
+
+        var result = AiSummaryService.CapToSentence(text, 40);
+
+        result.Should().Be("Did you finish the run yet?");
+    }
+
+    [Fact]
+    public void CapToSentence_NoSentenceBoundary_CutsAtWordBoundaryWithoutSplittingWords()
+    {
+        var text = "great work today you really kept the momentum going strong across everything";
+
+        var result = AiSummaryService.CapToSentence(text, 30);
+
+        result.Length.Should().BeLessThanOrEqualTo(30);
+        result.Should().Be("great work today you really");
+        text.Should().StartWith(result);
+        result.Should().NotEndWith(" ");
+    }
+
+    [Fact]
+    public void CapToSentence_NeverExceedsTwoHundredChars()
+    {
+        var text = string.Join(' ', Enumerable.Repeat("habit", 100));
+
+        var result = AiSummaryService.CapToSentence(text, 200);
+
+        result.Length.Should().BeLessThanOrEqualTo(200);
+        result.Should().NotEndWith(" ");
+        result.Split(' ').Should().OnlyContain(word => word == "habit");
+    }
+
     // ── BuildSummaryPrompt date formatting ──
 
     [Fact]

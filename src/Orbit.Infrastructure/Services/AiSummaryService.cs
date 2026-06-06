@@ -12,6 +12,8 @@ public sealed partial class AiSummaryService(
     AiCompletionClient aiClient,
     ILogger<AiSummaryService> logger) : ISummaryService
 {
+    private const int MaxSummaryChars = 200;
+
     public async Task<Result<string>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
         DateOnly dateFrom,
@@ -56,7 +58,7 @@ public sealed partial class AiSummaryService(
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<string>("AI returned empty response");
 
-            var trimmed = StripMarkdownFences(text);
+            var trimmed = CapToSentence(StripMarkdownFences(text), MaxSummaryChars);
 
             if (logger.IsEnabled(LogLevel.Information))
                 LogDailySummaryGenerated(logger, trimmed.Length);
@@ -101,7 +103,7 @@ public sealed partial class AiSummaryService(
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
             - GOOD: "Nice work getting your run in -- some guitar later could be a great way to unwind."
-            - Keep it to 2-3 sentences, warm and close, like a friend who actually knows you -- never corporate or coach-like
+            - Keep it to one or two short sentences, under ~200 characters total, warm and close, like a friend who actually knows you -- never corporate or coach-like
             - This message is shown for the WHOLE current part of the day, so it must read correctly whether they see it at the start or the end of that window
             - Treat the time of day as a broad window, not an exact moment; never imply a precise instant
             - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"
@@ -232,6 +234,26 @@ public sealed partial class AiSummaryService(
                 trimmed = string.Join('\n', lines.Skip(1).Take(lines.Length - (lines[^1].TrimStart().StartsWith("```") ? 2 : 1)));
         }
         return trimmed.Trim();
+    }
+
+    internal static string CapToSentence(string text, int maxChars)
+    {
+        if (text.Length <= maxChars)
+            return text;
+
+        for (var i = maxChars - 1; i >= 0; i--)
+        {
+            if (text[i] is '.' or '!' or '?')
+                return text[..(i + 1)];
+        }
+
+        for (var i = maxChars; i >= 0; i--)
+        {
+            if (char.IsWhiteSpace(text[i]))
+                return text[..i].TrimEnd();
+        }
+
+        return text[..maxChars].TrimEnd();
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating daily summary (date: {Date}, language: {Language})...")]
