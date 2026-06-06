@@ -80,6 +80,7 @@ public class GetDailySummaryQueryHandler(
             summaryHabits,
             request.DateFrom,
             request.DateTo,
+            userToday,
             effectiveLanguage,
             currentLocalTime,
             cancellationToken);

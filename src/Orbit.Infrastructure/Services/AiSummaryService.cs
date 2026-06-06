@@ -18,28 +18,12 @@ public sealed partial class AiSummaryService(
         IEnumerable<Habit> allHabits,
         DateOnly dateFrom,
         DateOnly dateTo,
+        DateOnly userToday,
         string language,
         TimeOnly? currentLocalTime,
         CancellationToken cancellationToken = default)
     {
-        var habitList = allHabits.ToList();
-
-        var scheduledTopLevel = habitList
-            .Where(h => h.ParentHabitId is null
-                         && !HasSkipLogInRange(h, dateFrom, dateTo)
-                         && (HabitScheduleService.GetScheduledDates(h, dateFrom, dateTo).Count > 0
-                             || HasCompletedLogInRange(h, dateFrom, dateTo)))
-            .ToList();
-
-        var scheduledTopLevelIds = scheduledTopLevel.Select(h => h.Id).ToHashSet();
-
-        var children = habitList
-            .Where(h => h.ParentHabitId is not null
-                        && scheduledTopLevelIds.Contains(h.ParentHabitId.Value)
-                        && !HasSkipLogInRange(h, dateFrom, dateTo))
-            .ToList();
-
-        var scheduledHabits = scheduledTopLevel.Concat(children).ToList();
+        var scheduledHabits = SelectScheduledHabits(allHabits, userToday, dateFrom, dateTo);
 
         var prompt = BuildSummaryPrompt(scheduledHabits, dateFrom, dateTo, language, currentLocalTime);
 
@@ -71,6 +55,38 @@ public sealed partial class AiSummaryService(
         }
     }
 
+    /// <summary>
+    /// Selects the habits the summary should reason about, using the same DueDate-authoritative
+    /// "due today" gate as the Today list (<see cref="IsDueToday"/>). A child is included on its
+    /// own merit, not merely because its parent qualified, so habits whose DueDate has already
+    /// advanced past today (logged good recurring habits) are not re-listed as pending.
+    /// </summary>
+    private static List<Habit> SelectScheduledHabits(
+        IEnumerable<Habit> allHabits,
+        DateOnly userToday,
+        DateOnly dateFrom,
+        DateOnly dateTo)
+    {
+        var habitList = allHabits.ToList();
+
+        var scheduledTopLevel = habitList
+            .Where(h => h.ParentHabitId is null
+                         && !HasSkipLogInRange(h, dateFrom, dateTo)
+                         && IsDueToday(h, userToday, dateFrom, dateTo))
+            .ToList();
+
+        var scheduledTopLevelIds = scheduledTopLevel.Select(h => h.Id).ToHashSet();
+
+        var children = habitList
+            .Where(h => h.ParentHabitId is not null
+                        && scheduledTopLevelIds.Contains(h.ParentHabitId.Value)
+                        && !HasSkipLogInRange(h, dateFrom, dateTo)
+                        && IsDueToday(h, userToday, dateFrom, dateTo))
+            .ToList();
+
+        return scheduledTopLevel.Concat(children).ToList();
+    }
+
     private static string BuildSummaryPrompt(
         List<Habit> scheduledHabits,
         DateOnly date,
@@ -99,6 +115,7 @@ public sealed partial class AiSummaryService(
             Rules:
             - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
             - THEN, gently point at one or two of the still-pending habits as easy next moves -- never list everything, never frame it as a checklist, never guilt-trip
+            - If EVERYTHING is already done (nothing is pending), simply celebrate the full day warmly and leave it there -- do NOT invent, imply, or suggest any remaining task
             - If nothing is done yet, stay warm and forward-looking; do NOT imply they are behind or failing
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
@@ -109,7 +126,7 @@ public sealed partial class AiSummaryService(
             - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"
             - Do NOT use markdown, bullet points, emojis, or JSON
             - Do NOT mention the date explicitly
-            - Write ONLY in {languageName}
+            - Write ONLY in {languageName}, using natural, fluent, grammatically correct phrasing a native speaker would actually use
             - No greeting like "good morning", no sign-off -- just the message
             """;
     }
@@ -151,6 +168,17 @@ public sealed partial class AiSummaryService(
 
     private static bool IsDoneInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         habit.IsCompleted || HasCompletedLogInRange(habit, dateFrom, dateTo);
+
+    /// <summary>
+    /// DueDate-authoritative "due today" gate shared with the Today list
+    /// (see <c>GetHabitScheduleQuery.DetermineOverdueStatus</c> / <c>MapChildren</c>):
+    /// a habit belongs in the summary only if it is scheduled today or has an unresolved
+    /// past occurrence. Habits completed in range are kept so they can be acknowledged as done.
+    /// </summary>
+    private static bool IsDueToday(Habit habit, DateOnly userToday, DateOnly dateFrom, DateOnly dateTo) =>
+        HabitScheduleService.IsHabitDueOnDate(habit, userToday)
+        || HabitScheduleService.HasMissedPastOccurrence(habit, userToday)
+        || IsDoneInRange(habit, dateFrom, dateTo);
 
     private static string BuildTimeContext(TimeOnly? currentLocalTime)
     {

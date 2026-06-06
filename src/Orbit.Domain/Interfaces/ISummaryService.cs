@@ -9,6 +9,7 @@ public interface ISummaryService
         IEnumerable<Habit> allHabits,
         DateOnly dateFrom,
         DateOnly dateTo,
+        DateOnly userToday,
         string language,
         TimeOnly? currentLocalTime,
         CancellationToken cancellationToken = default);
