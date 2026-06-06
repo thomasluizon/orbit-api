@@ -36,7 +36,8 @@ public record ChatResponse(
     IReadOnlyList<AgentOperationResult>? Operations = null,
     IReadOnlyList<PendingAgentOperation>? PendingOperations = null,
     IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    IReadOnlyList<string>? RelatedSurfaces = null);
 
 public record ActionResult(
     string Type,
@@ -252,7 +253,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.OperationResults,
             executionResults.PendingOperations,
             executionResults.PolicyDenials,
-            request.CorrelationId));
+            request.CorrelationId,
+            executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null));
     }
 
     /// <summary>
@@ -644,10 +646,19 @@ public partial class ProcessUserChatCommandHandler(
 
     private sealed class ToolExecutionAccumulator
     {
+        private readonly List<string> _relatedSurfaces = [];
+        private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
+
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
+
+        /// <summary>
+        /// App surface IDs (e.g. "today", "gamification") surfaced by read-only tools such as
+        /// describe_feature, deduplicated in first-seen order. The client maps these to deep links.
+        /// </summary>
+        public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
         public void Add(
             ActionResult? actionResult,
@@ -659,7 +670,10 @@ public partial class ProcessUserChatCommandHandler(
                 ActionResults.Add(actionResult);
 
             if (operationResult is not null)
+            {
                 OperationResults.Add(operationResult);
+                CollectRelatedSurfaces(operationResult);
+            }
 
             if (policyDenial is not null)
                 PolicyDenials.Add(policyDenial);
@@ -667,6 +681,54 @@ public partial class ProcessUserChatCommandHandler(
             if (pendingOperation is not null)
                 PendingOperations.Add(pendingOperation);
         }
+
+        private void CollectRelatedSurfaces(AgentOperationResult operationResult)
+        {
+            if (operationResult.Status != AgentOperationStatus.Succeeded)
+                return;
+
+            foreach (var surface in ExtractRelatedSurfaces(operationResult.Payload))
+            {
+                if (_seenRelatedSurfaces.Add(surface))
+                    _relatedSurfaces.Add(surface);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads the optional "related_surfaces" string array from a tool's anonymous payload
+    /// (e.g. describe_feature) by round-tripping it through JSON. Returns an empty sequence
+    /// when the payload is null, not an object, or carries no usable surface IDs.
+    /// </summary>
+    private static IEnumerable<string> ExtractRelatedSurfaces(object? payload)
+    {
+        if (payload is null)
+            return [];
+
+        JsonElement element;
+        try
+        {
+            element = JsonSerializer.SerializeToElement(payload);
+        }
+        catch (NotSupportedException)
+        {
+            return [];
+        }
+
+        if (element.ValueKind != JsonValueKind.Object
+            || !element.TryGetProperty("related_surfaces", out var surfaces)
+            || surfaces.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return surfaces
+            .EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .ToList();
     }
 
     /// <summary>
