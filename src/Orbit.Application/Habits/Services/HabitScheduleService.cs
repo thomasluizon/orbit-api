@@ -211,6 +211,40 @@ public static class HabitScheduleService
         return habit.DueDate < today;
     }
 
+    /// <summary>
+    /// True when the habit has a completion log (Value &gt; 0) on any date within
+    /// [<paramref name="dateFrom"/>, <paramref name="dateTo"/>]. Skip logs (Value == 0) do not
+    /// count. This is the date-scoped "done in range" signal shared by the schedule query and the
+    /// daily summary — deliberately distinct from <see cref="Habit.IsCompleted"/>, which is a
+    /// sticky lifetime flag (a one-time task stays completed forever) and must never be used to
+    /// decide whether a habit was done on a particular day.
+    /// </summary>
+    public static bool HasCompletedLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
+        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
+
+    /// <summary>
+    /// True when the habit has an unresolved occurrence strictly before
+    /// <paramref name="referenceDate"/>: a one-time task past its (still-uncompleted) due date,
+    /// or a recurring habit whose DueDate has fallen behind and that is not due on the reference
+    /// date. Flexible and bad habits are never overdue. This is the single overdue rule shared by
+    /// the schedule query (<c>GetHabitScheduleQuery</c>) and the daily summary (<c>AiSummaryService</c>).
+    /// </summary>
+    public static bool IsOverdueOnDate(Habit habit, DateOnly referenceDate)
+    {
+        if (habit.IsFlexible || habit.IsBadHabit)
+            return false;
+
+        if (habit.FrequencyUnit is null)
+            return !habit.IsCompleted
+                && habit.DueDate < referenceDate
+                && (!habit.EndDate.HasValue || habit.EndDate.Value >= referenceDate);
+
+        if (IsHabitDueOnDate(habit, referenceDate))
+            return false;
+
+        return HasMissedPastOccurrence(habit, referenceDate);
+    }
+
     // --- Flexible habit methods ---
 
     /// <summary>

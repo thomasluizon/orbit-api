@@ -583,6 +583,58 @@ public class AiSummaryServiceTests
         InvokeBuildHabitSection(selected).Should().Contain("Take vitamins (pending)");
     }
 
+    // ── SelectScheduledHabits: one-time tasks must not leak via the sticky IsCompleted flag ──
+
+    [Fact]
+    public void SelectScheduledHabits_OneTimeTaskCompletedOnPastDay_NotSelected()
+    {
+        // Regression: a one-time task keeps IsCompleted == true forever and its completion log is
+        // dated on a past day (filtered out of today's range). It must NOT reappear in today's
+        // summary as "done" -- the previous code OR-ed in the sticky flag and leaked it in.
+        var task = CreateOneTimeTask("Organizar viagem", dueDate: Today.AddDays(-5));
+        task.Log(Today.AddDays(-5)); // completed five days ago
+
+        var selected = InvokeSelectScheduledHabits([task], Today);
+
+        selected.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_OneTimeTaskCompletedToday_SelectedAndDone()
+    {
+        var task = CreateOneTimeTask("Pagar conta", dueDate: Today);
+        task.Log(Today);
+
+        var selected = InvokeSelectScheduledHabits([task], Today);
+
+        selected.Should().ContainSingle();
+        InvokeBuildHabitSection(selected).Should().Contain("Pagar conta (done)");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_OneTimeTaskDueTodayNotDone_SelectedAndPending()
+    {
+        var task = CreateOneTimeTask("Ligar para o médico", dueDate: Today);
+
+        var selected = InvokeSelectScheduledHabits([task], Today);
+
+        selected.Should().ContainSingle();
+        InvokeBuildHabitSection(selected).Should().Contain("Ligar para o médico (pending)");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_OneTimeTaskOverdueNotDone_SelectedAsPending()
+    {
+        // An uncompleted one-time task whose due date has passed is overdue and, while viewing
+        // today, belongs in the summary as a gentle pending nudge -- mirroring the Today list.
+        var task = CreateOneTimeTask("Renovar passaporte", dueDate: Today.AddDays(-3));
+
+        var selected = InvokeSelectScheduledHabits([task], Today);
+
+        selected.Should().ContainSingle();
+        InvokeBuildHabitSection(selected).Should().Contain("Renovar passaporte (pending)");
+    }
+
     // ── Helpers ──
 
     private static Habit CreateHabit(
@@ -614,6 +666,17 @@ public class AiSummaryServiceTests
             unit,
             quantity,
             DueDate: dueDate ?? Today,
+            ParentHabitId: parentId)).Value;
+    }
+
+    private static Habit CreateOneTimeTask(string title, DateOnly dueDate, Guid? parentId = null)
+    {
+        return Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            title,
+            null,
+            null,
+            DueDate: dueDate,
             ParentHabitId: parentId)).Value;
     }
 
