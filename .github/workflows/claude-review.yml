@@ -76,4 +76,4 @@ jobs:
             - Validation, error handling at trust boundaries, and test coverage for new mutating endpoints.
 
             The PR branch is checked out in the current working directory.
-          claude_args: '--max-turns 30 --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"'
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"'
