@@ -902,4 +902,128 @@ public class HabitScheduleServiceTests
 
         remaining.Should().Be(2); // target 3 - 1 skip - 0 completions = 2
     }
+
+    // --- HasCompletedLogInRange ---
+
+    [Fact]
+    public void HasCompletedLogInRange_CompletionLogInRange_ReturnsTrue()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        habit.Log(Anchor, advanceDueDate: false);
+
+        HabitScheduleService.HasCompletedLogInRange(habit, Anchor, Anchor).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasCompletedLogInRange_SkipLog_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: Anchor, isFlexible: true);
+        habit.SkipFlexible(Anchor); // Value == 0
+
+        HabitScheduleService.HasCompletedLogInRange(habit, Anchor, Anchor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasCompletedLogInRange_LogOutsideRange_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        habit.Log(Anchor, advanceDueDate: false);
+
+        HabitScheduleService.HasCompletedLogInRange(habit, Anchor.AddDays(1), Anchor.AddDays(5))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasCompletedLogInRange_OneTimeTaskCompletedBeforeRange_IgnoresStickyFlag()
+    {
+        // A one-time task keeps IsCompleted == true forever, but "done in range" must depend
+        // solely on a dated log. A task completed earlier is NOT done within a later range.
+        var task = CreateHabit(null, null, dueDate: Anchor);
+        task.Log(Anchor); // sets IsCompleted = true, log dated Anchor
+
+        task.IsCompleted.Should().BeTrue();
+        HabitScheduleService.HasCompletedLogInRange(task, Anchor.AddDays(1), Anchor.AddDays(5))
+            .Should().BeFalse();
+    }
+
+    // --- IsOverdueOnDate ---
+
+    [Fact]
+    public void IsOverdueOnDate_OneTimeTaskPastDueNotCompleted_ReturnsTrue()
+    {
+        var task = CreateHabit(null, null, dueDate: Anchor);
+
+        HabitScheduleService.IsOverdueOnDate(task, Anchor.AddDays(3)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_OneTimeTaskCompleted_ReturnsFalse()
+    {
+        var task = CreateHabit(null, null, dueDate: Anchor);
+        task.Log(Anchor); // completes it
+
+        HabitScheduleService.IsOverdueOnDate(task, Anchor.AddDays(3)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_OneTimeTaskDueInFuture_ReturnsFalse()
+    {
+        var task = CreateHabit(null, null, dueDate: Anchor.AddDays(5));
+
+        HabitScheduleService.IsOverdueOnDate(task, Anchor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_RecurringMissedPastOccurrence_ReturnsTrue()
+    {
+        // Weekly habit anchored on Monday, viewed on a later Wednesday: not scheduled that day,
+        // and its DueDate has fallen behind, so it is overdue (matches the Today list).
+        var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor); // Anchor = Mon 2025-01-06
+        var laterWednesday = Anchor.AddDays(9); // Wed 2025-01-15
+
+        HabitScheduleService.IsOverdueOnDate(habit, laterWednesday).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_RecurringDueOnReferenceDay_ReturnsFalse()
+    {
+        // A daily habit is due every day, so it is "due today", never overdue -- it simply
+        // reappears as pending. This mirrors the Today list's scheduledDates.Contains(date) guard.
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+
+        HabitScheduleService.IsOverdueOnDate(habit, Anchor.AddDays(3)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_RecurringDueToday_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+
+        HabitScheduleService.IsOverdueOnDate(habit, Anchor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_RecurringDueInFuture_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor.AddDays(7));
+
+        HabitScheduleService.IsOverdueOnDate(habit, Anchor).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_FlexibleHabit_ReturnsFalse()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: Anchor, isFlexible: true);
+
+        HabitScheduleService.IsOverdueOnDate(habit, Anchor.AddDays(30)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsOverdueOnDate_BadHabit_ReturnsFalse()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Anchor)).Value;
+
+        HabitScheduleService.IsOverdueOnDate(habit, Anchor.AddDays(5)).Should().BeFalse();
+    }
 }

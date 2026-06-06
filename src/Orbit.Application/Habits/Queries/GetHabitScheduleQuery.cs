@@ -414,7 +414,7 @@ public class GetHabitScheduleQueryHandler(
 
         foreach (var habit in topLevel)
         {
-            var hasCompletedLogInRange = HasCompletedLogInRange(habit, dateFrom, dateTo);
+            var hasCompletedLogInRange = HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
 
             // Flexible habits that have met their window target should not appear
             if (habit.IsFlexible
@@ -423,7 +423,7 @@ public class GetHabitScheduleQueryHandler(
                 continue;
 
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
-            var isOverdue = DetermineOverdueStatus(habit, dateFrom, scheduledDates, includeOverdue);
+            var isOverdue = DetermineOverdueStatus(habit, dateFrom, includeOverdue);
             var hasDescendantDue = HasAnyDescendantDue(
                 habit.Id,
                 lookup,
@@ -438,34 +438,14 @@ public class GetHabitScheduleQueryHandler(
         return filtered;
     }
 
-    private static bool HasCompletedLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
-        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
-
     /// <summary>
-    /// Determines whether a habit is overdue based on its type and schedule.
-    /// Handles both one-time tasks and recurring habits.
+    /// Whether a habit is overdue on the reference date, honoring the request's
+    /// <paramref name="includeOverdue"/> flag. Delegates the overdue rule to
+    /// <see cref="HabitScheduleService.IsOverdueOnDate"/> so the schedule query and the
+    /// daily summary share a single definition of "overdue".
     /// </summary>
-    private static bool DetermineOverdueStatus(
-        Habit habit, DateOnly dateFrom, List<DateOnly> scheduledDates, bool includeOverdue)
-    {
-        if (!includeOverdue || habit.IsFlexible || habit.IsBadHabit)
-            return false;
-
-        // One-time tasks: overdue if due date has passed
-        if (habit.FrequencyUnit == null)
-        {
-            return !habit.IsCompleted
-                && habit.DueDate < dateFrom
-                && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom);
-        }
-
-        // Recurring habits: overdue when there is an unresolved past occurrence
-        // (DueDate has fallen before the reference date) and the habit is not due today.
-        if (scheduledDates.Contains(dateFrom))
-            return false;
-
-        return HabitScheduleService.HasMissedPastOccurrence(habit, dateFrom);
-    }
+    private static bool DetermineOverdueStatus(Habit habit, DateOnly dateFrom, bool includeOverdue) =>
+        includeOverdue && HabitScheduleService.IsOverdueOnDate(habit, dateFrom);
 
     private async Task AppendGeneralHabits(
         List<HabitScheduleItem> pagedItems,
@@ -577,7 +557,7 @@ public class GetHabitScheduleQueryHandler(
         if (!dateFrom.HasValue || !dateTo.HasValue) return true;
 
         var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom.Value, dateTo.Value);
-        var isOverdue = DetermineOverdueStatus(child, dateFrom.Value, scheduledDates, includeOverdue);
+        var isOverdue = DetermineOverdueStatus(child, dateFrom.Value, includeOverdue);
 
         return scheduledDates.Count > 0 || isOverdue;
     }
@@ -615,7 +595,7 @@ public class GetHabitScheduleQueryHandler(
 
         var isLoggedInRange = ctx.DateFrom.HasValue
             && ctx.DateTo.HasValue
-            && HasCompletedLogInRange(h, ctx.DateFrom.Value, ctx.DateTo.Value);
+            && HabitScheduleService.HasCompletedLogInRange(h, ctx.DateFrom.Value, ctx.DateTo.Value);
 
         return new HabitScheduleItem(
             h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
@@ -674,7 +654,6 @@ public class GetHabitScheduleQueryHandler(
                 var childIsOverdue = DetermineOverdueStatus(
                     child,
                     ctx.DateFrom.Value,
-                    childScheduledDates,
                     ctx.IncludeOverdue);
 
                 if (childScheduledDates.Count == 0 && !childIsOverdue)
@@ -696,7 +675,7 @@ public class GetHabitScheduleQueryHandler(
         foreach (var child in lookup[parentId])
         {
             var scheduledDates = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo);
-            var isOverdue = DetermineOverdueStatus(child, dateFrom, scheduledDates, includeOverdue);
+            var isOverdue = DetermineOverdueStatus(child, dateFrom, includeOverdue);
 
             if (scheduledDates.Count > 0 || isOverdue)
                 return true;
@@ -720,7 +699,7 @@ public class GetHabitScheduleQueryHandler(
                 .Where(c =>
                 {
                     var scheduledDates = ctx.GetScheduledDates(c);
-                    var isOverdue = DetermineOverdueStatus(c, df, scheduledDates, ctx.IncludeOverdue);
+                    var isOverdue = DetermineOverdueStatus(c, df, ctx.IncludeOverdue);
 
                     return scheduledDates.Count > 0
                         || c.IsCompleted
@@ -741,12 +720,12 @@ public class GetHabitScheduleQueryHandler(
     {
         var (ft, fc) = CalculateFlexibleProgress(c, ctx.ReferenceDate);
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue
-            && c.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
+            && HabitScheduleService.HasCompletedLogInRange(c, ctx.DateFrom.Value, ctx.DateTo.Value);
         var scheduledDates = ctx.DateFrom.HasValue && ctx.DateTo.HasValue
             ? ctx.GetScheduledDates(c)
             : [];
         var isOverdue = ctx.DateFrom.HasValue
-            && DetermineOverdueStatus(c, ctx.DateFrom.Value, scheduledDates, ctx.IncludeOverdue);
+            && DetermineOverdueStatus(c, ctx.DateFrom.Value, ctx.IncludeOverdue);
 
         var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
             ? HabitScheduleService.GetInstances(c, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
