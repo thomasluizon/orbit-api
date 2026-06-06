@@ -18,6 +18,16 @@ public class AiSummaryServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
+    private static readonly string[] BannedInstantPhrases =
+    [
+        "right now",
+        "just woke up",
+        "now that the afternoon is here",
+        "as the day begins",
+        "earlier today",
+        "upcoming later today",
+    ];
+
     // ── StripMarkdownFences ──────────────────────────────────────────
 
     [Fact]
@@ -80,7 +90,7 @@ public class AiSummaryServiceTests
     {
         var habits = new List<Habit> { CreateHabit("Yoga") };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
 
         result.Should().Contain("English");
         result.Should().Contain("Yoga");
@@ -91,7 +101,7 @@ public class AiSummaryServiceTests
     {
         var habits = new List<Habit> { CreateHabit("Leitura") };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "pt-br");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "pt-br");
 
         result.Should().Contain("Brazilian Portuguese");
     }
@@ -101,7 +111,7 @@ public class AiSummaryServiceTests
     {
         var habits = new List<Habit> { CreateHabit("Read") };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "pt");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "pt");
 
         result.Should().Contain("Brazilian Portuguese");
     }
@@ -112,31 +122,9 @@ public class AiSummaryServiceTests
         var habits = new List<Habit> { CreateHabit("Walk") };
         var date = new DateOnly(2025, 12, 25);
 
-        var result = InvokeBuildSummaryPrompt(habits, [], date, "en");
+        var result = InvokeBuildSummaryPrompt(habits, date, "en");
 
         result.Should().Contain("December 25, 2025");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_WithOverdueHabits_IncludesOverdueSection()
-    {
-        var scheduled = new List<Habit> { CreateHabit("Exercise") };
-        var overdue = new List<Habit> { CreateHabit("Meditation") };
-
-        var result = InvokeBuildSummaryPrompt(scheduled, overdue, Today, "en");
-
-        result.Should().Contain("Meditation");
-        result.Should().NotContain("(none)");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_NoOverdueHabits_ShowsNone()
-    {
-        var scheduled = new List<Habit> { CreateHabit("Exercise") };
-
-        var result = InvokeBuildSummaryPrompt(scheduled, [], Today, "en");
-
-        result.Should().Contain("(none)");
     }
 
     [Fact]
@@ -149,7 +137,7 @@ public class AiSummaryServiceTests
             CreateHabit("C"),
         };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
 
         result.Should().Contain("0/3 habits completed");
     }
@@ -200,6 +188,16 @@ public class AiSummaryServiceTests
         result.Should().Be("(no habits scheduled)");
     }
 
+    [Fact]
+    public void BuildHabitSection_HabitWithDueTime_ShowsAbsoluteDueTime()
+    {
+        var habits = new List<Habit> { CreateHabit("Workout", dueTime: new TimeOnly(14, 0)) };
+
+        var result = InvokeBuildHabitSection(habits);
+
+        result.Should().Contain("due 14:00");
+    }
+
     // ── BuildSummaryPrompt additional edge cases ──
 
     [Fact]
@@ -207,27 +205,9 @@ public class AiSummaryServiceTests
     {
         var habits = new List<Habit> { CreateHabit("Test") };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "fr");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "fr");
 
         result.Should().Contain("English");
-    }
-
-    [Fact]
-    public void BuildSummaryPrompt_MultipleOverdueHabits_AllListed()
-    {
-        var scheduled = new List<Habit> { CreateHabit("Active") };
-        var overdue = new List<Habit>
-        {
-            CreateHabit("Overdue1"),
-            CreateHabit("Overdue2"),
-            CreateHabit("Overdue3"),
-        };
-
-        var result = InvokeBuildSummaryPrompt(scheduled, overdue, Today, "en");
-
-        result.Should().Contain("Overdue1");
-        result.Should().Contain("Overdue2");
-        result.Should().Contain("Overdue3");
     }
 
     // ── BuildSummaryPrompt with various habit types ──
@@ -235,33 +215,77 @@ public class AiSummaryServiceTests
     [Fact]
     public void BuildSummaryPrompt_EmptyHabitList_ShowsNoHabitsScheduled()
     {
-        var result = InvokeBuildSummaryPrompt([], [], Today, "en");
+        var result = InvokeBuildSummaryPrompt([], Today, "en");
 
         result.Should().Contain("(no habits scheduled)");
         result.Should().Contain("0/0 habits completed");
     }
 
     [Fact]
-    public void BuildSummaryPrompt_ContainsRulesSection()
+    public void BuildSummaryPrompt_EstablishesCloseFriendPersonaAndLeadWithDone()
     {
         var habits = new List<Habit> { CreateHabit("Walk") };
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
 
         result.Should().Contain("Rules:");
-        result.Should().Contain("2-3 short sentences");
+        result.Should().Contain("LEAD with a specific");
+        result.Should().Contain("ALREADY completed today");
+        result.Should().Contain("friend who actually knows you");
         result.Should().Contain("Do NOT use markdown");
     }
 
     [Fact]
-    public void BuildSummaryPrompt_EveningContext_TellsAiNotToFrameMorningHabitsAsStartOfDay()
+    public void BuildSummaryPrompt_ContextDoesNotSeedBannedInstantPhrases()
     {
-        var habits = new List<Habit> { CreateHabit("Morning routine") };
+        var habits = new List<Habit>
+        {
+            CreateHabit("Morning routine"),
+            CreateHabit("Evening walk", dueTime: new TimeOnly(20, 0)),
+        };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en", new TimeOnly(19, 0));
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(19, 0));
 
-        result.Should().Contain("Current local time: 19:00 (Evening)");
-        result.Should().Contain("Morning routine (pending) [title suggests Morning, earlier today]");
-        result.Should().Contain("do NOT frame earlier morning habits as a way to start the day");
+        // The rules section deliberately NAMES these phrases to ban them; the model-facing
+        // context above it (date, time window, habit lines) must never seed them.
+        var context = result[..result.IndexOf("Rules:", StringComparison.Ordinal)];
+
+        foreach (var phrase in BannedInstantPhrases)
+            context.Should().NotContain(phrase, $"the prompt context must not seed the instant-phrase \"{phrase}\"");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_RulesBanEveryInstantPhrase()
+    {
+        var habits = new List<Habit> { CreateHabit("Walk") };
+
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(14, 0));
+
+        var rules = result[result.IndexOf("Rules:", StringComparison.Ordinal)..];
+        foreach (var phrase in BannedInstantPhrases)
+            rules.Should().Contain(phrase, $"the rules must explicitly ban \"{phrase}\"");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_PeriodRobustTimeContext_UsesRangeNotExactMinute()
+    {
+        var habits = new List<Habit> { CreateHabit("Evening walk") };
+
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(19, 0));
+
+        result.Should().Contain("Current part of day: evening (~5pm-9pm)");
+        result.Should().NotContain("19:00");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_PeriodRobustTimeContext_StartOfPeriodMatchesEnd()
+    {
+        var habits = new List<Habit> { CreateHabit("Afternoon focus") };
+
+        var startOfAfternoon = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(11, 0));
+        var endOfAfternoon = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(16, 59));
+
+        startOfAfternoon.Should().Contain("afternoon (~11am-5pm)");
+        endOfAfternoon.Should().Contain("afternoon (~11am-5pm)");
     }
 
     [Fact]
@@ -270,7 +294,7 @@ public class AiSummaryServiceTests
         var habits = new List<Habit> { CreateHabit("Test") };
 
         // "PT-BR" should still map since the switch lowercases it
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "PT-BR");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "PT-BR");
 
         result.Should().Contain("Brazilian Portuguese");
     }
@@ -279,7 +303,7 @@ public class AiSummaryServiceTests
     public void BuildSummaryPrompt_EmptyLanguageString_DefaultsToEnglish()
     {
         var habits = new List<Habit> { CreateHabit("Test") };
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "");
 
         result.Should().Contain("English");
     }
@@ -320,20 +344,6 @@ public class AiSummaryServiceTests
         result.Should().Contain("Push-ups (pending)");
         result.Should().Contain("Sit-ups (pending)");
         result.Should().Contain("Math (pending)");
-    }
-
-    // ── BuildSummaryPrompt with overdue section only ──
-
-    [Fact]
-    public void BuildSummaryPrompt_OnlyOverdueHabits_ScheduledSectionEmpty()
-    {
-        var overdue = new List<Habit> { CreateHabit("Overdue Task") };
-
-        var result = InvokeBuildSummaryPrompt([], overdue, Today, "en");
-
-        result.Should().Contain("(no habits scheduled)");
-        result.Should().Contain("Overdue Task");
-        result.Should().NotContain("(none)");
     }
 
     // ── StripMarkdownFences edge cases ──
@@ -379,7 +389,7 @@ public class AiSummaryServiceTests
         var habits = new List<Habit> { CreateHabit("Celebrate") };
         var date = new DateOnly(2026, 1, 1);
 
-        var result = InvokeBuildSummaryPrompt(habits, [], date, "en");
+        var result = InvokeBuildSummaryPrompt(habits, date, "en");
 
         result.Should().Contain("January 1, 2026");
     }
@@ -398,7 +408,7 @@ public class AiSummaryServiceTests
             CreateHabit("E"),
         };
 
-        var result = InvokeBuildSummaryPrompt(habits, [], Today, "en");
+        var result = InvokeBuildSummaryPrompt(habits, Today, "en");
 
         result.Should().Contain("0/5 habits completed");
     }
@@ -421,7 +431,8 @@ public class AiSummaryServiceTests
     private static Habit CreateHabit(
         string title,
         Guid? parentId = null,
-        DateOnly? dueDate = null)
+        DateOnly? dueDate = null,
+        TimeOnly? dueTime = null)
     {
         return Habit.Create(new HabitCreateParams(
             ValidUserId,
@@ -429,25 +440,25 @@ public class AiSummaryServiceTests
             FrequencyUnit.Day,
             1,
             DueDate: dueDate ?? Today,
+            DueTime: dueTime,
             ParentHabitId: parentId)).Value;
     }
 
     private static string InvokeBuildSummaryPrompt(
         List<Habit> scheduledHabits,
-        List<Habit> overdueHabits,
         DateOnly date,
         string language,
         TimeOnly? currentLocalTime = null)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildSummaryPrompt", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits, overdueHabits, date, date, language, currentLocalTime])!;
+        return (string)method.Invoke(null, [scheduledHabits, date, date, language, currentLocalTime])!;
     }
 
     private static string InvokeBuildHabitSection(List<Habit> scheduledHabits)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildHabitSection", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits, Today, Today, null])!;
+        return (string)method.Invoke(null, [scheduledHabits, Today, Today])!;
     }
 }

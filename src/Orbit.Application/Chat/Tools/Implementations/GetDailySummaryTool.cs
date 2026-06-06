@@ -20,7 +20,6 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
         {
             date_from = new { type = JsonSchemaTypes.String, description = "Start date (YYYY-MM-DD). Defaults to today." },
             date_to = new { type = JsonSchemaTypes.String, description = "End date (YYYY-MM-DD). Defaults to date_from." },
-            include_overdue = new { type = JsonSchemaTypes.Boolean, description = "Include overdue habits in the summary. Default: false." },
             language = new { type = JsonSchemaTypes.String, description = "Language code for the summary text. Default: 'en'." }
         },
         required = Array.Empty<string>()
@@ -31,11 +30,10 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
         var today = await userDateService.GetUserTodayAsync(userId, ct);
         var dateFrom = JsonArgumentParser.ParseDateOnly(args, "date_from") ?? today;
         var dateTo = JsonArgumentParser.ParseDateOnly(args, "date_to") ?? dateFrom;
-        var includeOverdue = JsonArgumentParser.GetOptionalBool(args, "include_overdue") ?? false;
         var language = JsonArgumentParser.GetOptionalString(args, "language") ?? "en";
 
         var result = await mediator.Send(
-            new GetDailySummaryQuery(userId, dateFrom, dateTo, includeOverdue, language), ct);
+            new GetDailySummaryQuery(userId, dateFrom, dateTo, language), ct);
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)

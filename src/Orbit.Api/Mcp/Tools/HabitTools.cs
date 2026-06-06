@@ -501,7 +501,6 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         ClaimsPrincipal user,
         [Description(DateFromDescription)] string dateFrom,
         [Description(DateToDescription)] string dateTo,
-        [Description("Include overdue habits")] bool includeOverdue = true,
         [Description("Language code (en, pt-BR)")] string language = "en",
         CancellationToken cancellationToken = default)
     {
@@ -510,7 +509,6 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             userId,
             McpInputParser.ParseDate(dateFrom, "dateFrom"),
             McpInputParser.ParseDate(dateTo, "dateTo"),
-            includeOverdue,
             language);
 
         var result = await mediator.Send(query, cancellationToken);
