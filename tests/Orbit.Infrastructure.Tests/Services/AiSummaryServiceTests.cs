@@ -600,6 +600,45 @@ public class AiSummaryServiceTests
     }
 
     [Fact]
+    public void SelectScheduledHabits_OneTimeTaskDueTodayButCompletedEarlier_NotSelected()
+    {
+        // The reported bug ("Depilação a laser"): a one-time task whose due date IS today but which
+        // was already completed on an earlier day. It carries the sticky IsCompleted flag and its
+        // completion log is dated in the past (outside today's range), so it is done and must not
+        // surface today -- neither as done (no log today) nor as a pending due-today item. The old
+        // rule re-included it because its due date matched today.
+        var task = CreateOneTimeTask("Depilação a laser", dueDate: Today);
+        task.Log(Today.AddDays(-3)); // completed three days early
+
+        var selected = InvokeSelectScheduledHabits([task], Today);
+
+        selected.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_OneTimeTaskDueInFuture_NotSelected()
+    {
+        // "Not in the future": a one-time task due after today is not part of today's summary.
+        var task = CreateOneTimeTask("Consulta médica", dueDate: Today.AddDays(4));
+
+        var selected = InvokeSelectScheduledHabits([task], Today);
+
+        selected.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_RecurringHabitDueInFutureNotLogged_NotSelected()
+    {
+        // A recurring habit whose next occurrence is still ahead (DueDate > today) and that was not
+        // logged today is neither open-today nor done-today, so it stays out of the summary.
+        var habit = CreateRecurring("Pesar na balança", FrequencyUnit.Week, dueDate: Today.AddDays(5));
+
+        var selected = InvokeSelectScheduledHabits([habit], Today);
+
+        selected.Should().BeEmpty();
+    }
+
+    [Fact]
     public void SelectScheduledHabits_OneTimeTaskCompletedToday_SelectedAndDone()
     {
         var task = CreateOneTimeTask("Pagar conta", dueDate: Today);
