@@ -47,12 +47,12 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Test summary content"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -76,12 +76,12 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("First call summary"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         // First call populates cache
         await _handler.Handle(query, CancellationToken.None);
@@ -114,12 +114,12 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -127,7 +127,7 @@ public class GetDailySummaryQueryHandlerTests
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Is<IEnumerable<Habit>>(habits =>
                 habits.Select(h => h.Title).SequenceEqual(new[] { "Read" })),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>());
     }
@@ -138,7 +138,7 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -153,7 +153,7 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>())
             .Returns(Result.Failure("PAY_GATE", "PAY_GATE"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -169,7 +169,7 @@ public class GetDailySummaryQueryHandlerTests
         _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -192,12 +192,12 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Failure<string>("AI service unavailable"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
@@ -221,25 +221,25 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "pt-BR",
+            Today, Today, "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo em portugues"));
 
         // Request supplies "en" but the DB-persisted profile language is "pt-BR".
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "en");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "pt-BR",
+            Today, Today, "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>());
         await _summaryService.DidNotReceive().GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>());
     }
@@ -259,19 +259,19 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "pt-BR",
+            Today, Today, "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "pt-BR");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "pt-BR");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "pt-BR",
+            Today, Today, "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>());
     }
@@ -291,19 +291,19 @@ public class GetDailySummaryQueryHandlerTests
 
         _summaryService.GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
-        var query = new GetDailySummaryQuery(UserId, Today, Today, false, "");
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "");
 
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
-            Today, Today, false, "en",
+            Today, Today, "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>());
     }

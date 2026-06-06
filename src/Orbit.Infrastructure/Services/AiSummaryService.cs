@@ -16,7 +16,6 @@ public sealed partial class AiSummaryService(
         IEnumerable<Habit> allHabits,
         DateOnly dateFrom,
         DateOnly dateTo,
-        bool includeOverdue,
         string language,
         TimeOnly? currentLocalTime,
         CancellationToken cancellationToken = default)
@@ -40,15 +39,7 @@ public sealed partial class AiSummaryService(
 
         var scheduledHabits = scheduledTopLevel.Concat(children).ToList();
 
-        var overdueHabits = includeOverdue
-            ? habitList
-                .Where(h => !h.IsCompleted
-                            && h.DueDate < dateFrom
-                            && !HasSkipLogInRange(h, dateFrom, dateTo))
-                .ToList()
-            : [];
-
-        var prompt = BuildSummaryPrompt(scheduledHabits, overdueHabits, dateFrom, dateTo, language, currentLocalTime);
+        var prompt = BuildSummaryPrompt(scheduledHabits, dateFrom, dateTo, language, currentLocalTime);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogGeneratingDailySummary(logger, dateFrom, language);
@@ -56,10 +47,11 @@ public sealed partial class AiSummaryService(
         try
         {
             var text = await aiClient.CompleteTextAsync(
-                "You are a friendly habit coach. Write short daily briefings.",
+                "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate what they have already done, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You write plain text only -- no markdown, bullets, headings, emoji, or JSON -- with no greeting and no sign-off, only in the language you are told to use.",
                 prompt,
                 temperature: 0.7,
-                cancellationToken);
+                cancellationToken,
+                maxOutputTokens: 200);
 
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<string>("AI returned empty response");
@@ -79,7 +71,6 @@ public sealed partial class AiSummaryService(
 
     private static string BuildSummaryPrompt(
         List<Habit> scheduledHabits,
-        List<Habit> overdueHabits,
         DateOnly date,
         DateOnly dateTo,
         string language,
@@ -87,11 +78,7 @@ public sealed partial class AiSummaryService(
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
-        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo, currentLocalTime);
-
-        var overdueSection = overdueHabits.Count > 0
-            ? string.Join("\n", overdueHabits.Select(h => $"- {h.Title}"))
-            : "(none)";
+        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo);
 
         var totalCount = scheduledHabits.Count;
         var doneTotal = scheduledHabits.Count(h => IsDoneInRange(h, date, dateTo));
@@ -99,46 +86,43 @@ public sealed partial class AiSummaryService(
 
         return $"""
             Date: {date:MMMM d, yyyy}
-            Current local time: {timeContext}
+            Current part of day: {timeContext}
             Progress: {doneTotal}/{totalCount} habits completed
 
             Today's habits:
             {habitSection}
 
-            Overdue from previous days:
-            {overdueSection}
+            Write a short message to this person about their day.
 
             Rules:
-            - Write 2-3 short sentences max, like a supportive friend texting you
-            - Weave habits into natural sentences about the DAY, don't just list habit names
-            - BAD: "Today you have Yoga, Morning Routine, and Guitar Playing."
-            - GOOD: "A good day to stretch out with some yoga and get creative on the guitar."
+            - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
+            - THEN, gently point at one or two of the still-pending habits as easy next moves -- never list everything, never frame it as a checklist, never guilt-trip
+            - If nothing is done yet, stay warm and forward-looking; do NOT imply they are behind or failing
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
-            - If some habits are done, briefly acknowledge progress
-            - If there are overdue habits, gently nudge without guilt-tripping
-            - Use the current local time to decide what is still relevant now
-            - If it is evening or night, do NOT frame earlier morning habits as a way to start the day
-            - When earlier-day habits are still pending, mention them only as optional catch-up or closure, then focus on habits that fit the current or upcoming part of the day
-            - Keep it casual, warm, and concise -- not corporate or overly enthusiastic
+            - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
+            - GOOD: "Nice work getting your run in -- some guitar later could be a great way to unwind."
+            - Keep it to 2-3 sentences, warm and close, like a friend who actually knows you -- never corporate or coach-like
+            - This message is shown for the WHOLE current part of the day, so it must read correctly whether they see it at the start or the end of that window
+            - Treat the time of day as a broad window, not an exact moment; never imply a precise instant
+            - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"
             - Do NOT use markdown, bullet points, emojis, or JSON
             - Do NOT mention the date explicitly
             - Write ONLY in {languageName}
-            - No greeting like "good morning", no sign-off -- just the briefing
+            - No greeting like "good morning", no sign-off -- just the message
             """;
     }
 
     private static string BuildHabitSection(
         List<Habit> scheduledHabits,
         DateOnly dateFrom,
-        DateOnly dateTo,
-        TimeOnly? currentLocalTime)
+        DateOnly dateTo)
     {
         var habitLines = new List<string>();
 
         foreach (var habit in scheduledHabits.Where(h => h.ParentHabitId is null))
         {
             var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
-            var timing = DescribeTiming(habit, currentLocalTime);
+            var timing = DescribeTiming(habit);
             var children = scheduledHabits.Where(h => h.ParentHabitId == habit.Id).ToList();
 
             if (children.Count > 0)
@@ -146,7 +130,7 @@ public sealed partial class AiSummaryService(
                 var doneCount = children.Count(c => IsDoneInRange(c, dateFrom, dateTo));
                 habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{timing}]");
                 foreach (var child in children)
-                    habitLines.Add($"  - {child.Title} ({(IsDoneInRange(child, dateFrom, dateTo) ? "done" : "pending")}) [{DescribeTiming(child, currentLocalTime)}]");
+                    habitLines.Add($"  - {child.Title} ({(IsDoneInRange(child, dateFrom, dateTo) ? "done" : "pending")}) [{DescribeTiming(child)}]");
             }
             else
             {
@@ -166,36 +150,31 @@ public sealed partial class AiSummaryService(
     private static bool IsDoneInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         habit.IsCompleted || HasCompletedLogInRange(habit, dateFrom, dateTo);
 
-    private static string BuildTimeContext(TimeOnly? currentLocalTime) =>
-        currentLocalTime.HasValue
-            ? $"{currentLocalTime.Value:HH\\:mm} ({ResolveDayPeriod(currentLocalTime.Value)})"
-            : "not provided";
+    private static string BuildTimeContext(TimeOnly? currentLocalTime)
+    {
+        if (!currentLocalTime.HasValue)
+            return "not provided";
 
-    private static string DescribeTiming(Habit habit, TimeOnly? currentLocalTime)
+        var period = ResolveDayPeriod(currentLocalTime.Value);
+        return $"{period.ToString().ToLowerInvariant()} ({PeriodRange(period)})";
+    }
+
+    private static string PeriodRange(DayPeriod period) => period switch
+    {
+        DayPeriod.Morning => "~5am-11am",
+        DayPeriod.Afternoon => "~11am-5pm",
+        DayPeriod.Evening => "~5pm-9pm",
+        DayPeriod.Night => "~9pm-late",
+        _ => "~5am-11am"
+    };
+
+    private static string DescribeTiming(Habit habit)
     {
         var dueDescription = habit.DueTime.HasValue
             ? $"due {habit.DueTime.Value:HH\\:mm}"
             : InferTitleTimePeriod(habit.Title);
 
-        if (!currentLocalTime.HasValue)
-            return dueDescription ?? "no specific time";
-
-        var relation = ResolveTimeRelation(habit, currentLocalTime.Value);
-        return dueDescription is null ? relation : $"{dueDescription}, {relation}";
-    }
-
-    private static string ResolveTimeRelation(Habit habit, TimeOnly currentLocalTime)
-    {
-        if (habit.DueTime.HasValue)
-            return habit.DueTime.Value < currentLocalTime ? "earlier today" : "upcoming later today";
-
-        var inferredPeriod = InferTitleDayPeriod(habit.Title);
-        if (inferredPeriod is null)
-            return "no specific time";
-
-        return PeriodRank(inferredPeriod.Value) < PeriodRank(ResolveDayPeriod(currentLocalTime))
-            ? "earlier today"
-            : "fits now or later today";
+        return dueDescription ?? "no specific time";
     }
 
     private static string? InferTitleTimePeriod(string title)
@@ -234,15 +213,6 @@ public sealed partial class AiSummaryService(
         if (hour < 21) return DayPeriod.Evening;
         return DayPeriod.Night;
     }
-
-    private static int PeriodRank(DayPeriod period) => period switch
-    {
-        DayPeriod.Morning => 0,
-        DayPeriod.Afternoon => 1,
-        DayPeriod.Evening => 2,
-        DayPeriod.Night => 3,
-        _ => 0
-    };
 
     private enum DayPeriod
     {
