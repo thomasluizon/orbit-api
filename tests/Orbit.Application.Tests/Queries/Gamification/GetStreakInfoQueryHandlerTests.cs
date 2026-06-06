@@ -93,8 +93,6 @@ public class GetStreakInfoQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FreezesUsedThisMonth.Should().Be(2);
-        // FreezesAvailable now reflects min(accumulated, monthly remaining). User hasn't
-        // earned any freezes, so available is 0 despite monthly room.
         result.Value.FreezesAvailable.Should().Be(0);
         result.Value.RecentFreezeDates.Should().HaveCount(2);
         result.Value.IsFrozenToday.Should().BeFalse();

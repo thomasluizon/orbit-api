@@ -47,7 +47,6 @@ public partial class GetPlansQueryHandler(
             int? couponPercentOff = null;
             if (!string.IsNullOrEmpty(user.ReferralCouponId))
             {
-                // TryGet returns null on any provider error; treat as "no discount" and log.
                 couponPercentOff = await billingService.TryGetCouponPercentOffAsync(user.ReferralCouponId, cancellationToken);
                 if (couponPercentOff is null)
                 {

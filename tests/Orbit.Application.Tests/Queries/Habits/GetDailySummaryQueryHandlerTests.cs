@@ -83,10 +83,8 @@ public class GetDailySummaryQueryHandlerTests
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
-        // First call populates cache
         await _handler.Handle(query, CancellationToken.None);
 
-        // Second call should return from cache
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -226,7 +224,6 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo em portugues"));
 
-        // Request supplies "en" but the DB-persisted profile language is "pt-BR".
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
         var result = await _handler.Handle(query, CancellationToken.None);
@@ -247,8 +244,7 @@ public class GetDailySummaryQueryHandlerTests
     [Fact]
     public async Task Handle_FallsBackToRequestLanguage_WhenUserLanguageEmpty()
     {
-        var user = CreateTestUser(); // Language is null by default
-        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var user = CreateTestUser();        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _habitRepo.FindAsync(

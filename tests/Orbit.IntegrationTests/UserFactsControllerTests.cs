@@ -15,7 +15,6 @@ public class UserFactsControllerTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
@@ -43,7 +42,6 @@ public class UserFactsControllerTests : IAsyncLifetime
                     await _client.DeleteAsync($"/api/user-facts/{fact.Id}");
             }
 
-            // Also clean up habits created during tests
             var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
             if (habitsResponse.IsSuccessStatusCode)
             {
@@ -60,10 +58,8 @@ public class UserFactsControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetUserFacts_WhenNoFacts_ReturnsEmptyArray()
     {
-        // Act
         var response = await _client.GetAsync("/api/user-facts");
 
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var facts = await response.Content.ReadFromJsonAsync<List<UserFactDto>>(JsonOptions);
         facts.Should().NotBeNull();
@@ -73,7 +69,6 @@ public class UserFactsControllerTests : IAsyncLifetime
     [Fact]
     public async Task GetUserFacts_AfterChat_ReturnsFacts()
     {
-        // Act - Send a chat message rich with personal context
         var chatResponse = await SendChatMessage(
             "I'm a morning person and I work as a software developer. " +
             "I prefer exercising in the morning before work. " +
@@ -82,12 +77,10 @@ public class UserFactsControllerTests : IAsyncLifetime
         chatResponse.Should().NotBeNull();
         chatResponse!.AiMessage.Should().NotBeNullOrEmpty();
 
-        // Assert - Facts should be extracted
         var facts = await WaitForFactsAsync(minimumCount: 1);
         facts.Should().NotBeNull();
         facts.Should().NotBeEmpty("fact extraction should have captured personal info from the message");
 
-        // Verify fact structure
         var firstFact = facts!.First();
         firstFact.Id.Should().NotBeEmpty();
         firstFact.FactText.Should().NotBeNullOrEmpty();
@@ -97,7 +90,6 @@ public class UserFactsControllerTests : IAsyncLifetime
     [Fact]
     public async Task DeleteUserFact_ExistingFact_ReturnsNoContent()
     {
-        // Arrange - Create a fact via chat
         await SendChatMessage(
             "I'm a night owl and I love working late at night. " +
             "I prefer coffee over tea. " +
@@ -108,13 +100,10 @@ public class UserFactsControllerTests : IAsyncLifetime
 
         var factToDelete = facts!.First();
 
-        // Act - Delete the fact
         var deleteResponse = await _client.DeleteAsync($"/api/user-facts/{factToDelete.Id}");
 
-        // Assert
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Verify the fact is no longer in the list
         var afterDeleteResponse = await _client.GetAsync("/api/user-facts");
         var afterDeleteFacts = await afterDeleteResponse.Content.ReadFromJsonAsync<List<UserFactDto>>(JsonOptions);
         afterDeleteFacts.Should().NotContain(f => f.Id == factToDelete.Id);
@@ -123,24 +112,19 @@ public class UserFactsControllerTests : IAsyncLifetime
     [Fact]
     public async Task DeleteUserFact_NonExistentId_ReturnsNotFound()
     {
-        // Act
         var randomId = Guid.NewGuid();
         var response = await _client.DeleteAsync($"/api/user-facts/{randomId}");
 
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task GetUserFacts_Unauthorized_Returns401()
     {
-        // Arrange - Create anonymous client without auth token
         using var anonClient = _factory.CreateClient();
 
-        // Act
         var response = await anonClient.GetAsync("/api/user-facts");
 
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -148,13 +132,11 @@ public class UserFactsControllerTests : IAsyncLifetime
 
     private async Task<ChatResponse?> SendChatMessage(string message)
     {
-        // Rate limiting: Wait 10 seconds between API calls to respect AI API rate limits
         await RateLimitSemaphore.WaitAsync();
         try
         {
             var timeSinceLastCall = DateTime.UtcNow - LastApiCall;
-            var minDelay = TimeSpan.FromSeconds(10); // 6 requests per minute max
-
+            var minDelay = TimeSpan.FromSeconds(10);
             if (timeSinceLastCall < minDelay)
             {
                 var remainingDelay = minDelay - timeSinceLastCall;

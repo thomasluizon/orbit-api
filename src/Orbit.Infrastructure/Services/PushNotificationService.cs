@@ -63,9 +63,6 @@ public partial class PushNotificationService(
             return;
         }
 
-        // Batch via SendEachAsync so N tokens cost one HTTP round-trip per chunk of 500
-        // instead of one per token. SendEach reports per-message status, letting us still
-        // detect and remove stale tokens.
         const int FcmBatchSize = 500;
         var subsList = subs as IList<Domain.Entities.PushSubscription> ?? subs.ToList();
         for (int offset = 0; offset < subsList.Count; offset += FcmBatchSize)
@@ -85,8 +82,6 @@ public partial class PushNotificationService(
             }
             catch (Exception ex)
             {
-                // If the entire batch errors (e.g., network), fall back to per-message sends
-                // so a single transient hiccup doesn't lose the whole batch.
                 if (logger.IsEnabled(LogLevel.Warning))
                     LogFcmPushFailed(logger, ex, "batch");
                 foreach (var sub in chunk)
@@ -159,7 +154,6 @@ public partial class PushNotificationService(
         List<Domain.Entities.PushSubscription> staleSubscriptions,
         CancellationToken ct)
     {
-        // Reuse the injected HttpClient instead of creating a new PushServiceClient per call
         var client = new PushServiceClient(httpClient);
         client.DefaultAuthentication = new VapidAuthentication(
             _settings.PublicKey, _settings.PrivateKey)
@@ -237,7 +231,5 @@ public partial class PushNotificationService(
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Failed to send web push to {Endpoint}")]
     private static partial void LogWebPushFailedGeneric(ILogger logger, Exception ex, string endpoint);
-
-
 
 }

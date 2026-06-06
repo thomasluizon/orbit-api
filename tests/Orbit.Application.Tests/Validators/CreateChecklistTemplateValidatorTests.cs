@@ -79,7 +79,6 @@ public class CreateChecklistTemplateValidatorTests
     [Fact]
     public void Validate_NullItems_NoError()
     {
-        // Items null is allowed (When guard prevents the Must rule from firing)
         var result = _validator.TestValidate(ValidCommand() with { Items = null! });
         result.ShouldNotHaveValidationErrorFor(x => x.Items);
     }

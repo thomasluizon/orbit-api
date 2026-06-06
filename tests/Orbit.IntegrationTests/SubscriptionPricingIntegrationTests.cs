@@ -33,8 +33,6 @@ public class SubscriptionPricingIntegrationTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // ── Checkout price resolution ─────────────────────────────
-
     [Theory]
     [InlineData("BR", "yearly", "price_test_yearly_brl")]
     [InlineData("BR", "monthly", "price_test_monthly_brl")]
@@ -53,8 +51,6 @@ public class SubscriptionPricingIntegrationTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         _factory.BillingService.LastCheckoutPriceId.Should().Be(expectedPriceId);
     }
-
-    // ── Plans currency resolution ─────────────────────────────
 
     [Theory]
     [InlineData("BR", "brl")]

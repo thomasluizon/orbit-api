@@ -39,7 +39,6 @@ public class LinkHabitsToGoalCommandHandler(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
             cancellationToken);
 
-        // Clear existing and reassign
         foreach (var existing in goal.Habits.ToList())
             goal.RemoveHabit(existing);
 

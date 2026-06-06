@@ -72,16 +72,11 @@ public partial class HandleWebhookCommandHandler(
         }
         catch (StripeException ex)
         {
-            // Stripe SDK threw -- could be a transient call to GetAsync. Surface as a
-            // retryable failure so Stripe's webhook redelivery picks it up.
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
             return Result.Failure("Stripe API error processing webhook event");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Non-Stripe error (DB write, etc.). Generic message; do NOT include the raw
-            // exception detail in the response body since Stripe will deliver it back to
-            // the webhook caller.
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
             return Result.Failure("Webhook processing failed");
         }
@@ -100,10 +95,6 @@ public partial class HandleWebhookCommandHandler(
         if (session?.Metadata?.TryGetValue("userId", out var userIdStr) != true
             || !Guid.TryParse(userIdStr, out var uid))
         {
-            // Silent skip on missing/malformed userId metadata previously hid lost subscriptions.
-            // Throw so the outer catch records the failure and Stripe retries the webhook with
-            // (hopefully) corrected metadata; if metadata was set incorrectly upstream, the
-            // operator will see the recurring error in logs instead of a silent data loss.
             LogCheckoutUserIdExtractionFailed(logger);
             throw new InvalidOperationException(
                 $"checkout.session.completed missing or invalid userId metadata (session: {session?.Id ?? "null"}).");
@@ -205,7 +196,6 @@ public partial class HandleWebhookCommandHandler(
             ? subscription.Items.Data[0].CurrentPeriodEnd
             : DateTime.UtcNow.AddMonths(1);
     }
-
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Stripe webhook received, body length: {Length}")]
     private static partial void LogStripeWebhookReceived(ILogger logger, int length);

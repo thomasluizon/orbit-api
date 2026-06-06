@@ -21,15 +21,12 @@ public class ValidationBehaviorTests
     [Fact]
     public async Task Handle_NoValidators_CallsNext()
     {
-        // Arrange
         var validators = Enumerable.Empty<IValidator<ValidationTestRequest>>();
         var behavior = new ValidationBehavior<ValidationTestRequest, string>(validators);
         var request = new ValidationTestRequest("test");
 
-        // Act
         var result = await behavior.Handle(request, _next, CancellationToken.None);
 
-        // Assert
         result.Should().Be("success");
         await _next.Received(1).Invoke();
     }
@@ -37,7 +34,6 @@ public class ValidationBehaviorTests
     [Fact]
     public async Task Handle_ValidInput_CallsNext()
     {
-        // Arrange
         var validator = Substitute.For<IValidator<ValidationTestRequest>>();
         validator.ValidateAsync(Arg.Any<ValidationContext<ValidationTestRequest>>(), Arg.Any<CancellationToken>())
             .Returns(new ValidationResult());
@@ -45,10 +41,8 @@ public class ValidationBehaviorTests
         var behavior = new ValidationBehavior<ValidationTestRequest, string>(new[] { validator });
         var request = new ValidationTestRequest("valid");
 
-        // Act
         var result = await behavior.Handle(request, _next, CancellationToken.None);
 
-        // Assert
         result.Should().Be("success");
         await _next.Received(1).Invoke();
     }
@@ -56,7 +50,6 @@ public class ValidationBehaviorTests
     [Fact]
     public async Task Handle_InvalidInput_ThrowsValidationException()
     {
-        // Arrange
         var validator = Substitute.For<IValidator<ValidationTestRequest>>();
         var failures = new List<ValidationFailure>
         {
@@ -68,10 +61,8 @@ public class ValidationBehaviorTests
         var behavior = new ValidationBehavior<ValidationTestRequest, string>(new[] { validator });
         var request = new ValidationTestRequest("");
 
-        // Act
         var act = () => behavior.Handle(request, _next, CancellationToken.None);
 
-        // Assert
         var ex = await act.Should().ThrowAsync<ValidationException>();
         ex.Which.Errors.Should().HaveCount(1);
         await _next.DidNotReceive().Invoke();
@@ -80,7 +71,6 @@ public class ValidationBehaviorTests
     [Fact]
     public async Task Handle_MultipleFailures_ThrowsAllErrors()
     {
-        // Arrange
         var validator1 = Substitute.For<IValidator<ValidationTestRequest>>();
         validator1.ValidateAsync(Arg.Any<ValidationContext<ValidationTestRequest>>(), Arg.Any<CancellationToken>())
             .Returns(new ValidationResult(new[]
@@ -98,10 +88,8 @@ public class ValidationBehaviorTests
         var behavior = new ValidationBehavior<ValidationTestRequest, string>(new[] { validator1, validator2 });
         var request = new ValidationTestRequest("");
 
-        // Act
         var act = () => behavior.Handle(request, _next, CancellationToken.None);
 
-        // Assert
         var ex = await act.Should().ThrowAsync<ValidationException>();
         ex.Which.Errors.Should().HaveCount(2);
         await _next.DidNotReceive().Invoke();

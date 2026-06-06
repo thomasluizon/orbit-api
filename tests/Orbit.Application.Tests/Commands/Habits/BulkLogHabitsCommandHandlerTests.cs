@@ -90,8 +90,6 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OverdueHabit_LogsAsToday()
     {
-        // Weekly habit overdue 4 days ago (today is not its scheduled weekday).
-        // Bulk-log resolves it as today via the same overdue allowance single-log has.
         var habit = Habit.Create(new HabitCreateParams(UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
@@ -108,8 +106,6 @@ public class BulkLogHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_NotScheduledNotOverdue_ReportsFailedItem()
     {
-        // Weekly habit due in the future: today is neither scheduled nor overdue,
-        // so the overdue allowance must NOT permit logging it.
         var habit = Habit.Create(new HabitCreateParams(UserId, "Future", FrequencyUnit.Week, 1, DueDate: Today.AddDays(3))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
@@ -209,7 +205,6 @@ public class BulkLogHabitsCommandHandlerTests
     public async Task Handle_AlreadyLoggedRecurringHabit_FailsScheduleCheckSinceDueDateAdvanced()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        // Log once - this advances DueDate past Today for recurring habits
         habit.Log(Today);
         SetupHabitsForUser(new List<Habit> { habit });
 
@@ -219,7 +214,6 @@ public class BulkLogHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // After logging a daily habit, DueDate advances, so re-logging the same date fails schedule check
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
         result.Value.Results[0].Error.Should().Contain("not scheduled");
     }

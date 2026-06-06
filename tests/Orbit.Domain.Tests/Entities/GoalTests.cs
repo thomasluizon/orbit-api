@@ -23,8 +23,6 @@ public class GoalTests
         return result.Value;
     }
 
-    // --- Create tests ---
-
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
@@ -205,8 +203,6 @@ public class GoalTests
         goal.Habits.Should().BeEmpty();
     }
 
-    // --- UpdateProgress tests ---
-
     [Fact]
     public void UpdateProgress_ActiveGoal_UpdatesCurrentValue()
     {
@@ -288,8 +284,6 @@ public class GoalTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Cannot update progress on a non-active goal");
     }
-
-    // --- Update tests ---
 
     [Fact]
     public void Update_ValidInput_UpdatesAllFields()
@@ -400,8 +394,7 @@ public class GoalTests
     public void Update_RaiseTargetAboveCurrent_ReactivatesCompleted()
     {
         var goal = CreateValidGoal(targetValue: 100);
-        goal.UpdateProgress(100); // auto-completes
-        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.UpdateProgress(100);        goal.Status.Should().Be(GoalStatus.Completed);
 
         goal.Update("Title", null, 200, "pages", null);
 
@@ -419,8 +412,6 @@ public class GoalTests
         goal.Deadline.Should().BeNull();
     }
 
-    // --- UpdatePosition tests ---
-
     [Fact]
     public void UpdatePosition_SetsPosition()
     {
@@ -431,8 +422,6 @@ public class GoalTests
         result.IsSuccess.Should().BeTrue();
         goal.Position.Should().Be(3);
     }
-
-    // --- MarkCompleted tests ---
 
     [Fact]
     public void MarkCompleted_ActiveGoal_Completes()
@@ -469,8 +458,6 @@ public class GoalTests
         result.IsSuccess.Should().BeTrue();
         goal.Status.Should().Be(GoalStatus.Completed);
     }
-
-    // --- MarkAbandoned tests ---
 
     [Fact]
     public void MarkAbandoned_ActiveGoal_Abandons()
@@ -509,8 +496,6 @@ public class GoalTests
         goal.CompletedAtUtc.Should().BeNull();
     }
 
-    // --- Reactivate tests ---
-
     [Fact]
     public void Reactivate_CompletedGoal_Reactivates()
     {
@@ -547,8 +532,6 @@ public class GoalTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Goal is already active");
     }
-
-    // --- State transition sequences ---
 
     [Fact]
     public void StateTransition_Active_Complete_Reactivate()
@@ -596,8 +579,6 @@ public class GoalTests
         goal.Status.Should().Be(GoalStatus.Active);
         goal.CurrentValue.Should().Be(100);
     }
-
-    // --- Habit association tests ---
 
     [Fact]
     public void AddHabit_AddsHabit()

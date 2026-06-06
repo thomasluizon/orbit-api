@@ -81,10 +81,8 @@ public class GetRetrospectiveQueryHandlerTests
 
         var query = new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "weekly", "en");
 
-        // First call populates cache
         await _handler.Handle(query, CancellationToken.None);
 
-        // Second call should return from cache
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

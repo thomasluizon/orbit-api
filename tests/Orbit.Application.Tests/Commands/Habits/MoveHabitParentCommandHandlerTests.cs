@@ -35,14 +35,12 @@ public class MoveHabitParentCommandHandlerTests
         var habit = CreateTestHabit("Child");
         var newParent = CreateTestHabit("New Parent");
 
-        // First call returns the habit, second returns the new parent
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habit, newParent);
 
-        // WouldCreateCycle loads all user habits via FindAsync
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -60,8 +58,7 @@ public class MoveHabitParentCommandHandlerTests
     public async Task Handle_NullParent_PromotesToTopLevel()
     {
         var habit = CreateTestHabit("Child");
-        habit.SetParentHabitId(Guid.NewGuid()); // Start with a parent
-
+        habit.SetParentHabitId(Guid.NewGuid());
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -80,19 +77,16 @@ public class MoveHabitParentCommandHandlerTests
     [Fact]
     public async Task Handle_CircularReference_ReturnsFailure()
     {
-        // Parent -> Child. Try to move Parent under Child => circular.
         var parent = CreateTestHabit("Parent");
         var child = CreateTestHabit("Child");
         child.SetParentHabitId(parent.Id);
 
-        // First call returns the habit being moved (parent), second returns the target parent (child)
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(parent, child);
 
-        // WouldCreateCycle now loads ALL user habits via FindAsync and walks in memory
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())

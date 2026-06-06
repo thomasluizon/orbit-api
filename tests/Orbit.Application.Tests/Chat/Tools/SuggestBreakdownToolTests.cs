@@ -42,7 +42,6 @@ public class SuggestBreakdownToolTests
         var args = JsonDocument.Parse("{\"title\": \"Test\", \"suggested_sub_habits\": [{\"title\": \"Sub1\"}]}").RootElement;
         var result = await _tool.ExecuteAsync(args, UserId, CancellationToken.None);
 
-        // SuggestBreakdown only passes through suggestions, never creates entities
         result.Success.Should().BeTrue();
         result.EntityId.Should().BeNull();
     }

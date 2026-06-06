@@ -64,9 +64,6 @@ public class CompleteOnboardingCommandHandlerTests
     }
 }
 
-// CompleteTourCommandHandlerTests removed -- tests in dedicated file: CompleteTourCommandHandlerTests.cs
-// ResetTourCommandHandlerTests removed -- tests in dedicated file: ResetTourCommandHandlerTests.cs
-
 public class SetAiMemoryCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();

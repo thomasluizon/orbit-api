@@ -24,7 +24,6 @@ public class CreateApiKeyCommandHandlerTests
         _payGate.CanCreateApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
 
-        // Default: no existing keys
         _apiKeyRepo.FindAsync(
             Arg.Any<Expression<Func<ApiKey, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -65,7 +64,6 @@ public class CreateApiKeyCommandHandlerTests
     [Fact]
     public async Task Handle_MaxKeysReached_ReturnsFailure()
     {
-        // Create 5 existing keys (the max)
         var existingKeys = Enumerable.Range(0, 5)
             .Select(_ => ApiKey.Create(UserId, "Key").Value.Entity)
             .ToList();

@@ -49,8 +49,7 @@ public class ApiKey : Entity
 
         var rawKey = GenerateKey();
         var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);
-        var keyPrefix = rawKey[..12]; // "orb_" + first 8 random chars
-
+        var keyPrefix = rawKey[..12];
         var apiKey = new ApiKey
         {
             UserId = userId,

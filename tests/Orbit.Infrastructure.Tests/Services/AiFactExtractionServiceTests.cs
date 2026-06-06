@@ -113,7 +113,6 @@ public class AiFactExtractionServiceTests
             (IReadOnlyList<Domain.Entities.UserFact>)Array.Empty<Domain.Entities.UserFact>()
         ])!;
 
-        // Ensure the prompt contains guidance about what NOT to extract
         prompt.Should().Contain("NEVER extract");
         prompt.Should().Contain("habit intentions");
     }

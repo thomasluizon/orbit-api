@@ -75,7 +75,6 @@ public class AchievementDefinitionsTests
     {
         var categories = AchievementDefinitions.All.Select(a => a.Category).Distinct().ToList();
 
-        // GettingStarted, Consistency, Volume, Goals, Perfection, Special
         categories.Should().HaveCount(6);
     }
 
@@ -84,7 +83,6 @@ public class AchievementDefinitionsTests
     {
         var rarities = AchievementDefinitions.All.Select(a => a.Rarity).Distinct().ToList();
 
-        // Common, Uncommon, Rare, Epic, Legendary
         rarities.Should().HaveCount(5);
     }
 
@@ -131,7 +129,6 @@ public class AchievementDefinitionsTests
     [Fact]
     public void ConstantKeys_MatchDefinitionIds()
     {
-        // Verify key constants match their definition IDs
         AchievementDefinitions.GetById(AchievementDefinitions.FirstOrbit)!.Id
             .Should().Be("first_orbit");
         AchievementDefinitions.GetById(AchievementDefinitions.Liftoff)!.Id

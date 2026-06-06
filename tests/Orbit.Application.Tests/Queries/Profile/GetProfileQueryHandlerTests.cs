@@ -68,7 +68,6 @@ public class GetProfileQueryHandlerTests
     public async Task Handle_FreeUser_ReturnsFreeplan()
     {
         var user = CreateTestUser();
-        // Start trial in the past so user is on free plan
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
 
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);

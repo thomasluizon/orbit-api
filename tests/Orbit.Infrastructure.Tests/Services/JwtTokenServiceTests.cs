@@ -30,28 +30,22 @@ public class JwtTokenServiceTests
     [Fact]
     public void GenerateToken_ReturnsNonEmptyString()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var email = "test@example.com";
 
-        // Act
         var token = _sut.GenerateToken(userId, email);
 
-        // Assert
         token.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
     public void GenerateToken_ContainsUserIdClaim()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var email = "test@example.com";
 
-        // Act
         var token = _sut.GenerateToken(userId, email);
 
-        // Assert
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
 
@@ -63,14 +57,11 @@ public class JwtTokenServiceTests
     [Fact]
     public void GenerateToken_ContainsEmailClaim()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var email = "user@orbit.test";
 
-        // Act
         var token = _sut.GenerateToken(userId, email);
 
-        // Assert
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
 
@@ -82,15 +73,12 @@ public class JwtTokenServiceTests
     [Fact]
     public void GenerateToken_SetsCorrectExpiry()
     {
-        // Arrange
         var userId = Guid.NewGuid();
         var email = "test@example.com";
         var beforeGeneration = DateTime.UtcNow;
 
-        // Act
         var token = _sut.GenerateToken(userId, email);
 
-        // Assert
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
         var expectedExpiry = _settings.ExpiryMinutes > 0

@@ -31,8 +31,6 @@ public class ApiKeysControllerTests
         };
     }
 
-    // --- CreateApiKey ---
-
     [Fact]
     public async Task CreateApiKey_Success_ReturnsCreated()
     {
@@ -71,8 +69,6 @@ public class ApiKeysControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- GetApiKeys ---
-
     [Fact]
     public async Task GetApiKeys_Success_ReturnsOk()
     {
@@ -94,8 +90,6 @@ public class ApiKeysControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- RevokeApiKey ---
 
     [Fact]
     public async Task RevokeApiKey_Success_ReturnsNoContent()

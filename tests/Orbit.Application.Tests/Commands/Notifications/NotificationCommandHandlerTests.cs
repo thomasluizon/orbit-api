@@ -275,10 +275,6 @@ public class SubscribePushCommandHandlerTests
     [Fact]
     public async Task Handle_ExistingEndpointDifferentUser_RejectsToPreventHijack()
     {
-        // Push subscription endpoints are unique per browser/device. If a different user already
-        // owns this endpoint, the request is most likely an attempt to hijack notifications --
-        // legitimate browser re-registration produces a NEW endpoint URL. The handler now
-        // rejects rather than silently replacing.
         var otherUserId = Guid.NewGuid();
         var existing = PushSubscription.Create(otherUserId, "https://push.example.com/endpoint", "p256dh", "auth").Value;
 
@@ -311,10 +307,6 @@ public class SubscribePushCommandHandlerTests
     [Fact]
     public async Task Handle_FcmEndpoint_AcceptsRawTokenWithoutHttpsCheck()
     {
-        // FCM stores a raw Firebase registration token in Endpoint (not a URL). The
-        // PushNotificationService passes it as Message.Token to the Firebase Admin SDK,
-        // which addresses Google's servers internally. The https-only validation must
-        // not apply here, otherwise no native (mobile) subscription can register.
         _pushSubRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<PushSubscription, bool>>>(),
             Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>?>(),

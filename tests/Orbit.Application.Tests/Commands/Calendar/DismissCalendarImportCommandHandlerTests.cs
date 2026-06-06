@@ -46,7 +46,6 @@ public class DismissCalendarImportCommandHandlerTests
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
-        // FindOneTrackedAsync returns null by default
         var command = new DismissCalendarImportCommand(UserId);
 
         var result = await _handler.Handle(command, CancellationToken.None);

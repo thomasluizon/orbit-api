@@ -27,7 +27,6 @@ public class ApiKeyAuthenticationHandlerTests
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
 
-        // Set up service provider
         var services = new ServiceCollection();
         services.AddSingleton(apiKeyRepo);
         services.AddSingleton(payGate);
@@ -73,7 +72,6 @@ public class ApiKeyAuthenticationHandlerTests
     [Fact]
     public async Task HandleAuthenticateAsync_NonApiKeyBearer_ReturnsFail()
     {
-        // A standard JWT token does not start with "orb_"
         var result = await RunHandler("Bearer eyJhbGciOiJIUzI1NiJ9.test");
 
         result.Succeeded.Should().BeFalse();
@@ -98,7 +96,6 @@ public class ApiKeyAuthenticationHandlerTests
         payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
 
-        // Return empty list - no matching keys
         apiKeyRepo.FindTrackedAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(),
             Arg.Any<CancellationToken>())

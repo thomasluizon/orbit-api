@@ -35,7 +35,6 @@ public class BulkSkipHabitsCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
-        // Batch-load all requested habits in a single query instead of one per item (N+1)
         var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == request.UserId,

@@ -48,11 +48,6 @@ public partial class HabitDueDateAdvancementService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        // Conservative cutoff: UTC today - 1 day to avoid timezone false positives.
-        // Only BAD habits are auto-advanced here: a missed bad-habit occurrence should roll
-        // forward to its next scheduled day. Non-bad recurring habits intentionally rest on
-        // their oldest unresolved occurrence so the Today view can surface them as overdue
-        // (DueDate < today) until the user logs or skips them.
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
         var habits = await dbContext.Habits
             .Where(h => !h.IsCompleted

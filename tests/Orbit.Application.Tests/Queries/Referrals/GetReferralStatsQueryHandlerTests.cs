@@ -100,8 +100,7 @@ public class GetReferralStatsQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.SuccessfulReferrals.Should().Be(2); // Completed + Rewarded
-        result.Value.PendingReferrals.Should().Be(2);
+        result.Value.SuccessfulReferrals.Should().Be(2);        result.Value.PendingReferrals.Should().Be(2);
     }
 
     [Fact]
@@ -130,7 +129,6 @@ public class GetReferralStatsQueryHandlerTests
     public async Task Handle_WithoutReferralCode_ReturnsNullLink()
     {
         var user = CreateTestUser();
-        // No referral code set
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(user);
 

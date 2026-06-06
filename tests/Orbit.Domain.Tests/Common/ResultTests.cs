@@ -49,9 +49,6 @@ public class ResultTests
     [Fact]
     public void Success_WithError_ThrowsInvalidOp()
     {
-        // The protected constructor is invoked indirectly via a subclass hack,
-        // but we can test via the generic factory which calls the same constructor.
-        // Result(true, "oops") should throw.
         var act = () => new TestResult(true, "oops");
 
         act.Should().Throw<InvalidOperationException>()

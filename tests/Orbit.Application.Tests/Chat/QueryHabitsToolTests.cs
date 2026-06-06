@@ -34,24 +34,20 @@ public class QueryHabitsToolTests
     [Fact]
     public void Name_ReturnsQueryHabits() => _tool.Name.Should().Be("query_habits");
 
-    // --- No filters ---
-
     [Fact]
     public async Task NoFilters_ReturnsAllActiveParentHabits()
     {
         var h1 = CreateHabit("Water", FrequencyUnit.Day, 1, dueDate: Today, position: 0);
         var h2 = CreateHabit("Read", FrequencyUnit.Week, 1, dueDate: Today, position: 1);
         var completed = CreateHabit("Done", null, null, dueDate: Today);
-        completed.Log(Today); // one-time habit becomes completed on log
-        SetupHabits(h1, h2, completed);
+        completed.Log(Today);        SetupHabits(h1, h2, completed);
 
         var result = await Execute("{}");
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Water");
         result.EntityName.Should().Contain("Read");
-        result.EntityName.Should().NotContain("Done"); // completed excluded by default
-    }
+        result.EntityName.Should().NotContain("Done");    }
 
     [Fact]
     public async Task NoFilters_IncludesEmojiState()
@@ -77,7 +73,6 @@ public class QueryHabitsToolTests
         var result = await Execute("{}");
 
         result.Success.Should().BeTrue();
-        // Parent listed as top-level, child as sub-habit
         result.EntityName.Should().Contain("Before Bed");
         result.EntityName.Should().Contain("Floss");
     }
@@ -99,8 +94,6 @@ public class QueryHabitsToolTests
         secondIdx.Should().BeLessThan(thirdIdx);
     }
 
-    // --- Search filter ---
-
     [Fact]
     public async Task Search_MatchesTitleCaseInsensitive()
     {
@@ -117,8 +110,6 @@ public class QueryHabitsToolTests
     [Fact]
     public async Task Search_MatchesChildReturnsParent()
     {
-        // DB-level search filters by title, so only habits whose title matches appear.
-        // The parent and child both match when using a shared term.
         var parent = CreateHabit("Before Bed Routine", FrequencyUnit.Day, 1, dueDate: Today);
         var child = CreateHabit("Bed Melatonin", FrequencyUnit.Day, 1, dueDate: Today, parentId: parent.Id);
         SetupHabits(parent, child);
@@ -128,8 +119,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().Contain("Before Bed Routine");
         result.EntityName.Should().Contain("Bed Melatonin");
     }
-
-    // --- Date filter ---
 
     [Fact]
     public async Task DateToday_ReturnsDueTodayAndOverdue_ExcludesGeneral()
@@ -175,8 +164,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().NotContain("Other");
     }
 
-    // --- General filter ---
-
     [Fact]
     public async Task IsGeneralTrue_ReturnsOnlyGeneralHabits()
     {
@@ -203,15 +190,12 @@ public class QueryHabitsToolTests
         result.EntityName.Should().Contain("Water");
     }
 
-    // --- Completion filter ---
-
     [Fact]
     public async Task IsCompletedTrue_ReturnsCompletedHabits()
     {
         var active = CreateHabit("Active", FrequencyUnit.Day, 1, dueDate: Today);
         var done = CreateHabit("Done", null, null, dueDate: Today);
-        done.Log(Today); // one-time habit becomes completed on log
-        SetupHabits(active, done);
+        done.Log(Today);        SetupHabits(active, done);
 
         var result = await Execute("""{"is_completed": true}""");
 
@@ -224,16 +208,13 @@ public class QueryHabitsToolTests
     {
         var active = CreateHabit("Active", FrequencyUnit.Day, 1, dueDate: Today);
         var done = CreateHabit("Done", null, null, dueDate: Today);
-        done.Log(Today); // one-time habit becomes completed on log
-        SetupHabits(active, done);
+        done.Log(Today);        SetupHabits(active, done);
 
         var result = await Execute("{}");
 
         result.EntityName.Should().Contain("Active");
         result.EntityName.Should().NotContain("Done");
     }
-
-    // --- Bad habit filter ---
 
     [Fact]
     public async Task IsBadHabitTrue_ReturnsOnlyBadHabits()
@@ -260,8 +241,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().NotContain("Smoking");
         result.EntityName.Should().Contain("Exercise");
     }
-
-    // --- Frequency filter ---
 
     [Fact]
     public async Task FrequencyDay_ReturnsDailyHabits()
@@ -302,8 +281,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().Contain("Buy shoes");
     }
 
-    // --- Tag filter ---
-
     [Fact]
     public async Task TagFilter_MatchesByName()
     {
@@ -318,8 +295,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().Contain("Run");
         result.EntityName.Should().NotContain("Read");
     }
-
-    // --- Sub-habits toggle ---
 
     [Fact]
     public async Task IncludeSubHabitsFalse_HidesChildren()
@@ -347,13 +322,10 @@ public class QueryHabitsToolTests
         result.EntityName.Should().Contain("Floss");
     }
 
-    // --- Metrics toggle ---
-
     [Fact]
     public async Task IncludeMetricsTrue_ShowsMetricsData()
     {
         var habit = CreateHabit("Water", FrequencyUnit.Day, 1, dueDate: Today);
-        // Log enough days to build stats
         habit.Log(Today.AddDays(-1));
         habit.Log(Today.AddDays(-2));
         habit.Log(Today.AddDays(-3));
@@ -361,7 +333,6 @@ public class QueryHabitsToolTests
 
         var result = await Execute("""{"include_metrics": true}""");
 
-        // Should contain at least one metric (Total, Streak, or Week)
         result.EntityName.Should().ContainAny("Streak:", "Total:", "Week:");
     }
 
@@ -375,8 +346,6 @@ public class QueryHabitsToolTests
 
         result.EntityName.Should().NotContain("Streak:");
     }
-
-    // --- Limit ---
 
     [Fact]
     public async Task Limit_CapsResults()
@@ -393,8 +362,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().Contain("Habit 2");
         result.EntityName.Should().NotContain("Habit 3");
     }
-
-    // --- Combined filters ---
 
     [Fact]
     public async Task CombinedFilters_DateAndTag()
@@ -430,8 +397,6 @@ public class QueryHabitsToolTests
         result.EntityName.Should().NotContain("Laundry");
     }
 
-    // --- Edge cases ---
-
     [Fact]
     public async Task EmptyResult_ReturnsNoHabitsMessage()
     {
@@ -454,8 +419,6 @@ public class QueryHabitsToolTests
         result.Error.Should().Contain("User not found");
     }
 
-    // --- Helpers ---
-
     private static Habit CreateHabit(
         string title, FrequencyUnit? freq, int? qty,
         DateOnly? dueDate = null, int? position = null,
@@ -472,8 +435,6 @@ public class QueryHabitsToolTests
 
     private void SetupHabits(params Habit[] habits)
     {
-        // The tool now pushes filters into the FindAsync predicate, so we need to evaluate
-        // the expression against our test data to simulate DB-level filtering.
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
@@ -496,7 +457,6 @@ public class QueryHabitsToolTests
 
     private void SetupHabitsWithLogs(params Habit[] habits)
     {
-        // Same as SetupHabits but for include_metrics=true scenarios
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),

@@ -95,7 +95,6 @@ public class BulkCreateHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results.Should().HaveCount(1);
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
-        // Parent + 2 children = 3 AddAsync calls
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
     }
@@ -141,8 +140,7 @@ public class BulkCreateHabitsCommandHandlerTests
         var items = new List<BulkHabitItem>
         {
             new("Valid habit", null, FrequencyUnit.Day, 1),
-            new("", null, FrequencyUnit.Day, 1) // Invalid: empty title
-        };
+            new("", null, FrequencyUnit.Day, 1)        };
         var command = new BulkCreateHabitsCommand(UserId, items);
 
         var result = await _handler.Handle(command, CancellationToken.None);

@@ -60,8 +60,6 @@ public class GetHabitScheduleQueryHandlerTests
             .Returns(habitList);
     }
 
-    // --- Existing tests ---
-
     [Fact]
     public async Task Handle_NoHabits_ReturnsEmptyPaginatedResponse()
     {
@@ -113,8 +111,6 @@ public class GetHabitScheduleQueryHandlerTests
     [Fact]
     public async Task Handle_RecurringOverdue_WhenIncludeOverdue_ReturnsAsOverdue()
     {
-        // Weekly habit whose occurrence fell 4 days ago (today is not its weekday).
-        // DueDate-authoritative model: DueDate < today => overdue.
         var habit = CreateTestHabit(title: "Overdue Weekly", frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: Today.AddDays(-4));
         SetupHabits(habit);
         var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
@@ -127,7 +123,6 @@ public class GetHabitScheduleQueryHandlerTests
     [Fact]
     public async Task Handle_RecurringOverdueLongAgo_StillReturnsAsOverdue()
     {
-        // 60 days overdue: the old fixed lookback window would have hidden this.
         var habit = CreateTestHabit(title: "Long Overdue", frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: Today.AddDays(-60));
         SetupHabits(habit);
         var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), IncludeOverdue: true);
@@ -263,8 +258,6 @@ public class GetHabitScheduleQueryHandlerTests
             i.Date == Today && i.Status == InstanceStatus.Completed);
     }
 
-    // --- New tests: Parent-child habit grouping ---
-
     [Fact]
     public async Task Handle_ParentChildHabits_ChildrenNestedUnderParent()
     {
@@ -276,7 +269,6 @@ public class GetHabitScheduleQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Only parent should be at top level
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Morning Routine");
         result.Value.Items[0].HasSubHabits.Should().BeTrue();
@@ -297,8 +289,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].HasSubHabits.Should().BeFalse();
         result.Value.Items[0].Children.Should().BeEmpty();
     }
-
-    // --- Tag filtering ---
 
     [Fact]
     public async Task Handle_TagFilter_IncludesHabitsWithMatchingTag()
@@ -334,8 +324,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].Title.Should().Be("Morning Routine");
     }
 
-    // --- Sort order ---
-
     [Fact]
     public async Task Handle_HabitsWithPositions_SortsByPosition()
     {
@@ -354,8 +342,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items.Select(i => i.Title).Should().ContainInOrder("First", "Second", "Third");
     }
 
-    // --- Multiple frequency types in same query ---
-
     [Fact]
     public async Task Handle_MixedFrequencies_AllReturnedWithCorrectTypes()
     {
@@ -373,8 +359,6 @@ public class GetHabitScheduleQueryHandlerTests
             .Should().Contain(new FrequencyUnit?[] { FrequencyUnit.Day, FrequencyUnit.Week, null });
     }
 
-    // --- Search matching against child habits ---
-
     [Fact]
     public async Task Handle_SearchMatchesChildTitle_ReturnsParent()
     {
@@ -389,8 +373,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Morning Routine");
     }
-
-    // --- Search matching against description ---
 
     [Fact]
     public async Task Handle_SearchMatchesDescription_ReturnsHabit()
@@ -407,8 +389,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].Title.Should().Be("Exercise");
     }
 
-    // --- IsCompleted filter with true ---
-
     [Fact]
     public async Task Handle_IsCompletedTrue_ReturnsOnlyCompleted()
     {
@@ -422,8 +402,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().OnlyContain(h => h.IsCompleted);
     }
-
-    // --- Search matching against tag name ---
 
     [Fact]
     public async Task Handle_SearchMatchesTagName_ReturnsHabit()
@@ -442,8 +420,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].Title.Should().Be("Run");
     }
 
-    // --- General habits with IsGeneral filter + search ---
-
     [Fact]
     public async Task Handle_GeneralHabitsWithSearch_FiltersCorrectly()
     {
@@ -458,8 +434,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Stay Hydrated");
     }
-
-    // --- No date range returns all habits with IncludeAllChildren ---
 
     [Fact]
     public async Task Handle_NoDateRange_IncludesChildrenForParent()
@@ -476,8 +450,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].Children.Should().HaveCount(1);
     }
 
-    // --- Invalid frequency unit filter is ignored ---
-
     [Fact]
     public async Task Handle_InvalidFrequencyFilter_ReturnsAllHabits()
     {
@@ -490,8 +462,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(1);
     }
-
-    // --- General habits with IsCompleted filter ---
 
     [Fact]
     public async Task Handle_GeneralHabitsIsCompletedFilter_FiltersCorrectly()
@@ -506,8 +476,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().OnlyContain(h => !h.IsCompleted);
     }
-
-    // --- Tags are mapped in response ---
 
     [Fact]
     public async Task Handle_HabitWithTags_TagsMappedCorrectly()
@@ -526,8 +494,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].Tags[0].Color.Should().Be("#00FF00");
     }
 
-    // --- Overdue one-time tasks: completed tasks are not overdue ---
-
     [Fact]
     public async Task Handle_CompletedOneTimeTask_NotOverdue()
     {
@@ -539,11 +505,8 @@ public class GetHabitScheduleQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Completed task should not appear as overdue
         result.Value.Items.Where(h => h.IsOverdue).Should().BeEmpty();
     }
-
-    // --- Empty search string is ignored ---
 
     [Fact]
     public async Task Handle_EmptySearchString_ReturnsAllHabits()
@@ -559,12 +522,9 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items.Should().HaveCount(2);
     }
 
-    // --- Parent appears when child is due in range ---
-
     [Fact]
     public async Task Handle_ParentWithChildDueInRange_ParentIncluded()
     {
-        // Parent is a one-time task due in the past, but child is due today
         var parent = CreateTestHabit(title: "Project", frequencyUnit: null, frequencyQuantity: null, dueDate: Today.AddDays(-30));
         var child = CreateTestHabit(title: "Step 1", dueDate: Today, parentHabitId: parent.Id);
         SetupHabits(parent, child);
@@ -573,12 +533,9 @@ public class GetHabitScheduleQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Parent should be included because child is due in range
         result.Value.Items.Should().HaveCount(1);
         result.Value.Items[0].Title.Should().Be("Project");
     }
-
-    // --- SearchMatches field is populated ---
 
     [Fact]
     public async Task Handle_SearchWithMatch_PopulatesSearchMatches()
@@ -593,8 +550,6 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].SearchMatches.Should().NotBeNull();
         result.Value.Items[0].SearchMatches!.Any(m => m.Field == "title").Should().BeTrue();
     }
-
-    // --- Bad habits are not considered overdue ---
 
     [Fact]
     public async Task Handle_BadHabitPastDue_NotMarkedOverdue()

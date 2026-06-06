@@ -9,8 +9,6 @@ public class TimeZoneHelperTests
 {
     private readonly ILogger _logger = Substitute.For<ILogger>();
 
-    // --- Null/empty input tests ---
-
     [Fact]
     public void FindTimeZone_NullInput_ReturnsUtc()
     {
@@ -43,8 +41,6 @@ public class TimeZoneHelperTests
         result.Should().Be(TimeZoneInfo.Utc);
     }
 
-    // --- Known timezone tests ---
-
     [Fact]
     public void FindTimeZone_Utc_ReturnsUtc()
     {
@@ -61,17 +57,12 @@ public class TimeZoneHelperTests
     [InlineData("Australia/Sydney")]
     public void FindTimeZone_ValidIanaTimezone_ReturnsCorrectZone(string timezoneId)
     {
-        // This test may behave differently on Windows vs Linux due to timezone ID formats
-        // On Windows, IANA IDs are mapped by .NET 6+
         TimeZoneInfo? result = null;
         var action = () => result = TimeZoneHelper.FindTimeZone(timezoneId);
 
-        // Should not throw -- either finds the timezone or falls back to UTC
         action.Should().NotThrow();
         result.Should().NotBeNull();
     }
-
-    // --- Unknown timezone tests ---
 
     [Fact]
     public void FindTimeZone_UnknownTimezone_ReturnsUtc()
@@ -113,8 +104,6 @@ public class TimeZoneHelperTests
         result.Should().Be(TimeZoneInfo.Utc);
     }
 
-    // --- With userId parameter ---
-
     [Fact]
     public void FindTimeZone_NullUserId_DoesNotThrow()
     {
@@ -131,8 +120,6 @@ public class TimeZoneHelperTests
         action.Should().NotThrow();
     }
 
-    // --- Without logger parameter ---
-
     [Fact]
     public void FindTimeZone_NullLogger_ValidTimezone_ReturnsZone()
     {
@@ -148,8 +135,6 @@ public class TimeZoneHelperTests
 
         result.Should().Be(TimeZoneInfo.Utc);
     }
-
-    // --- Return value identity ---
 
     [Fact]
     public void FindTimeZone_SameInput_ReturnsSameTimezone()

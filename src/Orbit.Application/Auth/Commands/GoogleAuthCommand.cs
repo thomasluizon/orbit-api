@@ -155,9 +155,6 @@ public partial class GoogleAuthCommandHandler(
 
     private void ProcessReferralInBackground(Guid userId, string referralCode)
     {
-        // Spawn a fresh DI scope so the mediator and downstream services aren't disposed
-        // when the request completes, and use CancellationToken.None so the work survives
-        // request cancellation.
         _ = Task.Run(async () =>
         {
             try

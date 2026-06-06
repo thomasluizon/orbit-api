@@ -98,8 +98,6 @@ public class GetHabitByIdQueryHandlerTests
     [Fact]
     public async Task Handle_WrongUser_ReturnsFailure()
     {
-        // The repo query filters by both HabitId and UserId,
-        // so a wrong user means the repo returns empty
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),

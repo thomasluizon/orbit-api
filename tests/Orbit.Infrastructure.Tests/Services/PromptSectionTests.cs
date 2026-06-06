@@ -154,8 +154,6 @@ public class StructuringStrategySectionTests
     [Fact]
     public void Build_PreservesFlexibleWeeklyShortcut()
     {
-        // Regression: the clarifying-question rule must NOT block flexible weekly habits
-        // ("X times per week" should still create immediately with is_flexible=true).
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
         var result = new StructuringStrategySection().Build(ctx);
 

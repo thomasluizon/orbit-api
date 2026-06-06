@@ -20,7 +20,6 @@ public class DuplicateHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(DuplicateHabitCommand request, CancellationToken cancellationToken)
     {
-        // Load all habits for this user with tags pre-loaded to avoid N+1 queries
         var allHabits = await habitRepository.FindTrackedAsync(
             h => h.UserId == request.UserId,
             q => q.Include(h => h.Tags),
@@ -30,37 +29,31 @@ public class DuplicateHabitCommandHandler(
         if (original is null)
             return Result.Failure<Guid>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
-        // Check plan limits
         var canCreate = await payGateService.CanCreateHabits(request.UserId, 1, cancellationToken);
         if (!canCreate.IsSuccess) return canCreate.PropagateError<Guid>();
 
         var childLookup = allHabits.ToLookup(h => h.ParentHabitId);
 
-        // If original has sub-habits, also check sub-habit gate
         if (childLookup[original.Id].Any())
         {
             var canCreateSub = await payGateService.CanCreateSubHabits(request.UserId, cancellationToken);
             if (!canCreateSub.IsSuccess) return canCreateSub.PropagateError<Guid>();
         }
 
-        // Compute next position for root copy within its parent group.
         var rootSiblings = allHabits.Where(h => h.ParentHabitId == original.ParentHabitId && !h.IsDeleted).ToList();
         var nextRootPosition = rootSiblings.Count == 0
             ? 0
             : rootSiblings.Max(h => h.Position ?? -1) + 1;
 
-        // Duplicate the root habit
         var rootCopy = CloneHabit(original, original.ParentHabitId, nextRootPosition);
         if (rootCopy.IsFailure)
             return Result.Failure<Guid>(rootCopy.Error);
 
         await habitRepository.AddAsync(rootCopy.Value, cancellationToken);
 
-        // Tags are already loaded from the initial query
         foreach (var tag in original.Tags)
             rootCopy.Value.AddTag(tag);
 
-        // Recursively duplicate children (tags already pre-loaded)
         await DuplicateChildren(original.Id, rootCopy.Value.Id, childLookup, habitRepository, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -85,7 +78,6 @@ public class DuplicateHabitCommandHandler(
 
             await repository.AddAsync(childCopy.Value, cancellationToken);
 
-            // Tags are already pre-loaded from the initial query
             foreach (var tag in child.Tags)
                 childCopy.Value.AddTag(tag);
 

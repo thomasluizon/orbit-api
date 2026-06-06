@@ -129,7 +129,6 @@ public class UserTests
     public void IsPro_FreePlan_ReturnsFalse()
     {
         var user = CreateValidUser();
-        // Clear trial so HasProAccess doesn't confuse things
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
 
         user.IsPro.Should().BeFalse();
@@ -139,7 +138,6 @@ public class UserTests
     public void IsTrialActive_FutureTrialEnd_ReturnsTrue()
     {
         var user = CreateValidUser();
-        // Fresh user has 7-day trial
         user.IsTrialActive.Should().BeTrue();
     }
 
@@ -156,10 +154,8 @@ public class UserTests
     public void HasProAccess_ProOrTrial_ReturnsTrue()
     {
         var user = CreateValidUser();
-        // Fresh user has active trial
         user.HasProAccess.Should().BeTrue();
 
-        // Also true when Pro
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
         user.HasProAccess.Should().BeTrue();
     }
@@ -227,14 +223,12 @@ public class UserTests
     public void IncrementAiMessageCount_WithinPeriod_JustIncrements()
     {
         var user = CreateValidUser();
-        user.IncrementAiMessageCount(); // sets reset to +30 days
-        var resetAt = user.AiMessagesResetAt;
+        user.IncrementAiMessageCount();        var resetAt = user.AiMessagesResetAt;
 
         user.IncrementAiMessageCount();
 
         user.AiMessagesUsedThisMonth.Should().Be(2);
-        user.AiMessagesResetAt.Should().Be(resetAt); // unchanged
-    }
+        user.AiMessagesResetAt.Should().Be(resetAt);    }
 
     [Fact]
     public void IncrementAiMessageCount_PastReset_ResetsCounter()
@@ -244,16 +238,12 @@ public class UserTests
         user.IncrementAiMessageCount();
         user.AiMessagesUsedThisMonth.Should().Be(2);
 
-        // Force reset date to past via reflection
         typeof(User).GetProperty("AiMessagesResetAt")!.SetValue(user, DateTime.UtcNow.AddDays(-1));
 
         user.IncrementAiMessageCount();
 
-        // Counter was reset (0) then incremented to 1
         user.AiMessagesUsedThisMonth.Should().Be(1);
     }
-
-    // ----- Referral Methods -----
 
     [Fact]
     public void SetReferralCode_SetsCode()
@@ -321,8 +311,6 @@ public class UserTests
         user.TrialEndsAt.Should().NotBeNull();
         user.TrialEndsAt!.Value.Should().BeCloseTo(existingTrialEnd.AddDays(10), TimeSpan.FromSeconds(2));
     }
-
-    // --- XP / Level tests ---
 
     [Fact]
     public void AddXp_PositiveAmount_IncrementsTotalXp()
@@ -418,8 +406,6 @@ public class UserTests
         user.Level.Should().Be(1);
     }
 
-    // --- Streak tests ---
-
     [Fact]
     public void Create_DefaultStreakFields()
     {
@@ -465,8 +451,7 @@ public class UserTests
     {
         var user = CreateValidUser();
         var day1 = new DateOnly(2026, 3, 28);
-        var day3 = new DateOnly(2026, 3, 30); // Skipped March 29
-
+        var day3 = new DateOnly(2026, 3, 30);
         user.UpdateStreak(day1);
         user.UpdateStreak(day3);
 
@@ -494,24 +479,19 @@ public class UserTests
     {
         var user = CreateValidUser();
 
-        // Build a 5-day streak
         for (int i = 0; i < 5; i++)
             user.UpdateStreak(new DateOnly(2026, 3, 1).AddDays(i));
 
         user.CurrentStreak.Should().Be(5);
         user.LongestStreak.Should().Be(5);
 
-        // Gap breaks the streak
         user.UpdateStreak(new DateOnly(2026, 3, 10));
         user.CurrentStreak.Should().Be(1);
-        user.LongestStreak.Should().Be(5); // Longest is preserved
-
-        // Build a 3-day streak (less than longest)
+        user.LongestStreak.Should().Be(5);
         user.UpdateStreak(new DateOnly(2026, 3, 11));
         user.UpdateStreak(new DateOnly(2026, 3, 12));
         user.CurrentStreak.Should().Be(3);
-        user.LongestStreak.Should().Be(5); // Still 5
-    }
+        user.LongestStreak.Should().Be(5);    }
 
     [Fact]
     public void UpdateStreak_FreezeBridge_ContinuesStreak()
@@ -521,16 +501,12 @@ public class UserTests
         var freezeDay = new DateOnly(2026, 3, 29);
         var day3 = new DateOnly(2026, 3, 30);
 
-        // Day 1: normal activity
         user.UpdateStreak(day1);
         user.CurrentStreak.Should().Be(1);
 
-        // Day 2: freeze (no real activity, just bridges the gap)
         user.ApplyStreakFreeze(freezeDay);
-        user.CurrentStreak.Should().Be(1); // Freeze does NOT increment
-        user.LastActiveDate.Should().Be(freezeDay);
+        user.CurrentStreak.Should().Be(1);        user.LastActiveDate.Should().Be(freezeDay);
 
-        // Day 3: real activity - streak continues because LastActiveDate == yesterday
         user.UpdateStreak(day3);
         user.CurrentStreak.Should().Be(2);
         user.LongestStreak.Should().Be(2);
@@ -559,15 +535,12 @@ public class UserTests
     {
         var user = CreateValidUser();
 
-        // Build initial 2-day streak
         user.UpdateStreak(new DateOnly(2026, 1, 1));
         user.UpdateStreak(new DateOnly(2026, 1, 2));
         user.LongestStreak.Should().Be(2);
 
-        // Gap
         user.UpdateStreak(new DateOnly(2026, 2, 1));
 
-        // Build new 3-day streak (exceeds longest)
         user.UpdateStreak(new DateOnly(2026, 2, 2));
         user.UpdateStreak(new DateOnly(2026, 2, 3));
         user.CurrentStreak.Should().Be(3);

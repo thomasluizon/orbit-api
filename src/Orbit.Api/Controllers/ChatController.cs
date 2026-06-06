@@ -21,9 +21,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     [HttpPost]
-    [RequestSizeLimit(10_485_760)] // 10MB
-    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)] // 10MB
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [RequestSizeLimit(10_485_760)]    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)]    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -74,7 +72,6 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         if (image is null)
             return (null, null, null);
 
-        // Open the upload stream here so Domain doesn't need an AspNetCore dependency.
         using var uploadStream = image.OpenReadStream();
         var validationResult = await imageValidation.ValidateAsync(uploadStream, image.FileName, image.Length);
         if (validationResult.IsFailure)

@@ -126,7 +126,6 @@ public class CreateHabitToolTests
         """);
 
         result.Success.Should().BeTrue();
-        // Parent + 2 children = 3 AddAsync calls
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
@@ -191,8 +190,6 @@ public class CreateHabitToolTests
         result.EntityName.Should().Be("Smoking");
     }
 
-    // ── Frequency types ──
-
     [Fact]
     public async Task WithDailyFrequency_CreatesRecurringHabit()
     {
@@ -238,8 +235,6 @@ public class CreateHabitToolTests
         result.EntityName.Should().Be("Laundry");
     }
 
-    // ── Days array ──
-
     [Fact]
     public async Task WithDaysArray_CreatesHabitWithSpecificDays()
     {
@@ -256,8 +251,6 @@ public class CreateHabitToolTests
         result.EntityName.Should().Be("Gym");
     }
 
-    // ── Due time ──
-
     [Fact]
     public async Task WithDueTime_CreatesHabitWithTime()
     {
@@ -266,8 +259,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Morning Run");
     }
-
-    // ── End date ──
 
     [Fact]
     public async Task WithEndDate_CreatesRecurringHabitWithEndDate()
@@ -284,8 +275,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Summer Challenge");
     }
-
-    // ── Description ──
 
     [Fact]
     public async Task WithDescription_CreatesHabitWithDescription()
@@ -307,8 +296,6 @@ public class CreateHabitToolTests
             Arg.Any<CancellationToken>());
     }
 
-    // ── Reminder times ──
-
     [Fact]
     public async Task WithReminderTimes_CreatesHabitWithReminders()
     {
@@ -324,8 +311,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Take Meds");
     }
-
-    // ── Flexible habit ──
 
     [Fact]
     public async Task WithFlexible_CreatesFlexibleHabit()
@@ -343,8 +328,6 @@ public class CreateHabitToolTests
         result.EntityName.Should().Be("Yoga");
     }
 
-    // ── Scheduled reminders ──
-
     [Fact]
     public async Task WithScheduledReminders_CreatesHabitWithScheduledReminders()
     {
@@ -361,8 +344,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Appointment");
     }
-
-    // ── Multiple tags and goals ──
 
     [Fact]
     public async Task WithMultipleTagsAndGoals_CreatesAndAssignsAll()
@@ -392,8 +373,6 @@ public class CreateHabitToolTests
         await _tagRepo.Received(3).AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>());
     }
 
-    // ── Checklist items with is_checked ──
-
     [Fact]
     public async Task WithChecklistMixedCheckedState_CreatesHabit()
     {
@@ -411,8 +390,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Evening Routine");
     }
-
-    // ── Sub-habits with custom properties ──
 
     [Fact]
     public async Task WithSubHabitsWithFrequency_InheritsParentFrequency()
@@ -474,8 +451,6 @@ public class CreateHabitToolTests
         result.Error.Should().Contain("Sub-habit limit reached");
     }
 
-    // ── Bad habit with slip alert ──
-
     [Fact]
     public async Task BadHabitWithSlipAlert_CreatesWithSlipAlertEnabled()
     {
@@ -491,8 +466,6 @@ public class CreateHabitToolTests
         result.EntityName.Should().Be("Nail Biting");
     }
 
-    // ── Duplicate tag names deduplication ──
-
     [Fact]
     public async Task WithDuplicateTagNames_DeduplicatesTags()
     {
@@ -505,11 +478,8 @@ public class CreateHabitToolTests
         var result = await Execute("""{"title": "Run", "tag_names": ["Health", "health", "HEALTH"]}""");
 
         result.Success.Should().BeTrue();
-        // Only one tag should be created due to case-insensitive dedup
         await _tagRepo.Received(1).AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>());
     }
-
-    // ── Empty tag names filtered ──
 
     [Fact]
     public async Task WithEmptyTagNames_FiltersThem()
@@ -518,8 +488,6 @@ public class CreateHabitToolTests
 
         result.Success.Should().BeTrue();
     }
-
-    // ── Empty goal_ids list ──
 
     [Fact]
     public async Task WithEmptyGoalIds_SkipsGoalLinking()
@@ -531,8 +499,6 @@ public class CreateHabitToolTests
             Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
     }
 
-    // ── Invalid goal_ids ──
-
     [Fact]
     public async Task WithInvalidGoalIds_SkipsGoalLinking()
     {
@@ -540,8 +506,6 @@ public class CreateHabitToolTests
 
         result.Success.Should().BeTrue();
     }
-
-    // ── Frequency unit defaults quantity to 1 ──
 
     [Fact]
     public async Task FrequencyUnitWithoutQuantity_DefaultsToOne()
@@ -551,8 +515,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Daily Walk");
     }
-
-    // ── Sub-habit with checklist ──
 
     [Fact]
     public async Task SubHabitWithChecklist_CreatesSubWithChecklist()
@@ -577,8 +539,6 @@ public class CreateHabitToolTests
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
-    // ── Sub-habit with bad habit flag ──
-
     [Fact]
     public async Task SubHabitWithBadHabit_CreatesWithFlag()
     {
@@ -596,8 +556,6 @@ public class CreateHabitToolTests
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
-    // ── Sub-habit with custom due date ──
-
     [Fact]
     public async Task SubHabitWithDueDate_UsesSubDueDate()
     {
@@ -614,8 +572,6 @@ public class CreateHabitToolTests
         result.Success.Should().BeTrue();
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
-
-    // ── Full combined creation ──
 
     [Fact]
     public async Task FullHabitWithAllOptions_CreatesSuccessfully()

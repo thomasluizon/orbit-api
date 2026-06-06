@@ -42,7 +42,6 @@ public class DeleteChecklistTemplateCommandHandlerTests
     [Fact]
     public async Task Handle_TemplateNotFound_ReturnsFailure()
     {
-        // FindOneTrackedAsync returns null by default with NSubstitute
         var command = new DeleteChecklistTemplateCommand(UserId, Guid.NewGuid());
 
         var result = await _handler.Handle(command, CancellationToken.None);

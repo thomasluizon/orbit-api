@@ -14,39 +14,30 @@ public class SendCodeCommandValidatorTests
     [Fact]
     public void Validate_ValidEmail_NoErrors()
     {
-        // Arrange
         var command = ValidCommand();
 
-        // Act
         var result = _validator.TestValidate(command);
 
-        // Assert
         result.ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]
     public void Validate_EmptyEmail_HasError()
     {
-        // Arrange
         var command = ValidCommand() with { Email = "" };
 
-        // Act
         var result = _validator.TestValidate(command);
 
-        // Assert
         result.ShouldHaveValidationErrorFor(x => x.Email);
     }
 
     [Fact]
     public void Validate_InvalidEmailFormat_HasError()
     {
-        // Arrange
         var command = ValidCommand() with { Email = "not-an-email" };
 
-        // Act
         var result = _validator.TestValidate(command);
 
-        // Assert
         result.ShouldHaveValidationErrorFor(x => x.Email);
     }
 }

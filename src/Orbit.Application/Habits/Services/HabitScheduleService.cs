@@ -19,13 +19,11 @@ public static class HabitScheduleService
     /// </summary>
     public static bool IsHabitDueOnDate(Habit habit, DateOnly target)
     {
-        // EndDate check: habit is never due after its end date
         if (habit.EndDate.HasValue && target > habit.EndDate.Value)
             return false;
 
         if (habit.IsFlexible)
         {
-            // Flexible habit: due on any date at or after its start
             if (habit.FrequencyUnit is null) return false;
             return target >= habit.DueDate;
         }
@@ -34,16 +32,13 @@ public static class HabitScheduleService
         var unit = habit.FrequencyUnit;
         var qty = habit.FrequencyQuantity ?? 1;
 
-        // One-time task: only due on its specific date
         if (unit is null)
         {
             return target == habit.DueDate;
         }
 
-        // Habit is not due before its anchor (due) date
         if (target < anchor) return false;
 
-        // Day filter: if habit has specific days, check target's weekday
         if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
             return false;
 
@@ -62,7 +57,6 @@ public static class HabitScheduleService
     /// </summary>
     public static List<DateOnly> GetScheduledDates(Habit habit, DateOnly from, DateOnly to)
     {
-        // Cap the range to prevent runaway iteration on absurd date ranges
         if (to.DayNumber - from.DayNumber > AppConstants.MaxRangeDays)
             to = from.AddDays(AppConstants.MaxRangeDays);
 
@@ -96,7 +90,6 @@ public static class HabitScheduleService
             if (habit.IsBadHabit) continue;
             if (habit.IsGeneral) continue;
             if (habit.IsFlexible) continue;
-            // One-time tasks already completed no longer contribute expected dates going forward
             if (habit.FrequencyUnit is null && habit.IsCompleted) continue;
 
             foreach (var date in GetScheduledDates(habit, from, to))
@@ -162,7 +155,6 @@ public static class HabitScheduleService
         if (unit is null)
             return target == habit.DueDate;
 
-        // Use creation date as floor instead of DueDate
         if (target < habitCreationDate) return false;
 
         if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
@@ -245,8 +237,6 @@ public static class HabitScheduleService
         return HasMissedPastOccurrence(habit, referenceDate);
     }
 
-    // --- Flexible habit methods ---
-
     /// <summary>
     /// Checks if the flexible habit still needs completions within the window containing target.
     /// </summary>
@@ -265,8 +255,7 @@ public static class HabitScheduleService
         return habit.FrequencyUnit switch
         {
             FrequencyUnit.Day => target,
-            FrequencyUnit.Week => target.AddDays(-(((int)target.DayOfWeek + 6) % 7)), // ISO Monday
-            FrequencyUnit.Month => new DateOnly(target.Year, target.Month, 1),
+            FrequencyUnit.Week => target.AddDays(-(((int)target.DayOfWeek + 6) % 7)),            FrequencyUnit.Month => new DateOnly(target.Year, target.Month, 1),
             FrequencyUnit.Year => new DateOnly(target.Year, 1, 1),
             _ => target
         };
@@ -321,7 +310,6 @@ public static class HabitScheduleService
         return Math.Max(0, adjustedTarget - completed);
     }
 
-
     /// <summary>
     /// Computes per-date instances for a habit within a date range, including an overdue lookback window.
     /// Each instance has its own status (Pending, Completed, Overdue) based on logs and the user's today.
@@ -333,11 +321,9 @@ public static class HabitScheduleService
         DateOnly userToday,
         int overdueWindowDays = AppConstants.DefaultOverdueWindowDays)
     {
-        // Completed habits or flexible habits do not produce per-date instances
         if (habit.IsCompleted || habit.IsFlexible)
             return [];
 
-        // One-time tasks: single instance on DueDate
         if (habit.FrequencyUnit is null)
             return GetOneTimeTaskInstance(habit, dateFrom, dateTo, userToday);
 
@@ -358,7 +344,6 @@ public static class HabitScheduleService
     private static List<HabitInstanceItem> GetRecurringInstances(
         Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday, int overdueWindowDays)
     {
-        // Compute the overdue lookback start (capped by habit's DueDate -- no instances before anchor)
         var lookbackStart = dateFrom.AddDays(-overdueWindowDays);
         if (lookbackStart < habit.DueDate)
             lookbackStart = habit.DueDate;
@@ -452,11 +437,9 @@ public static class HabitScheduleService
         if (TrueMod(target.Year - anchor.Year, qty) != 0)
             return false;
 
-        // Normal case: same month and day
         if (target.Month == anchor.Month && target.Day == anchor.Day)
             return true;
 
-        // Leap-day fallback: anchor is Feb 29, target year is not a leap year, fire on Feb 28
         if (anchor.Month == 2 && anchor.Day == 29
             && target.Month == 2 && target.Day == 28
             && !DateTime.IsLeapYear(target.Year))
@@ -474,7 +457,6 @@ public static class HabitScheduleService
 
     private static int WeekDiff(DateOnly a, DateOnly b)
     {
-        // ISO week difference
         var dayDiff = a.DayNumber - b.DayNumber;
         return dayDiff / 7;
     }

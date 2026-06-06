@@ -43,8 +43,6 @@ public class SubscriptionToolsTests
             .Returns(response);
     }
 
-    // --- GetSubscriptionStatus ---
-
     [Fact]
     public async Task GetSubscriptionStatus_UserNotFound_ReturnsError()
     {
@@ -59,7 +57,6 @@ public class SubscriptionToolsTests
     [Fact]
     public async Task GetSubscriptionStatus_UserWithTrial_ShowsPlanAndAiMessages()
     {
-        // User.Create gives a 7-day trial by default, so HasProAccess is true
         var user = User.Create("Thomas", "thomas@example.com").Value;
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
@@ -75,7 +72,6 @@ public class SubscriptionToolsTests
     [Fact]
     public async Task GetSubscriptionStatus_TrialActive_ShowsTrialInfo()
     {
-        // User.Create gives a 7-day trial by default
         var user = User.Create("Thomas", "thomas@example.com").Value;
         _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(user);
@@ -84,7 +80,6 @@ public class SubscriptionToolsTests
 
         var result = await _tools.GetSubscriptionStatus(_user);
 
-        // New users have a trial active
         result.Should().Contain("Trial active");
     }
 
@@ -101,8 +96,6 @@ public class SubscriptionToolsTests
 
         result.Should().Contain("AI Messages: 0/50");
     }
-
-    // --- GetReferralStats ---
 
     [Fact]
     public async Task GetReferralStats_Success_ReturnsFormattedStats()
@@ -150,8 +143,6 @@ public class SubscriptionToolsTests
         result.Should().StartWith("Error: ");
     }
 
-    // --- GetReferralCode ---
-
     [Fact]
     public async Task GetReferralCode_Success_RoutesThroughExecutorAndReturnsCodeAndLink()
     {
@@ -176,8 +167,6 @@ public class SubscriptionToolsTests
 
         result.Should().StartWith("Error: ");
     }
-
-    // --- ManageSubscription (high-risk, step-up) ---
 
     [Fact]
     public async Task ManageSubscription_Success_RoutesThroughExecutor()
@@ -214,8 +203,6 @@ public class SubscriptionToolsTests
         _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
             .Returns(response);
     }
-
-    // --- GetUserId ---
 
     [Fact]
     public async Task AnyMethod_MissingUserClaim_ThrowsUnauthorized()

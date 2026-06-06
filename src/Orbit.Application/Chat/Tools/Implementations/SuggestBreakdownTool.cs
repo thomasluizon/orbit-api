@@ -43,8 +43,6 @@ public class SuggestBreakdownTool : IAiTool
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        // SuggestBreakdown creates nothing -- it passes through the AI's suggestions.
-        // The caller interprets this as a "Suggestion" status, not a creation.
         string? title = null;
         if (args.TryGetProperty("title", out var titleEl) && titleEl.ValueKind == JsonValueKind.String)
             title = titleEl.GetString();

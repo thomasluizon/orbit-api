@@ -9,7 +9,6 @@ using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 
-
 namespace Orbit.Application.Tests.Queries.Calendar;
 
 public class GetCalendarEventsQueryHandlerTests
@@ -237,8 +236,6 @@ public class GetCalendarEventsQueryHandlerTests
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    // --- CalendarEventItem record tests ---
-
     [Fact]
     public void CalendarEventItem_Properties_SetCorrectly()
     {
@@ -270,7 +267,4 @@ public class GetCalendarEventsQueryHandlerTests
         q1.UserId.Should().Be(id);
     }
 
-    // BuildReminders tests for the private helper on GoogleCalendarEventFetcher
-    // belong in Orbit.Infrastructure.Tests (they require the Google SDK Event types).
-    // Application tests intentionally stay SDK-free after the Calendar extraction.
 }

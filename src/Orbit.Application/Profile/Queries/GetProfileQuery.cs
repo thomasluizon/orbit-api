@@ -60,7 +60,6 @@ public class GetProfileQueryHandler(
 
         var levelTitle = LevelDefinitions.GetLevelForXp(user.TotalXp).Title;
 
-        // Compute streak freezes available
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var windowStart = today.AddDays(-29);
         var recentFreezes = await streakFreezeRepository.FindAsync(

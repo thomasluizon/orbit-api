@@ -24,7 +24,6 @@ public class GetHabitLogsQueryHandler(
 
     public async Task<Result<IReadOnlyList<HabitLogResponse>>> Handle(GetHabitLogsQuery request, CancellationToken cancellationToken)
     {
-        // Verify ownership without loading logs
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             cancellationToken: cancellationToken);
@@ -32,7 +31,6 @@ public class GetHabitLogsQueryHandler(
         if (habit is null)
             return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
-        // Cap log history to last 365 days to prevent unbounded queries
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var cutoff = userToday.AddDays(-DefaultLookbackDays);
 

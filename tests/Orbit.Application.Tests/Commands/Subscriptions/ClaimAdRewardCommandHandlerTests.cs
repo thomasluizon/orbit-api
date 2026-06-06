@@ -30,7 +30,6 @@ public class ClaimAdRewardCommandHandlerTests
     public async Task Handle_ValidClaim_GrantsRewardAndReturnsResponse()
     {
         var user = User.Create("Test", "test@example.com").Value;
-        // Expire the trial so GrantAdReward succeeds (Pro/trial users cannot claim)
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         SetupExistingUser(user);
 
@@ -47,7 +46,6 @@ public class ClaimAdRewardCommandHandlerTests
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
-        // FindOneTrackedAsync returns null by default
         var command = new ClaimAdRewardCommand(UserId);
 
         var result = await _handler.Handle(command, CancellationToken.None);

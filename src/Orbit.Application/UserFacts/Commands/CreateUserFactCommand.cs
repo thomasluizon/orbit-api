@@ -17,7 +17,6 @@ public class CreateUserFactCommandHandler(
     {
         var maxFacts = await appConfigService.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, cancellationToken);
 
-        // Check for duplicate/similar facts
         var existingFacts = await userFactRepository.FindAsync(
             f => f.UserId == request.UserId && !f.IsDeleted,
             cancellationToken);

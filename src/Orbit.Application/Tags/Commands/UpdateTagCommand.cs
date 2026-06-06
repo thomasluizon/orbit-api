@@ -25,7 +25,6 @@ public class UpdateTagCommandHandler(
         if (tag is null)
             return Result.Failure(ErrorMessages.TagNotFound, ErrorCodes.TagNotFound);
 
-        // Check for duplicate name (excluding self)
         var existing = await tagRepository.FindAsync(
             t => t.UserId == request.UserId && t.Name == request.Name.Trim() && t.Id != request.TagId,
             cancellationToken);

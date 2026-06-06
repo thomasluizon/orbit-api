@@ -18,10 +18,6 @@ public class PendingClarification : Entity
     public string QuickActionsJson { get; private set; } = "[]";
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
-    // No Resolve() domain method by design: PendingClarificationStore.MarkResolvedAsync
-    // flips this field via ExecuteUpdateAsync to keep the claim atomic (closes the
-    // TOCTOU window between Get and MarkResolved). Mirrors the PendingAgentOperationStore
-    // pattern — the trade-off is that EF change tracking is bypassed for this transition.
     public DateTime? ResolvedAtUtc { get; private set; }
 
     private PendingClarification()

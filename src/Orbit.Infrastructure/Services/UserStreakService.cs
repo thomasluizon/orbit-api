@@ -30,18 +30,12 @@ public class UserStreakService(
         var (completionDateSet, freezeDateSet, contributingHabits) =
             await LoadStreakDataAsync(userId, lookbackStart, cancellationToken);
 
-        // If the user has no recurring (non-bad, non-flexible, non-general) habits at all,
-        // fall back to calendar-day adjacency so brand-new users aren't penalized.
         var hasRecurring = contributingHabits.Any(h => h.FrequencyUnit is not null);
         if (!hasRecurring)
         {
             return CalendarFallback(user, completionDateSet, freezeDateSet, awardFreezeIfEligible);
         }
 
-        // Build expected-date timeline using historical schedule (anchored on CreatedAtUtc,
-        // not DueDate) so that past dates remain visible after DueDate advances.
-        // Use TimeZoneHelper rather than raw FindSystemTimeZoneById so an invalid/migrated
-        // timezone string falls back to UTC instead of crashing the entire log_habit path.
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
             contributingHabits, lookbackStart, userToday, userTimeZone);
@@ -49,7 +43,6 @@ public class UserStreakService(
         var currentStreak = ComputeCurrentStreak(
             expectedDates, completionDateSet, freezeDateSet, userToday, lookbackStart, out var lastActiveDate);
 
-        // Longest streak: walk the full expected timeline forward and track the longest run.
         var longestStreak = ComputeLongestStreak(expectedDates, completionDateSet, freezeDateSet);
         if (currentStreak > longestStreak) longestStreak = currentStreak;
 
@@ -159,7 +152,6 @@ public class UserStreakService(
             {
                 run = 0;
             }
-            // Freeze dates preserve the run without incrementing (no action needed).
         }
         return longest;
     }

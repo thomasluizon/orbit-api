@@ -54,20 +54,17 @@ public partial class GoalDeadlineNotificationService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
 
-        // Load active goals with deadlines
         var goals = await dbContext.Goals
             .Where(g => g.Status == GoalStatus.Active && g.Deadline != null)
             .ToListAsync(ct);
 
         if (goals.Count == 0) return;
 
-        // Group by user to handle timezones
         var userIds = goals.Select(g => g.UserId).Distinct().ToList();
         var users = await dbContext.Users
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        // Batch-load all possible dedup keys upfront to avoid N+1 AnyAsync queries
         var allKeys = goals
             .Where(g => g.Deadline.HasValue)
             .SelectMany(g => NotifyDaysBefore.Select(d => $"goal-deadline-{g.Id}-{d}d"))
@@ -107,8 +104,6 @@ public partial class GoalDeadlineNotificationService(
         {
             if (daysUntilDeadline != daysBefore) continue;
 
-            // FUTURE: The Url field is being repurposed as a deduplication key here (notificationKey).
-            // This should be replaced with a proper SentGoalDeadlineNotification entity.
             var notificationKey = $"goal-deadline-{goal.Id}-{daysBefore}d";
             if (sentKeys.Contains(notificationKey)) continue;
 

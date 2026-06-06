@@ -162,7 +162,6 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
 
         var sinceUtc = DateTime.SpecifyKind(since, DateTimeKind.Utc);
 
-        // Query all entities with IgnoreQueryFilters to include soft-deleted records
         var habits = await dbContext.Habits
             .IgnoreQueryFilters()
             .Where(h => h.UserId == userId && h.UpdatedAtUtc > sinceUtc)
@@ -336,13 +335,6 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var processed = 0;
         var failed = 0;
 
-        // Each mutation commits (or rolls back) independently so a partial failure
-        // can't leave tracked changes that leak into the next mutation or the final
-        // SaveChanges. Relational providers use a real transaction via IExecutionStrategy
-        // (EnableRetryOnFailure is on in prod). The in-memory test provider doesn't
-        // support transactions, so we fall back to SaveChanges-per-mutation +
-        // ChangeTracker.Clear on failure, which yields equivalent isolation since
-        // there's no real transaction to manage.
         var supportsTransactions = dbContext.Database.IsRelational();
         var strategy = dbContext.Database.CreateExecutionStrategy();
         var mutationCount = Math.Min(request.Mutations.Count, 100);
@@ -373,10 +365,6 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
                 }
                 else
                 {
-                    // In-memory / non-relational path used by unit tests. No transactions,
-                    // no ChangeTracker.Clear (tests rely on reference identity of tracked
-                    // entities from the initial seed). SaveChangesAsync-per-mutation still
-                    // provides partial-failure isolation within the test scope.
                     await ProcessMutation(userId, mutation, cancellationToken);
                     await dbContext.SaveChangesAsync(cancellationToken);
                 }

@@ -66,7 +66,6 @@ public class GoogleAuthCommandHandlerTests
     public async Task Handle_NewUser_CreatesUserAndReturnsLoginResponse()
     {
         SetupGoogleTokenResponse(TestEmail, "New User");
-        // No existing user -- FindOneTrackedAsync returns null by default
 
         var command = new GoogleAuthCommand("valid-token");
 

@@ -234,7 +234,6 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         return File(json, "application/json", fileName);
     }
 
-
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Timezone changed to {Timezone} for user {UserId}")]
     private static partial void LogTimezoneChanged(ILogger logger, string timezone, Guid userId);
 

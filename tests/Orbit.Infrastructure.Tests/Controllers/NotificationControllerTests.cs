@@ -31,8 +31,6 @@ public class NotificationControllerTests
         };
     }
 
-    // --- GetNotifications ---
-
     [Fact]
     public async Task GetNotifications_Success_ReturnsOk()
     {
@@ -54,8 +52,6 @@ public class NotificationControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- MarkAsRead ---
 
     [Fact]
     public async Task MarkAsRead_Success_ReturnsNoContent()
@@ -79,8 +75,6 @@ public class NotificationControllerTests
         result.Should().BeOfType<NotFoundObjectResult>();
     }
 
-    // --- MarkAllAsRead ---
-
     [Fact]
     public async Task MarkAllAsRead_Success_ReturnsNoContent()
     {
@@ -102,8 +96,6 @@ public class NotificationControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- Delete ---
 
     [Fact]
     public async Task Delete_Success_ReturnsNoContent()
@@ -127,8 +119,6 @@ public class NotificationControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- DeleteAll ---
-
     [Fact]
     public async Task DeleteAll_Success_ReturnsNoContent()
     {
@@ -150,8 +140,6 @@ public class NotificationControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- Subscribe ---
 
     [Fact]
     public async Task Subscribe_Success_ReturnsOk()
@@ -177,8 +165,6 @@ public class NotificationControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- Unsubscribe ---
-
     [Fact]
     public async Task Unsubscribe_Success_ReturnsOk()
     {
@@ -202,8 +188,6 @@ public class NotificationControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- TestPush ---
 
     [Fact]
     public async Task TestPush_Success_ReturnsOk()

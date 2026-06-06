@@ -213,8 +213,6 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(Result.Failure<AiResponse>(error));
     }
 
-    // --- Existing tests ---
-
     [Fact]
     public async Task Handle_PayGateBlocks_ReturnsPayGateError()
     {
@@ -389,8 +387,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("Just a plain message");
     }
 
-    // --- New tests: Tool call with success result ---
-
     [Fact]
     public async Task Handle_ToolCallWithSuccess_ReturnsActionResult()
     {
@@ -418,7 +414,6 @@ public class ProcessUserChatCommandHandlerTests
         };
         SetupAiResponse(aiResponseWithTool);
 
-        // After tool execution, AI returns a final text response
         _aiIntentService.ContinueWithToolResultsAsync(
             Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!", ToolCalls = null }));
@@ -434,8 +429,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].EntityName.Should().Be("Morning Run");
         result.Value.Operations.Should().ContainSingle(op => op.OperationId == "create_habit" && op.Status == AgentOperationStatus.Succeeded);
     }
-
-    // --- Tool call with failure ---
 
     [Fact]
     public async Task Handle_ToolCallWithFailure_ReturnsFailedAction()
@@ -526,8 +519,6 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- Tool call with read-only tool ---
-
     [Fact]
     public async Task Handle_ReadOnlyToolCall_DoesNotProduceActionResult()
     {
@@ -561,8 +552,6 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions.Should().BeEmpty();
     }
-
-    // --- Read-only tool surfacing related surfaces ---
 
     [Fact]
     public async Task Handle_ReadOnlyToolWithRelatedSurfaces_SurfacesThemOnResponse()
@@ -634,8 +623,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.RelatedSurfaces.Should().BeNull();
     }
 
-    // --- Multiple tool calls in sequence ---
-
     [Fact]
     public async Task Handle_MultipleToolCallsInOneIteration_ExecutesAllAndCollectsActions()
     {
@@ -684,8 +671,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Select(a => a.Type).Should().Contain("LogHabit");
     }
 
-    // --- Multiple tool-calling iterations ---
-
     [Fact]
     public async Task Handle_MultipleIterations_AccumulatesActions()
     {
@@ -703,7 +688,6 @@ public class ProcessUserChatCommandHandlerTests
 
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
 
-        // First AI call returns tool calls
         var firstResponse = new AiResponse
         {
             ToolCalls = [new AiToolCall("create_habit", "call_1", toolCallArgs)],
@@ -711,14 +695,12 @@ public class ProcessUserChatCommandHandlerTests
         };
         SetupAiResponse(firstResponse);
 
-        // After first tool execution, AI wants to call another tool
         var secondResponse = new AiResponse
         {
             ToolCalls = [new AiToolCall("create_habit", "call_2", toolCallArgs)],
             ConversationContext = TestConversationContext
         };
 
-        // After second tool execution, AI produces final text
         var finalResponse = new AiResponse { TextMessage = "Created two habits!", ToolCalls = null };
 
         _aiIntentService.ContinueWithToolResultsAsync(
@@ -732,14 +714,11 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions.Should().HaveCount(2);
     }
 
-    // --- Unknown tool ---
-
     [Fact]
     public async Task Handle_UnknownToolCall_ReturnsFailedAction()
     {
         SetupUserAndPayGate();
-        var handler = CreateHandler(); // No tools registered
-
+        var handler = CreateHandler();
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
         var aiResponseWithTool = new AiResponse
         {
@@ -760,8 +739,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Failed);
         result.Value.Actions[0].Error.Should().Contain("Unknown tool");
     }
-
-    // --- Tool that throws exception ---
 
     [Fact]
     public async Task Handle_ToolThrowsException_ReturnsFailedAction()
@@ -799,8 +776,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].Error.Should().Be("An unexpected error occurred.");
     }
 
-    // --- Image attachment ---
-
     [Fact]
     public async Task Handle_WithImageAttachment_PassesImageDataToAiService()
     {
@@ -822,8 +797,6 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
             Arg.Any<CancellationToken>());
     }
-
-    // --- Chat history with previous messages ---
 
     [Fact]
     public async Task Handle_WithChatHistory_PassesHistoryToAiService()
@@ -848,8 +821,6 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Is<IReadOnlyList<ChatHistoryMessage>?>(h => h != null && h.Count == 2),
             Arg.Any<CancellationToken>());
     }
-
-    // --- suggest_breakdown tool special handling ---
 
     [Fact]
     public async Task Handle_SuggestBreakdownTool_ReturnsSuggestionStatus()
@@ -905,8 +876,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].SuggestedSubHabits![0].Days.Should().HaveCount(3);
     }
 
-    // --- Max iterations guard ---
-
     [Fact]
     public async Task Handle_MaxIterationsReached_StopsLooping()
     {
@@ -930,7 +899,6 @@ public class ProcessUserChatCommandHandlerTests
         };
         SetupAiResponse(toolResponse);
 
-        // ContinueWithToolResults always returns more tool calls (would loop forever without guard)
         _aiIntentService.ContinueWithToolResultsAsync(
             Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(toolResponse));
@@ -939,12 +907,8 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // MaxToolIterations = 5, initial call + 5 iterations = 6 total tool executions
-        // But ContinueWithToolResults is called once per iteration loop
         result.Value.Actions.Count.Should().BeLessThanOrEqualTo(6);
     }
-
-    // --- ContinueWithToolResults failure ---
 
     [Fact]
     public async Task Handle_ContinueWithToolResultsFails_StopsAndReturnsPartialResult()
@@ -976,12 +940,9 @@ public class ProcessUserChatCommandHandlerTests
         var command = new ProcessUserChatCommand(UserId, "Create habit");
         var result = await handler.Handle(command, CancellationToken.None);
 
-        // The handler still succeeds, just with no final text message
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions.Should().HaveCount(1);
     }
-
-    // --- AI memory disabled path ---
 
     [Fact]
     public async Task Handle_AiMemoryDisabled_DoesNotLoadFacts()
@@ -997,13 +958,10 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // UserFact repository should not be queried when memory is disabled
         await _userFactRepo.DidNotReceive().FindAsync(
             Arg.Any<Expression<Func<UserFact, bool>>>(),
             Arg.Any<CancellationToken>());
     }
-
-    // --- Invalid JSON wrapper ---
 
     [Fact]
     public async Task Handle_InvalidJsonWrapper_ReturnsTextAsIs()
@@ -1019,8 +977,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("{invalid json here");
     }
 
-    // --- JSON without aiMessage key ---
-
     [Fact]
     public async Task Handle_JsonWithoutAiMessageKey_ReturnsTextAsIs()
     {
@@ -1035,8 +991,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("{\"other\": \"value\"}");
     }
 
-    // --- Null text message ---
-
     [Fact]
     public async Task Handle_NullTextMessage_ReturnsNull()
     {
@@ -1050,8 +1004,6 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().BeNull();
     }
-
-    // --- Tool ordering: create_habit before create_sub_habit ---
 
     [Fact]
     public async Task Handle_ToolCallOrdering_CreateHabitRunsBeforeSubHabit()
@@ -1089,7 +1041,6 @@ public class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(createTool, subTool);
 
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
-        // Note: sub_habit is listed BEFORE create_habit to prove ordering works
         var aiResponseWithTools = new AiResponse
         {
             ToolCalls =
@@ -1125,7 +1076,6 @@ public class ProcessUserChatCommandHandlerTests
         var handler = CreateHandler(createTool, subTool, assignTool);
 
         var toolCallArgs = JsonDocument.Parse("{}").RootElement;
-        // Fed in reverse to prove ordering is driven by Order, not call order.
         var aiResponseWithTools = new AiResponse
         {
             ToolCalls =
@@ -1165,8 +1115,6 @@ public class ProcessUserChatCommandHandlerTests
         return tool;
     }
 
-    // --- suggest_breakdown with no sub habits in args ---
-
     [Fact]
     public async Task Handle_SuggestBreakdownWithoutSubHabits_ReturnsNullSuggestions()
     {
@@ -1201,8 +1149,6 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].SuggestedSubHabits.Should().BeNull();
     }
 
-    // --- SaveChanges is called ---
-
     [Fact]
     public async Task Handle_AfterToolExecution_SavesChanges()
     {
@@ -1215,8 +1161,6 @@ public class ProcessUserChatCommandHandlerTests
 
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
-
-    // --- Correlation id ---
 
     [Fact]
     public async Task Handle_SuccessfulResponse_EchoesCorrelationId()

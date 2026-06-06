@@ -46,7 +46,6 @@ public partial class BulkLogHabitsCommandHandler(
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
 
-        // Batch-load all requested habits in a single query instead of one per item (N+1)
         var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
@@ -74,12 +73,10 @@ public partial class BulkLogHabitsCommandHandler(
             }
         }
 
-        // Save all successful logs once
         await unitOfWork.SaveChangesAsync(cancellationToken);
         if (results.Any(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
             await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
 
-        // Gamification: process each successfully logged habit
         var loggedHabitIds = results
             .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
             .Select(r => r.HabitId);
@@ -115,9 +112,6 @@ public partial class BulkLogHabitsCommandHandler(
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound);
 
-        // Validate schedule for recurring non-flexible habits. Allow logging an overdue
-        // habit as today (DueDate < today) even when today is not a scheduled day, so single
-        // and bulk log behave identically (mirrors LogHabitCommand.ValidateTargetDate).
         if (habit.FrequencyUnit is not null && !habit.IsFlexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
         {
@@ -127,7 +121,6 @@ public partial class BulkLogHabitsCommandHandler(
                     Error: "Habit is not scheduled on this date.");
         }
 
-        // Skip if already logged for target date (no toggle -- just skip)
         if (habit.Logs.Any(l => l.Date == targetDate))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
 

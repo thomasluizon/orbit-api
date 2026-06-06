@@ -44,8 +44,6 @@ public class HabitsControllerTests : IAsyncLifetime
         _client.Dispose();
     }
 
-    // ── GetHabits ─────────────────────────────────────────────
-
     [Fact]
     public async Task GetHabits_Authenticated_ReturnsOk()
     {
@@ -66,8 +64,6 @@ public class HabitsControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
-
-    // ── CreateHabit ───────────────────────────────────────────
 
     [Fact]
     public async Task CreateHabit_ValidBoolean_ReturnsCreated()
@@ -100,8 +96,6 @@ public class HabitsControllerTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    // ── LogHabit ──────────────────────────────────────────────
-
     [Fact]
     public async Task LogHabit_BooleanHabit_ReturnsOkWithLogId()
     {
@@ -125,8 +119,6 @@ public class HabitsControllerTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    // ── DeleteHabit ───────────────────────────────────────────
-
     [Fact]
     public async Task DeleteHabit_ExistingHabit_ReturnsNoContent()
     {
@@ -144,8 +136,6 @@ public class HabitsControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
-
-    // ── GetMetrics ────────────────────────────────────────────
 
     [Fact]
     public async Task GetMetrics_ExistingHabit_ReturnsOk()
@@ -168,8 +158,6 @@ public class HabitsControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
-
-    // ── BulkCreate ────────────────────────────────────────────
 
     [Fact]
     public async Task BulkCreate_WithParentChild_ReturnsSuccess()
@@ -206,7 +194,6 @@ public class HabitsControllerTests : IAsyncLifetime
         result.Results.Should().AllSatisfy(r => r.Status.Should().Be("Success"));
         result.Results.Should().AllSatisfy(r => r.HabitId.Should().NotBeEmpty());
 
-        // Verify parent B has children
         var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitWithChildrenDto>>(JsonOptions);
         var parentB = paginatedHabits!.Items.FirstOrDefault(h => h.Title == "Parent Habit B");
@@ -222,12 +209,10 @@ public class HabitsControllerTests : IAsyncLifetime
             habits = new[]
             {
                 new { title = "Valid Habit 1", frequencyUnit = "Day", frequencyQuantity = 1 },
-                new { title = "", frequencyUnit = "Day", frequencyQuantity = 1 }, // Invalid: empty title
-                new { title = "Valid Habit 2", frequencyUnit = "Day", frequencyQuantity = 1 }
+                new { title = "", frequencyUnit = "Day", frequencyQuantity = 1 },                new { title = "Valid Habit 2", frequencyUnit = "Day", frequencyQuantity = 1 }
             }
         });
 
-        // Validation rejects the entire request when any item has an empty title
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -241,8 +226,6 @@ public class HabitsControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
-
-    // ── BulkDelete ────────────────────────────────────────────
 
     [Fact]
     public async Task BulkDelete_MultipleHabits_ReturnsSuccess()
@@ -265,7 +248,6 @@ public class HabitsControllerTests : IAsyncLifetime
         result!.Results.Should().HaveCount(3);
         result.Results.Should().AllSatisfy(r => r.Status.Should().Be("Success"));
 
-        // Verify all deleted
         var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
         paginatedHabits!.Items.Should().NotContain(h => h.Id == id1 || h.Id == id2 || h.Id == id3);
@@ -296,7 +278,6 @@ public class HabitsControllerTests : IAsyncLifetime
         result.Results[1].Error.Should().Contain("not found");
         result.Results[2].Status.Should().Be("Success");
 
-        // Verify valid ones deleted
         var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
         var paginatedHabits = await habitsResponse.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
         paginatedHabits!.Items.Should().NotContain(h => h.Id == id1 || h.Id == id2);
@@ -315,8 +296,6 @@ public class HabitsControllerTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    // ── Helpers ───────────────────────────────────────────────
-
     private async Task<Guid> CreateBooleanHabit(string title)
     {
         var response = await _client.PostAsJsonAsync("/api/habits", new
@@ -330,8 +309,6 @@ public class HabitsControllerTests : IAsyncLifetime
         response.EnsureSuccessStatusCode();
         return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
-
-    // ── DTOs ──────────────────────────────────────────────────
 
     private record HabitDto(Guid Id, string Title);
     private record PaginatedResponse<T>(List<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);

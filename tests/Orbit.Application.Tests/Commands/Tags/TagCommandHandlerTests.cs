@@ -18,8 +18,6 @@ public class TagCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
-    // ----- CreateTag -----
-
     [Fact]
     public async Task CreateTag_Valid_CreatesAndSaves()
     {
@@ -54,8 +52,6 @@ public class TagCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("already exists");
     }
-
-    // ----- UpdateTag -----
 
     [Fact]
     public async Task UpdateTag_Valid_UpdatesAndSaves()
@@ -98,8 +94,6 @@ public class TagCommandHandlerTests
         result.Error.Should().Be("Tag not found.");
     }
 
-    // ----- DeleteTag -----
-
     [Fact]
     public async Task DeleteTag_Valid_RemovesAndSaves()
     {
@@ -138,8 +132,6 @@ public class TagCommandHandlerTests
         result.Error.Should().Be("Tag not found.");
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
-
-    // ----- AssignTags -----
 
     [Fact]
     public async Task AssignTags_Valid_AssignsAndSaves()

@@ -111,7 +111,6 @@ public class ReorderHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Only one call to FindTrackedAsync (batch load)
         await _habitRepo.Received(1).FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>());

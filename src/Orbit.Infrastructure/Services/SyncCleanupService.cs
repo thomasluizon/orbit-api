@@ -52,7 +52,6 @@ public partial class SyncCleanupService(
         var cutoff = DateTime.UtcNow - RetentionPeriod;
         var totalPurged = 0;
 
-        // Purge soft-deleted habits (using IgnoreQueryFilters to access deleted records)
         var deletedHabits = await dbContext.Habits
             .IgnoreQueryFilters()
             .Where(h => h.IsDeleted && h.DeletedAtUtc < cutoff)
@@ -64,7 +63,6 @@ public partial class SyncCleanupService(
             totalPurged += deletedHabits.Count;
         }
 
-        // Purge soft-deleted goals
         var deletedGoals = await dbContext.Goals
             .IgnoreQueryFilters()
             .Where(g => g.IsDeleted && g.DeletedAtUtc < cutoff)
@@ -76,7 +74,6 @@ public partial class SyncCleanupService(
             totalPurged += deletedGoals.Count;
         }
 
-        // Purge soft-deleted tags
         var deletedTags = await dbContext.Tags
             .IgnoreQueryFilters()
             .Where(t => t.IsDeleted && t.DeletedAtUtc < cutoff)
@@ -88,7 +85,6 @@ public partial class SyncCleanupService(
             totalPurged += deletedTags.Count;
         }
 
-        // Purge soft-deleted user facts
         var deletedFacts = await dbContext.UserFacts
             .IgnoreQueryFilters()
             .Where(f => f.IsDeleted && f.DeletedAtUtc < cutoff)
@@ -100,7 +96,6 @@ public partial class SyncCleanupService(
             totalPurged += deletedFacts.Count;
         }
 
-        // Purge abandoned calendar sync suggestions (14 days, not imported)
         var suggestionCutoff = DateTime.UtcNow - SuggestionRetentionPeriod;
         var abandonedSuggestions = await dbContext.GoogleCalendarSyncSuggestions
             .Where(s => s.DiscoveredAtUtc < suggestionCutoff && s.ImportedAtUtc == null)

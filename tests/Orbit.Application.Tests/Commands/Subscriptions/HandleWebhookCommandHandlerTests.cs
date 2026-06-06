@@ -27,7 +27,6 @@ public class HandleWebhookCommandHandlerTests
 
     public HandleWebhookCommandHandlerTests()
     {
-        // Stripe.net v50+ EventConverter requires StripeConfiguration to be initialized
         StripeConfiguration.ApiKey ??= "sk_test_fake_key_for_unit_tests";
 
         var settings = Options.Create(new StripeSettings
@@ -113,9 +112,6 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_NoUserIdInMetadata_ReturnsFailureSoStripeRetries()
     {
-        // Previously this scenario silently returned success, hiding lost subscriptions when
-        // checkout metadata was set incorrectly upstream. Now it surfaces as a failure so
-        // Stripe redelivers the webhook (and the operator sees the recurring error).
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             null, "sub_test", "cus_test"));
 
@@ -358,8 +354,6 @@ public class HandleWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
     }
-
-    // --- Helpers ---
 
     private static Subscription CreateMockSubscription(string subscriptionId)
     {

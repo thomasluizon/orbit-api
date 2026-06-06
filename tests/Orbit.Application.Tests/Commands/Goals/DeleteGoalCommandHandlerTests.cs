@@ -68,7 +68,6 @@ public class DeleteGoalCommandHandlerTests
     [Fact]
     public async Task Handle_WrongUser_GoalNotFoundBecauseFilterExcludesIt()
     {
-        // The handler filters by both GoalId and UserId, so a wrong user gets "not found"
         _goalRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),

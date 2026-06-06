@@ -60,7 +60,6 @@ public class BulkSkipHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_OverdueHabit_NotScheduledToday_SkipsAsToday()
     {
-        // Weekly habit overdue 4 days ago (today is not its weekday): bulk-skip resolves it.
         var habit = Habit.Create(new HabitCreateParams(UserId, "Overdue", FrequencyUnit.Week, 1, DueDate: Today.AddDays(-4))).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
@@ -110,8 +109,7 @@ public class BulkSkipHabitsCommandHandlerTests
     public async Task Handle_CompletedHabit_ReportsFailedItem()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
-        habit.Log(Today); // Completes one-time task
-        SetupHabitsForUser(new List<Habit> { habit });
+        habit.Log(Today);        SetupHabitsForUser(new List<Habit> { habit });
 
         var items = new List<BulkSkipItem> { new(habit.Id) };
         var command = new BulkSkipHabitsCommand(UserId, items);
@@ -183,16 +181,14 @@ public class BulkSkipHabitsCommandHandlerTests
             UserId, "Valid", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         var completedHabit = Habit.Create(new HabitCreateParams(
             UserId, "Done", null, null, DueDate: Today)).Value;
-        completedHabit.Log(Today); // Complete it
-
+        completedHabit.Log(Today);
         SetupHabitsForUser(new List<Habit> { validHabit, completedHabit });
 
         var items = new List<BulkSkipItem>
         {
             new(validHabit.Id),
             new(completedHabit.Id),
-            new(Guid.NewGuid()) // Not found
-        };
+            new(Guid.NewGuid())        };
         var command = new BulkSkipHabitsCommand(UserId, items);
 
         var result = await _handler.Handle(command, CancellationToken.None);

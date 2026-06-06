@@ -34,7 +34,6 @@ public static class LevelDefinitions
     {
         var current = GetLevelForXp(totalXp);
         if (current.Level >= 10) return null;
-        var next = _all[current.Level]; // Level is 1-indexed, array is 0-indexed, so _all[current.Level] = next level
-        return next.XpRequired - totalXp;
+        var next = _all[current.Level];        return next.XpRequired - totalXp;
     }
 }

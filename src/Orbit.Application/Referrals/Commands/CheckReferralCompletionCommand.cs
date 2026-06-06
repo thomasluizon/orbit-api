@@ -71,7 +71,6 @@ public partial class CheckReferralCompletionCommandHandler(
 
         trackedReferral.MarkCompleted();
 
-        // Grant coupon to referrer
         var referrer = await repos.UserRepository.FindOneTrackedAsync(
             u => u.Id == trackedReferral.ReferrerId,
             cancellationToken: cancellationToken);
@@ -79,13 +78,11 @@ public partial class CheckReferralCompletionCommandHandler(
         if (referrer is not null)
             await GrantCoupon(referrer, cancellationToken);
 
-        // Grant coupon to referred user
         await GrantCoupon(referredUser, cancellationToken);
 
         trackedReferral.MarkRewarded();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Send notifications
         if (referrer is not null)
             await SendNotification(referrer, isReferrer: true, cancellationToken);
 
@@ -123,7 +120,6 @@ public partial class CheckReferralCompletionCommandHandler(
             catch (Exception ex)
             {
                 LogApplyReferralCouponFailed(logger, ex, couponId, user.StripeSubscriptionId, user.Id);
-                // Fall back to storing coupon for next checkout
                 user.SetReferralCoupon(couponId);
             }
         }

@@ -64,7 +64,6 @@ public class LinkHabitsToGoalToolTests
         var goal = Goal.Create(UserId, "Be Healthy", 1, "goal").Value;
         SetupGoalFound(goal);
 
-        // No habits found
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>()
@@ -73,7 +72,6 @@ public class LinkHabitsToGoalToolTests
         var missingId = Guid.NewGuid();
         var result = await Execute($$$"""{"goal_id": "{{{goal.Id}}}", "habit_ids": ["{{{missingId}}}"]}""");
 
-        // Still succeeds, just no habits linked
         result.Success.Should().BeTrue();
     }
 
@@ -101,7 +99,6 @@ public class LinkHabitsToGoalToolTests
     public async Task TooManyHabits_ReturnsError()
     {
         var goalId = Guid.NewGuid();
-        // Create more than MaxHabitsPerGoal (20) habit IDs
         var ids = Enumerable.Range(0, AppConstants.MaxHabitsPerGoal + 1)
             .Select(_ => $"\"{Guid.NewGuid()}\"");
         var idsJson = string.Join(",", ids);
@@ -126,7 +123,6 @@ public class LinkHabitsToGoalToolTests
         var result = await Execute($$$"""{"goal_id": "{{{goal.Id}}}", "habit_ids": ["{{{newHabit.Id}}}"]}""");
 
         result.Success.Should().BeTrue();
-        // Old habit should have been removed and new one added
         goal.Habits.Should().Contain(newHabit);
         goal.Habits.Should().NotContain(oldHabit);
     }

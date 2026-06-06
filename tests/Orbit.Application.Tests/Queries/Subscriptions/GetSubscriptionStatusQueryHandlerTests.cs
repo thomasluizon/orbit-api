@@ -27,7 +27,6 @@ public class GetSubscriptionStatusQueryHandlerTests
     [Fact]
     public async Task Handle_UserFound_ReturnsStatus()
     {
-        // User.Create sets a 7-day trial, so freshly created user has pro access via trial
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(500);
@@ -62,7 +61,6 @@ public class GetSubscriptionStatusQueryHandlerTests
     public async Task Handle_TrialUser_ReturnsTrialActive()
     {
         var user = CreateTestUser();
-        // User.Create already sets trial, so IsTrialActive should be true
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(500);
 

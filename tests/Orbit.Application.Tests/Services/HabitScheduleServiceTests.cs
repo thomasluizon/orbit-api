@@ -8,8 +8,7 @@ namespace Orbit.Application.Tests.Services;
 public class HabitScheduleServiceTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly Anchor = new(2025, 1, 6); // Monday
-
+    private static readonly DateOnly Anchor = new(2025, 1, 6);
     private static Habit CreateHabit(
         FrequencyUnit? unit,
         int? qty,
@@ -29,41 +28,31 @@ public class HabitScheduleServiceTests
         return result.Value;
     }
 
-    // --- IsHabitDueOnDate ---
-
     [Fact]
     public void IsHabitDueOnDate_OneTime_ExactDate_True()
     {
-        // Arrange
         var habit = CreateHabit(null, null, dueDate: new DateOnly(2025, 3, 15));
 
-        // Act
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 3, 15));
 
-        // Assert
         result.Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_OneTime_DifferentDate_False()
     {
-        // Arrange
         var habit = CreateHabit(null, null, dueDate: new DateOnly(2025, 3, 15));
 
-        // Act
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 3, 16));
 
-        // Assert
         result.Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_DailyQty1_AnyDateAfterAnchor_True()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 1);
 
-        // Act & Assert
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(1)).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(100)).Should().BeTrue();
@@ -72,10 +61,8 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_DailyQty2_EveryOtherDay()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 2);
 
-        // Act & Assert
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(1)).Should().BeFalse();
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(2)).Should().BeTrue();
@@ -86,10 +73,8 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_DailyQty3_EveryThirdDay()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 3);
 
-        // Act & Assert
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(1)).Should().BeFalse();
         HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(2)).Should().BeFalse();
@@ -100,142 +85,107 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsHabitDueOnDate_BeforeAnchor_False()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 1);
 
-        // Act
         var result = HabitScheduleService.IsHabitDueOnDate(habit, Anchor.AddDays(-1));
 
-        // Assert
         result.Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_WeeklyQty1_SameWeekday_True()
     {
-        // Arrange - Anchor is Monday 2025-01-06
         var habit = CreateHabit(FrequencyUnit.Week, 1);
 
-        // Act - next Monday is 2025-01-13
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 13));
 
-        // Assert
         result.Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_WeeklyQty1_DifferentWeekday_False()
     {
-        // Arrange - Anchor is Monday 2025-01-06
         var habit = CreateHabit(FrequencyUnit.Week, 1);
 
-        // Act - Tuesday 2025-01-07
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 7));
 
-        // Assert
         result.Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_WeeklyQty2_EveryOtherWeek()
     {
-        // Arrange - Anchor is Monday 2025-01-06
         var habit = CreateHabit(FrequencyUnit.Week, 2);
 
-        // Act & Assert
-        // Week 0 (anchor): due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 6)).Should().BeTrue();
-        // Week 1: not due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 13)).Should().BeFalse();
-        // Week 2: due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 20)).Should().BeTrue();
-        // Week 3: not due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 27)).Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_MonthlyQty1_SameDay_True()
     {
-        // Arrange - Anchor is 6th of month
         var habit = CreateHabit(FrequencyUnit.Month, 1);
 
-        // Act - Feb 6th
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 6));
 
-        // Assert
         result.Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_MonthlyQty1_DifferentDay_False()
     {
-        // Arrange - Anchor is 6th of month
         var habit = CreateHabit(FrequencyUnit.Month, 1);
 
-        // Act - Feb 7th
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 7));
 
-        // Assert
         result.Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_Yearly_SameMonthAndDay_True()
     {
-        // Arrange - Anchor is Jan 6
         var habit = CreateHabit(FrequencyUnit.Year, 1);
 
-        // Act - Jan 6 next year
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2026, 1, 6));
 
-        // Assert
         result.Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_WithDaysFilter_MatchingDay_True()
     {
-        // Arrange - Daily qty 1, only on Monday and Wednesday
         var habit = CreateHabit(
             FrequencyUnit.Day, 1,
             days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday });
 
-        // Act - Wednesday 2025-01-08
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 8));
 
-        // Assert
         result.Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_WithDaysFilter_NonMatchingDay_False()
     {
-        // Arrange - Daily qty 1, only on Monday and Wednesday
         var habit = CreateHabit(
             FrequencyUnit.Day, 1,
             days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday });
 
-        // Act - Tuesday 2025-01-07
         var result = HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 7));
 
-        // Assert
         result.Should().BeFalse();
     }
-
-    // --- GetScheduledDates ---
 
     [Fact]
     public void GetScheduledDates_DailyOver7Days_Returns7Dates()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 1);
         var from = Anchor;
         var to = Anchor.AddDays(6);
 
-        // Act
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to);
 
-        // Assert
         dates.Should().HaveCount(7);
         dates.First().Should().Be(from);
         dates.Last().Should().Be(to);
@@ -244,15 +194,11 @@ public class HabitScheduleServiceTests
     [Fact]
     public void GetScheduledDates_CapsAt366Days()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 1);
         var from = Anchor;
-        var to = Anchor.AddDays(500); // Exceeds 366 cap
-
-        // Act
+        var to = Anchor.AddDays(500);
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to);
 
-        // Assert - should be capped at 367 dates (from + 366 days)
         dates.Should().HaveCount(367);
         dates.Last().Should().Be(from.AddDays(366));
     }
@@ -260,19 +206,14 @@ public class HabitScheduleServiceTests
     [Fact]
     public void GetScheduledDates_EmptyWhenFromAfterTo()
     {
-        // Arrange
         var habit = CreateHabit(FrequencyUnit.Day, 1);
         var from = new DateOnly(2025, 3, 15);
         var to = new DateOnly(2025, 3, 10);
 
-        // Act
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to);
 
-        // Assert
         dates.Should().BeEmpty();
     }
-
-    // --- EndDate tests ---
 
     [Fact]
     public void IsHabitDueOnDate_AfterEndDate_False()
@@ -315,19 +256,14 @@ public class HabitScheduleServiceTests
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2030, 12, 31)).Should().BeTrue();
     }
 
-    // --- Flexible: GetWindowStart ---
-
     [Fact]
     public void GetWindowStart_Weekly_ReturnsISOMonday()
     {
-        // Arrange - Wednesday Jan 8, 2025
         var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
         var wednesday = new DateOnly(2025, 1, 8);
 
-        // Act
         var windowStart = HabitScheduleService.GetWindowStart(habit, wednesday);
 
-        // Assert - ISO Monday = Jan 6
         windowStart.Should().Be(new DateOnly(2025, 1, 6));
         windowStart.DayOfWeek.Should().Be(DayOfWeek.Monday);
     }
@@ -387,8 +323,6 @@ public class HabitScheduleServiceTests
         windowStart.Should().Be(date);
     }
 
-    // --- Flexible: GetWindowEnd ---
-
     [Fact]
     public void GetWindowEnd_Weekly_ReturnsSunday()
     {
@@ -397,8 +331,7 @@ public class HabitScheduleServiceTests
 
         var windowEnd = HabitScheduleService.GetWindowEnd(habit, wednesday);
 
-        windowEnd.Should().Be(new DateOnly(2025, 1, 12)); // Sunday
-        windowEnd.DayOfWeek.Should().Be(DayOfWeek.Sunday);
+        windowEnd.Should().Be(new DateOnly(2025, 1, 12));        windowEnd.DayOfWeek.Should().Be(DayOfWeek.Sunday);
     }
 
     [Fact]
@@ -406,11 +339,9 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Month, 5, isFlexible: true);
 
-        // February 2025 (non-leap)
         var feb = new DateOnly(2025, 2, 15);
         HabitScheduleService.GetWindowEnd(habit, feb).Should().Be(new DateOnly(2025, 2, 28));
 
-        // February 2024 (leap)
         var febLeap = new DateOnly(2024, 2, 15);
         HabitScheduleService.GetWindowEnd(habit, febLeap).Should().Be(new DateOnly(2024, 2, 29));
     }
@@ -437,64 +368,46 @@ public class HabitScheduleServiceTests
         windowEnd.Should().Be(date);
     }
 
-    // --- Flexible: GetCompletedInWindow ---
-
     [Fact]
     public void GetCompletedInWindow_CountsLogsInCurrentWindow()
     {
-        // Arrange - 3x per week flexible habit
         var monday = new DateOnly(2025, 1, 6);
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
-        // Log on Monday and Wednesday
         habit.Log(monday);
-        habit.Log(new DateOnly(2025, 1, 8)); // Wednesday
-
-        // Act - check from Thursday's perspective (same week)
+        habit.Log(new DateOnly(2025, 1, 8));
         var completed = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 9), habit.Logs);
 
-        // Assert
         completed.Should().Be(2);
     }
 
     [Fact]
     public void GetCompletedInWindow_ExcludesLogsFromOtherWindows()
     {
-        // Arrange - 3x per week flexible habit
         var monday = new DateOnly(2025, 1, 6);
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
-        // Log on Monday (week 1)
         habit.Log(monday);
-        // Log on next Monday (week 2)
         habit.Log(new DateOnly(2025, 1, 13));
 
-        // Act - check from next Wednesday (week 2)
         var completed = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 15), habit.Logs);
 
-        // Assert - only 1 log in week 2
         completed.Should().Be(1);
     }
 
     [Fact]
     public void GetCompletedInWindow_CountsMultipleLogsOnSameDay()
     {
-        // Arrange - 5x per week flexible habit
         var monday = new DateOnly(2025, 1, 6);
         var habit = CreateHabit(FrequencyUnit.Week, 5, dueDate: monday, isFlexible: true);
 
-        // Log twice on Monday
         habit.Log(monday);
         habit.Log(monday);
 
-        // Act
         var completed = HabitScheduleService.GetCompletedInWindow(habit, monday, habit.Logs);
 
-        // Assert
         completed.Should().Be(2);
     }
-
-    // --- Flexible: GetRemainingCompletions ---
 
     [Fact]
     public void GetRemainingCompletions_ReturnsCorrectRemaining()
@@ -505,8 +418,7 @@ public class HabitScheduleServiceTests
 
         var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs);
 
-        remaining.Should().Be(2); // 3 target - 1 done = 2 remaining
-    }
+        remaining.Should().Be(2);    }
 
     [Fact]
     public void GetRemainingCompletions_NeverNegative()
@@ -515,14 +427,11 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Week, 2, dueDate: monday, isFlexible: true);
         habit.Log(monday);
         habit.Log(monday);
-        habit.Log(monday); // Over-complete
-
+        habit.Log(monday);
         var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs);
 
         remaining.Should().Be(0);
     }
-
-    // --- Flexible: IsFlexibleHabitDueOnDate ---
 
     [Fact]
     public void IsFlexibleHabitDueOnDate_TargetNotReached_ReturnsTrue()
@@ -559,15 +468,12 @@ public class HabitScheduleServiceTests
         result.Should().BeFalse();
     }
 
-    // --- Flexible: IsHabitDueOnDate delegates correctly ---
-
     [Fact]
     public void IsHabitDueOnDate_FlexibleHabit_TrueForAnyDateAfterAnchor()
     {
         var monday = new DateOnly(2025, 1, 6);
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
-        // Any date from anchor onwards returns true (flexible is "due" every day)
         HabitScheduleService.IsHabitDueOnDate(habit, monday).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(habit, monday.AddDays(1)).Should().BeTrue();
         HabitScheduleService.IsHabitDueOnDate(habit, monday.AddDays(30)).Should().BeTrue();
@@ -582,49 +488,34 @@ public class HabitScheduleServiceTests
         HabitScheduleService.IsHabitDueOnDate(habit, monday.AddDays(-1)).Should().BeFalse();
     }
 
-    // --- Monthly frequency edge cases ---
-
     [Fact]
     public void IsHabitDueOnDate_MonthlyQty2_EveryOtherMonth()
     {
-        // Anchor is 6th of Jan
         var habit = CreateHabit(FrequencyUnit.Month, 2);
 
-        // Feb (1 month) - not due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 6)).Should().BeFalse();
-        // Mar (2 months) - due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 3, 6)).Should().BeTrue();
-        // Apr (3 months) - not due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 4, 6)).Should().BeFalse();
-        // May (4 months) - due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 5, 6)).Should().BeTrue();
     }
 
     [Fact]
     public void IsHabitDueOnDate_MonthlyQty1_AnchorDay31_ShortMonth_ClampsToLastDay()
     {
-        // Anchor on Jan 31
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Test", FrequencyUnit.Month, 1, DueDate: new DateOnly(2025, 1, 31))).Value;
 
-        // Feb has 28 days - should fire on Feb 28
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 28)).Should().BeTrue();
-        // Apr has 30 days - should fire on Apr 30
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 4, 30)).Should().BeTrue();
-        // Mar has 31 days - should fire on Mar 31
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 3, 31)).Should().BeTrue();
     }
-
-    // --- Yearly frequency edge cases ---
 
     [Fact]
     public void IsHabitDueOnDate_YearlyQty2_EveryOtherYear()
     {
         var habit = CreateHabit(FrequencyUnit.Year, 2);
 
-        // 2026 (1 year) - not due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2026, 1, 6)).Should().BeFalse();
-        // 2027 (2 years) - due
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2027, 1, 6)).Should().BeTrue();
     }
 
@@ -633,26 +524,19 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Year, 1);
 
-        // Same year, different month
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2026, 6, 6)).Should().BeFalse();
     }
 
     [Fact]
     public void IsHabitDueOnDate_Yearly_LeapDayAnchor_NonLeapYear_FallsBackToFeb28()
     {
-        // Anchor on Feb 29 (leap year 2024)
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Test", FrequencyUnit.Year, 1, DueDate: new DateOnly(2024, 2, 29))).Value;
 
-        // 2025 is not a leap year - Feb 29 doesn't exist, should fire on Feb 28
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 2, 28)).Should().BeTrue();
-        // 2026 also not leap
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2026, 2, 28)).Should().BeTrue();
-        // 2028 is leap year - should fire on Feb 29
         HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2028, 2, 29)).Should().BeTrue();
     }
-
-    // --- Day-of-week filtering with different frequencies ---
 
     [Fact]
     public void IsHabitDueOnDate_DailyWithDays_AllMatchingDaysAreTrue()
@@ -661,17 +545,7 @@ public class HabitScheduleServiceTests
             FrequencyUnit.Day, 1,
             days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday });
 
-        // Week of Jan 6 (Monday) to Jan 12 (Sunday)
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 6)).Should().BeTrue();   // Mon
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 7)).Should().BeFalse();  // Tue
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 8)).Should().BeTrue();   // Wed
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 9)).Should().BeFalse();  // Thu
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 10)).Should().BeTrue();  // Fri
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 11)).Should().BeFalse(); // Sat
-        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 12)).Should().BeFalse(); // Sun
-    }
-
-    // --- HasMissedPastOccurrence ---
+        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 6)).Should().BeTrue();        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 7)).Should().BeFalse();        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 8)).Should().BeTrue();        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 9)).Should().BeFalse();        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 10)).Should().BeTrue();        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 11)).Should().BeFalse();        HabitScheduleService.IsHabitDueOnDate(habit, new DateOnly(2025, 1, 12)).Should().BeFalse();    }
 
     [Fact]
     public void HasMissedPastOccurrence_OneTimeTask_ReturnsFalse()
@@ -703,7 +577,6 @@ public class HabitScheduleServiceTests
     public void HasMissedPastOccurrence_DailyHabitAllLogged_ReturnsFalse()
     {
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
-        // Logging advances DueDate; once it has caught up to today the habit is not overdue.
         habit.Log(Anchor);
         habit.Log(Anchor.AddDays(1));
         var today = Anchor.AddDays(2);
@@ -740,12 +613,9 @@ public class HabitScheduleServiceTests
     public void HasMissedPastOccurrence_WeeklyHabit_LooksBackFarEnough()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor);
-        var today = Anchor.AddDays(14); // 2 weeks later
-
+        var today = Anchor.AddDays(14);
         HabitScheduleService.HasMissedPastOccurrence(habit, today).Should().BeTrue();
     }
-
-    // --- GetScheduledDates with various frequencies ---
 
     [Fact]
     public void GetScheduledDates_WeeklyHabit_ReturnsCorrectDates()
@@ -756,8 +626,7 @@ public class HabitScheduleServiceTests
 
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to);
 
-        dates.Should().HaveCount(5); // Every Monday: Anchor + 7, +14, +21, +28
-        dates.Should().AllSatisfy(d => d.DayOfWeek.Should().Be(DayOfWeek.Monday));
+        dates.Should().HaveCount(5);        dates.Should().AllSatisfy(d => d.DayOfWeek.Should().Be(DayOfWeek.Monday));
     }
 
     [Fact]
@@ -769,10 +638,7 @@ public class HabitScheduleServiceTests
 
         var dates = HabitScheduleService.GetScheduledDates(habit, from, to);
 
-        dates.Should().HaveCount(4); // Jan 6, Feb 6, Mar 6, Apr 6
-    }
-
-    // --- GetLookbackDays ---
+        dates.Should().HaveCount(4);    }
 
     [Theory]
     [InlineData(FrequencyUnit.Day, 3, 3)]
@@ -785,15 +651,12 @@ public class HabitScheduleServiceTests
         HabitScheduleService.GetLookbackDays(unit, qty).Should().Be(expected);
     }
 
-    // --- GetInstances ---
-
     [Fact]
     public void GetInstances_CompletedHabit_ReturnsEmpty()
     {
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Test", null, null, DueDate: Anchor)).Value;
-        habit.Log(Anchor); // completes one-time
-
+        habit.Log(Anchor);
         var instances = HabitScheduleService.GetInstances(habit, Anchor, Anchor.AddDays(7), Anchor);
 
         instances.Should().BeEmpty();
@@ -842,7 +705,6 @@ public class HabitScheduleServiceTests
 
         var instances = HabitScheduleService.GetInstances(habit, Anchor, today, today);
 
-        // Past unlogged dates should be overdue
         var overdue = instances.Where(i => i.Status == Orbit.Domain.Enums.InstanceStatus.Overdue);
         overdue.Should().NotBeEmpty();
     }
@@ -872,23 +734,17 @@ public class HabitScheduleServiceTests
         instances[0].Status.Should().Be(Orbit.Domain.Enums.InstanceStatus.Completed);
     }
 
-    // --- GetSkippedInWindow ---
-
     [Fact]
     public void GetSkippedInWindow_CountsOnlySkipLogs()
     {
         var monday = new DateOnly(2025, 1, 6);
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
-        habit.Log(monday);                    // completion log (Value=1)
-        habit.SkipFlexible(monday.AddDays(1)); // skip log (Value=0)
-
+        habit.Log(monday);        habit.SkipFlexible(monday.AddDays(1));
         var skipped = HabitScheduleService.GetSkippedInWindow(habit, monday, habit.Logs);
 
         skipped.Should().Be(1);
     }
-
-    // --- GetRemainingCompletions with skips ---
 
     [Fact]
     public void GetRemainingCompletions_SkipsReduceTarget()
@@ -896,14 +752,10 @@ public class HabitScheduleServiceTests
         var monday = new DateOnly(2025, 1, 6);
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
-        habit.SkipFlexible(monday); // 1 skip reduces target from 3 to 2
-
+        habit.SkipFlexible(monday);
         var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs);
 
-        remaining.Should().Be(2); // target 3 - 1 skip - 0 completions = 2
-    }
-
-    // --- HasCompletedLogInRange ---
+        remaining.Should().Be(2);    }
 
     [Fact]
     public void HasCompletedLogInRange_CompletionLogInRange_ReturnsTrue()
@@ -918,8 +770,7 @@ public class HabitScheduleServiceTests
     public void HasCompletedLogInRange_SkipLog_ReturnsFalse()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: Anchor, isFlexible: true);
-        habit.SkipFlexible(Anchor); // Value == 0
-
+        habit.SkipFlexible(Anchor);
         HabitScheduleService.HasCompletedLogInRange(habit, Anchor, Anchor).Should().BeFalse();
     }
 
@@ -936,17 +787,12 @@ public class HabitScheduleServiceTests
     [Fact]
     public void HasCompletedLogInRange_OneTimeTaskCompletedBeforeRange_IgnoresStickyFlag()
     {
-        // A one-time task keeps IsCompleted == true forever, but "done in range" must depend
-        // solely on a dated log. A task completed earlier is NOT done within a later range.
         var task = CreateHabit(null, null, dueDate: Anchor);
-        task.Log(Anchor); // sets IsCompleted = true, log dated Anchor
-
+        task.Log(Anchor);
         task.IsCompleted.Should().BeTrue();
         HabitScheduleService.HasCompletedLogInRange(task, Anchor.AddDays(1), Anchor.AddDays(5))
             .Should().BeFalse();
     }
-
-    // --- IsOverdueOnDate ---
 
     [Fact]
     public void IsOverdueOnDate_OneTimeTaskPastDueNotCompleted_ReturnsTrue()
@@ -960,8 +806,7 @@ public class HabitScheduleServiceTests
     public void IsOverdueOnDate_OneTimeTaskCompleted_ReturnsFalse()
     {
         var task = CreateHabit(null, null, dueDate: Anchor);
-        task.Log(Anchor); // completes it
-
+        task.Log(Anchor);
         HabitScheduleService.IsOverdueOnDate(task, Anchor.AddDays(3)).Should().BeFalse();
     }
 
@@ -976,19 +821,13 @@ public class HabitScheduleServiceTests
     [Fact]
     public void IsOverdueOnDate_RecurringMissedPastOccurrence_ReturnsTrue()
     {
-        // Weekly habit anchored on Monday, viewed on a later Wednesday: not scheduled that day,
-        // and its DueDate has fallen behind, so it is overdue (matches the Today list).
-        var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor); // Anchor = Mon 2025-01-06
-        var laterWednesday = Anchor.AddDays(9); // Wed 2025-01-15
-
+        var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: Anchor);        var laterWednesday = Anchor.AddDays(9);
         HabitScheduleService.IsOverdueOnDate(habit, laterWednesday).Should().BeTrue();
     }
 
     [Fact]
     public void IsOverdueOnDate_RecurringDueOnReferenceDay_ReturnsFalse()
     {
-        // A daily habit is due every day, so it is "due today", never overdue -- it simply
-        // reappears as pending. This mirrors the Today list's scheduledDates.Contains(date) guard.
         var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
 
         HabitScheduleService.IsOverdueOnDate(habit, Anchor.AddDays(3)).Should().BeFalse();

@@ -3,8 +3,7 @@ namespace Orbit.Infrastructure.Configuration;
 public sealed class JwtSettings
 {
     public const string SectionName = "Jwt";
-    public const int MinSecretKeyLengthBytes = 32; // 256 bits; HMAC-SHA256 minimum
-    public required string SecretKey { get; init; }
+    public const int MinSecretKeyLengthBytes = 32;    public required string SecretKey { get; init; }
     public required string Issuer { get; init; }
     public required string Audience { get; init; }
     public int ExpiryHours { get; init; } = 168;

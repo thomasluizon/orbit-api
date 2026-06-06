@@ -25,9 +25,6 @@ public class ClaimAdRewardCommandHandler(
         if (result.IsFailure)
             return Result.Failure<AdRewardResponse>(result.Error);
 
-        // Optimistic concurrency token on User (RowVersion) backstops two simultaneous
-        // claims at the same daily count: one save will succeed, the other will throw
-        // DbUpdateConcurrencyException and surface as a retryable error.
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var newLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);

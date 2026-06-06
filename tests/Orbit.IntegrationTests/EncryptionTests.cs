@@ -137,8 +137,7 @@ public class EncryptionTests
     {
         var badSettings = Options.Create(new EncryptionSettings
         {
-            Key = Convert.ToBase64String(new byte[16]) // 16 bytes instead of 32
-        });
+            Key = Convert.ToBase64String(new byte[16])        });
 
         var act = () => new EncryptionService(badSettings, NullLogger<EncryptionService>.Instance);
 

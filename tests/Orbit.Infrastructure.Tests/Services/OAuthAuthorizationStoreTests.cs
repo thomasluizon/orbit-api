@@ -90,11 +90,9 @@ public class OAuthAuthorizationStoreTests : IDisposable
 
         var code = _store.CreateCode(Guid.NewGuid(), challenge, redirectUri, "client");
 
-        // First exchange succeeds
         var first = _store.ExchangeCode(code, verifier, redirectUri);
         first.Should().NotBeNull();
 
-        // Second exchange fails (code already removed)
         var second = _store.ExchangeCode(code, verifier, redirectUri);
         second.Should().BeNull();
     }

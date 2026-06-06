@@ -35,11 +35,6 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes));
 
         dbContext.PendingClarifications.Add(entity);
-        // SaveChangesAsync runs here (eagerly, before the chat command's UoW commits)
-        // so the OperationId is durably stored before the response is returned. If the
-        // surrounding chat command fails afterwards, the row is orphaned but the
-        // 30-minute TTL + index on ExpiresAtUtc reclaim it. Mirrors the eager-save
-        // pattern in PendingAgentOperationStore.
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return entity.Id;
@@ -50,10 +45,6 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        // Push the expiry + resolved filters into SQL so an unusable row never crosses
-        // the wire. Collapses "not found", "expired", and "already resolved" into a
-        // single null return — the controller treats all three as "not available" and
-        // distinguishes them later via the atomic MarkResolved + ExpiresAtUtc field.
         var now = DateTime.UtcNow;
         var entity = await dbContext.PendingClarifications
             .AsNoTracking()
@@ -80,8 +71,6 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         Guid userId,
         CancellationToken cancellationToken = default)
     {
-        // Atomic compare-and-set: also requires the row to be unexpired so a client
-        // that catches the row right at the TTL boundary can't claim it.
         var rows = await dbContext.PendingClarifications
             .Where(item =>
                 item.Id == operationId &&
@@ -102,9 +91,6 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
 
         try
         {
-            // Case-insensitive deserialize decouples this from whichever casing the
-            // serializer used when storing — defaults to PascalCase for records, but
-            // a global camelCase policy would silently break a manual JsonNode lookup.
             var actions = JsonSerializer.Deserialize<List<QuickAction>>(quickActionsJson, QuickActionDeserializerOptions);
             if (actions is null) return Array.Empty<string>();
 

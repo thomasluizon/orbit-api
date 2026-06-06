@@ -112,8 +112,6 @@ public class ProfileTools(IMediator mediator, McpExecutorBridge executorBridge)
         [Description("Color scheme key, or null/default to clear it")] string? colorScheme,
         CancellationToken cancellationToken = default)
     {
-        // color_scheme must be sent even when null (null clears it); an explicit JsonObject
-        // survives the bridge's WhenWritingNull serialization, where an anonymous null member is dropped.
         var arguments = new System.Text.Json.Nodes.JsonObject { ["color_scheme"] = colorScheme };
         var result = await executorBridge.ExecuteAsync(user, "set_color_scheme", arguments, confirmationToken: null, cancellationToken);
 

@@ -12,11 +12,6 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
 {
     private static int _clientCounter;
 
-    // Connection string, Stripe price IDs, Encryption key, and JWT issuer/audience are validated
-    // (or consumed by the DbContext) during the builder phase in Program.cs, so they are supplied
-    // via environment variables read by the default config providers. This keeps the integration
-    // host hermetic and independent of the gitignored appsettings.Development.json, which is absent
-    // in git worktrees. The JWT secret is injected separately via UseSetting in ConfigureWebHost.
     static IntegrationTestWebApplicationFactory()
     {
         SetIfMissing("ConnectionStrings__DefaultConnection", "Host=localhost;Port=5432;Database=orbit_test;Username=postgres;Password=postgres");

@@ -51,12 +51,10 @@ public class ConfirmAccountDeletionCommandHandler(
 
         cache.Remove(cacheKey);
 
-        // Calculate scheduled deletion date
         var scheduledDate = user.HasProAccess && user.PlanExpiresAt.HasValue && user.PlanExpiresAt.Value > DateTime.UtcNow
             ? user.PlanExpiresAt.Value.AddDays(7)
             : DateTime.UtcNow.AddDays(7);
 
-        // Deactivate instead of hard-delete
         user.Deactivate(scheduledDate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

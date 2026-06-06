@@ -24,9 +24,6 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
 
         if (result.IsSuccess)
         {
-            // Opportunistic sync: if the user opens the sync screen, also run an auto-sync
-            // tick as a side effect so active users get fresh suggestions immediately.
-            // Gated by the 4h dedupe window inside the command handler.
             try
             {
                 await mediator.Send(new RunCalendarAutoSyncCommand(userId, IsOpportunistic: true), cancellationToken);

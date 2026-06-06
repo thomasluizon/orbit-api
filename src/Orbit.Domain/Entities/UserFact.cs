@@ -24,7 +24,6 @@ public class UserFact : Entity
         if (trimmedText.Length > 500)
             return Result.Failure<UserFact>("Fact text cannot exceed 500 characters");
 
-        // Basic prompt injection detection
         var lowerText = trimmedText.ToLowerInvariant();
         if (lowerText.Contains("ignore") ||
             lowerText.Contains("system:") ||

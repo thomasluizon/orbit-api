@@ -698,7 +698,6 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             GoogleEventId: request.GoogleEventId);
     }
 
-
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Habit created {HabitId} by user {UserId}")]
     private static partial void LogHabitCreated(ILogger logger, Guid habitId, Guid userId);
 

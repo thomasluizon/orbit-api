@@ -32,7 +32,6 @@ public class CreateSubHabitCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateSubHabitCommand request, CancellationToken cancellationToken)
     {
-        // Sub-habits are a Pro feature
         var gateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
@@ -44,20 +43,17 @@ public class CreateSubHabitCommandHandler(
         if (parent is null)
             return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound, ErrorCodes.ParentHabitNotFound);
 
-        // Enforce max nesting depth from config
         var maxDepth = await appConfigService.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
         var depth = await GetDepthAsync(parent, habitRepository, cancellationToken);
         if (depth >= maxDepth - 1)
             return Result.Failure<Guid>($"Maximum nesting depth reached ({maxDepth} levels).");
 
-        // Use explicit DueDate if provided, otherwise derive from parent
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var childDueDate = request.DueDate
             ?? (parent.DueDate > userToday ? parent.DueDate : userToday);
 
         var opts = request.Options ?? new HabitCommandOptions();
 
-        // Compute next position within this parent's children.
         var siblings = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == request.ParentHabitId && !h.IsDeleted,
             cancellationToken);
@@ -114,7 +110,6 @@ public class CreateSubHabitCommandHandler(
     {
         if (habit.ParentHabitId is null) return 0;
 
-        // Load all user habits once and walk in memory instead of N+1 queries
         var allHabits = await repo.FindAsync(h => h.UserId == habit.UserId, ct);
         var habitDict = allHabits.ToDictionary(h => h.Id);
 

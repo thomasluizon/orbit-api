@@ -48,7 +48,6 @@ public partial class CreateGoalCommandHandler(
         await goalRepository.AddAsync(goal, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Gamification: process goal creation
         try
         {
             await gamificationService.ProcessGoalCreated(request.UserId, cancellationToken);

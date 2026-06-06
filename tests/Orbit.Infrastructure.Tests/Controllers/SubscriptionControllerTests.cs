@@ -35,8 +35,6 @@ public class SubscriptionControllerTests
         };
     }
 
-    // --- CreateCheckout ---
-
     [Fact]
     public async Task CreateCheckout_Success_ReturnsOk()
     {
@@ -160,8 +158,6 @@ public class SubscriptionControllerTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- CreatePortal ---
-
     [Fact]
     public async Task CreatePortal_Success_ReturnsOk()
     {
@@ -184,8 +180,6 @@ public class SubscriptionControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- GetStatus ---
 
     [Fact]
     public async Task GetStatus_Success_ReturnsOk()
@@ -210,8 +204,6 @@ public class SubscriptionControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- GetBillingDetails ---
-
     [Fact]
     public async Task GetBillingDetails_Success_ReturnsOk()
     {
@@ -234,8 +226,6 @@ public class SubscriptionControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- GetPlans ---
 
     [Fact]
     public async Task GetPlans_Success_ReturnsOk()
@@ -341,8 +331,6 @@ public class SubscriptionControllerTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- ClaimAdReward ---
-
     [Fact]
     public async Task ClaimAdReward_Success_ReturnsOk()
     {
@@ -365,8 +353,6 @@ public class SubscriptionControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- HandleWebhook ---
 
     [Fact]
     public async Task HandleWebhook_Success_ReturnsOk()

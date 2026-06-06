@@ -31,8 +31,6 @@ public sealed partial class AiCompletionClient
             options: new OpenAIClientOptions
             {
                 Endpoint = new Uri(settings.BaseUrl),
-                // Cap network IO at 60s. Without this the OpenAI SDK can hold a thread-pool
-                // thread on a stalled completion for the full pipeline timeout (10 min default).
                 NetworkTimeout = TimeSpan.FromSeconds(60)
             });
     }
@@ -41,10 +39,6 @@ public sealed partial class AiCompletionClient
     /// Direct access to the underlying ChatClient for advanced scenarios (tool calling, multi-turn).
     /// </summary>
     public ChatClient ChatClient => _chatClient;
-
-    // ───────────────────────────────────────────────────────────────
-    //  Simple text completion
-    // ───────────────────────────────────────────────────────────────
 
     public async Task<string?> CompleteTextAsync(
         string systemPrompt,
@@ -77,10 +71,6 @@ public sealed partial class AiCompletionClient
 
         return text;
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  JSON-mode completion (structured output)
-    // ───────────────────────────────────────────────────────────────
 
     public async Task<T?> CompleteJsonAsync<T>(
         string prompt,

@@ -38,12 +38,9 @@ public class CreateHabitToolClarificationTests
     [Theory]
     [InlineData("My morning habit")]
     [InlineData("Meditation habit")]
-    [InlineData("MORNING HABIT")] // case-insensitive
-    [InlineData("Daily Habit Routine")]
-    [InlineData("Minha rotina matinal")] // pt-BR
-    [InlineData("Rotina de leitura")]
-    [InlineData("Meu hábito de meditar")] // pt-BR with accent
-    [InlineData("Hábito de exercício")]
+    [InlineData("MORNING HABIT")]    [InlineData("Daily Habit Routine")]
+    [InlineData("Minha rotina matinal")]    [InlineData("Rotina de leitura")]
+    [InlineData("Meu hábito de meditar")]    [InlineData("Hábito de exercício")]
     public async Task HabitFlavoredTitle_NoFrequency_ReturnsClarification(string title)
     {
         var result = await Execute($$"""{"title": "{{title}}"}""");
@@ -54,8 +51,6 @@ public class CreateHabitToolClarificationTests
         payload.MissingArgumentKey.Should().Be("frequency_unit");
         payload.QuickActions.Should().HaveCount(4);
 
-        // Assert on the JSON merge patches (the load-bearing contract), not the i18n key labels.
-        // Each patch is what gets shallow-merged into the partial args at resolve time.
         payload.QuickActions.Should().Contain(a =>
             a.Value.Contains("\"frequency_unit\":\"Day\"") && a.Value.Contains("\"frequency_quantity\":1"));
         payload.QuickActions.Should().Contain(a =>
@@ -69,7 +64,6 @@ public class CreateHabitToolClarificationTests
         payload.QuickActions.Should().Contain(a =>
             a.Value.Contains("\"frequency_unit\":null"));
 
-        // Tool must NOT have created a habit
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -99,8 +93,6 @@ public class CreateHabitToolClarificationTests
     [Fact]
     public async Task HabitFlavoredTitle_WithExplicitNullFrequency_CreatesOneTimeTask()
     {
-        // After a clarification resolves with the "One-time" patch, the merged args
-        // include "frequency_unit": null. The presence of the key bypasses the check.
         var result = await Execute("""{"title": "Habit thing", "frequency_unit": null}""");
 
         result.Success.Should().BeTrue();
@@ -135,12 +127,9 @@ public class CreateHabitToolClarificationTests
     [Fact]
     public async Task ClarificationPayload_DoesNotCarryOperationId()
     {
-        // OperationId is owned by the chat handler — the tool's payload type doesn't
-        // even expose the field. Keeps the tool decoupled from the store's id minting.
         var result = await Execute("""{"title": "Morning habit"}""");
 
         result.Payload.Should().BeOfType<NeedsClarificationPayload>();
-        // No OperationId property on NeedsClarificationPayload — confirmed by the type.
     }
 
     private async Task<ToolResult> Execute(string argsJson)

@@ -77,8 +77,6 @@ public class GetStreakInfoQueryHandler(
             user.LongestStreak,
             user.LastActiveDate,
             freezesUsedThisMonth,
-            // FreezesAvailable = raw accumulated count (what the user has earned).
-            // FreezesAvailableToUse = capped by monthly quota (what they can actually use right now).
             user.StreakFreezesAccumulated,
             AppConstants.MaxStreakFreezesPerMonth,
             isFrozenToday,

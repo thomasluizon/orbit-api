@@ -55,9 +55,6 @@ public partial class SlipAlertSchedulerService(
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
         var messageService = scope.ServiceProvider.GetRequiredService<ISlipAlertMessageService>();
 
-        // Load active bad habits with slip alerts enabled.
-        // Subtract 1 day from UTC date to include users west of UTC whose local "today" lags behind UTC.
-        // The per-user timezone check (userToday) below is the authoritative active/ended guard.
         var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var habits = await dbContext.Habits
             .AsNoTracking()
@@ -67,7 +64,6 @@ public partial class SlipAlertSchedulerService(
 
         if (habits.Count == 0) return;
 
-        // Group by user to handle timezones
         var userIds = habits.Select(h => h.UserId).Distinct().ToList();
         var users = await dbContext.Users
             .AsNoTracking()
@@ -75,7 +71,6 @@ public partial class SlipAlertSchedulerService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
-        // Batch-load sent slip alerts for this week
         var daysToMondayUtc = ((int)DateTime.UtcNow.DayOfWeek - 1 + 7) % 7;
         var currentWeekStart = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-daysToMondayUtc));
         var sentAlertHabitIds = (await dbContext.SentSlipAlerts
@@ -87,7 +82,6 @@ public partial class SlipAlertSchedulerService(
         habits = habits.Where(h => !sentAlertHabitIds.Contains(h.Id)).ToList();
         if (habits.Count == 0) return;
 
-        // Batch-load all relevant habit logs upfront (avoid per-habit query in loop)
         habitIds = habits.Select(h => h.Id).ToList();
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60));
         var allLogs = await dbContext.HabitLogs

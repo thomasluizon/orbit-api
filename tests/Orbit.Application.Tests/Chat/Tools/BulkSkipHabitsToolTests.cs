@@ -58,7 +58,6 @@ public class BulkSkipHabitsToolTests
     {
         var id1 = Guid.NewGuid();
         var id2 = Guid.NewGuid();
-        // Batch lookup returns no matches
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -75,8 +74,7 @@ public class BulkSkipHabitsToolTests
     public async Task CompletedHabits_SkipsCompleted()
     {
         var completed = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
-        completed.Log(Today); // Complete it
-        var active = CreateHabit("Water", FrequencyUnit.Day, 1, Today);
+        completed.Log(Today);        var active = CreateHabit("Water", FrequencyUnit.Day, 1, Today);
         SetupHabitLookup(completed, active);
 
         var result = await Execute($$$"""{"habit_ids": ["{{{completed.Id}}}", "{{{active.Id}}}"]}""");
@@ -119,9 +117,6 @@ public class BulkSkipHabitsToolTests
     [Fact]
     public async Task DifferentUserHabit_IsNotSkipped()
     {
-        // Ownership scoping: the production query filters on `h.UserId == userId`.
-        // The mock applies that predicate, so a habit belonging to another user
-        // is filtered out before the skip loop sees it.
         var otherUserId = Guid.NewGuid();
         var otherUserHabit = Habit.Create(
             new HabitCreateParams(otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
@@ -140,8 +135,6 @@ public class BulkSkipHabitsToolTests
 
     private void SetupHabitLookup(params Habit[] habits)
     {
-        // Apply the predicate so the production query's `h.UserId == userId`
-        // ownership check is still exercised by the unit tests.
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),

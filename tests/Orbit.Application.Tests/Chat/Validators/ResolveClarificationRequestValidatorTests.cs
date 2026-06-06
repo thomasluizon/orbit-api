@@ -44,7 +44,6 @@ public class ResolveClarificationRequestValidatorTests
     [Fact]
     public void MaxLengthValidJsonObject_Passes()
     {
-        // Padding inside a valid JSON object so the value parses AND hits exactly MaxLength.
         const string prefix = "{\"k\":\"";
         const string suffix = "\"}";
         var fillerLength = AppConstants.MaxClarificationValueLength - prefix.Length - suffix.Length;
@@ -57,12 +56,7 @@ public class ResolveClarificationRequestValidatorTests
 
     [Theory]
     [InlineData("not json at all")]
-    [InlineData("[]")] // JSON array, not object
-    [InlineData("\"a string\"")] // JSON string, not object
-    [InlineData("42")] // JSON number, not object
-    [InlineData("null")] // JSON null
-    [InlineData("true")] // JSON bool
-    public void NonObjectValue_Fails(string value)
+    [InlineData("[]")]    [InlineData("\"a string\"")]    [InlineData("42")]    [InlineData("null")]    [InlineData("true")]    public void NonObjectValue_Fails(string value)
     {
         var result = _validator.Validate(new ResolveClarificationRequest(value));
         result.IsValid.Should().BeFalse();

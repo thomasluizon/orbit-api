@@ -21,7 +21,6 @@ public class OrbitDbContextFactory : IDesignTimeDbContextFactory<OrbitDbContext>
         var optionsBuilder = new DbContextOptionsBuilder<OrbitDbContext>();
         optionsBuilder.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
 
-        // No encryption service at design time -- converters won't be applied
         return new OrbitDbContext(optionsBuilder.Options);
     }
 }

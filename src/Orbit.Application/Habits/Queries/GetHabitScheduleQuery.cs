@@ -180,13 +180,9 @@ public class GetHabitScheduleQueryHandler(
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> HandleScheduledHabits(
         GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
-        // Advance stale bad habit DueDates so they show on the correct next scheduled day
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
 
-        // Include Logs for flexible habits so we can compute window progress
-        // Filter logs to the requested date range (extended by overdue window) to avoid loading all historical logs
-        // Load logs with enough lookback for recurring overdue detection (monthly habits need ~31 days)
         var overdueLookbackDays = request.IncludeOverdue ? 31 : AppConstants.DefaultOverdueWindowDays;
         var logFrom = (request.DateFrom ?? today).AddDays(-overdueLookbackDays);
         var logTo = request.DateTo ?? today;
@@ -207,24 +203,19 @@ public class GetHabitScheduleQueryHandler(
         topLevel = ApplyCommonFilters(topLevel, request, lookup);
         topLevel = ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
-        // No date range: return all habits without schedule computation (used by "all" view)
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
             return await BuildNonDateResponse(topLevel, request, lookup, today, logFrom, logTo, cancellationToken);
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
 
-        // Schedule-aware filtering: keep habits that have at least one scheduled date in range,
-        // OR are overdue, OR have any descendant due in range
         var filtered = FilterScheduledHabits(topLevel, dateFrom, dateTo, request.IncludeOverdue, lookup);
 
-        // Pagination
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
         var page = Math.Max(1, Math.Min(request.Page, Math.Max(1, totalPages)));
 
         var scheduledDatesCache = new Dictionary<Guid, List<DateOnly>>();
-        // Seed the cache with dates already computed during filtering
         foreach (var item in filtered)
             scheduledDatesCache[item.habit.Id] = item.scheduledDates;
 
@@ -258,7 +249,6 @@ public class GetHabitScheduleQueryHandler(
                 ctx))
             .ToList();
 
-        // When IncludeGeneral is true, append general habits after the scheduled ones
         if (request.IncludeGeneral)
             await AppendGeneralHabits(pagedItems, request, logFrom, logTo, today, cancellationToken);
 
@@ -416,7 +406,6 @@ public class GetHabitScheduleQueryHandler(
         {
             var hasCompletedLogInRange = HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
 
-            // Flexible habits that have met their window target should not appear
             if (habit.IsFlexible
                 && !hasCompletedLogInRange
                 && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))

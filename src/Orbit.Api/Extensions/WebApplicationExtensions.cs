@@ -16,14 +16,12 @@ public static class WebApplicationExtensions
 {
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
-        // Apply Migrations
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
             await db.Database.MigrateAsync();
         }
 
-        // Security & Forwarded Headers
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
         app.UseForwardedHeaders(BuildForwardedHeadersOptions(app));
         app.UseMiddleware<Orbit.Api.Middleware.RequestCorrelationMiddleware>();
@@ -37,25 +35,16 @@ public static class WebApplicationExtensions
         app.UseExceptionHandler();
         app.UseCors();
         app.UseCookiePolicy();
-        // Render terminates TLS before the app, so internal HTTP requests should not be
-        // redirected again inside the container.
 
-        // MCP selective auth
         app.UseMcpSelectiveAuth();
 
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapControllers();
-        // MCP server uses Bearer API-key auth (no cookies), so it gets the non-credentialed
-        // ThirdParty CORS policy. claude.ai/claude.com origins are listed in
-        // Cors:ThirdPartyOrigins; first-party origins continue to use the default policy.
         app.MapMcp("/mcp").RequireCors("ThirdParty");
 
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
-            // Anonymous endpoint -- omit per-check `data` (background-service tick timing,
-            // internal names, etc.) to avoid leaking infrastructure topology to unauthenticated
-            // callers. Aggregate status is sufficient for liveness probes.
             ResponseWriter = async (context, report) =>
             {
                 context.Response.ContentType = "application/json";
@@ -330,7 +319,6 @@ public static class WebApplicationExtensions
         }
         catch (System.Text.Json.JsonException)
         {
-            // Invalid JSON -- require auth
         }
 
         return false;
@@ -448,7 +436,6 @@ public static class WebApplicationExtensions
         }
         catch
         {
-            // Audit failures must not block MCP requests.
         }
     }
 

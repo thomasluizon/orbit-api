@@ -48,7 +48,6 @@ public static class HabitMetricsCalculator
 
     private static List<DateOnly> GenerateExpectedDates(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
     {
-        // Convert habit creation timestamp to user local date to avoid UTC-vs-local day boundary errors
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var habitStartDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
 
@@ -115,7 +114,6 @@ public static class HabitMetricsCalculator
 
         var streak = 0;
 
-        // expectedDates are already in descending order from the generator methods
         foreach (var date in expectedDates)
         {
             var isLogged = logDates.Contains(date);
@@ -151,7 +149,6 @@ public static class HabitMetricsCalculator
         var maxStreak = 0;
         var currentStreak = 0;
 
-        // expectedDates are already in descending order from the generator methods
         foreach (var date in expectedDates)
         {
             var isLogged = logDates.Contains(date);

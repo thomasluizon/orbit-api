@@ -16,10 +16,8 @@ public class PushNotificationServiceTests
     [Fact]
     public void PushSubscription_FcmSubscription_IdentifiedByP256dhFcm()
     {
-        // Arrange
         var sub = PushSubscription.Create(ValidUserId, "fcm-token-123", "fcm", "auth-key").Value;
 
-        // Assert
         sub.P256dh.Should().Be("fcm");
         sub.Endpoint.Should().Be("fcm-token-123");
     }
@@ -27,21 +25,18 @@ public class PushNotificationServiceTests
     [Fact]
     public void PushSubscription_WebPushSubscription_HasRealP256dh()
     {
-        // Arrange
         var sub = PushSubscription.Create(
             ValidUserId,
             "https://fcm.googleapis.com/fcm/send/abc123",
             "BNcRdreA...real-key",
             "auth-secret").Value;
 
-        // Assert
         sub.P256dh.Should().NotBe("fcm");
     }
 
     [Fact]
     public void PushSubscription_FcmRoutingDecision_CorrectlySplits()
     {
-        // Arrange -- simulate the routing logic from PushNotificationService
         var subs = new List<PushSubscription>
         {
             PushSubscription.Create(ValidUserId, "fcm-token-1", "fcm", "auth1").Value,
@@ -50,11 +45,9 @@ public class PushNotificationServiceTests
             PushSubscription.Create(ValidUserId, "https://push.example.com/sub2", "p256dh-key-2", "auth4").Value,
         };
 
-        // Act -- replicate the routing logic
         var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
         var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
 
-        // Assert
         fcmSubs.Should().HaveCount(2);
         webPushSubs.Should().HaveCount(2);
         fcmSubs.Should().AllSatisfy(s => s.P256dh.Should().Be("fcm"));
@@ -64,14 +57,11 @@ public class PushNotificationServiceTests
     [Fact]
     public void PushSubscription_EmptyList_NoRouting()
     {
-        // Arrange
         var subs = new List<PushSubscription>();
 
-        // Act
         var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
         var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
 
-        // Assert
         fcmSubs.Should().BeEmpty();
         webPushSubs.Should().BeEmpty();
     }
@@ -79,18 +69,15 @@ public class PushNotificationServiceTests
     [Fact]
     public void PushSubscription_AllFcm_NoWebPush()
     {
-        // Arrange
         var subs = new List<PushSubscription>
         {
             PushSubscription.Create(ValidUserId, "token-1", "fcm", "auth1").Value,
             PushSubscription.Create(ValidUserId, "token-2", "fcm", "auth2").Value,
         };
 
-        // Act
         var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
         var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
 
-        // Assert
         fcmSubs.Should().HaveCount(2);
         webPushSubs.Should().BeEmpty();
     }
@@ -98,23 +85,18 @@ public class PushNotificationServiceTests
     [Fact]
     public void PushSubscription_AllWebPush_NoFcm()
     {
-        // Arrange
         var subs = new List<PushSubscription>
         {
             PushSubscription.Create(ValidUserId, "https://push.example.com/1", "real-key-1", "auth1").Value,
             PushSubscription.Create(ValidUserId, "https://push.example.com/2", "real-key-2", "auth2").Value,
         };
 
-        // Act
         var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
         var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
 
-        // Assert
         fcmSubs.Should().BeEmpty();
         webPushSubs.Should().HaveCount(2);
     }
-
-    // ── PushSubscription factory validation ──────────────────────────
 
     [Fact]
     public void Create_EmptyUserId_ReturnsFailure()
@@ -152,8 +134,6 @@ public class PushNotificationServiceTests
         result.Value.UserId.Should().Be(ValidUserId);
     }
 
-    // ── Token preview logic (replicates SendFcmToSubscription preview logic) ──
-
     [Fact]
     public void TokenPreview_ShortEndpoint_TruncatesCorrectly()
     {
@@ -170,8 +150,7 @@ public class PushNotificationServiceTests
         var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
 
         preview.Should().Be("https://push.example...");
-        preview.Should().HaveLength(23); // 20 + 3 for "..."
-    }
+        preview.Should().HaveLength(23);    }
 
     [Fact]
     public void TokenPreview_ExactlyTwentyChars_NoExtraTruncation()
@@ -181,8 +160,6 @@ public class PushNotificationServiceTests
 
         preview.Should().Be("12345678901234567890...");
     }
-
-    // ── Web push payload serialization ──
 
     [Fact]
     public void WebPushPayload_SerializesCorrectly_WithUrl()
@@ -224,8 +201,6 @@ public class PushNotificationServiceTests
         parsed.RootElement.GetProperty("body").GetString().Should().Be("Line1\nLine2");
     }
 
-    // ── Subscription multi-user routing ──
-
     [Fact]
     public void MultiUserRouting_GroupsByUserId()
     {
@@ -249,15 +224,12 @@ public class PushNotificationServiceTests
     [Fact]
     public void StaleSubscriptionTracking_AccumulatesAcrossTypes()
     {
-        // Simulate the stale subscription accumulation logic
         var staleSubscriptions = new List<PushSubscription>();
 
         var fcmSub = PushSubscription.Create(ValidUserId, "stale-token", "fcm", "auth1").Value;
         var webSub = PushSubscription.Create(ValidUserId, "https://gone.com/sub", "key1", "auth2").Value;
 
-        // Simulate FCM marking stale
         staleSubscriptions.Add(fcmSub);
-        // Simulate WebPush marking stale
         staleSubscriptions.Add(webSub);
 
         staleSubscriptions.Should().HaveCount(2);

@@ -21,8 +21,6 @@ public class StreakFreezeAutoActivationServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
-    // --- Notification copy ---
-
     [Fact]
     public void BuildNotification_English_MentionsStreakLengthAndFreeze()
     {
@@ -51,19 +49,12 @@ public class StreakFreezeAutoActivationServiceTests
         title.Should().Be("Streak protected");
     }
 
-    // --- Interval default ---
-
     [Fact]
     public void IntervalDefault_Is60Minutes()
     {
-        // The service reads BackgroundServices:StreakFreezeIntervalMinutes with a default of 60.
-        // GetValue is invoked at field init; assert the documented default constant directly
-        // by constructing with empty configuration.
         var defaultMinutes = GetConfiguredIntervalMinutesDefault();
         defaultMinutes.Should().Be(60);
     }
-
-    // --- SentStreakFreezeAlert entity ---
 
     [Fact]
     public void SentStreakFreezeAlert_Create_SetsFieldsCorrectly()
@@ -78,8 +69,6 @@ public class StreakFreezeAutoActivationServiceTests
         alert.SentAtUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
-    // --- Local-yesterday computation ---
-
     [Fact]
     public void MissedDate_IsLocalToday_MinusOneDay()
     {
@@ -88,8 +77,6 @@ public class StreakFreezeAutoActivationServiceTests
 
         missedDate.Should().Be(new DateOnly(2026, 6, 3));
     }
-
-    // --- Eligibility predicate (replicates ProcessUserAsync guards) ---
 
     private static bool IsEligible(EligibilityCase c)
     {
@@ -130,7 +117,6 @@ public class StreakFreezeAutoActivationServiceTests
     [Fact]
     public void Eligibility_LastActiveOnMissedDate_Excluded()
     {
-        // User was credited active on the "missed" day -> not actually missed.
         IsEligible(new EligibilityCase { LastActiveDate = new DateOnly(2026, 6, 3) })
             .Should().BeFalse();
     }
@@ -179,14 +165,9 @@ public class StreakFreezeAutoActivationServiceTests
         IsEligible(new EligibilityCase { StreakFreezesAccumulated = 0 }).Should().BeFalse();
     }
 
-    // --- Completion loading (LoadRecentCompletionsAsync excludes soft-deleted habits) ---
-
     [Fact]
     public async Task LoadRecentCompletions_SoftDeletedHabitLog_DoesNotMarkDateActive()
     {
-        // A soft-deleted habit's completion log must not count as activity: otherwise it would
-        // falsely cover the missed date and suppress the auto-freeze even though no live habit
-        // was completed. Mirrors UserStreakService, which also excludes IsDeleted habits.
         var userId = Guid.NewGuid();
         var missedDate = new DateOnly(2026, 6, 3);
         var since = missedDate.AddDays(-1);
@@ -229,8 +210,6 @@ public class StreakFreezeAutoActivationServiceTests
         completionsByUser.GetValueOrDefault(userId).Should().Contain(completedDate);
     }
 
-    // --- Helpers ---
-
     private static (string Title, string Body) InvokeBuildNotification(int currentStreak, string lang)
     {
         var method = typeof(StreakFreezeAutoActivationService)
@@ -262,8 +241,6 @@ public class StreakFreezeAutoActivationServiceTests
 
     private static int GetConfiguredIntervalMinutesDefault()
     {
-        // Construct the service with an empty configuration so the field initializer resolves
-        // to the hard-coded default, then read back the private _interval field.
         var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
         var service = (StreakFreezeAutoActivationService)Activator.CreateInstance(
             typeof(StreakFreezeAutoActivationService),

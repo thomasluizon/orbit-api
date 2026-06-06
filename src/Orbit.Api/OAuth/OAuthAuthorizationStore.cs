@@ -15,7 +15,7 @@ public sealed class OAuthAuthorizationStore : IDisposable
         _cleanupTimer = new Timer(_ =>
         {
             try { Cleanup(); }
-            catch (Exception) { /* timer callback - suppress to prevent process crash */ }
+            catch (Exception) { }
         }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
 
@@ -40,7 +40,6 @@ public sealed class OAuthAuthorizationStore : IDisposable
         if (entry.RedirectUri != redirectUri)
             return null;
 
-        // Validate PKCE: SHA256(code_verifier) must match stored code_challenge
         var hash = SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
         var computed = Convert.ToBase64String(hash)
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');

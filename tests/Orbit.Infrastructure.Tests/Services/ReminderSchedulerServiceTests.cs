@@ -8,7 +8,6 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class ReminderSchedulerServiceTests
 {
-    // Test FormatReminderText via reflection since it's private static
     private static string FormatReminderText(int minutesBefore, string lang)
     {
         var method = typeof(ReminderSchedulerService)
@@ -16,7 +15,6 @@ public class ReminderSchedulerServiceTests
         return (string)method.Invoke(null, [minutesBefore, lang])!;
     }
 
-    // Test FormatScheduledReminderText via reflection
     private static string FormatScheduledReminderText(ScheduledReminderWhen when, string lang)
     {
         var method = typeof(ReminderSchedulerService)
@@ -24,7 +22,6 @@ public class ReminderSchedulerServiceTests
         return (string)method.Invoke(null, [when, lang])!;
     }
 
-    // Test ShouldSendScheduledReminder via reflection
     private static bool ShouldSendScheduledReminder(
         ScheduledReminderTime sr, bool isDueToday, bool isDueTomorrow, TimeOnly userTimeNow)
     {
@@ -33,15 +30,12 @@ public class ReminderSchedulerServiceTests
         return (bool)method.Invoke(null, [sr, isDueToday, isDueTomorrow, userTimeNow])!;
     }
 
-    // Test Pluralize via reflection
     private static string Pluralize(string singular, int count)
     {
         var method = typeof(ReminderSchedulerService)
             .GetMethod("Pluralize", BindingFlags.NonPublic | BindingFlags.Static)!;
         return (string)method.Invoke(null, [singular, count])!;
     }
-
-    // --- FormatReminderText ---
 
     [Fact]
     public void FormatReminderText_Zero_English_ReturnsDueNow()
@@ -134,8 +128,6 @@ public class ReminderSchedulerServiceTests
         result.Should().Be("Em 3 dias");
     }
 
-    // --- FormatScheduledReminderText ---
-
     [Fact]
     public void FormatScheduledReminderText_SameDay_English()
     {
@@ -178,8 +170,6 @@ public class ReminderSchedulerServiceTests
         result.Should().Be("Lembrete");
     }
 
-    // --- ShouldSendScheduledReminder ---
-
     [Fact]
     public void ShouldSendScheduledReminder_SameDay_DueToday_WithinWindow_ReturnsTrue()
     {
@@ -216,7 +206,6 @@ public class ReminderSchedulerServiceTests
     public void ShouldSendScheduledReminder_OutsideTimeWindow_ReturnsFalse()
     {
         var sr = new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(9, 0));
-        // 2 minutes later is outside the 1-minute window
         var result = ShouldSendScheduledReminder(sr, isDueToday: true, isDueTomorrow: false, new TimeOnly(9, 2));
         result.Should().BeFalse();
     }
@@ -228,8 +217,6 @@ public class ReminderSchedulerServiceTests
         var result = ShouldSendScheduledReminder(sr, isDueToday: true, isDueTomorrow: false, new TimeOnly(8, 59));
         result.Should().BeFalse();
     }
-
-    // --- Pluralize ---
 
     [Fact]
     public void Pluralize_Single_ReturnsSingular()
@@ -246,7 +233,6 @@ public class ReminderSchedulerServiceTests
     [Fact]
     public void Pluralize_Zero_ReturnsPlural()
     {
-        // 0 is not > 1, so returns singular (design choice in the code)
         Pluralize("hour", 0).Should().Be("hour");
     }
 }

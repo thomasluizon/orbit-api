@@ -47,7 +47,6 @@ public class DuplicateHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBe(original.Id);
-        // Original + duplicate = 2nd AddAsync call is the duplicate
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(h => h.Title == "Exercise" && h.Id != original.Id),
             Arg.Any<CancellationToken>());
@@ -130,7 +129,6 @@ public class DuplicateHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Parent duplicate + child duplicate = 2 AddAsync calls
         await _habitRepo.Received(2).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
     }

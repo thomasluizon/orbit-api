@@ -1,0 +1,10 @@
+<Project>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Orbit.Analyzers'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Orbit.Analyzers/Orbit.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

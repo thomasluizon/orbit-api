@@ -27,7 +27,6 @@ public class GetOrCreateReferralCodeCommandHandler(
         if (user.ReferralCode is not null)
             return Result.Success(user.ReferralCode);
 
-        // Generate unique code
         string code;
         do
         {

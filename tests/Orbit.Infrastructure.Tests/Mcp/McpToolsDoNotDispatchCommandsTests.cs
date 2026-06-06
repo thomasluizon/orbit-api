@@ -11,8 +11,6 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// </summary>
 public class McpToolsDoNotDispatchCommandsTests
 {
-    // Matches mediator.Send( ... ) where the dispatched argument is a Command — either an inline
-    // `new SomethingCommand` or a local whose name ends in `Command`/equals `command`. Spans newlines.
     private static readonly Regex CommandDispatchPattern = new(
         @"mediator\s*\.\s*Send\s*\(\s*(new\s+\w*Command\b|\w*[Cc]ommand)\b",
         RegexOptions.Compiled | RegexOptions.Singleline);

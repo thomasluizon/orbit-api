@@ -63,7 +63,6 @@ public class LinkHabitsToGoalTool(
             h => habitIds.Contains(h.Id) && h.UserId == userId,
             ct);
 
-        // Clear existing and reassign
         foreach (var existing in goal.Habits.ToList())
             goal.RemoveHabit(existing);
 

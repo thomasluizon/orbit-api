@@ -19,8 +19,6 @@ public class TagToolTests
 
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement;
 
-    // --- ListTagsTool ---
-
     [Fact]
     public async Task ListTags_Success_ReturnsPayload()
     {
@@ -45,8 +43,6 @@ public class TagToolTests
         result.Success.Should().BeFalse();
         result.Error.Should().Be("boom");
     }
-
-    // --- CreateTagTool ---
 
     [Fact]
     public async Task CreateTag_Success_ReturnsIdAndName()
@@ -86,8 +82,6 @@ public class TagToolTests
         await _mediator.DidNotReceive().Send(Arg.Any<CreateTagCommand>(), Arg.Any<CancellationToken>());
     }
 
-    // --- UpdateTagTool ---
-
     [Fact]
     public async Task UpdateTag_Success_ReturnsIdAndName()
     {
@@ -114,8 +108,6 @@ public class TagToolTests
         await _mediator.DidNotReceive().Send(Arg.Any<UpdateTagCommand>(), Arg.Any<CancellationToken>());
     }
 
-    // --- DeleteTagTool ---
-
     [Fact]
     public async Task DeleteTag_Success_ReturnsId()
     {
@@ -139,8 +131,6 @@ public class TagToolTests
         result.Success.Should().BeFalse();
         await _mediator.DidNotReceive().Send(Arg.Any<DeleteTagCommand>(), Arg.Any<CancellationToken>());
     }
-
-    // --- ReorderGoalsTool ---
 
     [Fact]
     public async Task ReorderGoals_Success_ReturnsCount()
@@ -189,8 +179,6 @@ public class TagToolTests
         result.Success.Should().BeFalse();
         await _mediator.DidNotReceive().Send(Arg.Any<ReorderGoalsCommand>(), Arg.Any<CancellationToken>());
     }
-
-    // --- GetReferralCodeTool ---
 
     [Fact]
     public async Task GetReferralCode_Success_ReturnsCode()

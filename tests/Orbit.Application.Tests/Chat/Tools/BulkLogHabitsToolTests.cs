@@ -46,8 +46,7 @@ public class BulkLogHabitsToolTests
     {
         var h1 = CreateHabit("Water");
         var missingId = Guid.NewGuid();
-        SetupHabitsFound(h1); // Only h1 exists
-
+        SetupHabitsFound(h1);
         var result = await Execute($$$"""{"habit_ids": ["{{{h1.Id}}}", "{{{missingId}}}"]}""");
 
         result.Success.Should().BeTrue();
@@ -57,8 +56,7 @@ public class BulkLogHabitsToolTests
     [Fact]
     public async Task AllNotFound_ReturnsError()
     {
-        SetupHabitsFound(); // Empty list
-
+        SetupHabitsFound();
         var id1 = Guid.NewGuid();
         var result = await Execute($$$"""{"habit_ids": ["{{{id1}}}"]}""");
 
@@ -70,8 +68,7 @@ public class BulkLogHabitsToolTests
     public async Task AlreadyLogged_SkipsAlreadyLogged()
     {
         var logged = CreateHabit("Water");
-        logged.Log(Today); // Already logged
-        var fresh = CreateHabit("Exercise");
+        logged.Log(Today);        var fresh = CreateHabit("Exercise");
         SetupHabitsFound(logged, fresh);
 
         var result = await Execute($$$"""{"habit_ids": ["{{{logged.Id}}}", "{{{fresh.Id}}}"]}""");
@@ -116,9 +113,6 @@ public class BulkLogHabitsToolTests
     [Fact]
     public async Task DifferentUserHabit_IsNotLogged()
     {
-        // Ownership scoping: the production query filters on `h.UserId == userId`.
-        // The mock applies that predicate, so a habit belonging to another user
-        // is filtered out before the log loop sees it.
         var otherUserId = Guid.NewGuid();
         var otherUserHabit = Habit.Create(
             new HabitCreateParams(otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
@@ -137,8 +131,6 @@ public class BulkLogHabitsToolTests
 
     private void SetupHabitsFound(params Habit[] habits)
     {
-        // Apply the predicate so the production query's `h.UserId == userId`
-        // ownership check is still exercised by the unit tests.
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),

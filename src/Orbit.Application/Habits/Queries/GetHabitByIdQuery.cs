@@ -42,7 +42,6 @@ public class GetHabitByIdQueryHandler(
 {
     public async Task<Result<HabitDetailResponse>> Handle(GetHabitByIdQuery request, CancellationToken cancellationToken)
     {
-        // Load the specific habit directly by ID + UserId (no need to load all user habits)
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Children).ThenInclude(c => c.Children),

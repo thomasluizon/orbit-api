@@ -107,9 +107,6 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Google SDK exceptions surface as opaque errors to Application (Infrastructure
-            // owns the SDK and catches Google.GoogleApiException internally if it wants to
-            // classify). Any thrown exception here is treated as a transient provider error.
             LogGoogleApiError(logger, ex, user.Id);
             user.MarkCalendarSyncTransientError("google_api_error");
             await deps.UnitOfWork.SaveChangesAsync(ct);

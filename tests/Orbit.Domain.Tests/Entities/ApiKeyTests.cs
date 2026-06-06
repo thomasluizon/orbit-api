@@ -7,8 +7,6 @@ public class ApiKeyTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
-    // --- Create tests ---
-
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
@@ -35,7 +33,6 @@ public class ApiKeyTests
     {
         var result = ApiKey.Create(ValidUserId, "Test Key");
 
-        // "orb_" (4 chars) + 32 random chars = 36 total
         result.Value.RawKey.Should().HaveLength(36);
     }
 
@@ -131,7 +128,6 @@ public class ApiKeyTests
     [Fact]
     public void Create_NameWithLeadingWhitespaceOver50_TrimsBeforeValidation()
     {
-        // "  " + 49 chars = 51 total, but trimmed to 49, which is valid
         var name = "  " + new string('a', 49);
 
         var result = ApiKey.Create(ValidUserId, name);
@@ -150,8 +146,6 @@ public class ApiKeyTests
         var after = DateTime.UtcNow;
         result.Value.Entity.CreatedAtUtc.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
     }
-
-    // --- Revoke tests ---
 
     [Fact]
     public void Revoke_SetsIsRevokedTrue()
@@ -174,8 +168,6 @@ public class ApiKeyTests
         apiKey.IsRevoked.Should().BeTrue();
     }
 
-    // --- MarkUsed tests ---
-
     [Fact]
     public void MarkUsed_SetsLastUsedAtUtc()
     {
@@ -197,7 +189,6 @@ public class ApiKeyTests
         apiKey.MarkUsed();
         var firstUsed = apiKey.LastUsedAtUtc;
 
-        // Slight delay to ensure timestamp difference
         apiKey.MarkUsed();
 
         apiKey.LastUsedAtUtc.Should().BeOnOrAfter(firstUsed!.Value);

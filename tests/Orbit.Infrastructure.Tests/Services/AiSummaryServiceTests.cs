@@ -28,8 +28,6 @@ public class AiSummaryServiceTests
         "upcoming later today",
     ];
 
-    // ── StripMarkdownFences ──────────────────────────────────────────
-
     [Fact]
     public void StripMarkdownFences_PlainText_ReturnsUnchanged()
     {
@@ -82,8 +80,6 @@ public class AiSummaryServiceTests
         var text = "  \n  Some text  \n  ";
         AiSummaryService.StripMarkdownFences(text).Should().Be("Some text");
     }
-
-    // ── BuildSummaryPrompt via reflection ──
 
     [Fact]
     public void BuildSummaryPrompt_English_ContainsEnglishLanguageName()
@@ -142,8 +138,6 @@ public class AiSummaryServiceTests
         result.Should().Contain("0/3 habits completed");
     }
 
-    // ── BuildHabitSection via reflection ──
-
     [Fact]
     public void BuildHabitSection_EmptyList_ReturnsNoHabitsScheduled()
     {
@@ -179,7 +173,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void BuildHabitSection_ChildrenOnly_ReturnsNoHabitsScheduled()
     {
-        // Children without their parent in the list should not render as top-level
         var parent = CreateHabit("Workout");
         var child = CreateHabit("Push-ups", parentId: parent.Id);
 
@@ -198,8 +191,6 @@ public class AiSummaryServiceTests
         result.Should().Contain("due 14:00");
     }
 
-    // ── BuildSummaryPrompt additional edge cases ──
-
     [Fact]
     public void BuildSummaryPrompt_UnknownLanguage_DefaultsToEnglish()
     {
@@ -209,8 +200,6 @@ public class AiSummaryServiceTests
 
         result.Should().Contain("English");
     }
-
-    // ── BuildSummaryPrompt with various habit types ──
 
     [Fact]
     public void BuildSummaryPrompt_EmptyHabitList_ShowsNoHabitsScheduled()
@@ -245,8 +234,6 @@ public class AiSummaryServiceTests
 
         var result = InvokeBuildSummaryPrompt(habits, Today, "en", new TimeOnly(19, 0));
 
-        // The rules section deliberately NAMES these phrases to ban them; the model-facing
-        // context above it (date, time window, habit lines) must never seed them.
         var context = result[..result.IndexOf("Rules:", StringComparison.Ordinal)];
 
         foreach (var phrase in BannedInstantPhrases)
@@ -293,7 +280,6 @@ public class AiSummaryServiceTests
     {
         var habits = new List<Habit> { CreateHabit("Test") };
 
-        // "PT-BR" should still map since the switch lowercases it
         var result = InvokeBuildSummaryPrompt(habits, Today, "PT-BR");
 
         result.Should().Contain("Brazilian Portuguese");
@@ -307,8 +293,6 @@ public class AiSummaryServiceTests
 
         result.Should().Contain("English");
     }
-
-    // ── BuildHabitSection with completed habits ──
 
     [Fact]
     public void BuildHabitSection_MultipleParentsNoChildren_ListsAllPending()
@@ -346,8 +330,6 @@ public class AiSummaryServiceTests
         result.Should().Contain("Math (pending)");
     }
 
-    // ── StripMarkdownFences edge cases ──
-
     [Fact]
     public void StripMarkdownFences_OnlyFences_ReturnsEmpty()
     {
@@ -367,7 +349,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void StripMarkdownFences_InlineFences_NotStripped()
     {
-        // Inline code fences (single backtick) should not be affected
         var text = "Use `code` for inline formatting";
         var result = AiSummaryService.StripMarkdownFences(text);
         result.Should().Be(text);
@@ -380,8 +361,6 @@ public class AiSummaryServiceTests
         var result = AiSummaryService.StripMarkdownFences(text);
         result.Should().Be("{\"key\": \"value\"}");
     }
-
-    // ── CapToSentence ──
 
     [Fact]
     public void CapToSentence_UnderLimit_ReturnsUnchanged()
@@ -445,8 +424,6 @@ public class AiSummaryServiceTests
         result.Split(' ').Should().OnlyContain(word => word == "habit");
     }
 
-    // ── BuildSummaryPrompt date formatting ──
-
     [Fact]
     public void BuildSummaryPrompt_NewYearsDay_FormatsDateCorrectly()
     {
@@ -457,8 +434,6 @@ public class AiSummaryServiceTests
 
         result.Should().Contain("January 1, 2026");
     }
-
-    // ── BuildSummaryPrompt progress counts ──
 
     [Fact]
     public void BuildSummaryPrompt_AllHabitsPresent_ShowsCorrectTotal()
@@ -477,8 +452,6 @@ public class AiSummaryServiceTests
         result.Should().Contain("0/5 habits completed");
     }
 
-    // ── BuildHabitSection indent verification ──
-
     [Fact]
     public void BuildHabitSection_Children_IndentedWithTwoSpaces()
     {
@@ -490,13 +463,9 @@ public class AiSummaryServiceTests
         result.Should().Contain("  - Child (pending)");
     }
 
-    // ── SelectScheduledHabits: DueDate-authoritative parity with the Today list ──
-
     [Fact]
     public void SelectScheduledHabits_DailyGoodHabitLoggedToday_KeptAndLabeledDoneNotPending()
     {
-        // Logging a recurring good habit advances its DueDate past today (mirrors LogHabitCommand).
-        // It must still appear so it can be acknowledged -- but as done, never pending.
         var habit = CreateHabit("Café da manhã");
         habit.Log(Today);
 
@@ -523,10 +492,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_WeeklyChildResolvedOnItsOccurrence_NotSelected()
     {
-        // Regression: a weekly child resolved on its real occurrence has a DueDate that has
-        // advanced past today, so it is neither due today nor overdue. The old code force-included
-        // every child of a due parent and labeled it pending because the prior-week completion
-        // fell outside today's range.
         var parent = CreateHabit("Morning routine");
         var weeklyChild = CreateRecurring(
             "Pesar na balança", FrequencyUnit.Week, dueDate: Today.AddDays(7), parentId: parent.Id);
@@ -541,8 +506,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_RoutineWithNonDueChild_DoesNotSurfaceChildAsPending()
     {
-        // Same defect viewed through the prompt: a monthly child whose DueDate has advanced
-        // past today must never be listed as a pending sub-task just because its parent is due.
         var parent = CreateHabit("Morning routine");
         var monthlyChild = CreateRecurring(
             "Deep clean", FrequencyUnit.Month, dueDate: Today.AddDays(14), parentId: parent.Id);
@@ -574,7 +537,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_OverdueHabit_StillSelected()
     {
-        // An unresolved recurring habit (DueDate fell before today) is overdue and must remain.
         var overdue = CreateRecurring("Take vitamins", FrequencyUnit.Day, dueDate: Today.AddDays(-2));
 
         var selected = InvokeSelectScheduledHabits([overdue], Today);
@@ -583,17 +545,11 @@ public class AiSummaryServiceTests
         InvokeBuildHabitSection(selected).Should().Contain("Take vitamins (pending)");
     }
 
-    // ── SelectScheduledHabits: one-time tasks must not leak via the sticky IsCompleted flag ──
-
     [Fact]
     public void SelectScheduledHabits_OneTimeTaskCompletedOnPastDay_NotSelected()
     {
-        // Regression: a one-time task keeps IsCompleted == true forever and its completion log is
-        // dated on a past day (filtered out of today's range). It must NOT reappear in today's
-        // summary as "done" -- the previous code OR-ed in the sticky flag and leaked it in.
         var task = CreateOneTimeTask("Organizar viagem", dueDate: Today.AddDays(-5));
-        task.Log(Today.AddDays(-5)); // completed five days ago
-
+        task.Log(Today.AddDays(-5));
         var selected = InvokeSelectScheduledHabits([task], Today);
 
         selected.Should().BeEmpty();
@@ -602,14 +558,8 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_OneTimeTaskDueTodayButCompletedEarlier_NotSelected()
     {
-        // The reported bug ("Depilação a laser"): a one-time task whose due date IS today but which
-        // was already completed on an earlier day. It carries the sticky IsCompleted flag and its
-        // completion log is dated in the past (outside today's range), so it is done and must not
-        // surface today -- neither as done (no log today) nor as a pending due-today item. The old
-        // rule re-included it because its due date matched today.
         var task = CreateOneTimeTask("Depilação a laser", dueDate: Today);
-        task.Log(Today.AddDays(-3)); // completed three days early
-
+        task.Log(Today.AddDays(-3));
         var selected = InvokeSelectScheduledHabits([task], Today);
 
         selected.Should().BeEmpty();
@@ -618,7 +568,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_OneTimeTaskDueInFuture_NotSelected()
     {
-        // "Not in the future": a one-time task due after today is not part of today's summary.
         var task = CreateOneTimeTask("Consulta médica", dueDate: Today.AddDays(4));
 
         var selected = InvokeSelectScheduledHabits([task], Today);
@@ -629,8 +578,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_RecurringHabitDueInFutureNotLogged_NotSelected()
     {
-        // A recurring habit whose next occurrence is still ahead (DueDate > today) and that was not
-        // logged today is neither open-today nor done-today, so it stays out of the summary.
         var habit = CreateRecurring("Pesar na balança", FrequencyUnit.Week, dueDate: Today.AddDays(5));
 
         var selected = InvokeSelectScheduledHabits([habit], Today);
@@ -664,8 +611,6 @@ public class AiSummaryServiceTests
     [Fact]
     public void SelectScheduledHabits_OneTimeTaskOverdueNotDone_SelectedAsPending()
     {
-        // An uncompleted one-time task whose due date has passed is overdue and, while viewing
-        // today, belongs in the summary as a gentle pending nudge -- mirroring the Today list.
         var task = CreateOneTimeTask("Renovar passaporte", dueDate: Today.AddDays(-3));
 
         var selected = InvokeSelectScheduledHabits([task], Today);
@@ -673,8 +618,6 @@ public class AiSummaryServiceTests
         selected.Should().ContainSingle();
         InvokeBuildHabitSection(selected).Should().Contain("Renovar passaporte (pending)");
     }
-
-    // ── Helpers ──
 
     private static Habit CreateHabit(
         string title,

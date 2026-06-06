@@ -81,8 +81,7 @@ public class LogHabitToolTests
     public async Task AlreadyCompleted_ReturnsError()
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
-        habit.Log(Today); // Complete one-time task
-        SetupHabitFound(habit);
+        habit.Log(Today);        SetupHabitFound(habit);
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}"}""");
 

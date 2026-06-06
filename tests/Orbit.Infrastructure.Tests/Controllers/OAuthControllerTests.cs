@@ -61,8 +61,6 @@ public class OAuthControllerTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    // --- GetMetadata ---
-
     [Fact]
     public void GetMetadata_ReturnsOkWithEndpoints()
     {
@@ -87,8 +85,6 @@ public class OAuthControllerTests : IDisposable
         var json = JsonSerializer.Serialize(ok.Value);
         json.Should().Contain("https://");
     }
-
-    // --- Register ---
 
     [Fact]
     public void Register_WithClientName_Returns201WithClientId()
@@ -118,8 +114,6 @@ public class OAuthControllerTests : IDisposable
         json.Should().Contain("MCP Client");
     }
 
-    // --- GetProtectedResourceMetadata ---
-
     [Fact]
     public void GetProtectedResourceMetadata_ReturnsOkWithMcpResource()
     {
@@ -130,8 +124,6 @@ public class OAuthControllerTests : IDisposable
         json.Should().Contain("/mcp");
         json.Should().Contain("bearer_methods_supported");
     }
-
-    // --- Authorize ---
 
     [Fact]
     public void Authorize_ValidParams_ReturnsHtmlContent()
@@ -198,8 +190,6 @@ public class OAuthControllerTests : IDisposable
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- SendCode ---
-
     [Fact]
     public async Task SendCode_Success_ReturnsOk()
     {
@@ -237,8 +227,6 @@ public class OAuthControllerTests : IDisposable
         await _mediator.Received(1).Send(
             Arg.Is<SendCodeCommand>(c => c.Language == "en"), Arg.Any<CancellationToken>());
     }
-
-    // --- VerifyCode ---
 
     [Fact]
     public async Task VerifyCode_Success_ReturnsOkWithRedirectUrl()
@@ -303,11 +291,8 @@ public class OAuthControllerTests : IDisposable
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
-        // JSON serializer encodes '&' as '\u0026'
         json.Should().Contain("callback?existing=1\\u0026code=");
     }
-
-    // --- GoogleAuth ---
 
     [Fact]
     public async Task GoogleAuth_InvalidToken_ReturnsBadRequest()
@@ -451,8 +436,6 @@ public class OAuthControllerTests : IDisposable
             Arg.Is<User>(u => u.Name == "newuser"), Arg.Any<CancellationToken>());
     }
 
-    // --- Token ---
-
     [Fact]
     public async Task Token_UnsupportedGrantType_ReturnsBadRequest()
     {
@@ -491,7 +474,6 @@ public class OAuthControllerTests : IDisposable
     [Fact]
     public async Task Token_ValidCodeExchange_ReturnsAccessToken()
     {
-        // Create a valid PKCE code challenge/verifier pair
         var codeVerifier = "test-verifier-that-is-long-enough-for-pkce-validation";
         var hash = System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier));
         var codeChallenge = Convert.ToBase64String(hash)
@@ -510,8 +492,6 @@ public class OAuthControllerTests : IDisposable
         json.Should().Contain("Bearer");
         await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
-
-    // --- Helper: MockHttpMessageHandler ---
 
     private sealed class MockHttpMessageHandler(HttpStatusCode statusCode, string content) : HttpMessageHandler
     {

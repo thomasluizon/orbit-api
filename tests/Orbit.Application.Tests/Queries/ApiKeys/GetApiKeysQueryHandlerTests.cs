@@ -40,7 +40,6 @@ public class GetApiKeysQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(2);
-        // Both keys should have the correct UserId prefix
         result.Value.Should().AllSatisfy(k => k.KeyPrefix.Should().StartWith("orb_"));
     }
 
