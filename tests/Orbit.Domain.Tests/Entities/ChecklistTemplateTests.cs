@@ -16,8 +16,6 @@ public class ChecklistTemplateTests
         return result.Value;
     }
 
-    // --- Create tests ---
-
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
@@ -135,8 +133,6 @@ public class ChecklistTemplateTests
         var after = DateTime.UtcNow;
         result.Value.CreatedAtUtc.Should().BeOnOrAfter(before).And.BeOnOrBefore(after);
     }
-
-    // --- Update tests ---
 
     [Fact]
     public void Update_ValidInput_UpdatesFields()

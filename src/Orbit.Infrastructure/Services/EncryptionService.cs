@@ -9,10 +9,7 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed partial class EncryptionService : IEncryptionService
 {
-    private const int NonceSize = 12;  // AES-GCM standard nonce size
-    private const int TagSize = 16;    // AES-GCM standard tag size
-    private const string EncPrefix = "enc:"; // Deterministic prefix for encrypted values
-
+    private const int NonceSize = 12;    private const int TagSize = 16;    private const string EncPrefix = "enc:";
     private readonly byte[]? _key;
     private readonly bool _isConfigured;
 
@@ -64,7 +61,6 @@ public sealed partial class EncryptionService : IEncryptionService
         using var aes = new AesGcm(_key!, TagSize);
         aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
 
-        // Format: nonce + ciphertext + tag, then Base64 encode
         var result = new byte[NonceSize + ciphertext.Length + TagSize];
         nonce.CopyTo(result, 0);
         ciphertext.CopyTo(result, NonceSize);
@@ -78,15 +74,12 @@ public sealed partial class EncryptionService : IEncryptionService
         if (!_isConfigured)
             return ciphertext;
 
-        // New format: prefixed with "enc:"
         if (ciphertext.StartsWith(EncPrefix))
         {
             var decrypted = DecryptRaw(ciphertext[EncPrefix.Length..]);
-            // Handle double-encryption: legacy data that was re-encrypted with prefix
             return TryDecryptLegacy(decrypted);
         }
 
-        // Legacy format: encrypted without prefix (migration transition).
         return TryDecryptLegacy(ciphertext);
     }
 
@@ -121,7 +114,6 @@ public sealed partial class EncryptionService : IEncryptionService
         }
         catch
         {
-            // Not valid Base64 or decryption failed -- it's plaintext
             return value;
         }
     }

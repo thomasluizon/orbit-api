@@ -36,13 +36,11 @@ public class GetCalendarMonthQueryHandler(
 {
     public async Task<Result<CalendarMonthResponse>> Handle(GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
-        // Validate date range (max 62 days to cover month + adjacent partial weeks)
         if (request.DateTo.DayNumber - request.DateFrom.DayNumber > AppConstants.MaxCalendarRangeDays)
             return Result.Failure<CalendarMonthResponse>("Date range must not exceed 62 days.");
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        // Advance stale bad habit DueDates (same as HandleScheduledHabits)
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
 
         var allHabits = await LoadHabitsWithLogs(request, cancellationToken);
@@ -62,8 +60,7 @@ public class GetCalendarMonthQueryHandler(
     private async Task<IReadOnlyList<Habit>> LoadHabitsWithLogs(
         GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
-        var logFrom = request.DateFrom.AddDays(-31); // lookback for overdue detection
-        return await habitRepository.FindAsync(
+        var logFrom = request.DateFrom.AddDays(-31);        return await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
             q => q.Include(h => h.Tags)
                   .Include(h => h.Logs.Where(l => l.Date >= logFrom && l.Date <= request.DateTo))
@@ -103,7 +100,6 @@ public class GetCalendarMonthQueryHandler(
         if (habit.IsFlexible || habit.IsBadHabit)
             return false;
 
-        // One-time tasks overdue
         if (habit.FrequencyUnit == null)
         {
             return !habit.IsCompleted
@@ -111,7 +107,6 @@ public class GetCalendarMonthQueryHandler(
                 && (!habit.EndDate.HasValue || habit.EndDate.Value >= dateFrom);
         }
 
-        // Recurring overdue check
         if (scheduledDates.Contains(dateFrom))
             return false;
 

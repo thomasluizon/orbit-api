@@ -41,7 +41,6 @@ public class MoveHabitTool(
             && parentEl.ValueKind == JsonValueKind.String
             && Guid.TryParse(parentEl.GetString(), out var parsedParentId))
         {
-            // Verify the new parent exists and belongs to the user
             var parent = await habitRepository.FindOneTrackedAsync(
                 h => h.Id == parsedParentId && h.UserId == userId,
                 cancellationToken: ct);
@@ -49,12 +48,9 @@ public class MoveHabitTool(
             if (parent is null)
                 return new ToolResult(false, Error: $"New parent habit {parsedParentId} not found.");
 
-            // Prevent direct self-reference
             if (parsedParentId == habitId)
                 return new ToolResult(false, Error: "A habit cannot be its own parent.");
 
-            // Prevent deep circular reference: walk the parent chain of the target parent
-            // to ensure we never reach the habit being moved
             if (await WouldCreateCycleAsync(habitId, parsedParentId, userId, ct))
                 return new ToolResult(false, Error: "Cannot move habit: this would create a circular parent chain.");
 
@@ -78,8 +74,7 @@ public class MoveHabitTool(
         while (true)
         {
             if (!visited.Add(current))
-                break; // loop in existing data - stop to avoid infinite loop
-
+                break;
             var ancestors = await habitRepository.FindAsync(
                 h => h.Id == current && h.UserId == userId,
                 ct);

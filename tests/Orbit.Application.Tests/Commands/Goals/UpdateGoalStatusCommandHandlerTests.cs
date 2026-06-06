@@ -69,8 +69,7 @@ public class UpdateGoalStatusCommandHandlerTests
     public async Task Handle_Reactivate_SetsStatusToActive()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        goal.MarkCompleted(); // First complete it
-        SetupGoalFound(goal);
+        goal.MarkCompleted();        SetupGoalFound(goal);
 
         var command = new UpdateGoalStatusCommand(UserId, GoalId, GoalStatus.Active);
 
@@ -115,7 +114,6 @@ public class UpdateGoalStatusCommandHandlerTests
     public async Task Handle_AlreadyActive_ReturnsFailure()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        // Goal starts as Active
         SetupGoalFound(goal);
 
         var command = new UpdateGoalStatusCommand(UserId, GoalId, GoalStatus.Active);

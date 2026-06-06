@@ -23,7 +23,6 @@ public class RequestAccountDeletionCommandHandler(
 
         var cacheKey = $"delete:{user.Email.ToLowerInvariant()}";
 
-        // Rate limit: no new code within 60 seconds
         if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) && existing is not null)
         {
             var elapsed = DateTime.UtcNow - existing.CreatedAt;

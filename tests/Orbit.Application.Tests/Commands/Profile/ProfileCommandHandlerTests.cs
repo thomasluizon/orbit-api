@@ -62,8 +62,6 @@ public class ProfileCommandHandlerTests
             .Returns((User?)null);
     }
 
-    // ----- SetTimezone -----
-
     [Fact]
     public async Task SetTimezone_Valid_UpdatesAndSaves()
     {
@@ -94,8 +92,6 @@ public class ProfileCommandHandlerTests
         result.Error.Should().Be("User not found.");
     }
 
-    // ----- SetLanguage -----
-
     [Fact]
     public async Task SetLanguage_Valid_UpdatesAndSaves()
     {
@@ -111,8 +107,6 @@ public class ProfileCommandHandlerTests
         user.Language.Should().Be("pt-BR");
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
-
-    // ----- SetAiMemory -----
 
     [Fact]
     public async Task SetAiMemory_Valid_UpdatesAndSaves()
@@ -130,8 +124,6 @@ public class ProfileCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    // ----- SetAiSummary -----
-
     [Fact]
     public async Task SetAiSummary_Valid_UpdatesAndSaves()
     {
@@ -148,8 +140,6 @@ public class ProfileCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    // ----- CompleteOnboarding -----
-
     [Fact]
     public async Task CompleteOnboarding_Valid_UpdatesAndSaves()
     {
@@ -165,8 +155,6 @@ public class ProfileCommandHandlerTests
         user.HasCompletedOnboarding.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
-
-    // ----- SetColorScheme -----
 
     [Fact]
     public async Task SetColorScheme_Valid_UpdatesAndSaves()
@@ -213,8 +201,6 @@ public class ProfileCommandHandlerTests
         user.ColorScheme.Should().BeNull();
     }
 
-    // ----- SetThemePreference -----
-
     [Fact]
     public async Task SetThemePreference_Valid_UpdatesAndSaves()
     {
@@ -260,8 +246,6 @@ public class ProfileCommandHandlerTests
         user.ThemePreference.Should().BeNull();
     }
 
-    // ----- SetWeekStartDay -----
-
     [Fact]
     public async Task SetWeekStartDay_Valid_UpdatesAndSaves()
     {
@@ -291,8 +275,6 @@ public class ProfileCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("User not found.");
     }
-
-    // ----- ResetAccount -----
 
     [Fact]
     public async Task ResetAccount_Valid_ResetsAndSaves()
@@ -329,8 +311,6 @@ public class ProfileCommandHandlerTests
         result.Error.Should().Be("User not found.");
         await accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
-
-    // ----- RequestAccountDeletion -----
 
     [Fact]
     public async Task RequestAccountDeletion_Valid_SendsCodeAndSucceeds()

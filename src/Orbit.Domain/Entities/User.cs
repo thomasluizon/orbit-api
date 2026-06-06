@@ -178,9 +178,6 @@ public partial class User : Entity
         if (HasProAccess)
             return Result.Failure("Pro users do not see ads");
 
-        // Use the caller-supplied user-local "today" so the daily cap rolls over at the
-        // user's midnight, not at UTC midnight (which would let users in negative offsets
-        // double-claim mid-evening).
         if (!LastAdRewardLocalDate.HasValue || LastAdRewardLocalDate.Value < userToday)
             AdRewardsClaimedToday = 0;
 
@@ -302,16 +299,13 @@ public partial class User : Entity
     public void UpdateStreak(DateOnly today)
     {
         if (LastActiveDate == today)
-            return; // Already active today, no change
-
+            return;
         if (LastActiveDate == today.AddDays(-1))
         {
-            // Consecutive day (or freeze covered yesterday) - increment streak
             CurrentStreak++;
         }
         else
         {
-            // Streak broken or first activity - reset to 1
             CurrentStreak = 1;
         }
 
@@ -323,8 +317,6 @@ public partial class User : Entity
 
     public void ApplyStreakFreeze(DateOnly today)
     {
-        // Bridge the gap - set LastActiveDate so tomorrow's completion continues the streak.
-        // Do NOT increment CurrentStreak; freeze preserves, it does not extend.
         LastActiveDate = today;
     }
 
@@ -333,8 +325,6 @@ public partial class User : Entity
         var normalizedStreak = Math.Max(0, currentStreak);
         if (normalizedStreak < CurrentStreak)
         {
-            // Streak broke (went to 0, or restarted from a lower value such as 14 -> 1 after a missed day);
-            // reset the "last award" marker so the next 7-day run triggers a fresh award.
             LastFreezeAwardStreak = 0;
         }
         CurrentStreak = normalizedStreak;
@@ -349,7 +339,6 @@ public partial class User : Entity
 
         if (StreakFreezesAccumulated >= maxAccumulated)
         {
-            // Cap reached; advance marker to the most recent earned milestone so we don't overshoot later.
             LastFreezeAwardStreak = CurrentStreak - (CurrentStreak % daysPerFreeze);
             return false;
         }

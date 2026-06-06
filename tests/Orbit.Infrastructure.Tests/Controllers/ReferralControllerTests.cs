@@ -33,8 +33,6 @@ public class ReferralControllerTests
         };
     }
 
-    // --- GetOrCreateCode ---
-
     [Fact]
     public async Task GetOrCreateCode_Success_ReturnsOk()
     {
@@ -57,8 +55,6 @@ public class ReferralControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- GetStats ---
-
     [Fact]
     public async Task GetStats_Success_ReturnsOk()
     {
@@ -80,8 +76,6 @@ public class ReferralControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- GetDashboard ---
 
     [Fact]
     public async Task GetDashboard_Success_ReturnsOk()

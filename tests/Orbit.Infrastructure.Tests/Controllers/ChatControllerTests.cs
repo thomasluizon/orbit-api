@@ -32,8 +32,6 @@ public class ChatControllerTests
         };
     }
 
-    // --- ProcessChat ---
-
     [Fact]
     public async Task ProcessChat_Success_ReturnsOk()
     {

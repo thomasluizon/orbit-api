@@ -53,7 +53,6 @@ public class CreateSubHabitCommandHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(parent);
-        // GetDepthAsync loads all user habits via FindAsync (parent has no parent = depth 0)
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -108,7 +107,6 @@ public class CreateSubHabitCommandHandlerTests
         _appConfigService.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>())
             .Returns(2);
 
-        // Create a chain: grandparent -> parent (depth = 1, maxDepth - 1 = 1, so blocked)
         var grandparent = CreateParentHabit();
         var parent = Habit.Create(new HabitCreateParams(
             UserId, "Child", FrequencyUnit.Day, 1,
@@ -120,7 +118,6 @@ public class CreateSubHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(parent);
 
-        // GetDepthAsync now loads ALL user habits via FindAsync and walks in memory
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())

@@ -57,8 +57,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         auditRow.Should().NotBeNull();
     }
 
-    // --- Tag: create_tag → tags.write (not plan-gated) ---
-
     [Fact]
     public async Task CreateTag_ViaMcpSurface_WritesAuditRow()
     {
@@ -76,8 +74,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         await AssertAuditRowAsync(scope, "tags.write", "create_tag");
     }
-
-    // --- Tag (hard case #1): assign_tags id path → tags.write ---
 
     [Fact]
     public async Task AssignTags_ViaMcpSurface_ReplacesTagsByIdAndWritesAuditRow()
@@ -106,8 +102,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         habit.Tags.Select(t => t.Id).Should().ContainSingle().Which.Should().Be(tagId);
     }
 
-    // --- Profile (mapped): update_profile_preferences → profile.preferences.write (not gated) ---
-
     [Fact]
     public async Task UpdateProfilePreferences_ViaMcpSurface_WritesAuditRow()
     {
@@ -126,8 +120,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         await AssertAuditRowAsync(scope, "profile.preferences.write", "update_profile_preferences");
     }
 
-    // --- Notification (mapped): update_notifications → notifications.write (not gated) ---
-
     [Fact]
     public async Task UpdateNotifications_ViaMcpSurface_WritesAuditRow()
     {
@@ -145,8 +137,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
         await AssertAuditRowAsync(scope, "notifications.write", "update_notifications");
     }
-
-    // --- Referral (hard case #2): get_referral_code → referrals.write ---
 
     [Fact]
     public async Task GetReferralCode_ViaMcpSurface_WritesAuditRowAndReturnsCode()
@@ -167,15 +157,12 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         await AssertAuditRowAsync(scope, "referrals.write", "get_referral_code");
     }
 
-    // --- UserFact delete is Destructive: without a token → PendingConfirmation ---
-
     [Fact]
     public async Task DeleteUserFacts_ViaMcpSurface_WithoutToken_IsPendingConfirmation()
     {
         using var scope = _factory.Services.CreateScope();
         var executor = scope.ServiceProvider.GetRequiredService<IAgentOperationExecutor>();
 
-        // Seed an owned fact so the ownership pre-check passes and the confirmation gate is what fires.
         var factId = await SeedUserFactAsync(scope);
 
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -189,8 +176,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
     }
 
-    // --- Read-only credential is denied across newly-routed toolsets (fires before any gate) ---
-
     [Fact]
     public async Task ReadOnlyCredential_IsDeniedAcrossNewlyRoutedToolsets()
     {
@@ -199,9 +184,6 @@ public class McpMutationExecutorRoutingTests : IAsyncLifetime
 
         var scopes = AgentScopes.ClaudeDefaultScopes;
 
-        // assign_tags carries a habit target; seed an owned habit so the ownership pre-check passes
-        // and the read-only-credential denial (the assertion target) is what fires. delete_user_facts
-        // is invoked target-free so its ownership check is skipped for the same reason.
         var ownedHabitId = await SeedHabitAsync(executor);
 
         var cases = new (string OperationId, object Arguments)[]

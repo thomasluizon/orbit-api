@@ -16,7 +16,6 @@ public class CreateTagCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateTagCommand request, CancellationToken cancellationToken)
     {
-        // Check for duplicate name
         var existing = await tagRepository.FindAsync(
             t => t.UserId == request.UserId && t.Name == request.Name.Trim(),
             cancellationToken);

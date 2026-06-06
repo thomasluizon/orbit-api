@@ -128,28 +128,18 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_WeekdayOnlyHabit_StreakContinuesAcrossWeekend()
     {
-        // Mon-Fri schedule, user logs every weekday, misses Sat & Sun.
-        // Streak should NOT reset on the weekend because Sat/Sun aren't expected.
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var weekdays = new List<DayOfWeek>
         {
             DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday
         };
-        // Start: Monday 2026-04-06
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Work", FrequencyUnit.Day, 1,
             Days: weekdays,
             DueDate: new DateOnly(2026, 4, 6))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 6));
 
-        // Log Mon-Fri (week 1) and Mon (week 2) -- weekend untouched
-        habit.Log(new DateOnly(2026, 4, 6), advanceDueDate: false);  // Mon
-        habit.Log(new DateOnly(2026, 4, 7), advanceDueDate: false);  // Tue
-        habit.Log(new DateOnly(2026, 4, 8), advanceDueDate: false);  // Wed
-        habit.Log(new DateOnly(2026, 4, 9), advanceDueDate: false);  // Thu
-        habit.Log(new DateOnly(2026, 4, 10), advanceDueDate: false); // Fri
-        habit.Log(new DateOnly(2026, 4, 13), advanceDueDate: false); // Mon
-
+        habit.Log(new DateOnly(2026, 4, 6), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 7), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 8), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 9), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 10), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 13), advanceDueDate: false);
         SetupUser(user, new DateOnly(2026, 4, 13));
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
@@ -168,7 +158,6 @@ public class UserStreakServiceTests
         var habit = Habit.Create(new HabitCreateParams(UserId, "Run", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 4, 1))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 1));
 
-        // Missed April 3 (expected, no log, no freeze)
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
         habit.Log(new DateOnly(2026, 4, 2), advanceDueDate: false);
         habit.Log(new DateOnly(2026, 4, 4), advanceDueDate: false);
@@ -181,8 +170,7 @@ public class UserStreakServiceTests
         var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.CurrentStreak.Should().Be(2); // April 4-5
-        result.LongestStreak.Should().Be(2);
+        result!.CurrentStreak.Should().Be(2);        result.LongestStreak.Should().Be(2);
     }
 
     [Fact]
@@ -197,7 +185,6 @@ public class UserStreakServiceTests
             DueDate: new DateOnly(2026, 4, 6))).Value;
         BackdateCreation(weekdayHabit, new DateOnly(2026, 4, 6));
 
-        // Log water every day, weekday habit on weekdays only. Covers everything -> streak continuous.
         foreach (var d in Enumerable.Range(0, 7))
             daily.Log(new DateOnly(2026, 4, 6).AddDays(d), advanceDueDate: false);
         weekdayHabit.Log(new DateOnly(2026, 4, 6), advanceDueDate: false);
@@ -226,7 +213,6 @@ public class UserStreakServiceTests
         habit.Log(new DateOnly(2026, 4, 1), advanceDueDate: false);
         habit.Log(new DateOnly(2026, 4, 2), advanceDueDate: false);
         habit.Log(new DateOnly(2026, 4, 3), advanceDueDate: false);
-        // Missed April 4, freeze on April 4
         habit.Log(new DateOnly(2026, 4, 5), advanceDueDate: false);
 
         SetupUser(user, new DateOnly(2026, 4, 5));
@@ -242,7 +228,6 @@ public class UserStreakServiceTests
     [Fact]
     public async Task RecalculateAsync_OnlyBadHabits_DoesNotIncreaseStreak()
     {
-        // Bad habits must never contribute to user streak calculation.
         var user = User.Create("Thomas", "thomas@test.com").Value;
         var bad = Habit.Create(new HabitCreateParams(
             UserId, "Smoke", FrequencyUnit.Day, 1,

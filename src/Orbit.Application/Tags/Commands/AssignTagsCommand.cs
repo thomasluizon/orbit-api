@@ -33,12 +33,10 @@ public class AssignTagsCommandHandler(
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
 
-        // Load requested tags (tracked so EF doesn't try to re-insert them)
         var tags = await tagRepository.FindTrackedAsync(
             t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,
             cancellationToken);
 
-        // Clear existing and set new
         foreach (var existing in habit.Tags.ToList())
             habit.RemoveTag(existing);
 

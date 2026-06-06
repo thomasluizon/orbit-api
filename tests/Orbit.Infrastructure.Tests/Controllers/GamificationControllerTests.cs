@@ -28,8 +28,6 @@ public class GamificationControllerTests
         };
     }
 
-    // --- GetProfile ---
-
     [Fact]
     public async Task GetProfile_Success_ReturnsOk()
     {
@@ -53,8 +51,6 @@ public class GamificationControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- GetAchievements ---
-
     [Fact]
     public async Task GetAchievements_Success_ReturnsOk()
     {
@@ -77,8 +73,6 @@ public class GamificationControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- GetStreakInfo ---
 
     [Fact]
     public async Task GetStreakInfo_Success_ReturnsOk()

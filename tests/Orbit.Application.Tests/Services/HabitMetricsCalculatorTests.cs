@@ -9,10 +9,6 @@ public class HabitMetricsCalculatorTests
 {
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
-    // GenerateExpectedDates uses habit.CreatedAtUtc (converted to user-local date) as the
-    // lower boundary. Since Habit.Create sets CreatedAtUtc = DateTime.UtcNow, we use Today
-    // as the reference for all test dates. The expected dates window is [habitStartDate..today],
-    // so only Today itself falls in the window for a just-created habit.
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     /// <summary>
@@ -65,8 +61,6 @@ public class HabitMetricsCalculatorTests
             DueDate: Today)).Value;
     }
 
-    // --- Basic metrics calculation ---
-
     [Fact]
     public void Calculate_NoLogs_ReturnsZeroes()
     {
@@ -93,14 +87,8 @@ public class HabitMetricsCalculatorTests
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.LastCompletedDate.Should().Be(Today);
-        // Habit was just created today: only 1 expected date (today), which is logged
         metrics.CurrentStreak.Should().Be(1);
     }
-
-    // --- Streak tests ---
-    // The calculator generates expected dates from [habitCreatedDate..today].
-    // For a habit created today, only today is expected. This correctly models
-    // "streak since habit creation".
 
     [Fact]
     public void Calculate_TodayLogged_CurrentStreakIsOne()
@@ -116,37 +104,29 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_TodayNotLogged_CurrentStreakIsZero()
     {
-        // Not logged today -- the only expected date is today
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Test", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
-        // Today is skipped at position 0, but no prior dates exist, so streak = 0
         metrics.CurrentStreak.Should().Be(0);
     }
 
     [Fact]
     public void Calculate_LogOnNonExpectedDate_DoesNotCountForStreak()
     {
-        // Log a date far in the past (before habit creation) -- it won't appear in expected dates
         var habit = CreateDailyHabitWithLogs([Today.AddDays(-100)]);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
-        // The log exists but the date isn't in expected dates, so streak is 0
         metrics.CurrentStreak.Should().Be(0);
-        // But total completions still counts it (logs with Value > 0)
         metrics.TotalCompletions.Should().Be(1);
     }
-
-    // --- Completion rate tests ---
 
     [Fact]
     public void Calculate_TodayLogged_WeeklyRate100Percent()
     {
-        // Habit created today, 1 expected date (today), logged = 100%
         var habit = CreateDailyHabitWithLogs([Today]);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
@@ -169,7 +149,6 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_NoDaysCompletedInWeek_0PercentWeekly()
     {
-        // Log a date outside the 7-day window
         var habit = CreateDailyHabitWithLogs([Today.AddDays(-20)]);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
@@ -177,12 +156,9 @@ public class HabitMetricsCalculatorTests
         metrics.WeeklyCompletionRate.Should().Be(0);
     }
 
-    // --- Total completions ---
-
     [Fact]
     public void Calculate_TotalCompletions_MatchesDistinctLogDates()
     {
-        // Multiple logs on different dates
         var logDates = new[]
         {
             Today.AddDays(-6),
@@ -225,8 +201,6 @@ public class HabitMetricsCalculatorTests
         metrics.LastCompletedDate.Should().BeNull();
     }
 
-    // --- One-time habit ---
-
     [Fact]
     public void Calculate_OneTimeHabit_NotCompleted_ReturnsZeroes()
     {
@@ -238,13 +212,9 @@ public class HabitMetricsCalculatorTests
         metrics.CurrentStreak.Should().Be(0);
     }
 
-    // --- Bad habit tests ---
-
     [Fact]
     public void Calculate_BadHabit_NoLogs_StreakIsPositive()
     {
-        // Bad habit: streak counts days WITHOUT logging (resisting the habit)
-        // No logs means success for every expected date
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
@@ -257,7 +227,6 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_LoggedToday_BreaksStreak()
     {
-        // Logging a bad habit today breaks the streak
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
@@ -271,7 +240,6 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_NoLogs_CompletionRate100()
     {
-        // For bad habits, not logging = completion. No logs = 100%
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Junk Food", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
@@ -284,7 +252,6 @@ public class HabitMetricsCalculatorTests
     [Fact]
     public void Calculate_BadHabit_LoggedToday_CompletionRate0()
     {
-        // For bad habits, logging = failure. 1 expected date (today) + logged = 0%
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Junk Food", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
@@ -294,8 +261,6 @@ public class HabitMetricsCalculatorTests
 
         metrics.WeeklyCompletionRate.Should().Be(0);
     }
-
-    // --- Weekly habit ---
 
     [Fact]
     public void Calculate_WeeklyHabit_LoggedToday_HasStreak()
@@ -307,8 +272,6 @@ public class HabitMetricsCalculatorTests
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().BeGreaterThanOrEqualTo(1);
     }
-
-    // --- Timezone support ---
 
     [Fact]
     public void Calculate_WithTimezone_UsesTimezoneForDates()
@@ -330,8 +293,6 @@ public class HabitMetricsCalculatorTests
         metrics.TotalCompletions.Should().Be(1);
     }
 
-    // --- GetUserToday tests ---
-
     [Fact]
     public void GetUserToday_NullTimezone_ReturnsUtcDate()
     {
@@ -342,8 +303,6 @@ public class HabitMetricsCalculatorTests
         today.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
-    // --- Return type structure ---
-
     [Fact]
     public void Calculate_ReturnsAllMetricFields()
     {
@@ -351,15 +310,12 @@ public class HabitMetricsCalculatorTests
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
-        // Verify all fields of HabitMetrics are populated
         metrics.CurrentStreak.Should().BeGreaterThanOrEqualTo(0);
         metrics.LongestStreak.Should().BeGreaterThanOrEqualTo(0);
         metrics.WeeklyCompletionRate.Should().BeGreaterThanOrEqualTo(0);
         metrics.MonthlyCompletionRate.Should().BeGreaterThanOrEqualTo(0);
         metrics.TotalCompletions.Should().BeGreaterThanOrEqualTo(0);
     }
-
-    // --- Monthly habit metrics ---
 
     [Fact]
     public void Calculate_MonthlyHabit_LoggedToday_HasStreak()
@@ -394,8 +350,6 @@ public class HabitMetricsCalculatorTests
         metrics.CurrentStreak.Should().Be(0);
     }
 
-    // --- Yearly habit metrics ---
-
     [Fact]
     public void Calculate_YearlyHabit_LoggedToday_HasStreak()
     {
@@ -413,8 +367,6 @@ public class HabitMetricsCalculatorTests
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().Be(1);
     }
-
-    // --- Every-N-days habit metrics ---
 
     [Fact]
     public void Calculate_EveryTwoDaysHabit_LoggedToday()
@@ -434,8 +386,6 @@ public class HabitMetricsCalculatorTests
         metrics.CurrentStreak.Should().Be(1);
     }
 
-    // --- Day-filtered habit metrics ---
-
     [Fact]
     public void Calculate_DailyWithDaysFilter_OnlyCountsFilteredDays()
     {
@@ -454,12 +404,9 @@ public class HabitMetricsCalculatorTests
         metrics.TotalCompletions.Should().Be(1);
     }
 
-    // --- Longest streak tests ---
-
     [Fact]
     public void Calculate_LongestStreak_GreaterThanCurrent_WhenBroken()
     {
-        // Create a habit with some logged dates and a gap
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId,
             "Test",
@@ -467,15 +414,12 @@ public class HabitMetricsCalculatorTests
             1,
             DueDate: Today)).Value;
 
-        // Just created today, so only 1 expected date. Let's verify longest >= current
         habit.Log(Today, advanceDueDate: false);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
         metrics.LongestStreak.Should().BeGreaterThanOrEqualTo(metrics.CurrentStreak);
     }
-
-    // --- One-time completed ---
 
     [Fact]
     public void Calculate_OneTimeHabit_Completed_Streak1()
@@ -487,15 +431,12 @@ public class HabitMetricsCalculatorTests
             FrequencyQuantity: null,
             DueDate: Today)).Value;
 
-        habit.Log(Today); // marks completed
-
+        habit.Log(Today);
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
         metrics.TotalCompletions.Should().Be(1);
         metrics.CurrentStreak.Should().Be(1);
     }
-
-    // --- Bad habit longest streak ---
 
     [Fact]
     public void Calculate_BadHabit_LongestStreak_MatchesCurrentWhenNoLogs()
@@ -509,8 +450,6 @@ public class HabitMetricsCalculatorTests
         metrics.LongestStreak.Should().Be(metrics.CurrentStreak);
     }
 
-    // --- Timezone-specific tests ---
-
     [Fact]
     public void Calculate_WithSpecificTimezone_ProducesMetrics()
     {
@@ -522,25 +461,19 @@ public class HabitMetricsCalculatorTests
         metrics.TotalCompletions.Should().Be(1);
     }
 
-    // --- GetUserToday with timezone ---
-
     [Fact]
     public void GetUserToday_WithTimezone_ReturnsLocalDate()
     {
         var user = User.Create("Test User", "test@example.com").Value;
-        // User has no timezone set (null) - should default to UTC
 
         var today = HabitMetricsCalculator.GetUserToday(user);
 
         today.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
-    // --- Monthly completion rate ---
-
     [Fact]
     public void Calculate_MonthlyRate_ZeroWhenNoExpectedDatesInRange()
     {
-        // Yearly habit: only 1 expected date (today), which falls in both weekly and monthly windows
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId,
             "Yearly",
@@ -550,7 +483,6 @@ public class HabitMetricsCalculatorTests
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
-        // Monthly rate: 0 because not logged (today is expected but not logged)
         metrics.MonthlyCompletionRate.Should().Be(0);
     }
 
@@ -570,8 +502,6 @@ public class HabitMetricsCalculatorTests
         metrics.MonthlyCompletionRate.Should().Be(100);
     }
 
-    // --- Flexible habit metrics ---
-
     [Fact]
     public void Calculate_FlexibleHabit_LoggedMultipleTimes_CountsAll()
     {
@@ -588,6 +518,5 @@ public class HabitMetricsCalculatorTests
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
-        metrics.TotalCompletions.Should().Be(1); // TotalCompletions counts distinct dates
-    }
+        metrics.TotalCompletions.Should().Be(1);    }
 }

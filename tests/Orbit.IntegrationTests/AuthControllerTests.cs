@@ -32,8 +32,6 @@ public class AuthControllerTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    // -- SendCode -----------------------------------------------
-
     [Fact]
     public async Task SendCode_ValidEmail_ReturnsOk()
     {
@@ -41,8 +39,6 @@ public class AuthControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
-
-    // -- VerifyCode ---------------------------------------------
 
     [Fact]
     public async Task VerifyCode_ValidCode_ReturnsToken()
@@ -99,8 +95,6 @@ public class AuthControllerTests : IAsyncLifetime
 
         secondResult!.UserId.Should().Be(firstResult!.UserId);
     }
-
-    // -- DTOs ---------------------------------------------------
 
     private record LoginResponse(Guid UserId, string Token, string Name, string Email);
 }

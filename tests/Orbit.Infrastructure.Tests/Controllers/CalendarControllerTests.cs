@@ -31,8 +31,6 @@ public class CalendarControllerTests
         };
     }
 
-    // --- GetEvents ---
-
     [Fact]
     public async Task GetEvents_Success_ReturnsOk()
     {
@@ -72,8 +70,6 @@ public class CalendarControllerTests
         result.Should().BeOfType<OkObjectResult>();
     }
 
-    // --- DismissImport ---
-
     [Fact]
     public async Task DismissImport_Success_ReturnsNoContent()
     {
@@ -95,8 +91,6 @@ public class CalendarControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- GetAutoSyncState ---
 
     [Fact]
     public async Task GetAutoSyncState_Success_ReturnsOk()
@@ -120,8 +114,6 @@ public class CalendarControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- SetAutoSync ---
 
     [Fact]
     public async Task SetAutoSync_ValidEnabled_Success_ReturnsOk()
@@ -147,8 +139,6 @@ public class CalendarControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- GetSuggestions ---
-
     [Fact]
     public async Task GetSuggestions_Success_ReturnsOk()
     {
@@ -171,8 +161,6 @@ public class CalendarControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- DismissSuggestion ---
-
     [Fact]
     public async Task DismissSuggestion_Success_ReturnsNoContent()
     {
@@ -194,8 +182,6 @@ public class CalendarControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- RunSyncNow ---
 
     [Fact]
     public async Task RunSyncNow_Success_ReturnsOk()

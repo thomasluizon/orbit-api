@@ -46,12 +46,7 @@ public class LevelDefinitionsTests
     }
 
     [Theory]
-    [InlineData(0, 100)]       // Level 1 -> need 100 for level 2
-    [InlineData(50, 50)]       // Level 1 -> need 50 more
-    [InlineData(100, 200)]     // Level 2 -> need 200 more for level 3 (300)
-    [InlineData(250, 50)]      // Level 2 -> need 50 more for level 3 (300)
-    [InlineData(9999, 1)]      // Level 9 -> need 1 more for level 10 (10000)
-    public void GetXpToNextLevel_ReturnsCorrectXpNeeded(int xp, int expectedXpToNext)
+    [InlineData(0, 100)]    [InlineData(50, 50)]    [InlineData(100, 200)]    [InlineData(250, 50)]    [InlineData(9999, 1)]    public void GetXpToNextLevel_ReturnsCorrectXpNeeded(int xp, int expectedXpToNext)
     {
         var xpToNext = LevelDefinitions.GetXpToNextLevel(xp);
 

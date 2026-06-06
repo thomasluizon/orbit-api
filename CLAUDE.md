@@ -20,6 +20,7 @@ These apply everywhere — they override project-local conventions if they confl
 - **Logging:** Inject `ILogger<T>`, log business events with structured properties in PascalCase, English only: `logger.LogInformation("Action {Property}", value)`.
 - **No workarounds.** Root-cause every bug. No `TODO`/`FIXME`/`HACK` in committed code. No empty `catch {}`. No `as any`-equivalents like unjustified `null!`.
 - **No dead code.** Delete unused methods, types, parameters, branches the moment they become orphaned by your change.
+- **No narration comments (analyzer-enforced).** Code must read without prose. The only comments allowed are XML-doc comments (`///` or `/** */`) documenting a symbol's intent/contract, and a WHY note that links an upstream issue/PR/doc URL. Everything else is an error (`ORBIT0001`, from `src/Orbit.Analyzers`) and is autofixable via `dotnet format`. To explain code, rename it or extract a well-named method — don't narrate.
 
 ## Cross-repo parity contract
 

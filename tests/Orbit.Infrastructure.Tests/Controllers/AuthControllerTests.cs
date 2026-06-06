@@ -33,8 +33,6 @@ public class AuthControllerTests
         };
     }
 
-    // --- SendCode ---
-
     [Fact]
     public async Task SendCode_Success_ReturnsOk()
     {
@@ -58,8 +56,6 @@ public class AuthControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- VerifyCode ---
 
     [Fact]
     public async Task VerifyCode_Success_ReturnsOk()
@@ -85,8 +81,6 @@ public class AuthControllerTests
         result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
-    // --- GoogleAuth ---
-
     [Fact]
     public async Task GoogleAuth_Success_ReturnsOk()
     {
@@ -111,8 +105,6 @@ public class AuthControllerTests
         result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
-    // --- RequestDeletion ---
-
     [Fact]
     public async Task RequestDeletion_Success_ReturnsOk()
     {
@@ -134,8 +126,6 @@ public class AuthControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- ConfirmDeletion ---
 
     [Fact]
     public async Task ConfirmDeletion_Success_ReturnsOk()

@@ -58,8 +58,6 @@ public class GamificationServiceTests
             userId ?? UserId, "Test Habit", FrequencyUnit.Day, 1,
             DueDate: Today, IsBadHabit: isBadHabit)).Value;
 
-        // Backdate CreatedAtUtc so HabitMetricsCalculator generates expected dates
-        // covering Today (the test's fixed date, not the actual DateTime.UtcNow)
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, Today.ToDateTime(TimeOnly.MinValue));
         return habit;
     }
@@ -74,8 +72,6 @@ public class GamificationServiceTests
         var startDate = Today.AddDays(-(streakDays - 1));
         var habit = Habit.Create(new HabitCreateParams(UserId, "Daily", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
 
-        // HabitMetricsCalculator uses CreatedAtUtc as the earliest boundary for expected dates.
-        // Since Create() sets it to DateTime.UtcNow (today), we need to backdate it.
         typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
 
         for (int i = 0; i < streakDays; i++)
@@ -181,8 +177,6 @@ public class GamificationServiceTests
             .Returns(count);
     }
 
-    // --- ProcessHabitCreated: first_orbit ---
-
     [Fact]
     public async Task ProcessHabitCreated_FirstHabit_GrantsFirstOrbit()
     {
@@ -216,8 +210,6 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- ProcessHabitLogged: liftoff ---
-
     [Fact]
     public async Task ProcessHabitLogged_FirstCompletion_GrantsLiftoff()
     {
@@ -236,8 +228,6 @@ public class GamificationServiceTests
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.Liftoff),
             Arg.Any<CancellationToken>());
     }
-
-    // --- Streak achievements ---
 
     [Fact]
     public async Task ProcessHabitLogged_7DayStreak_GrantsWeekWarrior()
@@ -311,8 +301,6 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- Volume achievements ---
-
     [Fact]
     public async Task ProcessHabitLogged_10Completions_GrantsGettingMomentum()
     {
@@ -320,8 +308,6 @@ public class GamificationServiceTests
         SetupUserLookup(user);
         SetupNoEarnedAchievements();
 
-        // Service now loads all habits via FindAsync and sums logs from the collection.
-        // Create a habit with 10 logs total (including the one being logged)
         var habit = CreateHabitWithNLogs(10);
         SetupUserHabits(habit);
 
@@ -382,8 +368,6 @@ public class GamificationServiceTests
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.GettingMomentum),
             Arg.Any<CancellationToken>());
     }
-
-    // --- Goal achievements ---
 
     [Fact]
     public async Task ProcessGoalCreated_FirstGoal_GrantsMissionControl()
@@ -467,8 +451,6 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- Does not grant already-earned achievements ---
-
     [Fact]
     public async Task ProcessHabitCreated_AlreadyEarnedFirstOrbit_DoesNotGrantAgain()
     {
@@ -503,8 +485,6 @@ public class GamificationServiceTests
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.Liftoff),
             Arg.Any<CancellationToken>());
     }
-
-    // --- Skips if user doesn't have Pro access ---
 
     [Fact]
     public async Task ProcessHabitCreated_FreeUser_DoesNothing()
@@ -564,15 +544,12 @@ public class GamificationServiceTests
             Arg.Any<CancellationToken>());
     }
 
-    // --- XP calculation ---
-
     [Fact]
     public async Task ProcessHabitLogged_GrantsBaseXpPlusStreakBonus()
     {
         var user = CreateProUser();
         var initialXp = user.TotalXp;
         SetupUserLookup(user);
-        // Pre-earn all achievements that could be triggered, so only base+streak XP is added
         SetupEarnedAchievements(
             AchievementDefinitions.Liftoff,
             AchievementDefinitions.LegendaryVolume,
@@ -592,7 +569,6 @@ public class GamificationServiceTests
 
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
-        // Base XP = 10, streak bonus = 1 (single log = 1 streak)
         user.TotalXp.Should().Be(initialXp + 10 + 1);
     }
 
@@ -602,7 +578,6 @@ public class GamificationServiceTests
         var user = CreateProUser();
         var initialXp = user.TotalXp;
         SetupUserLookup(user);
-        // Pre-earn all triggerable achievements
         SetupEarnedAchievements(
             AchievementDefinitions.Liftoff,
             AchievementDefinitions.LegendaryVolume,
@@ -615,7 +590,6 @@ public class GamificationServiceTests
             AchievementDefinitions.Comeback,
             AchievementDefinitions.BadHabitBreaker);
 
-        // Create habit with 5-day streak (logs forward from startDate)
         var habit = CreateDailyHabitWithStreak(5);
         SetupHabitWithLogs(habit);
         SetupUserHabits(habit);
@@ -623,7 +597,6 @@ public class GamificationServiceTests
 
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
-        // XP = 10 base + 5 streak bonus
         user.TotalXp.Should().Be(initialXp + 10 + 5);
     }
 
@@ -644,8 +617,6 @@ public class GamificationServiceTests
 
         user.TotalXp.Should().Be(initialXp + 100);
     }
-
-    // --- Notifications ---
 
     [Fact]
     public async Task ProcessHabitCreated_NewAchievement_SendsNotification()

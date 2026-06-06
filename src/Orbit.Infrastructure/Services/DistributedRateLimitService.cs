@@ -15,10 +15,6 @@ public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistribute
         {
             ["auth"] = new(TimeSpan.FromMinutes(1), PermitLimit: 5, SegmentCount: 1),
             ["chat"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 4),
-            // Resolve buckets are separate from chat so a user who exhausts their chat
-            // quota can still tap quick-action buttons on cards already on screen.
-            // Each clarification is one-shot anyway; the limit is essentially a misuse
-            // guard, not a UX throttle.
             ["ai-resolve"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
             ["support"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1)
         };

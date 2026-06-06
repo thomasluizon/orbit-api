@@ -26,7 +26,6 @@ public class ProcessReferralCodeCommandHandlerTests
         _handler = new ProcessReferralCodeCommandHandler(
             _userRepo, _referralRepo, _appConfig, _referralReward, _unitOfWork);
 
-        // Default config values
         _appConfig.GetAsync("MaxReferrals", AppConstants.DefaultMaxReferrals, Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultMaxReferrals);
 
@@ -55,7 +54,6 @@ public class ProcessReferralCodeCommandHandlerTests
     /// </summary>
     private void SetupUsersFound(User referrer, User newUser)
     {
-        // First call finds referrer by code, second finds new user by ID
         _userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
@@ -70,7 +68,6 @@ public class ProcessReferralCodeCommandHandlerTests
         var newUser = CreateNewUser();
         SetupUsersFound(referrer, newUser);
 
-        // No existing successful referrals
         _referralRepo.FindAsync(
             Arg.Any<Expression<Func<Referral, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -104,7 +101,6 @@ public class ProcessReferralCodeCommandHandlerTests
 
         await _handler.Handle(command, CancellationToken.None);
 
-        // Coupon should be created for the new user
         await _referralReward.Received(1).CreateReferralCouponAsync(
             NewUserId, Arg.Any<CancellationToken>());
         newUser.ReferralCouponId.Should().Be("promo_test456");
@@ -135,7 +131,6 @@ public class ProcessReferralCodeCommandHandlerTests
         var newUser = CreateNewUser();
         SetupUsersFound(referrer, newUser);
 
-        // Return max number of successful referrals
         var completedReferrals = Enumerable.Range(0, AppConstants.DefaultMaxReferrals)
             .Select(_ =>
             {
@@ -162,7 +157,6 @@ public class ProcessReferralCodeCommandHandlerTests
     public async Task Handle_SelfReferral_ReturnsFailure()
     {
         var referrer = CreateReferrer();
-        // The referrer is also the "new user" (same ID)
         _userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
@@ -182,8 +176,7 @@ public class ProcessReferralCodeCommandHandlerTests
     {
         var referrer = CreateReferrer();
         var newUser = CreateNewUser();
-        newUser.SetReferredBy(Guid.NewGuid()); // Already referred by someone else
-        SetupUsersFound(referrer, newUser);
+        newUser.SetReferredBy(Guid.NewGuid());        SetupUsersFound(referrer, newUser);
 
         _referralRepo.FindAsync(
             Arg.Any<Expression<Func<Referral, bool>>>(),

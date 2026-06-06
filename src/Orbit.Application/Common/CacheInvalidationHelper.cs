@@ -9,9 +9,6 @@ public static class CacheInvalidationHelper
 
     public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId)
     {
-        // Use a +/-2 day buffer around UTC now to cover users in extreme offsets
-        // (UTC+14 at eastern edge, UTC-12 at western edge). A 1-day buffer only covers
-        // UTC+/-24h but UTC+14 means local "tomorrow" is already 2 days ahead of UTC-12.
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (int i = -2; i <= 2; i++)
         {
@@ -32,11 +29,6 @@ public static class CacheInvalidationHelper
     /// </summary>
     public static void InvalidateRetrospectiveCache(IMemoryCache cache, Guid userId)
     {
-        // The cache key is keyed on (userId, period, dateFrom, language). dateFrom varies by
-        // when the user requested it, so we cannot enumerate exact keys. Best-effort: clear
-        // each (period, language) pair for the most common dateFrom values (today and the
-        // first-of-period for the current calendar period). For now, since IMemoryCache has
-        // no prefix-scan, we burn keys for the +/-2 day window (matches summary semantics).
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         for (int i = -2; i <= 2; i++)
         {

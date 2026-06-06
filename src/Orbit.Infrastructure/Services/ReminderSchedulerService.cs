@@ -55,10 +55,8 @@ public partial class ReminderSchedulerService(
 
         var anyChanges = false;
 
-        // === Pass 1: Relative reminders (habits with DueTime) ===
         anyChanges |= await ProcessRelativeReminders(dbContext, pushService, ct);
 
-        // === Pass 2: Scheduled reminders (habits without DueTime) ===
         anyChanges |= await ProcessScheduledReminders(dbContext, pushService, ct);
 
         if (anyChanges)
@@ -168,7 +166,6 @@ public partial class ReminderSchedulerService(
                 && (!h.EndDate.HasValue || h.EndDate.Value >= minLocalDate))
             .ToListAsync(ct);
 
-        // Filter to habits that actually have scheduled reminders (can't do jsonb length check in EF)
         habits = habits.Where(h => h.ScheduledReminders.Count > 0).ToList();
 
         if (habits.Count == 0) return false;
@@ -182,7 +179,6 @@ public partial class ReminderSchedulerService(
         var habitIds = habits.Select(h => h.Id).ToList();
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Pre-load sent scheduled reminders (those with ReminderTimeUtc set)
         var sentScheduledKeys = await dbContext.SentReminders
             .AsNoTracking()
             .Where(r => habitIds.Contains(r.HabitId) && r.ReminderTimeUtc != null

@@ -39,7 +39,6 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         return sb.ToString();
     }
 
-    // ISystemPromptBuilder implementation
     string ISystemPromptBuilder.Build(PromptBuildRequest request)
     {
         var context = new PromptContext(

@@ -27,7 +27,6 @@ public class GetDailySummaryQueryHandler(
         GetDailySummaryQuery request,
         CancellationToken cancellationToken)
     {
-        // Check pay gate
         var gateCheck = await payGate.CanUseDailySummary(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<DailySummaryResponse>();
@@ -39,8 +38,6 @@ public class GetDailySummaryQueryHandler(
         if (!user.AiSummaryEnabled)
             return Result.Failure<DailySummaryResponse>("AI summary is disabled.");
 
-        // The backend is authoritative about the user's language: prefer the persisted
-        // profile language, fall back to the request-supplied value, finally English.
         string effectiveLanguage;
         if (!string.IsNullOrWhiteSpace(user.Language))
             effectiveLanguage = user.Language!;
@@ -88,7 +85,6 @@ public class GetDailySummaryQueryHandler(
         if (summaryResult.IsFailure)
             return Result.Failure<DailySummaryResponse>(summaryResult.Error);
 
-        // Cache until end of day, minimum 5 minutes if expiry is in the past
         var endOfDay = new DateTimeOffset(request.DateFrom.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
         var expiry = endOfDay > DateTimeOffset.UtcNow ? endOfDay : DateTimeOffset.UtcNow.AddMinutes(5);
 

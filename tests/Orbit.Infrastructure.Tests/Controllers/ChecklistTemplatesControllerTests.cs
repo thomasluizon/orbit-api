@@ -31,8 +31,6 @@ public class ChecklistTemplatesControllerTests
         };
     }
 
-    // --- GetTemplates ---
-
     [Fact]
     public async Task GetTemplates_Success_ReturnsOk()
     {
@@ -54,8 +52,6 @@ public class ChecklistTemplatesControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- CreateTemplate ---
 
     [Fact]
     public async Task CreateTemplate_Success_ReturnsCreated()
@@ -81,8 +77,6 @@ public class ChecklistTemplatesControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- DeleteTemplate ---
 
     [Fact]
     public async Task DeleteTemplate_Success_ReturnsNoContent()

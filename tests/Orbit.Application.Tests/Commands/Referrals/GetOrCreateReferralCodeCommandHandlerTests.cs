@@ -49,7 +49,6 @@ public class GetOrCreateReferralCodeCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        // No existing user with same code
         _userRepo.FindAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())

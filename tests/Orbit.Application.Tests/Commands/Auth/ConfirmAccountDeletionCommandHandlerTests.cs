@@ -37,7 +37,6 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.Value.Should().BeAfter(DateTime.UtcNow);
         user.IsDeactivated.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        // Cache entry should be cleared after successful verification
         _cache.TryGetValue($"delete:{TestEmail}", out _).Should().BeFalse();
     }
 
@@ -55,7 +54,6 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid");
         user.IsDeactivated.Should().BeFalse();
-        // Attempt should be incremented
         _cache.TryGetValue($"delete:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
         entry!.Attempts.Should().Be(1);
     }
@@ -63,7 +61,6 @@ public class ConfirmAccountDeletionCommandHandlerTests
     [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
-        // GetByIdAsync returns null by default
         var command = new ConfirmAccountDeletionCommand(UserId, "123456");
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -77,7 +74,6 @@ public class ConfirmAccountDeletionCommandHandlerTests
     {
         var user = User.Create("Test", TestEmail).Value;
         SetupUser(user);
-        // No cache entry -- simulates expired code
 
         var command = new ConfirmAccountDeletionCommand(UserId, "123456");
 

@@ -45,11 +45,9 @@ public partial class GoogleCalendarEventFetcher(ILogger<GoogleCalendarEventFetch
         {
             if (string.IsNullOrWhiteSpace(ev.Summary)) continue;
 
-            // Skip cancelled events that leak in when updatedMin is set
             if (string.Equals(ev.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            // Collapse all instances of a recurring series to a single row (the master)
             var masterId = ev.RecurringEventId ?? ev.Id;
             if (ev.RecurringEventId is not null && !seenRecurringMasterIds.Add(ev.RecurringEventId))
                 continue;

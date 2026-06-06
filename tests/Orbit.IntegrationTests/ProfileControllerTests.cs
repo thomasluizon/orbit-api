@@ -32,8 +32,6 @@ public class ProfileControllerTests : IAsyncLifetime
         _client.Dispose();
     }
 
-    // ── GetProfile ────────────────────────────────────────────
-
     [Fact]
     public async Task GetProfile_Authenticated_ReturnsProfile()
     {
@@ -56,8 +54,6 @@ public class ProfileControllerTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    // ── SetTimezone ───────────────────────────────────────────
-
     [Fact]
     public async Task SetTimezone_ValidTimezone_ReturnsNoContent()
     {
@@ -68,7 +64,6 @@ public class ProfileControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        // Verify it was persisted
         var profileResponse = await _client.GetAsync("/api/profile");
         var profile = await profileResponse.Content.ReadFromJsonAsync<ProfileResponse>(JsonOptions);
         profile!.TimeZone.Should().Be("America/New_York");
@@ -84,8 +79,6 @@ public class ProfileControllerTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
-
-    // ── DTOs ──────────────────────────────────────────────────
 
     private record ProfileResponse(string Name, string Email, string? TimeZone);
 }

@@ -44,8 +44,6 @@ public class HabitTests
             DueDate: dueDate)).Value;
     }
 
-    // --- Create tests ---
-
     [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
@@ -132,8 +130,6 @@ public class HabitTests
         habit.ParentHabitId.Should().Be(parentId);
     }
 
-    // --- Log tests ---
-
     [Fact]
     public void Log_ActiveHabit_CreatesLog()
     {
@@ -152,8 +148,7 @@ public class HabitTests
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var habit = CreateOneTimeHabit(dueDate: today);
-        habit.Log(today); // completes one-time
-
+        habit.Log(today);
         var result = habit.Log(today);
 
         result.IsFailure.Should().BeTrue();
@@ -214,7 +209,6 @@ public class HabitTests
     [Fact]
     public void Log_RecurringWithDays_AdvancesToNextMatchingDay()
     {
-        // Monday Jan 6, 2025
         var monday = new DateOnly(2025, 1, 6);
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday };
         var habit = CreateValidHabit(
@@ -225,12 +219,9 @@ public class HabitTests
 
         habit.Log(monday);
 
-        // Should advance to the next matching day (Wednesday Jan 8)
         habit.DueDate.DayOfWeek.Should().BeOneOf(DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday);
         habit.DueDate.Should().BeAfter(monday);
     }
-
-    // --- Unlog tests ---
 
     [Fact]
     public void Unlog_ExistingLog_RemovesAndReturns()
@@ -286,8 +277,6 @@ public class HabitTests
         habit.DueDate.Should().Be(startDate);
     }
 
-    // --- Update tests ---
-
     [Fact]
     public void Update_ValidInput_UpdatesFields()
     {
@@ -313,7 +302,6 @@ public class HabitTests
     [Fact]
     public void Update_MonthlyHabit_ChangingDueDateRefreshesOriginalDayOfMonth()
     {
-        // Create a monthly habit anchored on the 31st (so OriginalDayOfMonth = 31).
         var habit = Habit.Create(new HabitCreateParams(
             UserId: Guid.NewGuid(),
             Title: "Monthly Bills",
@@ -322,8 +310,6 @@ public class HabitTests
             DueDate: new DateOnly(2025, 1, 31))).Value;
         habit.OriginalDayOfMonth.Should().Be(31);
 
-        // User edits the habit to land on the 15th instead. The anchor must follow,
-        // otherwise future advances re-use the stale 31 anchor.
         habit.Update(new HabitUpdateParams(
             "Monthly Bills",
             null,
@@ -339,7 +325,6 @@ public class HabitTests
     [Fact]
     public void Update_DailyToMonthly_SeedsOriginalDayOfMonth()
     {
-        // Create a daily habit (no anchor day needed).
         var habit = Habit.Create(new HabitCreateParams(
             UserId: Guid.NewGuid(),
             Title: "Daily Stretch",
@@ -348,8 +333,6 @@ public class HabitTests
             DueDate: new DateOnly(2025, 3, 10))).Value;
         habit.OriginalDayOfMonth.Should().BeNull();
 
-        // Convert to monthly. The anchor must seed from the new DueDate so future
-        // advances re-anchor correctly.
         habit.Update(new HabitUpdateParams(
             "Daily Stretch",
             null,
@@ -373,8 +356,6 @@ public class HabitTests
             DueDate: new DateOnly(2025, 1, 20))).Value;
         habit.OriginalDayOfMonth.Should().Be(20);
 
-        // Switching away from monthly should clear the anchor so a future flip back
-        // to monthly doesn't pick up a stale day.
         habit.Update(new HabitUpdateParams(
             "Monthly Review",
             null,
@@ -408,8 +389,6 @@ public class HabitTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Frequency quantity must be greater than 0");
     }
-
-    // --- Tag tests ---
 
     [Fact]
     public void AddTag_NewTag_Adds()
@@ -445,8 +424,6 @@ public class HabitTests
 
         habit.Tags.Should().BeEmpty();
     }
-
-    // --- EndDate ---
 
     [Fact]
     public void Create_EndDateOnOneTime_ReturnsFailure()
@@ -521,8 +498,6 @@ public class HabitTests
         result.Error.Should().Contain("End date must be on or after the start date");
     }
 
-    // --- Flexible Habit Create tests ---
-
     [Fact]
     public void Create_Flexible_WithFrequency_ReturnsSuccess()
     {
@@ -579,8 +554,6 @@ public class HabitTests
         result.Value.IsFlexible.Should().BeFalse();
     }
 
-    // --- Flexible Habit Log tests ---
-
     [Fact]
     public void Log_FlexibleHabit_AllowsMultipleLogsPerDay()
     {
@@ -632,8 +605,6 @@ public class HabitTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("already been logged for this date");
     }
-
-    // --- Flexible Habit Update tests ---
 
     [Fact]
     public void Update_SwitchToFlexible_ClearsDays()
@@ -709,8 +680,6 @@ public class HabitTests
         updateResult.IsFailure.Should().BeTrue();
         updateResult.Error.Should().Contain("Flexible habits must have a frequency unit");
     }
-
-    // --- Scheduled Reminders ---
 
     [Fact]
     public void Create_WithValidScheduledReminders_ReturnsSuccess()
@@ -815,8 +784,6 @@ public class HabitTests
         result.IsSuccess.Should().BeTrue();
         habit.ScheduledReminders.Should().HaveCount(1);
     }
-
-    // --- Update with all parameter combinations ---
 
     [Fact]
     public void Update_AllOptionalFields_Applied()
@@ -940,8 +907,6 @@ public class HabitTests
         habit.DueDate.Should().Be(dueDate);
     }
 
-    // --- CatchUpDueDate for all frequency types ---
-
     [Fact]
     public void CatchUpDueDate_Daily_AdvancesToToday()
     {
@@ -958,8 +923,7 @@ public class HabitTests
     [Fact]
     public void CatchUpDueDate_Weekly_AdvancesToNextWeek()
     {
-        var start = new DateOnly(2025, 1, 6); // Monday
-        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
+        var start = new DateOnly(2025, 1, 6);        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
         var today = new DateOnly(2025, 1, 20);
 
         habit.CatchUpDueDate(today);
@@ -1013,8 +977,6 @@ public class HabitTests
         habit.DueDate.Should().Be(today);
     }
 
-    // --- AdvanceDueDate method ---
-
     [Fact]
     public void AdvanceDueDate_Daily_AdvancesPastLogged()
     {
@@ -1029,8 +991,7 @@ public class HabitTests
     [Fact]
     public void AdvanceDueDate_Weekly_AdvancesBy7Days()
     {
-        var start = new DateOnly(2025, 1, 6); // Monday
-        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
+        var start = new DateOnly(2025, 1, 6);        var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Week, frequencyQuantity: 1, dueDate: start);
 
         habit.AdvanceDueDate(start);
 
@@ -1051,19 +1012,16 @@ public class HabitTests
     [Fact]
     public void AdvanceDueDate_Monthly_Jan31_AdvancesToFeb28()
     {
-        // Jan 31 -> Feb 28 (clamped to last day of Feb)
         var start = new DateOnly(2025, 1, 31);
         var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Month, frequencyQuantity: 1, dueDate: start);
 
         habit.AdvanceDueDate(start);
-        // After first advance: Feb 28 (clamped from 31 to 28)
         habit.DueDate.Should().Be(new DateOnly(2025, 2, 28));
     }
 
     [Fact]
     public void AdvanceDueDate_Monthly_Feb28_AdvancesToMar28()
     {
-        // After clamping to Feb 28, next advance goes to Mar 28 (re-anchor uses current DueDate.Day)
         var start = new DateOnly(2025, 2, 28);
         var habit = CreateValidHabit(frequencyUnit: FrequencyUnit.Month, frequencyQuantity: 1, dueDate: start);
 
@@ -1094,12 +1052,9 @@ public class HabitTests
 
         habit.AdvanceDueDate(monday);
 
-        // Should snap to next Friday (Jan 10) since days filter requires Mon or Fri
         habit.DueDate.DayOfWeek.Should().BeOneOf(DayOfWeek.Monday, DayOfWeek.Friday);
         habit.DueDate.Should().BeAfter(monday);
     }
-
-    // --- SkipFlexible ---
 
     [Fact]
     public void SkipFlexible_FlexibleHabit_CreatesSkipLog()
@@ -1111,8 +1066,7 @@ public class HabitTests
         var result = habit.SkipFlexible(today);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Value.Should().Be(0); // Skip log has Value = 0
-        habit.Logs.Should().HaveCount(1);
+        result.Value.Value.Should().Be(0);        habit.Logs.Should().HaveCount(1);
     }
 
     [Fact]
@@ -1130,17 +1084,12 @@ public class HabitTests
     public void SkipFlexible_OneTimeTask_ReturnsFailure()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        // Create a flexible habit that looks like one-time (null frequency) -- but that would fail validation
-        // So test with a proper flexible habit scenario: skip when frequency is null is rejected
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Task", FrequencyUnit.Week, 3, DueDate: today, IsFlexible: true)).Value;
 
-        // The method checks IsFlexible first, so this should succeed
         var result = habit.SkipFlexible(today);
         result.IsSuccess.Should().BeTrue();
     }
-
-    // --- Flexible Habit Log does not advance DueDate ---
 
     [Fact]
     public void Log_FlexibleHabit_MultipleLogsOnSameDay_AllSucceed()
@@ -1156,10 +1105,7 @@ public class HabitTests
         }
 
         habit.Logs.Should().HaveCount(5);
-        habit.DueDate.Should().Be(today); // DueDate unchanged for flexible
-    }
-
-    // --- Log with checklist reset ---
+        habit.DueDate.Should().Be(today);    }
 
     [Fact]
     public void Log_RecurringWithChecklist_ResetsChecklist()
@@ -1179,8 +1125,6 @@ public class HabitTests
         habit.ChecklistItems.Should().AllSatisfy(item => item.IsChecked.Should().BeFalse());
     }
 
-    // --- AdvanceDueDatePastWindow ---
-
     [Fact]
     public void AdvanceDueDatePastWindow_Weekly_GoesToNextMonday()
     {
@@ -1190,7 +1134,6 @@ public class HabitTests
 
         habit.AdvanceDueDatePastWindow(wednesday);
 
-        // Sunday of that week is Jan 12, so next day is Jan 13 (Monday)
         habit.DueDate.Should().Be(new DateOnly(2025, 1, 13));
         habit.DueDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
     }
@@ -1231,8 +1174,6 @@ public class HabitTests
         habit.DueDate.Should().Be(new DateOnly(2025, 3, 16));
     }
 
-    // --- PostponeTo ---
-
     [Fact]
     public void PostponeTo_UpdatesDueDate()
     {
@@ -1242,8 +1183,6 @@ public class HabitTests
 
         habit.DueDate.Should().Be(new DateOnly(2025, 3, 15));
     }
-
-    // --- AddGoal / RemoveGoal ---
 
     [Fact]
     public void AddGoal_NewGoal_AddsSuccessfully()
@@ -1280,8 +1219,6 @@ public class HabitTests
         habit.Goals.Should().BeEmpty();
     }
 
-    // --- SetPosition / SetParentHabitId / UpdateChecklist ---
-
     [Fact]
     public void SetPosition_SetsValue()
     {
@@ -1315,8 +1252,6 @@ public class HabitTests
 
         habit.ChecklistItems.Should().HaveCount(2);
     }
-
-    // --- Create edge cases ---
 
     [Fact]
     public void Create_GeneralHabit_Success()
@@ -1382,8 +1317,6 @@ public class HabitTests
         result.Value.ChecklistItems.Should().HaveCount(1);
     }
 
-    // --- Unlog flexible habit ---
-
     [Fact]
     public void Unlog_FlexibleHabit_RemovesLogButDoesNotResetDueDate()
     {
@@ -1397,6 +1330,5 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         habit.Logs.Should().BeEmpty();
-        habit.DueDate.Should().Be(originalDueDate); // Flexible unlog doesn't reset DueDate
-    }
+        habit.DueDate.Should().Be(originalDueDate);    }
 }

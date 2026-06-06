@@ -58,7 +58,6 @@ public class OrbitDbContext : DbContext
     {
         var usePostgresArrayColumns = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
-        // --- Encryption Value Converters ---
         EncryptionValueConverter? encConverter = null;
         NullableEncryptionValueConverter? nullableEncConverter = null;
 
@@ -262,7 +261,6 @@ public class OrbitDbContext : DbContext
             entity.Property(f => f.Description).HasMaxLength(500);
             entity.Property(f => f.PlanRequirement).HasMaxLength(50);
 
-            // Seed data uses anonymous types for deterministic values (required by EF Core HasData).
             entity.HasData(
                 new { Key = "offline_mode", Enabled = true, PlanRequirement = (string?)null, Description = (string?)"Enable offline mode with background sync", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "ai_chat", Enabled = true, PlanRequirement = (string?)"Free", Description = (string?)"AI chat assistant", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },

@@ -76,7 +76,6 @@ public class GetHabitLogsQueryHandlerTests
     [Fact]
     public async Task Handle_WrongUser_ReturnsHabitNotFound()
     {
-        // Repository filters by both HabitId and UserId so wrong user returns null
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),

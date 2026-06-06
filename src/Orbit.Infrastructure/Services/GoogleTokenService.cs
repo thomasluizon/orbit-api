@@ -12,16 +12,12 @@ public partial class GoogleTokenService(
     IConfiguration configuration,
     ILogger<GoogleTokenService> logger) : IGoogleTokenService
 {
-    // S1075: Stable Google OAuth API endpoint - not configurable
-    private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token"; // NOSONAR
-
+    private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token";
     public async Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default)
     {
         if (user.GoogleAccessToken is null)
             return null;
 
-        // Legacy behavior: attempt refresh, fall back to stored access token on failure.
-        // Auto-sync uses TryRefreshAsync directly to distinguish invalid_grant from transient errors.
         if (user.GoogleRefreshToken is null)
             return user.GoogleAccessToken;
 
@@ -98,7 +94,6 @@ public partial class GoogleTokenService(
         }
         catch (JsonException)
         {
-            // Non-JSON body, leave errorCode null
         }
 
         if (errorCode is "invalid_grant" or "unauthorized_client")

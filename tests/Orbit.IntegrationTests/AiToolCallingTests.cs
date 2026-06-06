@@ -21,7 +21,6 @@ public class AiToolCallingTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
@@ -55,15 +54,11 @@ public class AiToolCallingTests : IAsyncLifetime
 
                 await _client.DeleteAsync($"/api/users/{_testUserId}");
             }
-            catch { /* cleanup best-effort */ }
+            catch { }
         }
 
         _client.Dispose();
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  Habit Creation
-    // ───────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task CreateHabit_SimpleDaily_CreatesWithCorrectFrequency()
@@ -126,10 +121,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.Actions[0].Status.Should().Be("Success");
     }
 
-    // ───────────────────────────────────────────────────────────────
-    //  Habit Logging
-    // ───────────────────────────────────────────────────────────────
-
     [Fact]
     public async Task LogHabit_ExistingHabit_LogsSuccessfully()
     {
@@ -166,10 +157,6 @@ public class AiToolCallingTests : IAsyncLifetime
 
         response.Actions.Should().Contain(a => a.Type == "LogHabit" && a.Status == "Success");
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  Habit Update
-    // ───────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task UpdateHabit_ChangeTitle_UpdatesTitle()
@@ -219,10 +206,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.Actions[0].Status.Should().Be("Success");
     }
 
-    // ───────────────────────────────────────────────────────────────
-    //  Habit Deletion
-    // ───────────────────────────────────────────────────────────────
-
     [Fact]
     public async Task DeleteHabit_SingleHabit_DeletesSuccessfully()
     {
@@ -249,10 +232,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
-    // ───────────────────────────────────────────────────────────────
-    //  Skip Habit
-    // ───────────────────────────────────────────────────────────────
-
     [Fact]
     public async Task SkipHabit_RecurringDueToday_SkipsSuccessfully()
     {
@@ -264,10 +243,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.Actions[0].Type.Should().Be("SkipHabit");
         response.Actions[0].Status.Should().Be("Success");
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  Sub-habits
-    // ───────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task CreateSubHabit_UnderExistingParent_CreatesCorrectly()
@@ -306,10 +281,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.Actions[0].Status.Should().Be("Success");
     }
 
-    // ───────────────────────────────────────────────────────────────
-    //  Tags
-    // ───────────────────────────────────────────────────────────────
-
     [Fact]
     public async Task AssignTags_ToExistingHabit_AssignsCorrectly()
     {
@@ -321,10 +292,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.Actions[0].Type.Should().Be("AssignTags");
         response.Actions[0].Status.Should().Be("Success");
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  Bulk Operations
-    // ───────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task BulkCreate_MultipleHabits_CreatesAll()
@@ -359,10 +326,6 @@ public class AiToolCallingTests : IAsyncLifetime
         response.Actions.Should().Contain(a => a.Type == "CreateHabit");
     }
 
-    // ───────────────────────────────────────────────────────────────
-    //  Edge Cases
-    // ───────────────────────────────────────────────────────────────
-
     [Fact]
     public async Task OutOfScope_GeneralQuestion_NoActions()
     {
@@ -389,10 +352,6 @@ public class AiToolCallingTests : IAsyncLifetime
 
         response.Actions.Should().Contain(a => a.Type == "SuggestBreakdown");
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  Helpers
-    // ───────────────────────────────────────────────────────────────
 
     private async Task<ChatResponse> SendChat(string message, int maxRetries = 2)
     {
@@ -454,10 +413,6 @@ public class AiToolCallingTests : IAsyncLifetime
 
         return await IntegrationTestHelpers.ReadCreatedIdAsync(response, JsonOptions);
     }
-
-    // ───────────────────────────────────────────────────────────────
-    //  DTOs
-    // ───────────────────────────────────────────────────────────────
 
     private record LoginResponse(Guid UserId, string Token, string Name, string Email);
     private record ChatResponse(

@@ -43,8 +43,6 @@ public class ConfigControllerTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    // --- GetConfig ---
-
     [Fact]
     public async Task GetConfig_ReturnsOk()
     {

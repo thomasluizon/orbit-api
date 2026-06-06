@@ -39,8 +39,6 @@ public class ResendEmailServiceTests
         _sut = new ResendEmailService(factory, resendSettings, frontendSettings, logger);
     }
 
-    // --- SendVerificationCodeAsync ---
-
     [Fact]
     public async Task SendVerificationCodeAsync_SuccessfulResponse_DoesNotThrow()
     {
@@ -94,8 +92,6 @@ public class ResendEmailServiceTests
         await act.Should().NotThrowAsync();
     }
 
-    // --- SendWelcomeEmailAsync ---
-
     [Fact]
     public async Task SendWelcomeEmailAsync_SuccessfulResponse_SendsEmail()
     {
@@ -117,8 +113,6 @@ public class ResendEmailServiceTests
         _handler.LastRequestBody.Should().Contain("Boas-vindas");
     }
 
-    // --- SendAccountDeletionCodeAsync ---
-
     [Fact]
     public async Task SendAccountDeletionCodeAsync_English_SendsEnglish()
     {
@@ -139,8 +133,6 @@ public class ResendEmailServiceTests
         _handler.LastRequestBody.Should().Contain("Confirme a exclus");
     }
 
-    // --- SendSupportEmailAsync ---
-
     [Fact]
     public async Task SendSupportEmailAsync_SendsToSupportEmail()
     {
@@ -152,12 +144,9 @@ public class ResendEmailServiceTests
         _handler.LastRequestBody.Should().Contain("reply_to");
     }
 
-    // --- Test account detection ---
-
     [Fact]
     public async Task SendVerificationCodeAsync_TestAccount_SkipsSend()
     {
-        // Set up a test account environment variable
         Environment.SetEnvironmentVariable("TEST_ACCOUNTS", "testaccount@test.com:123456");
         try
         {
@@ -165,7 +154,6 @@ public class ResendEmailServiceTests
 
             await _sut.SendVerificationCodeAsync("testaccount@test.com", "123456");
 
-            // Should not have made any HTTP request since it's a test account
             _handler.LastRequest.Should().BeNull();
         }
         finally

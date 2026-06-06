@@ -116,8 +116,6 @@ public class UpdateHabitToolTests
         result.Error.Should().Contain("habit_id is required");
     }
 
-    // ── Update days ──
-
     [Fact]
     public async Task UpdateDays_ChangesDaySchedule()
     {
@@ -136,8 +134,6 @@ public class UpdateHabitToolTests
         habit.Days.Should().Contain(DayOfWeek.Wednesday);
         habit.Days.Should().Contain(DayOfWeek.Friday);
     }
-
-    // ── Update due time ──
 
     [Fact]
     public async Task UpdateDueTime_ChangesTime()
@@ -163,8 +159,6 @@ public class UpdateHabitToolTests
         habit.DueTime.Should().BeNull();
     }
 
-    // ── Update checklist ──
-
     [Fact]
     public async Task UpdateChecklist_ReplacesChecklistItems()
     {
@@ -187,8 +181,6 @@ public class UpdateHabitToolTests
         habit.ChecklistItems[1].IsChecked.Should().BeTrue();
     }
 
-    // ── Update reminder times ──
-
     [Fact]
     public async Task UpdateReminderTimes_ChangesReminders()
     {
@@ -207,8 +199,6 @@ public class UpdateHabitToolTests
         habit.ReminderEnabled.Should().BeTrue();
         habit.ReminderTimes.Should().BeEquivalentTo([5, 30, 60]);
     }
-
-    // ── Update description ──
 
     [Fact]
     public async Task UpdateDescription_ChangesDescription()
@@ -270,8 +260,6 @@ public class UpdateHabitToolTests
         habit.Description.Should().BeNull();
     }
 
-    // ── Toggle bad habit ──
-
     [Fact]
     public async Task ToggleBadHabit_SetsIsBadHabit()
     {
@@ -284,8 +272,6 @@ public class UpdateHabitToolTests
         habit.IsBadHabit.Should().BeTrue();
     }
 
-    // ── Toggle flexible ──
-
     [Fact]
     public async Task ToggleFlexible_SetsIsFlexible()
     {
@@ -297,8 +283,6 @@ public class UpdateHabitToolTests
         result.Success.Should().BeTrue();
         habit.IsFlexible.Should().BeTrue();
     }
-
-    // ── End date operations ──
 
     [Fact]
     public async Task SetEndDate_UpdatesEndDate()
@@ -324,8 +308,6 @@ public class UpdateHabitToolTests
         habit.EndDate.Should().BeNull();
     }
 
-    // ── Update due date ──
-
     [Fact]
     public async Task UpdateDueDate_ChangesDueDate()
     {
@@ -337,8 +319,6 @@ public class UpdateHabitToolTests
         result.Success.Should().BeTrue();
         habit.DueDate.Should().Be(new DateOnly(2026, 6, 15));
     }
-
-    // ── Scheduled reminders ──
 
     [Fact]
     public async Task UpdateScheduledReminders_ReplacesReminders()
@@ -360,8 +340,6 @@ public class UpdateHabitToolTests
         habit.ScheduledReminders.Should().HaveCount(2);
     }
 
-    // ── No changes provided ──
-
     [Fact]
     public async Task NoFieldsProvided_KeepsAllExistingValues()
     {
@@ -375,8 +353,6 @@ public class UpdateHabitToolTests
         habit.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         habit.FrequencyQuantity.Should().Be(1);
     }
-
-    // ── Multiple fields at once ──
 
     [Fact]
     public async Task UpdateMultipleFields_AllFieldsChange()
@@ -412,8 +388,6 @@ public class UpdateHabitToolTests
         habit.ReminderTimes.Should().BeEquivalentTo([15]);
         habit.ChecklistItems.Should().HaveCount(1);
     }
-
-    // ── Absent optional fields are preserved ──
 
     [Fact]
     public async Task AbsentDueTime_PreservesExisting()

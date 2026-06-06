@@ -93,8 +93,6 @@ public partial class ProcessUserChatCommandHandler(
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
 
-    // Mirrors SendSupportCommandValidator's Message MaximumLength so the appended
-    // trace line never pushes the support body past what the command will accept.
     private const int MaxSupportMessageLength = 5000;
 
     public async Task<Result<ChatResponse>> Handle(
@@ -104,7 +102,6 @@ public partial class ProcessUserChatCommandHandler(
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
 
-        // 1. Load lightweight context for system prompt (no Logs, no metrics)
         LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -124,7 +121,6 @@ public partial class ProcessUserChatCommandHandler(
                 cancellationToken)
             : [];
 
-        // Check AI message limits
         var messageGate = await execution.PayGateService.CanSendAiMessage(request.UserId, cancellationToken);
         if (messageGate.IsFailure)
             return messageGate.PropagateError<ChatResponse>();
@@ -154,7 +150,6 @@ public partial class ProcessUserChatCommandHandler(
         dbStopwatch.Stop();
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
 
-        // 2. Build slim system prompt (habit/goal indexes only, details fetched via read tools)
         var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(
             promptHabits, userFacts,
             HasImage: request.ImageData is not null,
@@ -170,7 +165,6 @@ public partial class ProcessUserChatCommandHandler(
             parameters = t.GetParameterSchema()
         }).ToList();
 
-        // 3. Call AI with tool declarations
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -191,7 +185,6 @@ public partial class ProcessUserChatCommandHandler(
 
         var aiResponse = response.Value;
 
-        // 4. Agentic tool-calling loop
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
         int iteration = 0;
@@ -215,7 +208,6 @@ public partial class ProcessUserChatCommandHandler(
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iteration, executionResults.ActionResults.Count);
 
-        // 5. Persist all changes in a single unit of work
         LogSavingChanges(logger);
         var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -229,10 +221,8 @@ public partial class ProcessUserChatCommandHandler(
         saveStopwatch.Stop();
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
-        // 6. Extract AI message (strip JSON wrapper if model didn't use function calling)
         var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
 
-        // 7. Fire-and-forget: fact extraction + message counter (non-blocking background work)
         RunBackgroundPostResponseWork(
             request.UserId,
             request.Message,
@@ -272,8 +262,6 @@ public partial class ProcessUserChatCommandHandler(
 
         var toolResults = new List<AiToolCallResult>();
 
-        // Sort tool calls by each tool's declared Order (parents before sub-habits, then tags);
-        // unordered tools default to int.MaxValue and run last, ties broken by stable OrderBy.
         var orderedCalls = aiResponse.ToolCalls!
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
@@ -286,7 +274,6 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.Add(actionResult, operationResult, policyDenial, pendingOperation);
         }
 
-        // Send results back to the AI for next iteration or final message
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, cancellationToken);
         if (continueResult.IsFailure)
         {
@@ -390,16 +377,10 @@ public partial class ProcessUserChatCommandHandler(
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
         {
-            // Serialize null as an empty array literal — JsonSerializer.Serialize(null)
-            // returns the string "null" which bypasses PendingClarification.Create's
-            // "[]" default and would break ExtractQuickActionValues on read.
             var quickActionsJson = payload.QuickActions is null
                 ? "[]"
                 : JsonSerializer.Serialize(payload.QuickActions);
 
-            // Cap the stashed args so a runaway tool argument can't bloat the table.
-            // 16 KB covers realistic create_habit calls (a few sub_habits with checklists
-            // and descriptions); larger blows past expected payloads.
             var partialArgsJson = call.Args.GetRawText();
             if (partialArgsJson.Length > AppConstants.MaxClarificationArgsLength)
             {
@@ -633,7 +614,6 @@ public partial class ProcessUserChatCommandHandler(
         }
         catch (JsonException)
         {
-            // Not valid JSON, use as-is
         }
 
         return text;
@@ -951,7 +931,6 @@ public partial class ProcessUserChatCommandHandler(
         var suggestions = new List<AiAction>();
         foreach (var item in subHabitsEl.EnumerateArray())
             suggestions.Add(ParseSingleSubHabit(item));
-
 
         return suggestions.Count > 0 ? suggestions : null;
     }

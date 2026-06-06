@@ -337,7 +337,6 @@ public class AgentOperationExecutor(
         }
         catch
         {
-            // Audit failures must not block the operation path.
         }
     }
 

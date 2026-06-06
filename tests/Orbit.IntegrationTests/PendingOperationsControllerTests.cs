@@ -41,8 +41,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         var login = await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
         _userId = login.UserId;
 
-        // The api_keys.manage capability is plan-gated to Pro; an active trial grants Pro access
-        // so policy evaluation reaches the step-up gate instead of denying on plan.
         await GrantProAccessAsync(_factory, _userId);
     }
 
@@ -51,8 +49,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         _client.Dispose();
         return Task.CompletedTask;
     }
-
-    // ── confirm ──────────────────────────────────────────────
 
     [Fact]
     public async Task Confirm_PersistsConfirmationToken()
@@ -86,8 +82,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         body!.Error.Should().NotBeNullOrEmpty();
     }
 
-    // ── step-up ──────────────────────────────────────────────
-
     [Fact]
     public async Task StepUp_IssuesChallenge_AndEmailsCode()
     {
@@ -120,8 +114,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         body!.Error.Should().Be("Please wait before requesting another step-up code.");
     }
 
-    // ── step-up/verify ───────────────────────────────────────
-
     [Fact]
     public async Task StepUpVerify_ValidCode_Succeeds()
     {
@@ -152,8 +144,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
         body!.Error.Should().Be("Invalid step-up code.");
     }
-
-    // ── execute ──────────────────────────────────────────────
 
     [Fact]
     public async Task Execute_WithoutStepUpSatisfied_IsNotExecuted()
@@ -203,8 +193,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         body!.Error.Should().NotBeNullOrEmpty();
     }
 
-    // ── helpers ──────────────────────────────────────────────
-
     private static Guid SeedStepUpPendingOperation(IntegrationTestWebApplicationFactory factory, Guid userId)
     {
         using var scope = factory.Services.CreateScope();
@@ -212,10 +200,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         var store = scope.ServiceProvider.GetRequiredService<IPendingAgentOperationStore>();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        // ArgumentsJson is a jsonb column, so reading it back yields Postgres-normalized text
-        // (reordered keys, spaces after separators). The execute-time fingerprint is derived
-        // from that normalized text, so the seed must store args already in jsonb-canonical
-        // form for the fingerprint to match and confirmation to be consumable.
         var canonicalArguments = NormalizeToJsonb(dbContext, CreateApiKeyArgumentsJson);
 
         var capability = catalog.GetCapability(AgentCapabilityIds.ApiKeysManage)!;
@@ -293,8 +277,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         return challenge!;
     }
 
-    // ── DTOs ─────────────────────────────────────────────────
-
     private record ConfirmResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc);
     private record StepUpChallengeResponse(Guid ChallengeId, Guid PendingOperationId, DateTime ExpiresAtUtc);
     private record OperationResult(AgentOperationStatus Status, string? PolicyReason);
@@ -302,10 +284,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
     private record ApiKeyListItem(Guid Id, string Name);
     private record ErrorResponse(string Error);
 
-    // The auth limiter (5/min, partitioned by user) is shared across every step-up and
-    // verify call. Exhausting it on the class-wide account would bleed 429s into the other
-    // pending-ops tests whenever they share a clock-minute, so this case gets its own user
-    // and its own exhausted bucket.
     [Collection("Sequential")]
     public sealed class RateLimitTests : IAsyncLifetime
     {
@@ -348,9 +326,6 @@ public class PendingOperationsControllerTests : IAsyncLifetime
         [Fact]
         public async Task StepUpVerify_ExceedsAuthRateLimit_ReturnsTooManyRequests()
         {
-            // The auth limiter trips before the service-level max-attempts gate can ever be
-            // reached over HTTP, so the HTTP boundary's repeated-verify protection is the rate
-            // limiter, not max-attempts.
             HttpStatusCode? rateLimited = null;
             for (var attempt = 0; attempt < 6 && rateLimited is null; attempt++)
             {

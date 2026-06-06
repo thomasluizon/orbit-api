@@ -59,13 +59,11 @@ public partial class BulkCreateHabitsCommandHandler(
 {
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
-        // Count total habits being created (parents only, sub-habits don't count toward limit)
         var parentCount = request.Habits.Count;
         var habitGate = await payGate.CanCreateHabits(request.UserId, parentCount, cancellationToken);
         if (habitGate.IsFailure)
             return habitGate.PropagateError<BulkCreateResult>();
 
-        // Check sub-habit access if any items have sub-habits
         var hasSubHabits = request.Habits.Any(h => h.SubHabits is { Count: > 0 });
         if (hasSubHabits)
         {
@@ -77,7 +75,6 @@ public partial class BulkCreateHabitsCommandHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
 
-        // Compute the starting root position so all created parents get contiguous 0..N-1 (or max+1..) positions.
         var existingRoots = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == null && !h.IsDeleted,
             cancellationToken);
@@ -148,7 +145,6 @@ public partial class BulkCreateHabitsCommandHandler(
             var parentHabit = habitResult.Value;
             await habitRepository.AddAsync(parentHabit, cancellationToken);
 
-            // Create child habits if any
             if (item.SubHabits is { Count: > 0 })
             {
                 var subPositionCursor = 0;
@@ -225,7 +221,6 @@ public partial class BulkCreateHabitsCommandHandler(
         if (createdHabitIds.Count == 0)
             return;
 
-        // Look up which habits have GoogleEventIds and map them back to suggestions
         var createdHabits = await habitRepository.FindAsync(
             h => createdHabitIds.Contains(h.Id) && h.GoogleEventId != null,
             cancellationToken);

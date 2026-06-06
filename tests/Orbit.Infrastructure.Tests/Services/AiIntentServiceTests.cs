@@ -17,8 +17,6 @@ public class AiIntentServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
-    // ── NormalizeSchemaTypes ──
-
     [Fact]
     public void NormalizeSchemaTypes_UppercaseTypes_ConvertsToLowercase()
     {
@@ -88,7 +86,6 @@ public class AiIntentServiceTests
     [Fact]
     public void NormalizeSchemaTypes_TypeInValue_NotInTypeField_Unchanged()
     {
-        // The word OBJECT appears as a value, not in a "type" field
         var input = """{"name": "OBJECT", "desc": "STRING value"}""";
         var result = InvokeNormalizeSchemaTypes(input);
 
@@ -112,14 +109,11 @@ public class AiIntentServiceTests
     [Fact]
     public void NormalizeSchemaTypes_ExtraWhitespace_StillMatches()
     {
-        // The regex handles optional whitespace around the colon
         var input = """{"type"  :  "STRING"}""";
         var result = InvokeNormalizeSchemaTypes(input);
 
         result.Should().Contain("\"string\"");
     }
-
-    // ── ConvertToSdkTool ──
 
     [Fact]
     public void ConvertToSdkTool_ValidDeclaration_ReturnsChatTool()
@@ -167,8 +161,6 @@ public class AiIntentServiceTests
         result.Should().NotBeNull();
     }
 
-    // ── SerializeOptions ──
-
     [Fact]
     public void SerializeOptions_UsesCamelCase()
     {
@@ -188,8 +180,6 @@ public class AiIntentServiceTests
 
         options.DefaultIgnoreCondition.Should().Be(JsonIgnoreCondition.WhenWritingNull);
     }
-
-    // ── ConvertToSdkTool extended scenarios ──
 
     [Fact]
     public void ConvertToSdkTool_WithNestedParameters_ReturnsTool()
@@ -258,8 +248,6 @@ public class AiIntentServiceTests
         result.Should().NotBeNull();
     }
 
-    // ── NormalizeSchemaTypes with multiple occurrences ──
-
     [Fact]
     public void NormalizeSchemaTypes_MultipleOccurrencesOfSameType_AllNormalized()
     {
@@ -267,7 +255,6 @@ public class AiIntentServiceTests
         var result = InvokeNormalizeSchemaTypes(input);
 
         result.Should().NotContain("STRING");
-        // Count occurrences of "string" to verify all three were normalized
         var count = result.Split("\"string\"").Length - 1;
         count.Should().Be(3);
     }
@@ -286,13 +273,9 @@ public class AiIntentServiceTests
         result.Should().NotContain("STRING");
     }
 
-    // ── ConvertToSdkTool with camelCase serialization ──
-
     [Fact]
     public void ConvertToSdkTool_PascalCaseProperties_SerializedAsCamelCase()
     {
-        // The serializer uses CamelCase policy, so PascalCase properties
-        // in the C# object become camelCase in JSON before conversion
         var declaration = new
         {
             name = "test_tool",
@@ -312,8 +295,6 @@ public class AiIntentServiceTests
         result.Should().NotBeNull();
     }
 
-    // ── ConvertToSdkTool null handling ──
-
     [Fact]
     public void ConvertToSdkTool_NullDescription_ReturnsTool()
     {
@@ -323,12 +304,9 @@ public class AiIntentServiceTests
             description = (string?)null
         };
 
-        // NullDescription serializes as absent (WhenWritingNull)
         var result = InvokeConvertToSdkTool(declaration);
         result.Should().NotBeNull();
     }
-
-    // ── NormalizeSchemaTypes preserves non-type content ──
 
     [Fact]
     public void NormalizeSchemaTypes_WithDescriptions_OnlyChangesTypeFields()
@@ -336,14 +314,10 @@ public class AiIntentServiceTests
         var input = """{"type": "OBJECT", "description": "An OBJECT that does STRING things", "properties": {"name": {"type": "STRING"}}}""";
         var result = InvokeNormalizeSchemaTypes(input);
 
-        // type fields normalized
         result.Should().Contain("\"object\"");
         result.Should().Contain("\"string\"");
-        // description content preserved
         result.Should().Contain("An OBJECT that does STRING things");
     }
-
-    // ── ConvertToSdkTool with enum arrays ──
 
     [Fact]
     public void ConvertToSdkTool_WithEnumProperty_ReturnsTool()
@@ -370,8 +344,6 @@ public class AiIntentServiceTests
         result.Should().NotBeNull();
     }
 
-    // ── NormalizeSchemaTypes with colons and spacing variations ──
-
     [Fact]
     public void NormalizeSchemaTypes_CompactJson_NormalizesCorrectly()
     {
@@ -384,11 +356,9 @@ public class AiIntentServiceTests
     [Fact]
     public void NormalizeSchemaTypes_MixedCaseNotInEnum_Unchanged()
     {
-        // Only the exact uppercase values should match (OBJECT, STRING, etc.)
         var input = """{"type": "Object"}""";
         var result = InvokeNormalizeSchemaTypes(input);
 
-        // "Object" is mixed case and should not match the regex
         result.Should().Contain("\"Object\"");
     }
 
@@ -433,8 +403,6 @@ public class AiIntentServiceTests
         transcript.Should().Contain("ASSISTANT: real reply");
         transcript.Should().NotContain("forged");
     }
-
-    // ── Helpers ──
 
     private static string InvokeNormalizeSchemaTypes(string json)
     {

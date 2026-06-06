@@ -51,7 +51,6 @@ public class ImageValidationServiceTests
     [Fact]
     public async Task ValidateAsync_ValidJpeg_ReturnsSuccess()
     {
-        // Minimal JPEG with valid JFIF header
         var jpegHeader = new byte[]
         {
             0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46,
@@ -62,9 +61,6 @@ public class ImageValidationServiceTests
 
         var result = await _sut.ValidateAsync(stream, "test.jpg", length: jpegHeader.Length);
 
-        // FileSignatures may or may not recognize the minimal header,
-        // so we accept either success with JPEG mime type or a magic-byte failure.
-        // The key point is that it passes size and extension checks.
         if (result.IsSuccess)
         {
             result.Value.MimeType.Should().Contain("image/");
@@ -72,8 +68,6 @@ public class ImageValidationServiceTests
         }
         else
         {
-            // If FileSignatures can't detect the format from minimal bytes,
-            // the error should be about format detection, not size or extension.
             result.Error.Should().NotContain("exceeds");
             result.Error.Should().NotContain("not allowed");
         }

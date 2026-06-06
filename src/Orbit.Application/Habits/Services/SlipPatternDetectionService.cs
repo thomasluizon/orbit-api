@@ -20,14 +20,12 @@ public static class SlipPatternDetectionService
         if (recentLogs.Count < MinTotalLogs)
             return null;
 
-        // Convert to user local time and extract (DayOfWeek, Hour)
         var localEntries = recentLogs.Select(l =>
         {
             var localTime = TimeZoneInfo.ConvertTimeFromUtc(l.CreatedAtUtc, userTimeZone);
             return (localTime.DayOfWeek, localTime.Hour);
         }).ToList();
 
-        // Group by DayOfWeek, filter to days with 3+ occurrences
         var dayGroups = localEntries
             .GroupBy(e => e.DayOfWeek)
             .Where(g => g.Count() >= MinTotalLogs)
@@ -40,7 +38,6 @@ public static class SlipPatternDetectionService
 
         foreach (var dayGroup in dayGroups)
         {
-            // Bucket hours into 2-hour windows, pick peak window
             var hourBuckets = dayGroup
                 .GroupBy(e => e.Hour / 2)
                 .OrderByDescending(g => g.Count())
@@ -48,7 +45,6 @@ public static class SlipPatternDetectionService
 
             var topBucket = hourBuckets[0];
 
-            // Only assign a peak hour if the top bucket has meaningful concentration
             int? peakHour = topBucket.Count() >= MinBucketCountForTimePeak
                 ? topBucket.Key * 2 + 1
                 : null;

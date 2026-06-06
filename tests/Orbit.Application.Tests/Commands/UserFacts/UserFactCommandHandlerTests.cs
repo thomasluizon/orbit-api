@@ -23,8 +23,6 @@ public class UserFactCommandHandlerTests
             .Returns(Task.FromResult(Result.Success()));
     }
 
-    // ----- CreateUserFact -----
-
     [Fact]
     public async Task CreateFact_Valid_CreatesAndSaves()
     {
@@ -52,7 +50,6 @@ public class UserFactCommandHandlerTests
         _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
             .Returns(50);
 
-        // Return 50 existing facts
         var existingFacts = Enumerable.Range(0, 50)
             .Select(i => UserFact.Create(UserId, $"Fact {i}", null).Value)
             .ToList();
@@ -86,8 +83,6 @@ public class UserFactCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("similar fact already exists");
     }
-
-    // ----- UpdateUserFact -----
 
     [Fact]
     public async Task UpdateFact_Valid_UpdatesAndSaves()
@@ -128,8 +123,6 @@ public class UserFactCommandHandlerTests
         result.Error.Should().Be("Fact not found.");
     }
 
-    // ----- DeleteUserFact -----
-
     [Fact]
     public async Task DeleteFact_Valid_SoftDeletesAndSaves()
     {
@@ -149,8 +142,6 @@ public class UserFactCommandHandlerTests
         fact.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
-
-    // ----- BulkDeleteUserFacts -----
 
     [Fact]
     public async Task BulkDeleteFacts_Valid_SoftDeletesAllAndSaves()

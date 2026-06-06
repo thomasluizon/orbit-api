@@ -78,20 +78,16 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_EmptyHabits_ShowsNoHabitsMessage()
     {
-        // Arrange
         var context = CreateContext(habits: []);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("0 total");
     }
 
     [Fact]
     public void Build_WithHabits_IncludesHabitTitles()
     {
-        // Arrange
         var habits = new List<Habit>
         {
             CreateHabit("Morning Routine"),
@@ -99,10 +95,8 @@ public class ActiveHabitsSectionTests
         };
         var context = CreateContext(habits: habits);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("Morning Routine");
         result.Should().Contain("Exercise");
     }
@@ -121,16 +115,13 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_WithParentAndChildren_ShowsHierarchy()
     {
-        // Arrange
         var parent = CreateHabit("Fitness");
         var child = CreateHabit("Push-ups", parentId: parent.Id);
         var habits = new List<Habit> { parent, child };
         var context = CreateContext(habits: habits);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("Fitness");
         result.Should().Contain("Push-ups");
     }
@@ -138,7 +129,6 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_CompletedHabit_IsExcludedFromIndex()
     {
-        // Arrange -- use a one-time task, which becomes IsCompleted when logged
         var oneTimeHabit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Done Task", null, null,
             DueDate: Today)).Value;
@@ -146,10 +136,8 @@ public class ActiveHabitsSectionTests
 
         var context = CreateContext(habits: [oneTimeHabit]);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().NotContain("Done Task");
         result.Should().Contain("0 total");
     }
@@ -157,7 +145,6 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_CompletedParentWithActiveChild_KeepsHierarchyInIndex()
     {
-        // Arrange
         var parent = Habit.Create(new HabitCreateParams(
             ValidUserId, "Fitness", null, null,
             DueDate: Today)).Value;
@@ -165,10 +152,8 @@ public class ActiveHabitsSectionTests
         var child = CreateHabit("Push-ups", parentId: parent.Id);
         var context = CreateContext(habits: [parent, child]);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("Fitness");
         result.Should().Contain("Push-ups");
         result.Should().Contain("COMPLETED");
@@ -178,70 +163,55 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_BadHabit_ShowsBadLabel()
     {
-        // Arrange
         var habit = CreateHabit("Smoking", isBadHabit: true);
         var context = CreateContext(habits: [habit]);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("BAD");
     }
 
     [Fact]
     public void Build_GeneralHabit_ShowsGeneralLabel()
     {
-        // Arrange
         var habit = CreateHabit("Read Books", isGeneral: true);
         var context = CreateContext(habits: [habit]);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("GENERAL");
     }
 
     [Fact]
     public void Build_OverdueHabit_ShowsOverdueLabel()
     {
-        // Arrange
         var habit = CreateHabit("Overdue", dueDate: Today.AddDays(-3));
         var context = CreateContext(habits: [habit], userToday: Today);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("OVERDUE");
     }
 
     [Fact]
     public void Build_HabitDueToday_ShowsTodayLabel()
     {
-        // Arrange
         var habit = CreateHabit("Due Today", dueDate: Today);
         var context = CreateContext(habits: [habit], userToday: Today);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("TODAY");
     }
 
     [Fact]
     public void Build_NullUserToday_OmitsTodayAndOverdueLabels()
     {
-        // Arrange
         var habit = CreateHabit("Some Habit", dueDate: Today.AddDays(-3));
         var context = CreateContext(habits: [habit], userToday: null, useDefaultToday: false);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().NotContain("TODAY");
         result.Should().NotContain("OVERDUE");
     }
@@ -249,16 +219,12 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_LongTitle_TruncatesTo100Chars()
     {
-        // Arrange
         var longTitle = new string('A', 150);
         var habit = CreateHabit(longTitle);
         var context = CreateContext(habits: [habit]);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
-        // The title should be truncated to 100 characters in the output
         result.Should().Contain(new string('A', 97) + "...");
         result.Should().NotContain(new string('A', 101));
     }
@@ -266,13 +232,10 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_IncludesQueryInstructions()
     {
-        // Arrange
         var context = CreateContext(habits: [CreateHabit("Test")]);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("query_habits");
         result.Should().Contain("create_habit");
     }
@@ -280,17 +243,14 @@ public class ActiveHabitsSectionTests
     [Fact]
     public void Build_CountsSummary_IncludesGeneralDueTodayOverdue()
     {
-        // Arrange
         var generalHabit = CreateHabit("Read", isGeneral: true);
         var todayHabit = CreateHabit("Exercise", dueDate: Today);
         var overdueHabit = CreateHabit("Meditate", dueDate: Today.AddDays(-2));
         var habits = new List<Habit> { generalHabit, todayHabit, overdueHabit };
         var context = CreateContext(habits: habits, userToday: Today);
 
-        // Act
         var result = _sut.Build(context);
 
-        // Assert
         result.Should().Contain("3 total");
         result.Should().Contain("1 general");
         result.Should().Contain("1 due today");

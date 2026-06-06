@@ -20,8 +20,6 @@ public class AuthCommandHandlerTests
 
     private const string TestEmail = "test@example.com";
 
-    // ===== SendCode =====
-
     [Fact]
     public async Task SendCode_Valid_CachesCodeAndSendsEmail()
     {
@@ -31,12 +29,10 @@ public class AuthCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Verify code was cached
         _cache.TryGetValue($"verify:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
         entry.Should().NotBeNull();
         entry!.Code.Should().HaveLength(6);
         entry.Attempts.Should().Be(0);
-        // Verify email was sent
         await _emailService.Received(1).SendVerificationCodeAsync(
             TestEmail, Arg.Any<string>(), "en", Arg.Any<CancellationToken>());
     }
@@ -44,7 +40,6 @@ public class AuthCommandHandlerTests
     [Fact]
     public async Task SendCode_RateLimit_ReturnsFailure()
     {
-        // Pre-populate cache with a recent entry (less than 60s ago)
         var existingEntry = new VerificationEntry("123456", 0, DateTime.UtcNow);
         _cache.Set($"verify:{TestEmail}", existingEntry,
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
@@ -59,8 +54,6 @@ public class AuthCommandHandlerTests
         await _emailService.DidNotReceive().SendVerificationCodeAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
-
-    // ===== VerifyCode =====
 
     [Fact]
     public async Task VerifyCode_Valid_ReturnsLoginResponse()
@@ -79,7 +72,6 @@ public class AuthCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
         result.Value.Email.Should().Be(TestEmail);
-        // Cache should be cleared after successful verification
         _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
     }
 
@@ -95,7 +87,6 @@ public class AuthCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid");
-        // Attempt count should have incremented
         _cache.TryGetValue($"verify:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
         entry!.Attempts.Should().Be(1);
     }
@@ -103,7 +94,6 @@ public class AuthCommandHandlerTests
     [Fact]
     public async Task VerifyCode_MaxAttempts_ReturnsFailure()
     {
-        // Set up entry with 3 attempts already (max reached)
         var entry = new VerificationEntry("123456", 3, DateTime.UtcNow);
         _cache.Set($"verify:{TestEmail}", entry,
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
@@ -115,7 +105,6 @@ public class AuthCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Too many attempts");
-        // Cache entry should be removed
         _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
     }
 
@@ -123,7 +112,6 @@ public class AuthCommandHandlerTests
     public async Task VerifyCode_NewUser_CreatesAccount()
     {
         SetupCacheWithCode("123456");
-        // No existing user - FindOneTrackedAsync returns null by default with NSubstitute
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
@@ -153,11 +141,8 @@ public class AuthCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Token.Should().Be("jwt-token");
-        // Should NOT create a new user
         await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
-
-    // ----- Helpers -----
 
     private void SetupCacheWithCode(string code)
     {

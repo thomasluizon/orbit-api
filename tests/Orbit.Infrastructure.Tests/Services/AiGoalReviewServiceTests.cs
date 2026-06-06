@@ -12,11 +12,6 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// </summary>
 public class AiGoalReviewServiceTests
 {
-    // The service validates goalsContext before calling the AI client.
-    // We can test that validation without mocking the AI.
-
-    // We also test the StripMarkdownFences usage indirectly through
-    // AiSummaryService tests, and verify the language mapping logic.
 
     [Fact]
     public void LanguageMapping_English_MapsCorrectly()
@@ -105,8 +100,6 @@ public class AiGoalReviewServiceTests
         var result = AiSummaryService.StripMarkdownFences(input);
         result.Should().BeEmpty();
     }
-
-    // --- LocaleHelper.IsPortuguese ---
 
     [Theory]
     [InlineData("pt-br", true)]

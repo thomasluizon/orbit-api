@@ -97,8 +97,7 @@ public partial class GetCalendarEventsQueryHandler(
         if (accessToken is null)
             return null;
 
-        await unitOfWork.SaveChangesAsync(cancellationToken); // Persist refreshed token
-        return accessToken;
+        await unitOfWork.SaveChangesAsync(cancellationToken);        return accessToken;
     }
 
     private async Task<HashSet<string>> BuildImportedEventIdSet(Guid userId, CancellationToken ct)

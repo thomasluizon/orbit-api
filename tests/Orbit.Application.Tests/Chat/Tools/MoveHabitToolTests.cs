@@ -43,7 +43,6 @@ public class MoveHabitToolTests
         var child = CreateHabit("Floss");
         SetupFindOneTrackedSingle(child);
 
-        // new_parent_id is null (not provided or explicitly null)
         var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}"}""");
 
         result.Success.Should().BeTrue();
@@ -71,7 +70,6 @@ public class MoveHabitToolTests
         var child = CreateHabit("Floss");
         var missingParentId = Guid.NewGuid();
 
-        // First call returns the child, second call (parent lookup) returns null
         var callCount = 0;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -95,7 +93,6 @@ public class MoveHabitToolTests
         var habit = CreateHabit("Water");
         SetupFindOneTrackedSingle(habit);
 
-        // Second call returns the same habit (for parent lookup)
         var callCount = 0;
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

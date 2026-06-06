@@ -42,7 +42,6 @@ public class LogHabitCommandHandlerTests
         _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
 
-        // Return a valid user by default for streak tracking
         var user = User.Create("Test", "test@test.com").Value;
         _userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -84,8 +83,6 @@ public class LogHabitCommandHandlerTests
     public async Task Handle_AlreadyLogged_TogglesUnlog()
     {
         var habit = CreateTestHabit();
-        // Log the habit without advancing DueDate so the schedule check still passes
-        // when the handler tries to process the same date (toggle-unlog)
         habit.Log(Today, advanceDueDate: false);
 
         _habitRepo.FindOneTrackedAsync(
@@ -149,7 +146,6 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        // CacheInvalidationHelper uses DateOnly.FromDateTime(DateTime.UtcNow) internally
         var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
         var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
@@ -190,7 +186,6 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        // Default overdue window is 7 days; logging 8+ days back should fail
         var oldDate = Today.AddDays(-8);
         var command = new LogHabitCommand(UserId, habit.Id, Date: oldDate);
 
@@ -203,7 +198,6 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_NotScheduledOnDate_ReturnsFailure()
     {
-        // Every-other-day habit: due on anchor (Today) but not on Today+1
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Test", FrequencyUnit.Day, 2, DueDate: Today)).Value;
 
@@ -213,8 +207,6 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        // Today+1 is an off-day for every-2-days, and it's not in the future since we use Date param
-        // We need a date that is in the past, not scheduled, and within overdue window
         var offDay = Today.AddDays(-1);
         var command = new LogHabitCommand(UserId, habit.Id, Date: offDay);
 
@@ -286,7 +278,6 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_OneTimeTask_FutureDateAllowed()
     {
-        // One-time tasks (FrequencyUnit is null) can be logged on future dates
         var futureDate = Today.AddDays(3);
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "One-time task", null, null, DueDate: futureDate)).Value;
@@ -307,7 +298,6 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_FlexibleHabit_DoesNotToggleOnDuplicateDate()
     {
-        // Flexible habits allow multiple logs per day; should not unlog
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Flexible", FrequencyUnit.Week, 3, DueDate: Today, IsFlexible: true)).Value;
         habit.Log(Today);
@@ -323,7 +313,6 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Should add a new log, not remove existing
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
         _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
     }
@@ -331,9 +320,6 @@ public class LogHabitCommandHandlerTests
     [Fact]
     public async Task Handle_BadHabit_DoesNotToggleOnDuplicateDate()
     {
-        // Bad habits allow multiple logs per day; should not unlog.
-        // Use advanceDueDate: false so the DueDate stays on Today
-        // (in production, the handler controls whether to advance).
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Bad Habit", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
         habit.Log(Today, advanceDueDate: false);
@@ -387,7 +373,6 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // CurrentStreak is returned in the response
         result.Value.CurrentStreak.Should().BeGreaterThanOrEqualTo(0);
     }
 }

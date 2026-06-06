@@ -29,7 +29,6 @@ public class GetHabitFullDetailQueryHandler(
 
     public async Task<Result<HabitFullDetailResponse>> Handle(GetHabitFullDetailQuery request, CancellationToken cancellationToken)
     {
-        // Load habit with children for detail
         var habits = await habitRepository.FindAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
             q => q.Include(h => h.Children).ThenInclude(c => c.Children),
@@ -69,7 +68,6 @@ public class GetHabitFullDetailQueryHandler(
 
         var metrics = HabitMetricsCalculator.Calculate(habit, allRootLogs, userToday, userTimeZone);
 
-        // Build logs (365-day lookback, same as GetHabitLogsQueryHandler)
         var cutoff = userToday.AddDays(-DefaultLookbackDays);
         var logs = allRootLogs
             .Where(l => l.Date >= cutoff)

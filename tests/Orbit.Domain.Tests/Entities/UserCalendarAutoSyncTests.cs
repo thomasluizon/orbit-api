@@ -31,7 +31,6 @@ public class UserCalendarAutoSyncTests
     {
         var user = User.Create("Test", "test@example.com").Value;
         user.SetGoogleTokens("access", "refresh");
-        // Clear trial
         typeof(User).GetProperty("TrialEndsAt")!.SetValue(user, null);
 
         var result = user.EnableCalendarAutoSync();

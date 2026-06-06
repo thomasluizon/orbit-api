@@ -68,9 +68,6 @@ public partial class OAuthController(
         if (body.TryGetProperty("redirect_uris", out var uris) && uris.ValueKind == JsonValueKind.Array)
             requestedUris = uris.EnumerateArray().Select(u => u.GetString() ?? string.Empty).ToArray();
 
-        // Enforce the redirect-host allowlist at registration time, not just at /authorize.
-        // Otherwise a malicious caller can register an arbitrary client with attacker-controlled
-        // URIs and rely on downstream code to skip the check.
         var rejected = requestedUris
             .Where(u => !string.IsNullOrEmpty(u) && !IsRedirectUriAllowed(u))
             .ToArray();
@@ -184,7 +181,6 @@ public partial class OAuthController(
         if (!IsRedirectUriAllowed(request.RedirectUri))
             return BadRequest(new { error = InvalidRedirectUriError });
 
-        // Validate Google ID token directly (GIS returns a JWT, not a Supabase token)
         var client = httpClientFactory.CreateClient();
         var response = await client.GetAsync(
             $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(request.Credential)}", ct);
@@ -200,13 +196,11 @@ public partial class OAuthController(
         if (string.IsNullOrEmpty(email))
             return BadRequest(new { error = "Could not retrieve email from Google account" });
 
-        // Verify the token was issued for our client ID
         var tokenAud = root.TryGetProperty("aud", out var audProp) ? audProp.GetString() : null;
         var expectedClientId = googleSettings.Value.ClientId;
         if (!string.IsNullOrEmpty(expectedClientId) && tokenAud != expectedClientId)
             return BadRequest(new { error = "Google token was not issued for this application" });
 
-        // Find or create user
         var user = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
         if (user is null)
         {
@@ -258,13 +252,11 @@ public partial class OAuthController(
         if (entry is null)
             return BadRequest(new { error = "invalid_grant", error_description = "Invalid, expired, or already used authorization code" });
 
-        // Revoke any existing "Claude.ai" keys for this user to prevent unbounded accumulation
         var existingKeys = await apiKeyRepository.FindTrackedAsync(
             k => k.UserId == entry.UserId && k.Name == "Claude.ai", ct);
         foreach (var existing in existingKeys)
             existing.Revoke();
 
-        // Create an API key for this user (name: "Claude.ai", no Pro gate)
         var keyResult = ApiKey.Create(
             entry.UserId,
             "Claude.ai",

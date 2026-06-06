@@ -60,10 +60,6 @@ public partial class StreakFreezeAutoActivationService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
 
-        // Conservative UTC pre-filter: a user can only have a fully-elapsed missed day if their
-        // last active date is already before UTC yesterday. The per-user local-yesterday guard
-        // below is the authoritative check. HasProAccess is computed (not mapped) so it is gated
-        // in memory per user rather than in SQL.
         var utcYesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
         var candidates = await dbContext.Users
             .Where(u => u.CurrentStreak > 0
@@ -147,8 +143,6 @@ public partial class StreakFreezeAutoActivationService(
         var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
         var missedDate = userToday.AddDays(-1);
 
-        // Authoritative local guard: the missed day must be fully elapsed (strictly before today)
-        // and the user must not already be credited as active on or after it.
         if (user.LastActiveDate is null || user.LastActiveDate >= missedDate) return false;
 
         var existingFreezes = freezesByUser.GetValueOrDefault(user.Id) ?? [];

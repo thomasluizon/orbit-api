@@ -29,7 +29,6 @@ public class BulkDeleteHabitsCommandHandler(
     {
         var results = new List<BulkDeleteItemResult>();
 
-        // Batch-load all requested habits in a single query instead of N+1
         var habits = await habitRepository.FindTrackedAsync(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
             cancellationToken);

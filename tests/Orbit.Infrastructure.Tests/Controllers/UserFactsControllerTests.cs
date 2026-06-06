@@ -31,8 +31,6 @@ public class UserFactsControllerTests
         };
     }
 
-    // --- GetUserFacts ---
-
     [Fact]
     public async Task GetUserFacts_Success_ReturnsOk()
     {
@@ -55,8 +53,6 @@ public class UserFactsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- DeleteUserFact ---
-
     [Fact]
     public async Task DeleteUserFact_Success_ReturnsNoContent()
     {
@@ -78,8 +74,6 @@ public class UserFactsControllerTests
 
         result.Should().BeOfType<NotFoundObjectResult>();
     }
-
-    // --- BulkDeleteUserFacts ---
 
     [Fact]
     public async Task BulkDeleteUserFacts_Success_ReturnsOk()

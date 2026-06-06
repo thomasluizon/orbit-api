@@ -106,7 +106,6 @@ public class CreateHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        // Parent + 2 children = 3 AddAsync calls
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _payGate.Received(1).CanCreateSubHabits(UserId, Arg.Any<CancellationToken>());
     }
@@ -177,8 +176,6 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        // CacheInvalidationHelper uses DateOnly.FromDateTime(DateTime.UtcNow) internally,
-        // so the test cache key must use the real UTC date (not the mocked Today).
         var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
         var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
@@ -305,8 +302,6 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WithDays_SetsDueDateToNextMatchingDay()
     {
-        // Today is Friday 2026-03-20; Days = Saturday, Sunday
-        // DueDate should advance to Saturday 2026-03-21
         var options = new HabitCommandOptions(
             Days: new[] { DayOfWeek.Saturday, DayOfWeek.Sunday });
 
@@ -325,8 +320,6 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WithDays_IncludingToday_KeepsTodayAsDueDate()
     {
-        // Today is Friday 2026-03-20; Days includes Friday
-        // DueDate should stay as today
         var options = new HabitCommandOptions(
             Days: new[] { DayOfWeek.Friday, DayOfWeek.Saturday });
 

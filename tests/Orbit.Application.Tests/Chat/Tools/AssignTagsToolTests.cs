@@ -33,7 +33,6 @@ public class AssignTagsToolTests
         habit.AddTag(oldTag);
         SetupHabitFound(habit);
 
-        // No existing tags with new names
         _tagRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(),
             Arg.Any<Func<IQueryable<Tag>, IQueryable<Tag>>?>(),
@@ -64,7 +63,6 @@ public class AssignTagsToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "tag_names": ["Health"]}""");
 
         result.Success.Should().BeTrue();
-        // Should NOT create new tags since they already exist
         await _tagRepo.DidNotReceive().AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>());
     }
 
@@ -167,7 +165,6 @@ public class AssignTagsToolTests
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "tag_names": ["Health", "health", "HEALTH"]}""");
 
         result.Success.Should().BeTrue();
-        // Should only create 1 tag because they're all the same (case-insensitive)
         await _tagRepo.Received(1).AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>());
     }
 

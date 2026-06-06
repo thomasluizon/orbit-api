@@ -75,7 +75,6 @@ public class CreateGoalToolTests
         var result = await Execute("""{"title": "Complete goal"}""");
 
         result.Success.Should().BeTrue();
-        // Default target_value = 1, default unit = "goal"
         result.EntityName.Should().Be("Complete goal");
     }
 

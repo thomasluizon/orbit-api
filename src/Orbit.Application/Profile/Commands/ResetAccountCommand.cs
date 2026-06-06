@@ -26,10 +26,8 @@ public class ResetAccountCommandHandler(
 
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            // Delete all user-created data (habits, goals, tags, etc.)
             await accountResetRepository.DeleteAllUserDataAsync(request.UserId, ct);
 
-            // Reset user profile fields to defaults
             user.ResetAccount();
             await unitOfWork.SaveChangesAsync(ct);
         }, cancellationToken);

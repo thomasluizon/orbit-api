@@ -9,17 +9,14 @@ public static class GoalMetricsCalculator
 {
     public static GoalMetrics Calculate(Goal goal, DateOnly userToday)
     {
-        // Progress percentage
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
             : 0;
 
-        // Velocity: progress per day since creation
         var creationDate = DateOnly.FromDateTime(goal.CreatedAtUtc);
         var daysSinceCreation = Math.Max(1, userToday.DayNumber - creationDate.DayNumber);
         var velocityPerDay = Math.Round(goal.CurrentValue / daysSinceCreation, 2);
 
-        // Projected completion date
         DateOnly? projectedCompletionDate = null;
         if (velocityPerDay > 0 && goal.CurrentValue < goal.TargetValue)
         {
@@ -28,15 +25,12 @@ public static class GoalMetricsCalculator
             projectedCompletionDate = userToday.AddDays(daysToComplete);
         }
 
-        // Days to deadline
         int? daysToDeadline = goal.Deadline.HasValue
             ? goal.Deadline.Value.DayNumber - userToday.DayNumber
             : null;
 
-        // Tracking status
         var trackingStatus = DetermineTrackingStatus(goal, daysToDeadline);
 
-        // Habit adherence
         var habitAdherence = goal.Habits.Select(h =>
         {
             var metrics = HabitMetricsCalculator.Calculate(h, userToday);

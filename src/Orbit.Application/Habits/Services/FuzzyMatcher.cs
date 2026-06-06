@@ -32,11 +32,9 @@ public static class FuzzyMatcher
         if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(term))
             return false;
 
-        // Fast path: exact substring match
         if (text.Contains(term, StringComparison.OrdinalIgnoreCase))
             return true;
 
-        // Short terms: exact only (avoid false positives)
         if (term.Length <= 2)
             return false;
 

@@ -149,17 +149,10 @@ public class CreateHabitTool(
 
         var title = titleEl.GetString() ?? string.Empty;
 
-        // Check PayGate BEFORE the clarification heuristic so a user at their habit
-        // limit gets the "limit reached" error immediately, not after picking a
-        // schedule on the card and waiting for the re-invocation to fail.
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
         if (habitGate.IsFailure)
             return new ToolResult(false, Error: habitGate.Error);
 
-        // TryGetProperty returns true for an explicit null value, so this only fires when
-        // the key is genuinely absent. The "one-time task" quick action patches with
-        // {"frequency_unit":null}, which adds the key and bypasses this check on
-        // re-invocation. Don't change to a value-based check without preserving that.
         if (!args.TryGetProperty("frequency_unit", out _) && IsHabitFlavoredTitle(title))
         {
             return new ToolResult(true, EntityName: title, Payload: BuildFrequencyClarification());
@@ -329,11 +322,6 @@ public class CreateHabitTool(
     private static string Capitalize(string s) =>
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 
-    // Whole-word "habit" so "inhabit", "habitual", "cohabit" don't false-positive.
-    // "rotina" and "hábito" are PT-BR and don't collide with common words. The
-    // unaccented "habito" was previously included but conflicts with the verb
-    // habitar (e.g., "Eu habito em Lisboa" = "I live in Lisbon"), so we don't
-    // match it — users typing pt-BR properly will use the accent.
     private static readonly System.Text.RegularExpressions.Regex HabitWordRegex =
         new(@"\bhabit\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 

@@ -76,10 +76,8 @@ public class GetGoalReviewQueryHandlerTests
 
         var query = new GetGoalReviewQuery(UserId, "en");
 
-        // First call populates cache
         await _handler.Handle(query, CancellationToken.None);
 
-        // Second call should return from cache
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

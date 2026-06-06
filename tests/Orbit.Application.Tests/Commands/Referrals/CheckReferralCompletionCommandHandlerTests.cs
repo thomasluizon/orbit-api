@@ -80,7 +80,6 @@ public class CheckReferralCompletionCommandHandlerTests
 
     private void SetupReferredUserFound(User user)
     {
-        // First call returns referred user, second call returns referrer
         _userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
@@ -112,7 +111,6 @@ public class CheckReferralCompletionCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habits);
 
-        // CountAsync is used instead of loading all logs
         _habitLogRepo.CountAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -140,7 +138,6 @@ public class CheckReferralCompletionCommandHandlerTests
         SetupPendingReferral(referral);
         SetupReferredUserFound(referredUser);
 
-        // Only 1 habit with 2 logs (below threshold of 3)
         SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold - 1);
 
         var command = new CheckReferralCompletionCommand(ReferredUserId);
@@ -170,7 +167,6 @@ public class CheckReferralCompletionCommandHandlerTests
         referral.Status.Should().Be(ReferralStatus.Rewarded);
         referral.CompletedAtUtc.Should().NotBeNull();
         referral.RewardGrantedAtUtc.Should().NotBeNull();
-        // Coupon should be created for the referrer
         await _referralReward.Received(1).CreateReferralCouponAsync(
             ReferrerId, Arg.Any<CancellationToken>());
         referrer.ReferralCouponId.Should().Be("promo_test123");
@@ -183,7 +179,6 @@ public class CheckReferralCompletionCommandHandlerTests
         var referral = CreatePendingReferral();
         var referredUser = CreateReferredUser();
         var referrer = CreateReferrer();
-        // Make referrer a Pro user with an active Stripe subscription
         referrer.SetStripeSubscription("sub_test123", DateTime.UtcNow.AddDays(30));
         SetupPendingReferral(referral);
         SetupReferredAndReferrerUsers(referredUser, referrer);
@@ -195,7 +190,6 @@ public class CheckReferralCompletionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Rewarded);
-        // Pro users also get a coupon (same behavior for all users now)
         await _referralReward.Received(1).CreateReferralCouponAsync(
             ReferrerId, Arg.Any<CancellationToken>());
     }
@@ -205,7 +199,6 @@ public class CheckReferralCompletionCommandHandlerTests
     {
         var referral = CreatePendingReferral();
         var referredUser = CreateReferredUser();
-        // Force CreatedAtUtc to be beyond the completion window
         typeof(User).GetProperty("CreatedAtUtc")!.SetValue(
             referredUser,
             DateTime.UtcNow.AddDays(-(AppConstants.ReferralCompletionWindowDays + 1)));
@@ -229,7 +222,6 @@ public class CheckReferralCompletionCommandHandlerTests
         SetupPendingReferral(referral);
         SetupReferredUserFound(referredUser);
 
-        // No habits
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -241,7 +233,6 @@ public class CheckReferralCompletionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Pending);
-        // HabitLog repo should not even be queried when no habits exist
         await _habitLogRepo.DidNotReceive().CountAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>());

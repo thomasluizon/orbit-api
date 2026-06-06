@@ -19,9 +19,6 @@ public sealed partial class DataEncryptionMigrationService(
 {
     private const int BatchSize = 50;
 
-    // Versioned so adding User to the backfill loop re-runs once in environments where the
-    // original "EncryptionMigrationComplete" flag was already set (existing User rows kept
-    // plaintext Google tokens until this pass).
     private const string MigrationFlag = "EncryptionMigrationComplete_v2";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

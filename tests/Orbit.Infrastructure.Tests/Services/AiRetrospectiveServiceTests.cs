@@ -20,8 +20,6 @@ public class AiRetrospectiveServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
-    // ── StripMarkdownFences edge cases specific to retrospective output ──
-
     [Fact]
     public void StripMarkdownFences_BoldHeadings_PreservesBoldMarkdown()
     {
@@ -57,13 +55,10 @@ public class AiRetrospectiveServiceTests
     [Fact]
     public void StripMarkdownFences_NestedFences_HandlesGracefully()
     {
-        // Should strip the outer fences
         var text = "```\nSome code:\n```inner```\n```";
         var result = AiSummaryService.StripMarkdownFences(text);
         result.Should().Contain("Some code:");
     }
-
-    // ── BuildRetrospectivePrompt via reflection ──
 
     [Fact]
     public void BuildRetrospectivePrompt_English_ContainsEnglishHeadings()
@@ -118,8 +113,7 @@ public class AiRetrospectiveServiceTests
 
         var result = InvokeBuildRetrospectivePrompt(habits, from, to, "weekly", "en");
 
-        result.Should().Contain("10 days"); // 10 - 1 + 1 = 10 (inclusive)
-    }
+        result.Should().Contain("10 days");    }
 
     [Fact]
     public void BuildRetrospectivePrompt_CountsOnlyTopLevelHabits()
@@ -130,11 +124,8 @@ public class AiRetrospectiveServiceTests
 
         var result = InvokeBuildRetrospectivePrompt(habits, DateFrom, DateTo, "weekly", "en");
 
-        // Should say "1" top-level habit, not 2
         result.Should().Contain("Total habits tracked: 1");
     }
-
-    // ── AppendParentHabitLine via reflection ──
 
     [Fact]
     public void AppendParentHabitLine_BadHabit_ShowsSlipsFormat()
@@ -191,12 +182,9 @@ public class AiRetrospectiveServiceTests
         lines[0].Should().Contain("100%");
     }
 
-    // ── BuildHabitBreakdown via reflection ──
-
     [Fact]
     public void BuildHabitBreakdown_NoActivity_ReturnsNoHabitActivity()
     {
-        // A habit with no logs and no scheduled dates in the range
         var futureHabit = Habit.Create(new HabitCreateParams(
             ValidUserId, "Future", FrequencyUnit.Day, 1,
             DueDate: DateTo.AddDays(10))).Value;
@@ -214,7 +202,6 @@ public class AiRetrospectiveServiceTests
         var parent = CreateDailyHabit("Workout");
         var child = CreateDailyHabit("Push-ups", parentId: parent.Id);
 
-        // Pass only the child (no parent) -- it should be skipped since it has a ParentHabitId
         var result = InvokeBuildHabitBreakdown([child], DateFrom, DateTo, 7);
 
         result.HabitSection.Should().Contain("(no habit activity)");
@@ -227,7 +214,6 @@ public class AiRetrospectiveServiceTests
             ValidUserId, "Smoking", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: DateFrom)).Value;
 
-        // Log some slips
         badHabit.Log(DateFrom);
         badHabit.Log(DateFrom.AddDays(1));
 
@@ -237,8 +223,6 @@ public class AiRetrospectiveServiceTests
         result.HabitSection.Should().Contain("bad habit");
         result.HabitSection.Should().Contain("2 slips");
     }
-
-    // ── Helpers ──
 
     private static Habit CreateDailyHabit(
         string title,

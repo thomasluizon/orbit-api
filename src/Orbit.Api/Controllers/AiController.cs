@@ -309,8 +309,6 @@ public class AiController(
         [FromBody] ResolveClarificationRequest body,
         CancellationToken cancellationToken)
     {
-        // Clarification cards are a UI-only flow — API-key clients can't render or tap them.
-        // Mirrors the guard on ExecutePendingOperation and the step-up endpoints.
         var authMethod = HttpContext.User.GetAgentAuthMethod();
         if (authMethod == AgentAuthMethod.ApiKey)
             return Forbid();
@@ -346,9 +344,6 @@ public class AiController(
             return NotFound(new { error = ErrorMessages.ClarificationNotFound });
         }
 
-        // The patch must be one of the server-offered quick-action values. This is a
-        // defense-in-depth check: prevents a malicious client from hand-crafting a patch
-        // that overrides fields the contract never said could be changed.
         if (!pending.AllowedValues.Contains(body.Value, StringComparer.Ordinal))
         {
             await RecordResolveAuditAsync(
@@ -380,17 +375,6 @@ public class AiController(
             return BadRequest(new { error = ErrorMessages.ClarificationValueNotJsonObject });
         }
 
-        // Atomic one-shot claim: if this returns false, either another concurrent request
-        // already marked the row resolved OR the row expired in the (typically sub-ms)
-        // window between Get and MarkResolved. Bail before re-invoking.
-        //
-        // The clarification is intentionally consumed BEFORE ExecuteAsync runs. If the
-        // executor throws or the tool returns Failed/Denied, the clarification is gone —
-        // the user must re-initiate the request via chat. This is acceptable because:
-        //   (a) the alternative (un-claim on failure) reopens TOCTOU races on retry,
-        //   (b) tool Failed/Denied is surfaced in the response so the client can prompt
-        //       the user appropriately,
-        //   (c) re-asking in chat is a natural recovery path the user already understands.
         var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
         if (!claimed)
         {
@@ -462,8 +446,6 @@ public class AiController(
 
     private static JsonElement MergeClarificationValue(string baseJson, string value)
     {
-        // Fail closed if the stored args aren't a JSON object — silently coercing to {}
-        // would drop the original tool arguments and replay the tool with only the patch.
         if (JsonNode.Parse(baseJson) is not JsonObject baseNode)
             throw new JsonException("Stored partial arguments are not a JSON object.");
 
@@ -478,7 +460,6 @@ public class AiController(
         return JsonDocument.Parse(baseNode.ToJsonString()).RootElement.Clone();
     }
 
-    // Deep merge: nested JsonObjects recurse instead of clobbering.
     private static void DeepMerge(JsonObject target, JsonObject patch)
     {
         foreach (var kvp in patch.ToList())

@@ -69,8 +69,7 @@ public class GetGamificationProfileQueryHandlerTests
     public async Task Handle_ProUser_CalculatesXpToNextLevel()
     {
         var user = CreateProUser();
-        user.AddXp(200); // Level 2 (100-299), next level at 300
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        user.AddXp(200);        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _achievementRepo.FindAsync(
             Arg.Any<Expression<Func<UserAchievement, bool>>>(),
@@ -82,15 +81,13 @@ public class GetGamificationProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.XpToNextLevel.Should().Be(100); // 300 - 200
-    }
+        result.Value.XpToNextLevel.Should().Be(100);    }
 
     [Fact]
     public async Task Handle_MaxLevel_XpToNextLevelIsNull()
     {
         var user = CreateProUser();
-        user.AddXp(10_000); // Level 10, max
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        user.AddXp(10_000);        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _achievementRepo.FindAsync(
             Arg.Any<Expression<Func<UserAchievement, bool>>>(),
@@ -136,7 +133,6 @@ public class GetGamificationProfileQueryHandlerTests
     public async Task Handle_NewUser_ReturnsLevel1()
     {
         var user = CreateProUser();
-        // Fresh user with 0 XP
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _achievementRepo.FindAsync(

@@ -60,8 +60,6 @@ public class ApiKeyTests : IAsyncLifetime
         await dbContext.SaveChangesAsync();
     }
 
-    // ── Create API Key ───────────────────────────────────────
-
     [Fact]
     public async Task CreateApiKey_FreeUser_ReturnsForbidden()
     {
@@ -81,8 +79,6 @@ public class ApiKeyTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    // ── List API Keys ────────────────────────────────────────
-
     [Fact]
     public async Task ListApiKeys_ReturnsOk()
     {
@@ -94,8 +90,6 @@ public class ApiKeyTests : IAsyncLifetime
         keys.Should().NotBeNull();
     }
 
-    // ── Revoke API Key ───────────────────────────────────────
-
     [Fact]
     public async Task RevokeApiKey_NonExistentKey_ReturnsNotFound()
     {
@@ -103,8 +97,6 @@ public class ApiKeyTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
-
-    // ── API Key Authentication ───────────────────────────────
 
     [Fact]
     public async Task ApiKeyAuth_InvalidKey_ReturnsUnauthorized()
@@ -125,20 +117,16 @@ public class ApiKeyTests : IAsyncLifetime
 
         var response = await keyClient.GetAsync("/api/api-keys");
 
-        // JWT handler will reject this as an invalid JWT
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task JwtAuth_ContinuesToWork()
     {
-        // The main _client uses JWT auth -- verify it still works
         var response = await _client.GetAsync("/api/api-keys");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
-
-    // ── DTO classes for deserialization ──────────────────────
 
     private record LoginResponse(Guid UserId, string Token, string Name, string Email);
 

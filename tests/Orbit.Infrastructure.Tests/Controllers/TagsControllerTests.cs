@@ -31,8 +31,6 @@ public class TagsControllerTests
         };
     }
 
-    // --- GetTags ---
-
     [Fact]
     public async Task GetTags_Success_ReturnsOk()
     {
@@ -54,8 +52,6 @@ public class TagsControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- CreateTag ---
 
     [Fact]
     public async Task CreateTag_Success_ReturnsCreated()
@@ -82,8 +78,6 @@ public class TagsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- UpdateTag ---
-
     [Fact]
     public async Task UpdateTag_Success_ReturnsNoContent()
     {
@@ -108,8 +102,6 @@ public class TagsControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- DeleteTag ---
-
     [Fact]
     public async Task DeleteTag_Success_ReturnsNoContent()
     {
@@ -131,8 +123,6 @@ public class TagsControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- AssignTags ---
 
     [Fact]
     public async Task AssignTags_Success_ReturnsNoContent()

@@ -30,14 +30,9 @@ public static class ServiceCollectionExtensions
 {
     public static WebApplicationBuilder ValidateOrbitSecuritySettings(this WebApplicationBuilder builder)
     {
-        // JWT secret strength check applies in every environment -- a weak key in dev/staging
-        // becomes a weak key in prod the moment someone copy-pastes appsettings.
         var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
         jwtSettings?.Validate();
 
-        // A blank price ID silently degrades affected users to the wrong currency, so we fail
-        // fast in deployed environments. Local Development is exempt -- booting the API shouldn't
-        // require full Stripe price config when you aren't touching checkout.
         if (!builder.Environment.IsDevelopment())
         {
             var stripeSettings = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>();
@@ -61,9 +56,6 @@ public static class ServiceCollectionExtensions
                 builder.Configuration.GetConnectionString("DefaultConnection"),
                 npgsql =>
                 {
-                    // Retry transient PostgreSQL disconnects (Supabase pooler can drop idle
-                    // connections). Without this, a single transient blip surfaces as an
-                    // uncaught NpgsqlException at the request boundary.
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
                     npgsql.CommandTimeout(30);
                 }));
@@ -160,7 +152,6 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
         builder.Services.AddScoped<Orbit.Api.Mcp.McpExecutorBridge>();
 
-        // AI Tool Registration
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();
@@ -226,7 +217,6 @@ public static class ServiceCollectionExtensions
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         builder.Services.AddSingleton<IFeatureExplanationService, FeatureExplanationService>();
 
-        // Handler Parameter Objects
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitRepositories>(sp =>
             new Orbit.Application.Habits.Commands.LogHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
@@ -291,18 +281,14 @@ public static class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitInfrastructure(this WebApplicationBuilder builder)
     {
-        // Encryption
         builder.Services.Configure<EncryptionSettings>(
             builder.Configuration.GetSection(EncryptionSettings.SectionName));
         builder.Services.AddSingleton<IEncryptionService, EncryptionService>();
 
-        // Frontend Settings
         builder.Services.Configure<FrontendSettings>(builder.Configuration.GetSection("Frontend"));
 
-        // HTTP Client Timeout
         var httpTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
 
-        // Supabase (OAuth token validation)
         builder.Services.AddHttpClient("Supabase", client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
@@ -310,7 +296,6 @@ public static class ServiceCollectionExtensions
             client.Timeout = httpTimeout;
         });
 
-        // Resend (Email)
         builder.Services.Configure<ResendSettings>(
             builder.Configuration.GetSection(ResendSettings.SectionName));
 
@@ -325,14 +310,11 @@ public static class ServiceCollectionExtensions
 
         builder.Services.AddScoped<IEmailService, ResendEmailService>();
 
-        // Google
         builder.Services.Configure<GoogleSettings>(
             builder.Configuration.GetSection(GoogleSettings.SectionName));
 
-        // OAuth
         builder.Services.AddSingleton<OAuthAuthorizationStore>();
 
-        // Stripe
         builder.Services.Configure<StripeSettings>(
             builder.Configuration.GetSection(StripeSettings.SectionName));
         var stripeKey = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>()?.SecretKey;
@@ -348,12 +330,9 @@ public static class ServiceCollectionExtensions
         builder.Services.AddSingleton<Stripe.InvoiceService>();
         builder.Services.AddSingleton<Stripe.PriceService>();
         builder.Services.AddSingleton<Stripe.CouponService>();
-        // IBillingService wraps every Stripe SDK call used by checkout, portal, plans,
-        // and billing-details so the Application layer has no Stripe imports.
         builder.Services.AddScoped<Orbit.Application.Common.IBillingService, Orbit.Infrastructure.Services.StripeBillingService>();
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
 
-        // Push Notifications (VAPID + FCM)
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
@@ -367,7 +346,6 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
 
-        // Background Services
         builder.Services.AddHostedService<ReminderSchedulerService>();
         builder.Services.AddHostedService<GoalDeadlineNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
@@ -379,39 +357,26 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<CalendarAutoSyncService>();
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
 
-        // Health Checks
         builder.Services.AddHealthChecks()
             .AddCheck<BackgroundServiceHealthCheck>("background-services");
 
-        // Firebase Admin SDK for FCM
         InitializeFirebase(builder.Configuration);
 
-        // Image Validation
         builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
 
-        // Geo Location
         builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>()
             .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 
-        // In-Memory Cache
         builder.Services.AddMemoryCache();
 
-        // Validation
         builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
 
-        // MediatR
         builder.Services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly);
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 
-        // CORS -- two policies:
-        //  1. Default credentialed policy for first-party Orbit web/mobile origins (cookie auth).
-        //  2. Separate non-credentialed policy for third-party MCP origins (claude.ai/claude.com)
-        //     which authenticate via Bearer API key, not cookies. Allowing credentials with
-        //     third-party origins would let a malicious page issue cookie-bearing requests on
-        //     behalf of an authenticated user.
         var firstPartyOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
             ?? ["http://localhost:3000"];
         var thirdPartyOrigins = builder.Configuration.GetSection("Cors:ThirdPartyOrigins").Get<string[]>()
@@ -432,12 +397,10 @@ public static class ServiceCollectionExtensions
                     policy.WithOrigins(thirdPartyOrigins)
                           .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
                           .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
-                    // No AllowCredentials() -- third-party origins use Bearer token auth.
                 });
             }
         });
 
-        // Cookie Security Policy
         builder.Services.Configure<CookiePolicyOptions>(options =>
         {
             options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
@@ -445,13 +408,10 @@ public static class ServiceCollectionExtensions
             options.MinimumSameSitePolicy = SameSiteMode.Strict;
         });
 
-        // Request Size Limit
         builder.WebHost.ConfigureKestrel(options =>
         {
-            options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10MB global default
-        });
+            options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;        });
 
-        // MCP Server
         builder.Services.AddMcpServer()
             .WithHttpTransport()
             .WithTools<AgentTools>()
@@ -470,14 +430,12 @@ public static class ServiceCollectionExtensions
             .WithTools<ChecklistTemplateTools>()
             .WithTools<FeatureTools>();
 
-        // Controllers
         builder.Services.AddControllers()
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
             });
 
-        // Exception Handling
         builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
         builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
         builder.Services.AddProblemDetails(options =>
@@ -489,7 +447,6 @@ public static class ServiceCollectionExtensions
             };
         });
 
-        // OpenAPI + Scalar
         builder.Services.AddOpenApi(options =>
         {
             options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();

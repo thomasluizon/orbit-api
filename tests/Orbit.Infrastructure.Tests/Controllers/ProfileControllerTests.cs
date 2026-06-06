@@ -31,8 +31,6 @@ public class ProfileControllerTests
         };
     }
 
-    // --- GetProfile ---
-
     [Fact]
     public async Task GetProfile_Success_ReturnsOk()
     {
@@ -54,8 +52,6 @@ public class ProfileControllerTests
 
         result.Should().BeOfType<NotFoundObjectResult>();
     }
-
-    // --- SetTimezone ---
 
     [Fact]
     public async Task SetTimezone_Success_ReturnsNoContent()
@@ -81,8 +77,6 @@ public class ProfileControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- SetAiMemory ---
-
     [Fact]
     public async Task SetAiMemory_Success_ReturnsNoContent()
     {
@@ -106,8 +100,6 @@ public class ProfileControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- SetAiSummary ---
 
     [Fact]
     public async Task SetAiSummary_Success_ReturnsNoContent()
@@ -133,8 +125,6 @@ public class ProfileControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- SetLanguage ---
-
     [Fact]
     public async Task SetLanguage_Success_ReturnsNoContent()
     {
@@ -158,8 +148,6 @@ public class ProfileControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- SetWeekStartDay ---
 
     [Fact]
     public async Task SetWeekStartDay_Success_ReturnsNoContent()
@@ -185,8 +173,6 @@ public class ProfileControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- SetThemePreference ---
-
     [Fact]
     public async Task SetThemePreference_Success_ReturnsNoContent()
     {
@@ -210,8 +196,6 @@ public class ProfileControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- SetColorScheme ---
 
     [Fact]
     public async Task SetColorScheme_Success_ReturnsNoContent()
@@ -237,8 +221,6 @@ public class ProfileControllerTests
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    // --- CompleteOnboarding ---
-
     [Fact]
     public async Task CompleteOnboarding_Success_ReturnsNoContent()
     {
@@ -260,8 +242,6 @@ public class ProfileControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
-
-    // --- ResetAccount ---
 
     [Fact]
     public async Task ResetAccount_Success_ReturnsOk()

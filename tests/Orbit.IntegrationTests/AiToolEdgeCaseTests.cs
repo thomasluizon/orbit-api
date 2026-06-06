@@ -23,7 +23,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly string[] DefaultChecklistItems = ["Old item 1", "Old item 2"];
 
-    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
@@ -47,7 +46,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         {
             try
             {
-                // Delete all tags first (cleanup)
                 var tagsResponse = await _client.GetAsync("/api/tags");
                 if (tagsResponse.IsSuccessStatusCode)
                 {
@@ -56,7 +54,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
                         await _client.DeleteAsync($"/api/tags/{tag.Id}");
                 }
 
-                // Delete all habits
                 var habitsResponse = await _client.GetAsync(IntegrationTestHelpers.BuildHabitSchedulePath());
                 if (habitsResponse.IsSuccessStatusCode)
                 {
@@ -67,25 +64,19 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
                 await _client.DeleteAsync($"/api/users/{_testUserId}");
             }
-            catch { /* cleanup best-effort */ }
+            catch { }
         }
 
         _client.Dispose();
     }
-
-    // ===================================================================
-    //  SECTION 1: QueryHabitsTool Integration Tests (6 tests)
-    // ===================================================================
 
     [Fact]
     public async Task QueryHabits_NoHabits_ReturnsEmptyResponse()
     {
         var response = await SendChat("list all my habits");
 
-        // AI should respond indicating no habits found (query_habits returns empty)
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // No action chips expected for a read-only query
     }
 
     [Fact]
@@ -111,7 +102,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // Should mention the weekly habit
         response.AiMessage!.ToLower().Should().MatchRegex("(yoga|weekly)");
     }
 
@@ -119,7 +109,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     public async Task QueryHabits_WithMetrics_IncludesStreakData()
     {
         var habitId = await CreateHabitViaApi("Streak Test", "Day");
-        // Log it to create some metrics
         await _client.PostAsync($"/api/habits/{habitId}/log", null);
 
         var response = await SendChat("show me my habit Streak Test with metrics and progress data");
@@ -136,8 +125,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         var response = await SendChat("list all my current habits");
 
         response.Should().NotBeNull();
-        // query_habits is read-only, so it should NOT produce action chips
-        // If the AI only queries (no create/log/update/delete), Actions should be empty
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
@@ -150,13 +137,8 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // Should show at least the habit created above
         response.AiMessage!.ToLower().Should().MatchRegex("(today|habit|due)");
     }
-
-    // ===================================================================
-    //  SECTION 2: CreateHabit Extended Tests (6 tests)
-    // ===================================================================
 
     [Fact]
     public async Task CreateHabit_WithTagNames_CreatesAndAssignsTags()
@@ -166,7 +148,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Actions.Should().Contain(a => a.Type == "CreateHabit" && a.Status == "Success");
 
-        // Verify the habit was created
         var habits = await GetAllHabits();
         var taggedHabit = habits.FirstOrDefault(h =>
             h.Title.Contains("Tagged", StringComparison.OrdinalIgnoreCase) ||
@@ -189,7 +170,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         var response = await SendChat(
             "Create a daily habit called 'Morning Routine EdgeTest' with sub-habits: Brush teeth, Shower, Breakfast");
 
-        // AI may use create_habit with sub_habits param or multiple create_sub_habit calls
         response.Actions.Should().Contain(a =>
             (a.Type == "CreateHabit" || a.Type == "CreateSubHabit") && a.Status == "Success");
     }
@@ -224,10 +204,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.Actions.Should().Contain(a => a.Type == "CreateHabit" && a.Status == "Success");
     }
 
-    // ===================================================================
-    //  SECTION 3: UpdateHabit Extended Tests (5 tests)
-    // ===================================================================
-
     [Fact]
     public async Task UpdateHabit_ClearDescription_RemovesDescription()
     {
@@ -252,7 +228,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     [Fact]
     public async Task UpdateHabit_UpdateChecklist_ReplacesItems()
     {
-        // Create habit with checklist via API
         var habitId = await CreateHabitViaApiWithChecklist("Checklist Update Test", "Day",
             DefaultChecklistItems);
 
@@ -284,33 +259,24 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.Actions.Should().Contain(a => a.Type == "UpdateHabit" && a.Status == "Success");
     }
 
-    // ===================================================================
-    //  SECTION 4: LogHabit Edge Cases (3 tests)
-    // ===================================================================
-
     [Fact]
     public async Task LogHabit_AlreadyLogged_UnlogsHabit()
     {
         var habitId = await CreateHabitViaApi("Toggle Log Test", "Day");
-        // Log it first via API
         await _client.PostAsync($"/api/habits/{habitId}/log", null);
 
-        // AI should toggle (unlog) since it's already logged
         var response = await SendChat("log Toggle Log Test as done for today");
 
         response.Actions.Should().Contain(a => a.Type == "LogHabit");
-        // The tool has toggle behavior, so this should succeed either way
     }
 
     [Fact]
     public async Task LogHabit_NonExistentHabit_HandlesGracefully()
     {
-        // No habits exist with this name
         var response = await SendChat("log my 'Totally Nonexistent Xyz Habit 999' as done today");
 
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // AI should indicate the habit was not found
     }
 
     [Fact]
@@ -327,34 +293,26 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         response.Actions.Should().Contain(a => a.Type == "LogHabit" && a.Status == "Success");
     }
 
-    // ===================================================================
-    //  SECTION 5: SkipHabit Edge Cases (3 tests)
-    // ===================================================================
-
     [Fact]
     public async Task SkipHabit_OneTimeHabit_FailsGracefully()
     {
-        // Create a one-time task (no frequency)
         await CreateHabitViaApiOneTime("OneTime Skip Test");
 
         var response = await SendChat("skip the habit 'OneTime Skip Test' for today");
 
         response.Should().NotBeNull();
-        // The AI should either report failure or explain one-time tasks can't be skipped
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
     public async Task SkipHabit_FutureHabit_FailsGracefully()
     {
-        // Create a daily habit with future due date
         var futureDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7));
         await CreateHabitViaApiWithDate("Future Skip Test", "Day", futureDate);
 
         var response = await SendChat("skip the habit 'Future Skip Test' for today");
 
         response.Should().NotBeNull();
-        // Should fail because the habit is not yet due
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
@@ -367,16 +325,11 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Actions.Should().Contain(a => a.Type == "SkipHabit" && a.Status == "Success");
 
-        // Verify the habit's due date advanced (no longer today)
         var habits = await GetAllHabits();
         var skipped = habits.FirstOrDefault(h =>
             h.Title.Contains("Skip Advance", StringComparison.OrdinalIgnoreCase));
         skipped.Should().NotBeNull();
     }
-
-    // ===================================================================
-    //  SECTION 6: BulkOperations Tests (4 tests)
-    // ===================================================================
 
     [Fact]
     public async Task BulkLog_AlreadyLoggedHabits_SkipsThose()
@@ -384,25 +337,21 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         var id1 = await CreateHabitViaApi("Bulk Already A", "Day");
         var id2 = await CreateHabitViaApi("Bulk Already B", "Day");
 
-        // Pre-log one of them
         await _client.PostAsync($"/api/habits/{id1}/log", null);
 
         var response = await SendChat("I completed both Bulk Already A and Bulk Already B today");
 
         response.Should().NotBeNull();
-        // At least one should be logged (B), the other may toggle or skip
         response.Actions.Should().NotBeEmpty();
     }
 
     [Fact]
     public async Task BulkLog_AllChildrenLogged_AutoCompletesParent()
     {
-        // Create parent with children via API
         var parentId = await CreateHabitViaApi("AutoComplete Parent", "Day");
         await CreateSubHabitViaApi(parentId, "Child Alpha");
         await CreateSubHabitViaApi(parentId, "Child Beta");
 
-        // Log both children
         var response = await SendChat("I finished Child Alpha and Child Beta today");
 
         response.Should().NotBeNull();
@@ -418,7 +367,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         var response = await SendChat("skip both 'Bulk Skip One' and 'Bulk Skip Two' for today");
 
         response.Should().NotBeNull();
-        // AI may use bulk_skip_habits or multiple skip_habit calls
         var skipActions = response.Actions.Where(a =>
             a.Type == "SkipHabit" || a.Type == "BulkSkipHabits").ToList();
         skipActions.Should().NotBeEmpty();
@@ -435,12 +383,7 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // At least one skip should succeed (the recurring one)
     }
-
-    // ===================================================================
-    //  SECTION 7: SubHabit and Hierarchy Tests (3 tests)
-    // ===================================================================
 
     [Fact]
     public async Task CreateSubHabit_InheritsParentFrequency_WhenNotOverridden()
@@ -472,18 +415,12 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         var parentId = await CreateHabitViaApi("Circular Parent", "Day");
         var childId = await CreateSubHabitViaApi(parentId, "Circular Child");
 
-        // Try to move parent under its own child (should fail)
         var response = await SendChat(
             "Move the habit 'Circular Parent' under 'Circular Child'");
 
         response.Should().NotBeNull();
-        // AI should report an error or the backend should prevent circular reference
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
-
-    // ===================================================================
-    //  SECTION 8: AssignTags Extended Tests (3 tests)
-    // ===================================================================
 
     [Fact]
     public async Task AssignTags_NewTagNames_CreatesAndAssigns()
@@ -501,16 +438,13 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     {
         var habitId = await CreateHabitViaApi("Tag Clear Test", "Day");
 
-        // First assign some tags
         await SendChat("Tag 'Tag Clear Test' with Health");
 
-        // Then clear them
         var response = await SendChat(
             "Remove all tags from the habit 'Tag Clear Test'");
 
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // AI may use assign_tags with empty array or explain how to remove tags
     }
 
     [Fact]
@@ -518,28 +452,20 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     {
         await CreateHabitViaApi("Mixed Tag Test", "Day");
 
-        // Create one tag first
         await SendChat("Tag the habit 'Mixed Tag Test' with ExistingOne");
 
-        // Now assign both an existing tag and a new one
         var response = await SendChat(
             "Tag the habit 'Mixed Tag Test' with ExistingOne and BrandNewTag");
 
         response.Actions.Should().Contain(a => a.Type == "AssignTags" && a.Status == "Success");
     }
 
-    // ===================================================================
-    //  SECTION 9: Multi-Turn and Context Tests (3 tests)
-    // ===================================================================
-
     [Fact]
     public async Task MultiTurn_CreateThenLog_MaintainsContext()
     {
-        // Turn 1: Create a habit
         var createResponse = await SendChat("Create a daily habit called 'Context Log Test'");
         createResponse.Actions.Should().Contain(a => a.Type == "CreateHabit" && a.Status == "Success");
 
-        // Turn 2: Log it (AI should find it by name from context)
         var logResponse = await SendChat("I just completed Context Log Test");
         logResponse.Actions.Should().Contain(a => a.Type == "LogHabit" && a.Status == "Success");
     }
@@ -547,11 +473,9 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     [Fact]
     public async Task MultiTurn_CreateThenUpdate_FindsByName()
     {
-        // Turn 1: Create
         var createResponse = await SendChat("Create a daily habit called 'Context Update Test'");
         createResponse.Actions.Should().Contain(a => a.Type == "CreateHabit" && a.Status == "Success");
 
-        // Turn 2: Update it by name
         var updateResponse = await SendChat(
             "Change the habit 'Context Update Test' to weekly instead of daily");
         updateResponse.Actions.Should().Contain(a => a.Type == "UpdateHabit" && a.Status == "Success");
@@ -562,20 +486,14 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     {
         await CreateHabitViaApi("Info Then Modify", "Day");
 
-        // Turn 1: Ask about the habit
         var infoResponse = await SendChat("Tell me about my habit called 'Info Then Modify'");
         infoResponse.Should().NotBeNull();
         infoResponse.AiMessage.Should().NotBeNullOrEmpty();
 
-        // Turn 2: Modify it
         var modifyResponse = await SendChat(
             "Now add a description to 'Info Then Modify': do this every morning");
         modifyResponse.Actions.Should().Contain(a => a.Type == "UpdateHabit" && a.Status == "Success");
     }
-
-    // ===================================================================
-    //  SECTION 10: Boundary and Error Tests (3 tests)
-    // ===================================================================
 
     [Fact]
     public async Task Chat_SpecialCharactersInTitle_HandlesCorrectly()
@@ -585,7 +503,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Actions.Should().Contain(a => a.Type == "CreateHabit" && a.Status == "Success");
 
-        // Verify the habit was actually created
         var habits = await GetAllHabits();
         habits.Should().Contain(h => h.Title.Contains("Test") || h.Title.Contains("Debug"));
     }
@@ -593,7 +510,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
     [Fact]
     public async Task Chat_VeryManyHabits_HandlesLargeDataset()
     {
-        // Create 10 habits to test query with a larger dataset
         for (int i = 1; i <= 10; i++)
             await CreateHabitViaApi($"Bulk Habit {i:D2}", "Day");
 
@@ -609,33 +525,24 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         await CreateHabitViaApi("Concurrent A", "Day");
         await CreateHabitViaApi("Concurrent B", "Day");
 
-        // Request multiple operations in one message
         var response = await SendChat(
             "Log 'Concurrent A' as done, and also skip 'Concurrent B' for today");
 
         response.Should().NotBeNull();
         response.Actions.Should().NotBeEmpty();
-        // Both operations should succeed without interference
         response.Actions.Should().OnlyContain(a => a.Status == "Success");
     }
-
-    // ===================================================================
-    //  SECTION 11: DuplicateHabit Extended Tests (2 tests)
-    // ===================================================================
 
     [Fact]
     public async Task DuplicateHabit_WithTags_CopiesTags()
     {
         var habitId = await CreateHabitViaApi("Dup Tag Source", "Day");
 
-        // Tag the source habit first
         await SendChat("Tag the habit 'Dup Tag Source' with Wellness");
 
-        // Duplicate it
         var response = await SendChat("Duplicate the habit 'Dup Tag Source'");
         response.Actions.Should().Contain(a => a.Type == "DuplicateHabit" && a.Status == "Success");
 
-        // Verify two habits exist with similar names
         var habits = await GetAllHabits();
         var dupHabits = habits.Where(h =>
             h.Title.Contains("Dup Tag", StringComparison.OrdinalIgnoreCase) ||
@@ -655,10 +562,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
 
         response.Actions.Should().Contain(a => a.Type == "DuplicateHabit" && a.Status == "Success");
     }
-
-    // ===================================================================
-    //  Helpers
-    // ===================================================================
 
     private async Task<ChatResponse> SendChat(string message, int maxRetries = 2)
     {
@@ -731,7 +634,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         {
             title,
             type = "Boolean"
-            // No frequencyUnit = one-time task
         });
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             $"Failed to create one-time habit '{title}'");
@@ -795,10 +697,6 @@ public class AiToolEdgeCaseTests : IAsyncLifetime
         var paginated = await response.Content.ReadFromJsonAsync<PaginatedResponse<HabitDto>>(JsonOptions);
         return (paginated?.Items ?? []).DistinctBy(habit => habit.Id).ToList();
     }
-
-    // ===================================================================
-    //  DTOs
-    // ===================================================================
 
     private record LoginResponse(Guid UserId, string Token, string Name, string Email);
     private record ChatResponse(string? AiMessage, List<ActionResultDto> Actions);

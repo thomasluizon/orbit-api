@@ -76,7 +76,6 @@ public partial class LogHabitCommandHandler(
 
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
 
-        // Toggle: if already logged for the target date, unlog it (skip for flexible/bad habits which allow multiple logs)
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
             return await HandleUnlogAsync(habit, targetDate, today, cancellationToken);
@@ -115,12 +114,8 @@ public partial class LogHabitCommandHandler(
         var unlogGoalUpdates = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        // Pass awardFreezeIfEligible: false on unlog -- the streak being recomputed is
-        // the one the user is no longer credited for, so awarding a freeze from it would
-        // double-count milestones the user has already received freezes for.
         var streakState = await services.UserStreakService.RecalculateAsync(
             habit.UserId, cancellationToken, awardFreezeIfEligible: false);
-        // Streak recalculate modifies user entity; save the streak state update
         await unitOfWork.SaveChangesAsync(cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
@@ -153,7 +148,6 @@ public partial class LogHabitCommandHandler(
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
 
-        // Persist streak state changes (gamification already saved its own changes)
         if (gamificationResult is null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -202,7 +196,6 @@ public partial class LogHabitCommandHandler(
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
 
-        // Load all linked goals in a single query instead of one per goal
         var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id),
             q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),

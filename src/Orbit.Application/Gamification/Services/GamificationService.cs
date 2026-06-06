@@ -37,25 +37,20 @@ public partial class GamificationService(
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
-        // --- Load all user habits with logs ONCE (reused across streak, volume, perfect-day, perfect-week checks) ---
-        // Limit logs to the last 400 days to cover 365-day streak achievements with buffer
         var logCutoff = today.AddDays(-400);
         var allUserHabits = await repos.HabitRepository.FindAsync(
             h => h.UserId == userId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= logCutoff)),
             ct);
 
-        // Find the specific logged habit from the already-loaded collection
         var habit = allUserHabits.FirstOrDefault(h => h.Id == habitId);
         if (habit is null) return null;
 
-        // Calculate XP: 10 base + streak bonus
         var userTz = TimeZoneHelper.FindTimeZone(user.TimeZone);
         var metrics = HabitMetricsCalculator.Calculate(habit, today, userTz);
         var xp = 10 + metrics.CurrentStreak;
         user.AddXp(xp);
 
-        // --- Liftoff (first completion) ---
         if (!earned.Contains(AchievementDefinitions.Liftoff))
         {
             var totalLogs = allUserHabits.Sum(h => h.Logs.Count);
@@ -63,48 +58,38 @@ public partial class GamificationService(
                 TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
         }
 
-        // --- Consistency achievements ---
         CheckConsistencyAchievements(metrics.CurrentStreak, earned, user, newAchievements);
 
-        // --- Volume achievements ---
         if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
         {
             var totalCompletions = allUserHabits.Sum(h => h.Logs.Count);
             CheckVolumeAchievements(totalCompletions, earned, user, newAchievements);
         }
 
-        // --- Perfect Day ---
         CheckPerfectDay(allUserHabits, today, earned, user, newAchievements);
 
-        // --- Perfect Week / Perfect Month (only if PerfectDay is earned) ---
         if (earned.Contains(AchievementDefinitions.PerfectDay) || newAchievements.Any(a => a.Definition.Id == AchievementDefinitions.PerfectDay))
         {
             CheckPerfectWeekAndMonth(allUserHabits, today, earned, user, newAchievements);
         }
 
-        // --- Early Bird / Night Owl ---
         await CheckTimeBasedAchievements(user, earned, newAchievements, allUserHabits, ct);
 
-        // --- Comeback ---
         if (!earned.Contains(AchievementDefinitions.Comeback))
         {
             await CheckComeback(today, earned, user, newAchievements, allUserHabits, ct);
         }
 
-        // --- Bad Habit Breaker ---
         if (!earned.Contains(AchievementDefinitions.BadHabitBreaker) && habit.IsBadHabit && metrics.CurrentStreak >= 30)
         {
             TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
         }
 
-        // Persist new achievements
         foreach (var (entity, _) in newAchievements)
             await repos.AchievementRepository.AddAsync(entity, ct);
 
-        // Check level up
         UpdateLevel(user);
 
-        // Notifications
         foreach (var (_, definition) in newAchievements)
             await SendAchievementNotification(userId, definition, user.Language, ct);
 
@@ -204,8 +189,6 @@ public partial class GamificationService(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    // --- Private helpers ---
-
     private async Task<HashSet<string>> LoadEarnedAchievementIds(Guid userId, CancellationToken ct)
     {
         var earned = await repos.AchievementRepository.FindAsync(a => a.UserId == userId, ct);
@@ -276,18 +259,15 @@ public partial class GamificationService(
     {
         if (earned.Contains(AchievementDefinitions.PerfectDay)) return;
 
-        // Filter to active, non-general, top-level habits
         var eligibleHabits = allUserHabits
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
             .ToList();
 
         if (eligibleHabits.Count == 0) return;
 
-        // Filter to habits scheduled for today
         var scheduledToday = eligibleHabits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, today)).ToList();
         if (scheduledToday.Count == 0) return;
 
-        // Check if all scheduled habits have a log for today
         var allDone = scheduledToday.All(h => h.Logs.Any(l => l.Date == today));
         if (allDone)
             TryGrant(AchievementDefinitions.PerfectDay, user, earned, newAchievements);
@@ -300,21 +280,18 @@ public partial class GamificationService(
         User user,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
     {
-        // Filter to active, non-general, top-level habits
         var eligibleHabits = allUserHabits
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ParentHabitId == null)
             .ToList();
 
         if (eligibleHabits.Count == 0) return;
 
-        // Check consecutive perfect days going back from today
         var consecutivePerfectDays = 0;
         for (var day = today; day >= today.AddDays(-30); day = day.AddDays(-1))
         {
             var scheduledForDay = eligibleHabits.Where(h => HabitScheduleService.IsHabitDueOnDate(h, day)).ToList();
             if (scheduledForDay.Count == 0)
             {
-                // No habits scheduled this day, skip but don't break streak
                 if (day != today) consecutivePerfectDays++;
                 continue;
             }
@@ -345,11 +322,9 @@ public partial class GamificationService(
 
         var userTz = TimeZoneHelper.FindTimeZone(user.TimeZone);
 
-        // Use pre-loaded habits instead of re-querying
         var habitIds = allUserHabits.Select(h => h.Id).ToList();
         if (habitIds.Count == 0) return;
 
-        // Load recent logs only -- 90 days is more than enough to detect 10 qualifying entries
         var cutoff = DateTime.UtcNow.AddDays(-90);
         var allLogs = await repos.HabitLogRepository.FindAsync(
             l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= cutoff, ct);
@@ -389,11 +364,9 @@ public partial class GamificationService(
 
         var sevenDaysAgo = today.AddDays(-7);
 
-        // Use pre-loaded habits instead of re-querying
         var habitIds = allUserHabits.Select(h => h.Id).ToList();
         if (habitIds.Count == 0) return;
 
-        // Check for any logs in the 7 days before today (not including today)
         var recentLogs = await repos.HabitLogRepository.FindAsync(
             l => habitIds.Contains(l.HabitId) && l.Date >= sevenDaysAgo && l.Date < today, ct);
 
@@ -408,10 +381,6 @@ public partial class GamificationService(
             user.SetLevel(newLevel.Level);
     }
 
-    // FUTURE (Issue #52): These hardcoded Portuguese translations should be moved to a proper
-    // localization resource file (e.g., .resx or a JSON-backed IStringLocalizer) once a
-    // backend i18n strategy is established. Currently only pt-BR is supported; adding more
-    // languages would require duplicating this pattern, which is not maintainable.
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
     {
         ["first_orbit"] = ("Primeira Órbita", "Crie seu primeiro hábito"),
@@ -513,7 +482,6 @@ public partial class GamificationService(
             LogPushNotificationFailedForLevelUp(logger, ex, newLevel.Level, userId);
         }
     }
-
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Push notification failed for achievement {AchievementId} for user {UserId}")]
     private static partial void LogPushNotificationFailedForAchievement(ILogger logger, Exception ex, string achievementId, Guid userId);

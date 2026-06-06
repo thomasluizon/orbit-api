@@ -58,7 +58,6 @@ public class GetAchievementsQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Achievements.Should().HaveCount(AchievementDefinitions.All.Count);
 
-        // Earned achievements should be marked
         var firstOrbit = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.FirstOrbit);
         firstOrbit.IsEarned.Should().BeTrue();
         firstOrbit.EarnedAtUtc.Should().NotBeNull();
@@ -67,7 +66,6 @@ public class GetAchievementsQueryHandlerTests
         liftoff.IsEarned.Should().BeTrue();
         liftoff.EarnedAtUtc.Should().NotBeNull();
 
-        // Unearned achievements should be marked as not earned
         var weekWarrior = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.WeekWarrior);
         weekWarrior.IsEarned.Should().BeFalse();
         weekWarrior.EarnedAtUtc.Should().BeNull();
@@ -114,7 +112,6 @@ public class GetAchievementsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
 
-        // Check that all achievements have required fields
         result.Value.Achievements.Should().AllSatisfy(a =>
         {
             a.Id.Should().NotBeNullOrEmpty();

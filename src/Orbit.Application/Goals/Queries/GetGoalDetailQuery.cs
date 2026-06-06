@@ -29,7 +29,6 @@ public class GetGoalDetailQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalDetailWithMetricsResponse>();
 
-        // Superset includes: ProgressLogs for detail + Habits.Logs for metrics
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             includes: q => q.Include(g => g.ProgressLogs)
@@ -46,7 +45,6 @@ public class GetGoalDetailQueryHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        // Build detail DTO (same as GetGoalByIdQueryHandler)
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
             : 0;
@@ -65,7 +63,6 @@ public class GetGoalDetailQueryHandler(
             goal.Unit, goal.Status, goal.Type, goal.Deadline, goal.Position, goal.CreatedAtUtc,
             goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits);
 
-        // Build metrics
         var goalMetrics = GoalMetricsCalculator.Calculate(goal, userToday);
 
         return Result.Success(new GoalDetailWithMetricsResponse(detail, goalMetrics));

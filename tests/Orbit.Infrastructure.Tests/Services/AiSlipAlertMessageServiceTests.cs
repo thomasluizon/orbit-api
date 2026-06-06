@@ -18,8 +18,6 @@ public class AiSlipAlertMessageServiceTests
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
 
-    // -- GenerateFallback --
-
     [Fact]
     public void GenerateFallback_English_ReturnsEnglishMessage()
     {
@@ -66,8 +64,6 @@ public class AiSlipAlertMessageServiceTests
         result.Value.Title.Should().Contain("Doom scrolling");
     }
 
-    // -- Additional GenerateFallback tests --
-
     [Fact]
     public void GenerateFallback_English_BodyMentionsSlipping()
     {
@@ -87,7 +83,6 @@ public class AiSlipAlertMessageServiceTests
     [Fact]
     public void GenerateFallback_AlwaysReturnsSuccess()
     {
-        // Fallback should never fail -- it's the safety net
         var languages = new[] { "en", "pt", "pt-br", "pt-BR", "fr", "de", "es", "" };
 
         foreach (var lang in languages)
@@ -115,8 +110,6 @@ public class AiSlipAlertMessageServiceTests
         result.Value.Title.Should().Contain(longTitle);
     }
 
-    // -- Response parsing logic (replicating the lines-split from GenerateMessageAsync) --
-
     [Fact]
     public void ResponseParsing_TwoLines_ReturnsBothParts()
     {
@@ -135,7 +128,6 @@ public class AiSlipAlertMessageServiceTests
         var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         lines.Should().HaveCount(1);
-        // Service falls back to "Heads up: {habitTitle}" as the title
         var fallbackTitle = "Heads up: Smoking";
         fallbackTitle.Should().StartWith("Heads up:");
     }
@@ -167,12 +159,9 @@ public class AiSlipAlertMessageServiceTests
         var lines = text.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         lines.Should().HaveCountGreaterThanOrEqualTo(2);
-        // The service takes lines[0] and lines[1]
         lines[0].Should().Be("Title");
         lines[1].Should().Be("Body line 1");
     }
-
-    // -- Language detection logic (replicating the prompt construction) --
 
     [Theory]
     [InlineData("en", "English")]
@@ -184,7 +173,6 @@ public class AiSlipAlertMessageServiceTests
     [InlineData("de", "English")]
     public void LanguageMapping_ReturnsCorrectLanguageName(string input, string expected)
     {
-        // Replicate the language mapping from GenerateMessageAsync
         var languageName = input.ToLowerInvariant() switch
         {
             "pt-br" or "pt" => "Brazilian Portuguese",
@@ -193,8 +181,6 @@ public class AiSlipAlertMessageServiceTests
 
         languageName.Should().Be(expected);
     }
-
-    // -- Time context formatting --
 
     [Fact]
     public void TimeContext_WithPeakHour_IncludesTimeAndDay()
@@ -221,8 +207,6 @@ public class AiSlipAlertMessageServiceTests
         timeContext.Should().Contain("no specific time pattern");
         timeContext.Should().Contain("Saturdays");
     }
-
-    // -- Fallback with Portuguese variant --
 
     [Fact]
     public void GenerateFallback_PortugueseBR_TitleContainsFiqueAtento()
@@ -255,8 +239,6 @@ public class AiSlipAlertMessageServiceTests
         result.Value.Title.Should().Contain("Heads up");
     }
 
-    // -- Response parsing with edge cases --
-
     [Fact]
     public void ResponseParsing_TrailingNewlines_TrimmedCorrectly()
     {
@@ -278,8 +260,6 @@ public class AiSlipAlertMessageServiceTests
         lines[0].Should().Be("Title");
         lines[1].Should().Be("Body");
     }
-
-    // -- Helpers --
 
     private static Result<(string Title, string Body)> InvokeGenerateFallback(string habitTitle, string language)
     {

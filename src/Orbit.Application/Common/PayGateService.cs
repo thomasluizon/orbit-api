@@ -19,8 +19,6 @@ public class PayGateService(
             return Result.Success();
 
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
-        // Cap applies to top-level habits only; soft-deleted habits are excluded
-        // automatically by the EF global query filter on Habit.IsDeleted.
         var activeHabitCount = await habitRepository.CountAsync(
             h => h.UserId == userId && h.ParentHabitId == null, ct);
 

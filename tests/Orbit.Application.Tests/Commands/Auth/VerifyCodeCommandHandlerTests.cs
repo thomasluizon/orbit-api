@@ -71,7 +71,6 @@ public class VerifyCodeCommandHandlerTests
     [Fact]
     public async Task Handle_ExpiredCode_ReturnsFailure()
     {
-        // No cache entry -- simulates expired code
         var command = new VerifyCodeCommand(TestEmail, "123456");
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -85,7 +84,6 @@ public class VerifyCodeCommandHandlerTests
     public async Task Handle_NewUser_CreatesAccountAndReturnsToken()
     {
         SetupCacheWithCode("123456");
-        // No existing user -- FindOneTrackedAsync returns null by default
 
         var command = new VerifyCodeCommand(TestEmail, "123456");
 

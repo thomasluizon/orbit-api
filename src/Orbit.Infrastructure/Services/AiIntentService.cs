@@ -39,7 +39,6 @@ public sealed partial class AiIntentService(
             new SystemChatMessage(systemPrompt)
         };
 
-        // Conversation history
         if (history is { Count: > 0 })
         {
             var historyTranscript = BuildHistoryTranscript(history);
@@ -47,7 +46,6 @@ public sealed partial class AiIntentService(
                 messages.Add(new SystemChatMessage(historyTranscript));
         }
 
-        // Current user message with optional image
         if (imageData != null && !string.IsNullOrWhiteSpace(imageMimeType))
         {
             messages.Add(new UserChatMessage(
@@ -60,7 +58,6 @@ public sealed partial class AiIntentService(
             messages.Add(new UserChatMessage(userMessage));
         }
 
-        // Convert tool declarations to SDK ChatTool instances
         var options = new ChatCompletionOptions
         {
             Temperature = 0.1f,
@@ -86,7 +83,6 @@ public sealed partial class AiIntentService(
             conversationContext.Options is not ChatCompletionOptions options)
             return Result.Failure<AiResponse>("No active conversation. Call SendWithToolsAsync first.");
 
-        // Add tool result messages (one per result, with tool_call_id)
         foreach (var result in results)
         {
             var payload = new Dictionary<string, object>
@@ -108,10 +104,6 @@ public sealed partial class AiIntentService(
         return await CallWithToolsAsync(messages, options, cancellationToken);
     }
 
-    // ───────────────────────────────────────────────────────────────
-    //  Shared helpers
-    // ───────────────────────────────────────────────────────────────
-
     private async Task<Result<AiResponse>> CallWithToolsAsync(
         List<ChatMessage> messages, ChatCompletionOptions options, CancellationToken cancellationToken)
     {
@@ -128,10 +120,8 @@ public sealed partial class AiIntentService(
 
             var result = completion.Value;
 
-            // Append the assistant message to conversation state
             messages.Add(new AssistantChatMessage(result));
 
-            // Check if response contains tool calls
             if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
             {
                 var toolCalls = result.ToolCalls
@@ -153,7 +143,6 @@ public sealed partial class AiIntentService(
                 return Result.Success(new AiResponse { ToolCalls = toolCalls, ConversationContext = convCtx });
             }
 
-            // Otherwise it's a text response
             var text = result.Content.FirstOrDefault()?.Text;
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<AiResponse>("AI returned neither tool calls nor text.");
@@ -176,7 +165,6 @@ public sealed partial class AiIntentService(
     private static ChatTool? ConvertToSdkTool(object declaration)
     {
         var json = JsonSerializer.Serialize(declaration, SerializeOptions);
-        // Normalize uppercase types (OBJECT, STRING, etc.) to JSON Schema lowercase
         json = NormalizeSchemaTypes(json);
 
         using var doc = JsonDocument.Parse(json);

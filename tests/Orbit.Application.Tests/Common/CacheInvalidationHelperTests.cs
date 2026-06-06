@@ -9,7 +9,6 @@ public class CacheInvalidationHelperTests
     [Fact]
     public void InvalidateSummaryCache_RemovesSummaryKeys()
     {
-        // Arrange
         var cache = new MemoryCache(new MemoryCacheOptions());
         var userId = Guid.NewGuid();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -37,7 +36,6 @@ public class CacheInvalidationHelperTests
             cache.TryGetValue(key, out _).Should().BeTrue($"key '{key}' should exist before invalidation");
         }
 
-        // Act
         CacheInvalidationHelper.InvalidateSummaryCache(cache, userId);
 
         foreach (var key in keys)

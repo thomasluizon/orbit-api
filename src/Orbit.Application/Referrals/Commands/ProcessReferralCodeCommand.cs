@@ -38,7 +38,6 @@ public class ProcessReferralCodeCommandHandler(
         if (newUser.ReferredByUserId is not null)
             return Result.Failure(ErrorMessages.AlreadyReferred, ErrorCodes.AlreadyReferred);
 
-        // Count referrer's successful referrals (Completed or Rewarded)
         var successfulReferrals = await referralRepository.FindAsync(
             r => r.ReferrerId == referrer.Id && r.Status != ReferralStatus.Pending,
             cancellationToken: cancellationToken);
@@ -52,7 +51,6 @@ public class ProcessReferralCodeCommandHandler(
         var referral = Referral.Create(referrer.Id, newUser.Id);
         await referralRepository.AddAsync(referral, cancellationToken);
 
-        // Create a 10% discount coupon for the referred user
         var promoCodeId = await referralRewardService.CreateReferralCouponAsync(
             newUser.Id, cancellationToken);
         newUser.SetReferralCoupon(promoCodeId);

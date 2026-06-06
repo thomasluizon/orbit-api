@@ -35,7 +35,6 @@ public class RunCalendarAutoSyncCommandHandlerTests
             .Returns(Task.FromResult(Result.Success()));
         _handler = new RunCalendarAutoSyncCommandHandler(deps, _payGate, _timeProvider, _logger);
 
-        // Default: mid-day so notifications pass quiet-hours check
         _timeProvider.SetUtcNow(new DateTime(2026, 4, 9, 14, 0, 0, DateTimeKind.Utc));
 
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
@@ -211,7 +210,6 @@ public class RunCalendarAutoSyncCommandHandlerTests
     [Fact]
     public async Task Handle_Success_QuietHours_DoesNotCreateNotification()
     {
-        // Set time to 03:00 UTC - outside quiet hours window of 08:00-20:00
         _timeProvider.SetUtcNow(new DateTime(2026, 4, 9, 3, 0, 0, DateTimeKind.Utc));
 
         var user = CreateEnabledProUser();

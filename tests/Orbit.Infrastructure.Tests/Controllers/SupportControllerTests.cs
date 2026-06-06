@@ -30,8 +30,6 @@ public class SupportControllerTests
         };
     }
 
-    // --- SendSupport ---
-
     [Fact]
     public async Task SendSupport_Success_ReturnsOk()
     {

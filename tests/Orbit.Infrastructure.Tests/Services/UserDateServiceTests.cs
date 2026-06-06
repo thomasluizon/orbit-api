@@ -30,7 +30,6 @@ public class UserDateServiceTests
 
         var result = await _sut.GetUserTodayAsync(UserId);
 
-        // Should return a valid date
         result.Should().NotBe(default);
     }
 
@@ -43,7 +42,6 @@ public class UserDateServiceTests
 
         var result = await _sut.GetUserTodayAsync(UserId);
 
-        // Falls back to UTC
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
         result.Should().Be(utcToday);
     }
@@ -68,13 +66,10 @@ public class UserDateServiceTests
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(user);
 
-        // First call
         await _sut.GetUserTodayAsync(UserId);
 
-        // Second call - should use cache
         await _sut.GetUserTodayAsync(UserId);
 
-        // Only one call to repository expected
         await _userRepo.Received(1).GetByIdAsync(UserId, Arg.Any<CancellationToken>());
     }
 }

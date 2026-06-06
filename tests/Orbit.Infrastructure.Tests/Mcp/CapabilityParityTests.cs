@@ -16,9 +16,7 @@ public class CapabilityParityTests
 
     private static readonly HashSet<string> OneSidedExemptions = new(StringComparer.OrdinalIgnoreCase)
     {
-        // chat itself is the entry point, not a chat-callable tool; its operation executors are MCP-only.
         AgentCapabilityIds.ChatInteract,
-        // catalog discovery is MCP-only; chat receives catalog context through the prompt supplement.
         AgentCapabilityIds.CatalogCapabilitiesRead,
         AgentCapabilityIds.CatalogDataRead,
         AgentCapabilityIds.CatalogSurfacesRead,

@@ -10,8 +10,6 @@ public class JsonArgumentParserTests
 {
     private static readonly int[] ExpectedReminderTimes = [15, 30, 60];
 
-    // --- GetOptionalString ---
-
     [Fact]
     public void GetOptionalString_ExistingProperty_ReturnsValue()
     {
@@ -40,8 +38,6 @@ public class JsonArgumentParserTests
         JsonArgumentParser.GetOptionalString(el, "name").Should().BeNull();
     }
 
-    // --- GetOptionalInt ---
-
     [Fact]
     public void GetOptionalInt_ExistingProperty_ReturnsValue()
     {
@@ -62,8 +58,6 @@ public class JsonArgumentParserTests
         var el = Parse("""{"count": "five"}""");
         JsonArgumentParser.GetOptionalInt(el, "count").Should().BeNull();
     }
-
-    // --- GetOptionalBool ---
 
     [Fact]
     public void GetOptionalBool_TrueValue_ReturnsTrue()
@@ -92,8 +86,6 @@ public class JsonArgumentParserTests
         var el = Parse("""{"enabled": "yes"}""");
         JsonArgumentParser.GetOptionalBool(el, "enabled").Should().BeNull();
     }
-
-    // --- ParseFrequencyUnit ---
 
     [Theory]
     [InlineData("Day", FrequencyUnit.Day)]
@@ -126,8 +118,6 @@ public class JsonArgumentParserTests
         var el = Parse("{}");
         JsonArgumentParser.ParseFrequencyUnit(el).Should().BeNull();
     }
-
-    // --- ParseDays ---
 
     [Fact]
     public void ParseDays_ValidDays_ReturnsDayList()
@@ -162,8 +152,6 @@ public class JsonArgumentParserTests
         JsonArgumentParser.ParseDays(el).Should().BeNull();
     }
 
-    // --- ParseDateOnly ---
-
     [Fact]
     public void ParseDateOnly_ValidDate_ReturnsDate()
     {
@@ -185,8 +173,6 @@ public class JsonArgumentParserTests
         JsonArgumentParser.ParseDateOnly(el, "due_date").Should().BeNull();
     }
 
-    // --- ParseTimeOnly ---
-
     [Fact]
     public void ParseTimeOnly_ValidTime_ReturnsTime()
     {
@@ -200,8 +186,6 @@ public class JsonArgumentParserTests
         var el = Parse("{}");
         JsonArgumentParser.ParseTimeOnly(el, "due_time").Should().BeNull();
     }
-
-    // --- ParseIntArray ---
 
     [Fact]
     public void ParseIntArray_ValidArray_ReturnsInts()
@@ -225,8 +209,6 @@ public class JsonArgumentParserTests
         var el = Parse("{}");
         JsonArgumentParser.ParseIntArray(el, "reminder_times").Should().BeNull();
     }
-
-    // --- ParseChecklistItems ---
 
     [Fact]
     public void ParseChecklistItems_ValidItems_ReturnsList()
@@ -258,8 +240,6 @@ public class JsonArgumentParserTests
         result![0].Text.Should().Be("Valid");
     }
 
-    // --- ParseScheduledReminders ---
-
     [Fact]
     public void ParseScheduledReminders_ValidItems_ReturnsList()
     {
@@ -288,8 +268,6 @@ public class JsonArgumentParserTests
         JsonArgumentParser.ParseScheduledReminders(el).Should().BeNull();
     }
 
-    // --- TryParseScheduledReminderWhen ---
-
     [Theory]
     [InlineData("same_day", ScheduledReminderWhen.SameDay, true)]
     [InlineData("day_before", ScheduledReminderWhen.DayBefore, true)]
@@ -301,8 +279,6 @@ public class JsonArgumentParserTests
         if (expectedResult)
             result.Should().Be(expectedWhen);
     }
-
-    // --- PropertyExists ---
 
     [Fact]
     public void PropertyExists_ExistingProperty_ReturnsTrue()
@@ -325,8 +301,6 @@ public class JsonArgumentParserTests
         JsonArgumentParser.PropertyExists(el, "name").Should().BeTrue();
     }
 
-    // --- GetNullableString ---
-
     [Fact]
     public void GetNullableString_StringValue_ReturnsString()
     {
@@ -348,8 +322,6 @@ public class JsonArgumentParserTests
         JsonArgumentParser.GetNullableString(el, "name").Should().BeNull();
     }
 
-    // --- ParseTimeOnlyFromString ---
-
     [Fact]
     public void ParseTimeOnlyFromString_ValidTime_ReturnsTime()
     {
@@ -361,8 +333,6 @@ public class JsonArgumentParserTests
     {
         JsonArgumentParser.ParseTimeOnlyFromString("not-a-time").Should().BeNull();
     }
-
-    // --- Helper ---
 
     private static JsonElement Parse(string json) =>
         JsonDocument.Parse(json).RootElement;

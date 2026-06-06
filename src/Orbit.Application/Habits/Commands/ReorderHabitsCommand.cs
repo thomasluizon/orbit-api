@@ -20,7 +20,6 @@ public class ReorderHabitsCommandHandler(
     {
         var ids = request.Positions.Select(p => p.HabitId).ToHashSet();
 
-        // Load all habits in a single query instead of one per position update
         var habits = await habitRepository.FindTrackedAsync(
             h => ids.Contains(h.Id) && h.UserId == request.UserId,
             cancellationToken);

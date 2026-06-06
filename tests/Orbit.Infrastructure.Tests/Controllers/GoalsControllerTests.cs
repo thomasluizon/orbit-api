@@ -34,8 +34,6 @@ public class GoalsControllerTests
         };
     }
 
-    // --- GetGoals ---
-
     [Fact]
     public async Task GetGoals_Success_ReturnsOk()
     {
@@ -58,8 +56,6 @@ public class GoalsControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- GetGoalById ---
 
     [Fact]
     public async Task GetGoalById_Success_ReturnsOk()
@@ -94,8 +90,6 @@ public class GoalsControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- CreateGoal ---
 
     [Fact]
     public async Task CreateGoal_Success_ReturnsCreated()
@@ -135,8 +129,6 @@ public class GoalsControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- UpdateGoal ---
-
     [Fact]
     public async Task UpdateGoal_Success_ReturnsNoContent()
     {
@@ -173,8 +165,6 @@ public class GoalsControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- UpdateProgress ---
 
     [Fact]
     public async Task UpdateProgress_Success_ReturnsNoContent()
@@ -213,8 +203,6 @@ public class GoalsControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- UpdateStatus ---
-
     [Fact]
     public async Task UpdateStatus_Success_ReturnsNoContent()
     {
@@ -251,8 +239,6 @@ public class GoalsControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- ReorderGoals ---
 
     [Fact]
     public async Task ReorderGoals_Success_ReturnsNoContent()
@@ -291,8 +277,6 @@ public class GoalsControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- LinkHabits ---
-
     [Fact]
     public async Task LinkHabits_Success_ReturnsNoContent()
     {
@@ -330,8 +314,6 @@ public class GoalsControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- GetGoalDetail ---
-
     [Fact]
     public async Task GetGoalDetail_Success_ReturnsOk()
     {
@@ -365,8 +347,6 @@ public class GoalsControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- GetGoalMetrics ---
 
     [Fact]
     public async Task GetGoalMetrics_Success_ReturnsOk()
@@ -402,8 +382,6 @@ public class GoalsControllerTests
         objectResult.StatusCode.Should().Be(403);
     }
 
-    // --- GetGoalReview ---
-
     [Fact]
     public async Task GetGoalReview_Success_ReturnsOk()
     {
@@ -426,8 +404,6 @@ public class GoalsControllerTests
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
     }
-
-    // --- DeleteGoal ---
 
     [Fact]
     public async Task DeleteGoal_Success_ReturnsNoContent()

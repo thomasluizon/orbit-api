@@ -20,8 +20,6 @@ public class SendCodeCommandHandler(
         var email = request.Email.Trim().ToLowerInvariant();
         var cacheKey = $"verify:{email}";
 
-        // Test accounts: skip email, store fixed code (disabled in Production)
-        // Format: TEST_ACCOUNTS=email1:code1,email2:code2,...
         var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         if (!string.Equals(aspNetEnv, "Production", StringComparison.OrdinalIgnoreCase))
         {
@@ -44,7 +42,6 @@ public class SendCodeCommandHandler(
             }
         }
 
-        // Rate limit: no new code within 60 seconds
         if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) && existing is not null)
         {
             var elapsed = DateTime.UtcNow - existing.CreatedAt;
@@ -52,17 +49,14 @@ public class SendCodeCommandHandler(
                 return Result.Failure("Please wait before requesting a new code");
         }
 
-        // Generate 6-digit code using cryptographic PRNG
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
-        // Store in cache with 5-minute expiration
         var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
         cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
         });
 
-        // Send code via email
         await emailService.SendVerificationCodeAsync(email, code, request.Language, cancellationToken);
 
         return Result.Success();

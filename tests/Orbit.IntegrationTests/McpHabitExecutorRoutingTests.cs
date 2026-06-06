@@ -124,8 +124,6 @@ public class McpHabitExecutorRoutingTests : IAsyncLifetime
         goalsWriteDenial.Operation.Status.Should().Be(AgentOperationStatus.Denied);
         goalsWriteDenial.Operation.PolicyReason.Should().Be("read_only_credential");
 
-        // bulk_delete_habits is Destructive (requires confirmation); proving read-only wins here
-        // confirms the credential check fires before the confirmation gate.
         bulkDeleteDenial.Operation.Status.Should().Be(AgentOperationStatus.Denied);
         bulkDeleteDenial.Operation.PolicyReason.Should().Be("read_only_credential");
     }

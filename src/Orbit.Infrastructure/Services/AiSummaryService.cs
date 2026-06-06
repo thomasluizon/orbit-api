@@ -56,13 +56,11 @@ public sealed partial class AiSummaryService(
     }
 
     /// <summary>
-    /// Selects the habits the summary should reason about, mirroring the Today list's inclusion
-    /// gate (GetHabitScheduleQuery) so the summary never mentions a habit the Today screen would
-    /// not show: a habit is included when it was completed on the viewed day, is scheduled on it,
-    /// or — only when the viewed day is today — is overdue. Each child is evaluated on its own
-    /// merit, so a recurring habit whose DueDate has already advanced past the day (a logged good
-    /// habit) is not re-listed as pending, and a one-time task completed on an earlier day never
-    /// reappears (its <see cref="Habit.IsCompleted"/> flag is sticky and intentionally ignored here).
+    /// Selects the habits the summary should reason about: anything logged on the viewed day
+    /// (completed today), plus anything still open — not completed and with a
+    /// <see cref="Habit.DueDate"/> on or before the user's today (due today or overdue). Habits due
+    /// only in the future, and tasks already completed on an earlier day, are excluded. Each child
+    /// is evaluated on its own merit so a non-due child never rides in on a due parent.
     /// </summary>
     private static List<Habit> SelectScheduledHabits(
         IEnumerable<Habit> allHabits,
@@ -70,14 +68,12 @@ public sealed partial class AiSummaryService(
         DateOnly dateFrom,
         DateOnly dateTo)
     {
-        // The Today list only surfaces overdue items while viewing today (includeOverdue: isToday).
-        var includeOverdue = dateFrom == userToday && dateTo == userToday;
         var habitList = allHabits.ToList();
 
         var scheduledTopLevel = habitList
             .Where(h => h.ParentHabitId is null
                          && !HasSkipLogInRange(h, dateFrom, dateTo)
-                         && IsRelevant(h, dateFrom, dateTo, includeOverdue))
+                         && IsRelevant(h, dateFrom, dateTo, userToday))
             .ToList();
 
         var scheduledTopLevelIds = scheduledTopLevel.Select(h => h.Id).ToHashSet();
@@ -86,7 +82,7 @@ public sealed partial class AiSummaryService(
             .Where(h => h.ParentHabitId is not null
                         && scheduledTopLevelIds.Contains(h.ParentHabitId.Value)
                         && !HasSkipLogInRange(h, dateFrom, dateTo)
-                        && IsRelevant(h, dateFrom, dateTo, includeOverdue))
+                        && IsRelevant(h, dateFrom, dateTo, userToday))
             .ToList();
 
         return scheduledTopLevel.Concat(children).ToList();
@@ -172,15 +168,15 @@ public sealed partial class AiSummaryService(
         HabitScheduleService.HasCompletedLogInRange(habit, dateFrom, dateTo);
 
     /// <summary>
-    /// Mirrors the Today list's per-habit inclusion gate: a habit is relevant when it was
-    /// completed on the viewed day, is scheduled on it, or — only while viewing today — is overdue.
-    /// "Done" is decided purely by a dated completion log, never by the sticky
-    /// <see cref="Habit.IsCompleted"/> flag, so past-completed one-time tasks do not leak in.
+    /// The summary's single inclusion rule: a habit is relevant when it was logged on the viewed
+    /// day (completed today), or it is still open — not completed and due on or before the user's
+    /// today (due today or overdue). "Done" is decided purely by a dated completion log, never by
+    /// the sticky <see cref="Habit.IsCompleted"/> flag, so a task completed on an earlier day (still
+    /// flagged completed, but with no log today) is excluded.
     /// </summary>
-    private static bool IsRelevant(Habit habit, DateOnly dateFrom, DateOnly dateTo, bool includeOverdue) =>
+    private static bool IsRelevant(Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday) =>
         IsDoneInRange(habit, dateFrom, dateTo)
-        || HabitScheduleService.IsHabitDueOnDate(habit, dateFrom)
-        || (includeOverdue && HabitScheduleService.IsOverdueOnDate(habit, dateFrom));
+        || (!habit.IsCompleted && habit.DueDate <= userToday);
 
     private static string BuildTimeContext(TimeOnly? currentLocalTime)
     {

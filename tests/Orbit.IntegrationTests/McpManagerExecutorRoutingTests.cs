@@ -63,8 +63,6 @@ public class McpManagerExecutorRoutingTests : IAsyncLifetime
         auditRow.Should().NotBeNull();
     }
 
-    // --- Routing + audit (success path, non-confirmation managers) ---
-
     [Fact]
     public async Task SendSupportRequest_ViaMcpSurface_WritesAuditRow()
     {
@@ -144,8 +142,6 @@ public class McpManagerExecutorRoutingTests : IAsyncLifetime
         await AssertAuditRowAsync(scope, "notifications.write", "update_notifications", AgentOperationStatus.Succeeded);
     }
 
-    // --- Routing: bulk log/skip now go through the executor (was direct MediatR dispatch) ---
-
     [Fact]
     public async Task BulkLogHabits_ViaMcpSurface_EnforcesConfirmationGateAndWritesAuditRow()
     {
@@ -154,9 +150,6 @@ public class McpManagerExecutorRoutingTests : IAsyncLifetime
 
         var habitId = await SeedHabitAsync(executor);
 
-        // Routing through the executor enforces the HabitsBulkWrite confirmation gate (Destructive):
-        // a no-token call is held as PendingConfirmation and audited, unlike a direct command dispatch
-        // which would skip both the gate and the audit trail.
         var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
             _userId,
             "bulk_log_habits",
@@ -168,8 +161,6 @@ public class McpManagerExecutorRoutingTests : IAsyncLifetime
         response.Operation.Status.Should().Be(AgentOperationStatus.PendingConfirmation);
         await AssertAuditRowAsync(scope, "habits.bulk.write", "bulk_log_habits", AgentOperationStatus.PendingConfirmation);
     }
-
-    // --- Step-up gate: manage_subscription with no confirmation token → step_up_required ---
 
     [Fact]
     public async Task ManageSubscription_ViaMcpSurface_WithoutToken_RequiresStepUp()
@@ -191,9 +182,6 @@ public class McpManagerExecutorRoutingTests : IAsyncLifetime
         response.Operation.PolicyReason.Should().Be("step_up_required");
     }
 
-    // --- Read-only credential is denied across ≥3 toolsets, including a now-routed bulk op
-    // and a step-up tool, with read_only_credential as the assertion target ---
-
     [Fact]
     public async Task ReadOnlyCredential_IsDeniedAcrossManagerToolsets_IncludingBulkLogAndStepUp()
     {
@@ -202,12 +190,8 @@ public class McpManagerExecutorRoutingTests : IAsyncLifetime
         using var scope = _factory.Services.CreateScope();
         var executor = scope.ServiceProvider.GetRequiredService<IAgentOperationExecutor>();
 
-        // bulk_log_habits carries a habit target; seed an owned habit so the ownership pre-check
-        // passes and the read-only-credential denial (the assertion target) is what fires.
         var ownedHabitId = await SeedHabitAsync(executor);
 
-        // ManageSubscriptions and WriteSupport are NOT in ClaudeDefaultScopes; grant them explicitly
-        // so missing_scope does not fire before the read_only_credential denial.
         var scopes = AgentScopes.ClaudeDefaultScopes
             .Append(AgentScopes.ManageSubscriptions)
             .Append(AgentScopes.WriteSupport)

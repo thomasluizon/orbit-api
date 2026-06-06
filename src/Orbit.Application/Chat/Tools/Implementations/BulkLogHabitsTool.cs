@@ -56,7 +56,6 @@ public class BulkLogHabitsTool(
         var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
         var loggedNames = new List<string>();
 
-        // Batch-load all requested habits in a single query instead of N+1
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == userId,
             q => q.Include(h => h.Logs),

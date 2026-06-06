@@ -129,9 +129,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (reminderValidation is not null)
             return Result.Failure<Habit>(reminderValidation);
 
-        // Note: fallback to UTC date is approximate -- used only for EndDate validation when
-        // dueDate is null. The caller (CreateHabitCommand) resolves the correct local date,
-        // so this path rarely fires and the 1-day drift is acceptable for a validation guard.
         var effectiveDueDate = p.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
         return Result.Success(new Habit
@@ -147,8 +144,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsGeneral = p.IsGeneral,
             IsFlexible = p.IsFlexible,
             DueDate = effectiveDueDate,
-            // For monthly/yearly habits, capture the original anchor day so subsequent
-            // advances can re-anchor through end-of-month clamps without drifting.
             OriginalDayOfMonth = p.FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year
                 ? effectiveDueDate.Day
                 : null,
@@ -172,24 +167,20 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (IsCompleted)
             return Result.Failure<HabitLog>("Cannot log a completed habit.");
 
-        // Flexible and bad habits allow multiple logs per day; regular habits do not
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date))
             return Result.Failure<HabitLog>("This habit has already been logged for this date.");
 
         var log = HabitLog.Create(Id, date, 1, note);
         _logs.Add(log);
 
-        // One-time task: mark as completed
         if (FrequencyUnit is null)
         {
             IsCompleted = true;
         }
         else if (!IsFlexible && advanceDueDate)
         {
-            // Recurring (non-flexible) habit: advance DueDate past the logged date
             AdvanceDueDate(date);
 
-            // Reset checklist for next occurrence
             if (ChecklistItems.Count > 0)
                 ChecklistItems = ChecklistItems.Select(i => i with { IsChecked = false }).ToList();
         }
@@ -207,7 +198,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             if (DueDate == prev) break;
         } while (DueDate <= today);
 
-        // If the habit has run past its end date, mark it as completed
         if (EndDate.HasValue && DueDate > EndDate.Value)
         {
             IsCompleted = true;
@@ -244,9 +234,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     private DateOnly AdvanceDueDateByOneStep()
     {
-        // Use the persisted OriginalDayOfMonth as the re-anchor target so day 31 stays
-        // day 31 across the Feb clamp. Falls back to DueDate.Day for legacy rows that
-        // pre-date the OriginalDayOfMonth migration.
         var originalDay = OriginalDayOfMonth ?? DueDate.Day;
 
         var next = (FrequencyUnit, FrequencyQuantity) switch
@@ -258,9 +245,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             _ => DueDate
         };
 
-        // Re-anchor monthly/yearly advances to the original day-of-month, clamped to the
-        // last day of the target month. This prevents drift when AddMonths/AddYears clamps
-        // (e.g., Jan 31 -> Feb 28 should re-anchor to Mar 31, not Mar 28).
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
         {
             var daysInTargetMonth = DateTime.DaysInMonth(next.Year, next.Month);
@@ -268,7 +252,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             next = new DateOnly(next.Year, next.Month, correctedDay);
         }
 
-        // If Days are specified, find the next matching day
         if (Days.Count > 0)
         {
             while (!Days.Contains(next.DayOfWeek))
@@ -287,8 +270,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var windowEnd = FrequencyUnit switch
         {
             Enums.FrequencyUnit.Day => today,
-            Enums.FrequencyUnit.Week => today.AddDays(6 - ((int)today.DayOfWeek + 6) % 7), // end of ISO week (Sunday)
-            Enums.FrequencyUnit.Month => new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)),
+            Enums.FrequencyUnit.Week => today.AddDays(6 - ((int)today.DayOfWeek + 6) % 7),            Enums.FrequencyUnit.Month => new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)),
             Enums.FrequencyUnit.Year => new DateOnly(today.Year, 12, 31),
             _ => today
         };
@@ -313,7 +295,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (FrequencyUnit is null)
             return Result.Failure<HabitLog>("Cannot skip a one-time task.");
 
-        // Create a skip log (Value = 0 distinguishes from completion logs which use Value = 1)
         var log = HabitLog.Create(Id, date, 0, null);
         _logs.Add(log);
         UpdatedAtUtc = DateTime.UtcNow;
@@ -322,7 +303,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public Result<HabitLog> Unlog(DateOnly date)
     {
-        // Only match completion logs (Value > 0), not skip logs (Value == 0)
         var log = _logs.Find(l => l.Date == date && l.Value > 0);
         if (log is null)
             return Result.Failure<HabitLog>("No log found for this date.");
@@ -400,11 +380,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (p.DueDate is not null)
             DueDate = p.DueDate.Value;
 
-        // Re-anchor OriginalDayOfMonth on edit so changing a monthly habit from the 31st
-        // to the 15th re-anchors to day 15 (instead of staying at the old day), and switching
-        // a daily habit to monthly seeds the field instead of leaving it null.
-        // Daily/weekly habits don't use this field, so clear it on transition away from
-        // monthly/yearly to avoid stale anchors lingering across cadence flips.
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
             OriginalDayOfMonth = DueDate.Day;
         else
@@ -477,8 +452,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public void AddGoal(Goal goal) { if (!_goals.Contains(goal)) _goals.Add(goal); }
 
     public void RemoveGoal(Goal goal) => _goals.Remove(goal);
-
-    // --- Validation helpers ---
 
     private static string? ValidateScheduleOptions(
         bool isGeneral, bool isFlexible, bool isBadHabit,

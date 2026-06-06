@@ -19,7 +19,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    // Rate limiting: AI API rate limits
     private static readonly SemaphoreSlim RateLimitSemaphore = new(1, 1);
     private static DateTime LastApiCall = DateTime.MinValue;
 
@@ -53,7 +52,7 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
                 await _client.DeleteAsync($"/api/users/{_testUserId}");
             }
-            catch { /* cleanup best-effort */ }
+            catch { }
         }
 
         _client.Dispose();
@@ -64,10 +63,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_CreateBooleanHabit_ShouldSucceed()
     {
-        // Act
         var response = await SendChatMessage("i want to meditate daily");
 
-        // Assert
         response.Actions.Should().ContainSingle();
         response.Actions[0].Type.Should().Be("CreateHabit");
         response.Actions[0].Status.Should().Be("Success");
@@ -79,10 +76,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_CreateRunningHabit_ExplicitRequest_ShouldSucceed()
     {
-        // Act
         var response = await SendChatMessage("create a daily habit called Running");
 
-        // Assert
         response.Actions.Should().ContainSingle();
         response.Actions[0].Type.Should().Be("CreateHabit");
         response.Actions[0].Status.Should().Be("Success");
@@ -92,10 +87,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_CreateQuantifiableHabit_Water_ShouldSucceed()
     {
-        // Act
         var response = await SendChatMessage("i want to drink 8 glasses of water daily");
 
-        // Assert
         response.Actions.Should().ContainSingle();
         response.Actions[0].Type.Should().Be("CreateHabit");
         response.Actions[0].Status.Should().Be("Success");
@@ -109,13 +102,10 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_LogHabit_ToExistingHabit_ShouldSucceed()
     {
-        // Arrange - Create a habit first
         await SendChatMessage("i want to read daily");
 
-        // Act - Log to the habit
         var response = await SendChatMessage("i read today");
 
-        // Assert
         response.Actions.Should().ContainSingle();
         response.Actions[0].Type.Should().Be("LogHabit");
         response.Actions[0].Status.Should().Be("Success");
@@ -125,13 +115,10 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_LogRunningHabit_WithDistanceNote_ShouldSucceed()
     {
-        // Arrange
         await CreateHabitViaApi("Running", "Day");
 
-        // Act
         var response = await SendChatMessage("i ran 3km today");
 
-        // Assert
         response.Actions.Should().ContainSingle();
         response.Actions[0].Type.Should().Be("LogHabit");
         response.Actions[0].Status.Should().Be("Success");
@@ -145,10 +132,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_GeneralQuestion_ShouldReject()
     {
-        // Act
         var response = await SendChatMessage("what's the capital of france?");
 
-        // Assert
         response.Actions.Should().BeEmpty();
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
@@ -156,10 +141,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_HomeworkHelp_ShouldReject()
     {
-        // Act
         var response = await SendChatMessage("help me solve this math problem: 2x + 5 = 15");
 
-        // Assert
         response.Actions.Should().BeEmpty();
         response.AiMessage.Should().NotBeNullOrEmpty();
         response.AiMessage.ToLower().Should().MatchRegex("(habit|can't|homework)");
@@ -172,10 +155,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_TaskLikeRequest_ShouldRedirectToHabits()
     {
-        // Act
         var response = await SendChatMessage("i need to buy milk today");
 
-        // Assert - AI may or may not create a habit; the key test is it responds successfully
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
 
@@ -186,23 +167,19 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_EmptyMessage_ShouldHandleGracefully()
     {
-        // Act
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(""), "message");
         var httpResponse = await _client.PostAsync("/api/chat", content);
 
-        // Assert
         httpResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.BadRequest);
     }
 
     [Fact]
     public async Task Chat_VeryLongMessage_ShouldHandle()
     {
-        // Act
         var longMessage = string.Concat(Enumerable.Repeat("i need to do something important ", 50));
         var response = await SendChatMessage(longMessage);
 
-        // Assert
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
@@ -214,10 +191,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_CreateHabitAndLogSameMessage_ShouldHandleBoth()
     {
-        // Act
         var response = await SendChatMessage("i want to track push-ups and i did 20 today");
 
-        // Assert
         response.Actions.Should().HaveCount(2);
         response.Actions.Should().Contain(a => a.Type == "CreateHabit");
         response.Actions.Should().Contain(a => a.Type == "LogHabit");
@@ -227,10 +202,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_MixedHabitActionsInOneMessage_ShouldHandleAll()
     {
-        // Act - multiple habit-related actions (no tasks)
         var response = await SendChatMessage("i want to start meditating daily and i ran 5km today");
 
-        // Assert
         response.Actions.Should().HaveCountGreaterThan(1);
         response.AiMessage.Should().NotBeNullOrEmpty();
     }
@@ -242,10 +215,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_MultipleCreates_ShouldSucceedForAll()
     {
-        // Act
         var response = await SendChatMessage("i want to exercise, meditate, and read every day");
 
-        // Assert
         response.Actions.Should().HaveCount(3);
         response.Actions.Should().OnlyContain(a => a.Type == "CreateHabit");
         response.Actions.Should().OnlyContain(a => a.Status == "Success");
@@ -256,17 +227,12 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_PartialFailure_ShouldReturnMixedStatuses()
     {
-        // Arrange - Create one habit first
         await SendChatMessage("i want to jog daily");
 
-        // Act - Try to log the existing habit AND log a non-existent habit (simulated by using a specific UUID)
-        // Since we can't easily trigger a failure with the AI, we'll just verify the response shape supports it
         var response = await SendChatMessage("i jogged today");
 
-        // Assert - At minimum verify the response structure supports partial success
         response.Actions.Should().NotBeEmpty();
         response.Actions.Should().OnlyContain(a => a.Status == "Success" || a.Status == "Failed");
-        // In this case it should be all success, but the structure supports failures
     }
 
     #endregion
@@ -309,9 +275,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
             response.Should().NotBeNull();
             response!.AiMessage.Should().NotBeNullOrEmpty();
-            // The AI should respond to the image -- it may return SuggestBreakdown or empty actions
-            // depending on what AI Vision interprets from the minimal 1x1 PNG.
-            // The key verification is that the request succeeded (200 OK) and the pipeline works end-to-end.
         }
         finally
         {
@@ -322,7 +285,6 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_UploadInvalidFile_ShouldReturn400()
     {
-        // Arrange - Create a fake text file disguised as image
         var fakeImageBytes = System.Text.Encoding.UTF8.GetBytes("This is not an image");
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent("Analyze this"), "message");
@@ -331,10 +293,8 @@ public class AiChatIntegrationTests : IAsyncLifetime
         imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
         content.Add(imageContent, "image", "fake.png");
 
-        // Act
         var httpResponse = await _client.PostAsync("/api/chat", content);
 
-        // Assert - Should reject with 400 due to invalid file signature
         httpResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -345,68 +305,48 @@ public class AiChatIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Chat_AskAboutRoutinePatterns_ShouldAnalyzeAndRespond()
     {
-        // Arrange - Create a daily habit and log it a few times to establish a pattern
         await SendChatMessage("i want to exercise daily");
         await SendChatMessage("i exercised today");
 
-        // Act - Ask about routine patterns
         var response = await SendChatMessage("analyze my routine");
 
-        // Assert
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // AI should respond with scheduling/routine analysis content
-        // (exact content is non-deterministic, just verify it responded)
     }
 
     [Fact]
     public async Task Chat_CreateHabitWithPotentialConflict_ShouldReturnWarning()
     {
-        // Arrange - Create a daily habit
         var firstResponse = await SendChatMessage("i want to exercise every weekday morning");
 
-        // Act - Create another habit on the same schedule
         var secondResponse = await SendChatMessage("i want to meditate every weekday morning");
 
-        // Assert - Habit creation should succeed (not blocked by conflict)
         secondResponse.Actions.Should().ContainSingle();
         secondResponse.Actions[0].Type.Should().Be("CreateHabit");
         secondResponse.Actions[0].Status.Should().Be("Success");
         secondResponse.Actions[0].EntityId.Should().NotBeEmpty();
 
-        // Note: ConflictWarning may or may not be populated depending on whether
-        // enough log history exists. The key test is that creation succeeds regardless.
     }
 
     [Fact]
     public async Task Chat_AskForScheduleSuggestions_ShouldReturnTimeSlots()
     {
-        // Arrange - Create a habit to establish some routine context
         await SendChatMessage("i want to run daily");
 
-        // Act - Ask for scheduling suggestions
         var response = await SendChatMessage("when should i schedule a new reading habit?");
 
-        // Assert
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // AI should leverage routine context to suggest times
-        // (exact suggestions are non-deterministic, verify it responded)
     }
 
     [Fact]
     public async Task Chat_RoutineAnalysisWithNoData_ShouldNotFail()
     {
-        // Arrange - Fresh user with no habits or logs (already clean from InitializeAsync)
 
-        // Act - Ask about routine with no data
         var response = await SendChatMessage("analyze my routine");
 
-        // Assert - Should succeed gracefully with a message indicating insufficient data
         response.Should().NotBeNull();
         response.AiMessage.Should().NotBeNullOrEmpty();
-        // AI should indicate not enough data or empty routine info
-        // (graceful handling, no errors)
     }
 
     #endregion
@@ -421,13 +361,11 @@ public class AiChatIntegrationTests : IAsyncLifetime
 
     private async Task<ChatResponse> SendChatMessage(string message)
     {
-        // Rate limiting: Wait 10 seconds between API calls to respect AI API rate limits
         await RateLimitSemaphore.WaitAsync();
         try
         {
             var timeSinceLastCall = DateTime.UtcNow - LastApiCall;
-            var minDelay = TimeSpan.FromSeconds(10); // 6 requests per minute max
-
+            var minDelay = TimeSpan.FromSeconds(10);
             if (timeSinceLastCall < minDelay)
             {
                 var remainingDelay = minDelay - timeSinceLastCall;

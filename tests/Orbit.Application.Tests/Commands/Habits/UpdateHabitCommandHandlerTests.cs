@@ -88,7 +88,6 @@ public class UpdateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WrongUser_ReturnsFailure()
     {
-        // FindOneTrackedAsync filters by userId in the predicate, so wrong user returns null
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
@@ -135,7 +134,6 @@ public class UpdateHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        // Handler now uses FindAsync to load sent reminders for the date
         _sentReminderRepo.FindAsync(
             Arg.Any<Expression<Func<SentReminder, bool>>>(),
             Arg.Any<CancellationToken>())
@@ -161,7 +159,6 @@ public class UpdateHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        // CacheInvalidationHelper uses DateOnly.FromDateTime(DateTime.UtcNow) internally
         var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
         var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");

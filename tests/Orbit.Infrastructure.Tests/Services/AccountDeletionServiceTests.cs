@@ -16,19 +16,14 @@ public class AccountDeletionServiceTests
         return User.Create("Test User", "test@example.com").Value;
     }
 
-    // ── Deactivation ──
-
     [Fact]
     public void Deactivate_SetsIsDeactivatedAndScheduledDeletion()
     {
-        // Arrange
         var user = CreateUser();
         var scheduledDeletion = DateTime.UtcNow.AddDays(30);
 
-        // Act
         user.Deactivate(scheduledDeletion);
 
-        // Assert
         user.IsDeactivated.Should().BeTrue();
         user.ScheduledDeletionAt.Should().Be(scheduledDeletion);
         user.DeactivatedAt.Should().NotBeNull();
@@ -37,14 +32,11 @@ public class AccountDeletionServiceTests
     [Fact]
     public void CancelDeactivation_ClearsDeactivationState()
     {
-        // Arrange
         var user = CreateUser();
         user.Deactivate(DateTime.UtcNow.AddDays(30));
 
-        // Act
         user.CancelDeactivation();
 
-        // Assert
         user.IsDeactivated.Should().BeFalse();
         user.ScheduledDeletionAt.Should().BeNull();
         user.DeactivatedAt.Should().BeNull();
@@ -53,31 +45,24 @@ public class AccountDeletionServiceTests
     [Fact]
     public void Deactivate_ThenCancel_ThenDeactivate_WorksCorrectly()
     {
-        // Arrange
         var user = CreateUser();
 
-        // Act
         user.Deactivate(DateTime.UtcNow.AddDays(30));
         user.CancelDeactivation();
         var newDeletion = DateTime.UtcNow.AddDays(60);
         user.Deactivate(newDeletion);
 
-        // Assert
         user.IsDeactivated.Should().BeTrue();
         user.ScheduledDeletionAt.Should().Be(newDeletion);
     }
 
-    // ── Deletion eligibility ──
-
     [Fact]
     public void ScheduledDeletionAt_PastDate_IsEligibleForDeletion()
     {
-        // Arrange
         var user = CreateUser();
         var pastDate = DateTime.UtcNow.AddDays(-1);
         user.Deactivate(pastDate);
 
-        // Assert -- simulate the service's deletion query condition
         var shouldDelete = user.IsDeactivated
             && user.ScheduledDeletionAt.HasValue
             && user.ScheduledDeletionAt.Value <= DateTime.UtcNow;
@@ -88,12 +73,10 @@ public class AccountDeletionServiceTests
     [Fact]
     public void ScheduledDeletionAt_FutureDate_IsNotEligibleForDeletion()
     {
-        // Arrange
         var user = CreateUser();
         var futureDate = DateTime.UtcNow.AddDays(30);
         user.Deactivate(futureDate);
 
-        // Assert -- simulate the service's deletion query condition
         var shouldDelete = user.IsDeactivated
             && user.ScheduledDeletionAt.HasValue
             && user.ScheduledDeletionAt.Value <= DateTime.UtcNow;
@@ -104,10 +87,8 @@ public class AccountDeletionServiceTests
     [Fact]
     public void NonDeactivatedUser_IsNotEligibleForDeletion()
     {
-        // Arrange
         var user = CreateUser();
 
-        // Assert
         var shouldDelete = user.IsDeactivated
             && user.ScheduledDeletionAt.HasValue
             && user.ScheduledDeletionAt.Value <= DateTime.UtcNow;
@@ -118,12 +99,10 @@ public class AccountDeletionServiceTests
     [Fact]
     public void CancelledDeactivation_IsNotEligibleForDeletion()
     {
-        // Arrange
         var user = CreateUser();
         user.Deactivate(DateTime.UtcNow.AddDays(-1));
         user.CancelDeactivation();
 
-        // Assert
         var shouldDelete = user.IsDeactivated
             && user.ScheduledDeletionAt.HasValue
             && user.ScheduledDeletionAt.Value <= DateTime.UtcNow;
@@ -172,12 +151,9 @@ public class AccountDeletionServiceTests
         user.ScheduledDeletionAt.Should().Be(second);
     }
 
-    // ── Stale record cleanup cutoff (replicates CleanupStaleSentRecords logic) ──
-
     [Fact]
     public void StaleRecordCutoff_Is90DaysAgo()
     {
-        // Replicate the cutoff calculation from CleanupStaleSentRecords
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
@@ -215,19 +191,12 @@ public class AccountDeletionServiceTests
         shouldDelete.Should().BeFalse();
     }
 
-    // ── Batch processing logic ──
-
     [Fact]
     public void DeletionEligibility_MultipleUsers_FiltersCorrectly()
     {
-        // Simulate the service's query condition on multiple users
         var users = new[]
         {
-            CreateDeactivatedUser(DateTime.UtcNow.AddDays(-1)),   // eligible
-            CreateDeactivatedUser(DateTime.UtcNow.AddDays(30)),   // not eligible (future)
-            CreateUser(),                                          // not eligible (not deactivated)
-            CreateDeactivatedUser(DateTime.UtcNow.AddDays(-7)),   // eligible
-        };
+            CreateDeactivatedUser(DateTime.UtcNow.AddDays(-1)),            CreateDeactivatedUser(DateTime.UtcNow.AddDays(30)),            CreateUser(),            CreateDeactivatedUser(DateTime.UtcNow.AddDays(-7)),        };
 
         var eligible = users.Where(u =>
             u.IsDeactivated
@@ -267,8 +236,6 @@ public class AccountDeletionServiceTests
 
         eligible.Should().HaveCount(3);
     }
-
-    // ── Helpers ──
 
     private static User CreateDeactivatedUser(DateTime scheduledDeletion)
     {
