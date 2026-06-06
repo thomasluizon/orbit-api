@@ -165,6 +165,47 @@ public class NotificationToolsTests
     }
 
     [Fact]
+    public async Task SubscribePush_RoutesThroughExecutorWithSubscribeAction()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () =>
+            result = await _tools.SubscribePush(_user, "https://push.example/x", "p256", "auth"));
+
+        request.OperationId.Should().Be("update_notifications");
+        request.Arguments.GetRawText().Should().Contain("subscribe_push");
+        result.Should().Be("Push subscription registered.");
+    }
+
+    [Fact]
+    public async Task UnsubscribePush_RoutesThroughExecutorWithUnsubscribeAction()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () =>
+            result = await _tools.UnsubscribePush(_user, "https://push.example/x"));
+
+        request.OperationId.Should().Be("update_notifications");
+        request.Arguments.GetRawText().Should().Contain("unsubscribe_push");
+        result.Should().Be("Push subscription removed.");
+    }
+
+    [Fact]
+    public async Task TestPush_RoutesThroughExecutorWithTestPushAction()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        string result = string.Empty;
+        var request = await CapturedRequestAsync(async () => result = await _tools.TestPush(_user));
+
+        request.OperationId.Should().Be("update_notifications");
+        request.Arguments.GetRawText().Should().Contain("test_push");
+        result.Should().Be("Test push requested.");
+    }
+
+    [Fact]
     public async Task GetNotifications_MissingUserClaim_ThrowsUnauthorized()
     {
         var emptyUser = new ClaimsPrincipal(new ClaimsIdentity());

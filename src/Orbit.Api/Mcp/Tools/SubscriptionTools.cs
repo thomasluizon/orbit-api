@@ -12,11 +12,13 @@ namespace Orbit.Api.Mcp.Tools;
 
 /// <summary>
 /// MCP subscription and referral tools. <c>get_referral_code</c> is a mutation (it generates and
-/// persists a code on demand), so it routes through <see cref="McpExecutorBridge"/> →
+/// persists a code on demand) and <c>manage_subscription</c> is a high-risk mutation, so both route
+/// through <see cref="McpExecutorBridge"/> →
 /// <see cref="Orbit.Domain.Interfaces.IAgentOperationExecutor"/> with
 /// <see cref="Orbit.Domain.Models.AgentExecutionSurface.Mcp"/> for shared policy evaluation and the
-/// <c>AgentAuditLogs</c> trail; the chat tool returns the code as the result target name. The
-/// <c>get_subscription_status</c> and <c>get_referral_stats</c> reads stay on MediatR.
+/// <c>AgentAuditLogs</c> trail; <c>manage_subscription</c> requires step-up and forwards a
+/// confirmation token. The <c>get_subscription_status</c> and <c>get_referral_stats</c> reads stay
+/// on MediatR.
 /// </summary>
 [McpServerToolType]
 public class SubscriptionTools(
@@ -76,6 +78,23 @@ public class SubscriptionTools(
         return result.Succeeded
             ? $"Referral Code: {result.TargetName}\nLink: {frontendSettings.Value.BaseUrl}/r/{result.TargetName}"
             : result.Message;
+    }
+
+    [McpServerTool(Name = "manage_subscription"), Description("Manage the user's subscription: create a checkout session, open the billing portal, or claim an ad reward.")]
+    public async Task<string> ManageSubscription(
+        ClaimsPrincipal user,
+        [Description("Action to perform: create_checkout, create_portal, or claim_ad_reward")] string action,
+        [Description("For create_checkout: billing interval (monthly or yearly)")] string? interval = null,
+        [Description("Confirmation token from verify_step_up_agent_operation_v2 (required: managing a subscription is high-risk and needs step-up)")] string? confirmationToken = null,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "manage_subscription", new
+        {
+            action,
+            interval
+        }, confirmationToken, cancellationToken);
+
+        return result.Succeeded ? $"Subscription: {result.TargetName}" : result.Message;
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

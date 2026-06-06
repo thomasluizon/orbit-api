@@ -2,23 +2,43 @@ using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
 using NSubstitute;
+using Orbit.Api.Mcp;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Mcp;
 
 public class CalendarToolsTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IAgentOperationExecutor _executor = Substitute.For<IAgentOperationExecutor>();
     private readonly CalendarTools _tools;
     private readonly ClaimsPrincipal _user;
 
     public CalendarToolsTests()
     {
-        _tools = new CalendarTools(_mediator);
+        _tools = new CalendarTools(_mediator, new McpExecutorBridge(_executor));
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()) };
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+    }
+
+    private void StubExecutor(AgentOperationStatus status, string? targetName = null, string? policyReason = null)
+    {
+        var response = new AgentExecuteOperationResponse(new AgentOperationResult(
+            "manage_calendar_sync",
+            "manage_calendar_sync",
+            AgentRiskClass.Destructive,
+            AgentConfirmationRequirement.FreshConfirmation,
+            status,
+            Summary: "summary",
+            TargetName: targetName,
+            PolicyReason: policyReason));
+
+        _executor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(response);
     }
 
     [Fact]
@@ -59,6 +79,33 @@ public class CalendarToolsTests
             .Returns(Result.Failure<List<CalendarEventItem>>("Calendar not connected"));
 
         var result = await _tools.GetCalendarEvents(_user);
+
+        result.Should().StartWith("Error: ");
+    }
+
+    [Fact]
+    public async Task ManageCalendarSync_Success_RoutesThroughExecutor()
+    {
+        StubExecutor(AgentOperationStatus.Succeeded);
+
+        var result = await _tools.ManageCalendarSync(_user, "run_sync");
+
+        var calls = _executor.ReceivedCalls()
+            .Where(call => call.GetMethodInfo().Name == nameof(IAgentOperationExecutor.ExecuteAsync))
+            .ToList();
+        calls.Should().NotBeEmpty();
+        var request = (AgentExecuteOperationRequest)calls[^1].GetArguments()[0]!;
+
+        request.OperationId.Should().Be("manage_calendar_sync");
+        result.Should().Contain("run_sync completed");
+    }
+
+    [Fact]
+    public async Task ManageCalendarSync_Failure_ReturnsError()
+    {
+        StubExecutor(AgentOperationStatus.Failed, policyReason: "feature_disabled:calendar_integration");
+
+        var result = await _tools.ManageCalendarSync(_user, "run_sync");
 
         result.Should().StartWith("Error: ");
     }

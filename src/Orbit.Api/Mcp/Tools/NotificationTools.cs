@@ -13,7 +13,10 @@ namespace Orbit.Api.Mcp.Tools;
 /// <c>AgentAuditLogs</c> trail. <c>mark_notification_read</c>/<c>mark_all_notifications_read</c> map
 /// to the consolidated <c>update_notifications</c> chat tool and <c>delete_notification</c> maps to
 /// <c>delete_notifications</c>, each via an <c>action</c> discriminator; the destructive delete
-/// accepts and forwards a confirmation token. The <c>get_notifications</c> read stays on MediatR.
+/// accepts and forwards a confirmation token. Push-subscription management
+/// (<c>subscribe_push</c>/<c>unsubscribe_push</c>/<c>test_push</c>) maps to the same
+/// <c>update_notifications</c> chat tool via its <c>action</c> discriminator. The
+/// <c>get_notifications</c> read stays on MediatR.
 /// </summary>
 [McpServerToolType]
 public class NotificationTools(IMediator mediator, McpExecutorBridge executorBridge)
@@ -65,6 +68,53 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? "Marked all notifications as read." : result.Message;
+    }
+
+    [McpServerTool(Name = "subscribe_push"), Description("Register a Web Push subscription so the user receives push notifications.")]
+    public async Task<string> SubscribePush(
+        ClaimsPrincipal user,
+        [Description("Push service endpoint URL")] string endpoint,
+        [Description("Client public key (p256dh)")] string p256dh,
+        [Description("Client auth secret")] string auth,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        {
+            action = "subscribe_push",
+            endpoint,
+            p256dh,
+            auth
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? "Push subscription registered." : result.Message;
+    }
+
+    [McpServerTool(Name = "unsubscribe_push"), Description("Remove a previously registered Web Push subscription.")]
+    public async Task<string> UnsubscribePush(
+        ClaimsPrincipal user,
+        [Description("Push service endpoint URL to remove")] string endpoint,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        {
+            action = "unsubscribe_push",
+            endpoint
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? "Push subscription removed." : result.Message;
+    }
+
+    [McpServerTool(Name = "test_push"), Description("Send a test push notification to the user's registered devices.")]
+    public async Task<string> TestPush(
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        {
+            action = "test_push"
+        }, confirmationToken: null, cancellationToken);
+
+        return result.Succeeded ? "Test push requested." : result.Message;
     }
 
     [McpServerTool(Name = "delete_notification"), Description("Delete a specific notification.")]

@@ -464,6 +464,10 @@ public static class ServiceCollectionExtensions
             .WithTools<SubscriptionTools>()
             .WithTools<UserFactTools>()
             .WithTools<CalendarTools>()
+            .WithTools<AccountTools>()
+            .WithTools<ApiKeyTools>()
+            .WithTools<SupportTools>()
+            .WithTools<ChecklistTemplateTools>()
             .WithTools<FeatureTools>();
 
         // Controllers

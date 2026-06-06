@@ -21,11 +21,6 @@ namespace Orbit.Api.Mcp.Tools;
 /// snake_case argument object matching its backing <c>IAiTool</c> schema and formats the
 /// returned <see cref="McpExecutorResult"/> into the legacy string contract. Read/query tools
 /// stay on MediatR. Other MCP toolsets mirror this routing for the same policy + audit coverage.
-/// <para>
-/// <c>bulk_log_habits</c> and <c>bulk_skip_habits</c> intentionally stay on MediatR: their MCP
-/// contract accepts an explicit per-instance date that the current chat <c>IAiTool</c>s do not
-/// model, so routing them would silently drop that capability.
-/// </para>
 /// </summary>
 [McpServerToolType]
 public class HabitTools(IMediator mediator, IUserDateService userDateService, McpExecutorBridge executorBridge)
@@ -413,21 +408,17 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => McpInputParser.ParseGuid(s, "habitIds")).ToList();
-        var logDate = McpInputParser.ParseOptionalDate(date, "date");
+        var ids = ParseGuidCsv(habitIds);
 
-        var items = ids.Select(id => new BulkLogItem(id, logDate)).ToList();
-        var command = new BulkLogHabitsCommand(userId, items);
-        var result = await mediator.Send(command, cancellationToken);
+        var result = await executorBridge.ExecuteAsync(user, "bulk_log_habits", new
+        {
+            habit_ids = ids.Select(id => id.ToString()),
+            date
+        }, confirmationToken: null, cancellationToken);
 
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var r = result.Value;
-        var successCount = r.Results.Count(x => x.Status == BulkItemStatus.Success);
-        return $"Bulk log: {successCount}/{ids.Count} logged successfully";
+        return result.Succeeded
+            ? $"Bulk log: {ids.Count} habit(s) processed ({result.TargetName})"
+            : result.Message;
     }
 
     [McpServerTool(Name = "bulk_skip_habits"), Description("Skip multiple habits at once.")]
@@ -437,21 +428,17 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
-        var ids = habitIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(Guid.Parse).ToList();
-        var skipDate = McpInputParser.ParseOptionalDate(date, "date");
+        var ids = ParseGuidCsv(habitIds);
 
-        var items = ids.Select(id => new BulkSkipItem(id, skipDate)).ToList();
-        var command = new BulkSkipHabitsCommand(userId, items);
-        var result = await mediator.Send(command, cancellationToken);
+        var result = await executorBridge.ExecuteAsync(user, "bulk_skip_habits", new
+        {
+            habit_ids = ids.Select(id => id.ToString()),
+            date
+        }, confirmationToken: null, cancellationToken);
 
-        if (result.IsFailure)
-            return $"Error: {result.Error}";
-
-        var r = result.Value;
-        var successCount = r.Results.Count(x => x.Status == BulkItemStatus.Success);
-        return $"Bulk skip: {successCount}/{ids.Count} skipped successfully";
+        return result.Succeeded
+            ? $"Bulk skip: {ids.Count} habit(s) processed ({result.TargetName})"
+            : result.Message;
     }
 
     [McpServerTool(Name = "reorder_habits"), Description("Reorder habits by setting new positions.")]
