@@ -490,6 +490,99 @@ public class AiSummaryServiceTests
         result.Should().Contain("  - Child (pending)");
     }
 
+    // ── SelectScheduledHabits: DueDate-authoritative parity with the Today list ──
+
+    [Fact]
+    public void SelectScheduledHabits_DailyGoodHabitLoggedToday_KeptAndLabeledDoneNotPending()
+    {
+        // Logging a recurring good habit advances its DueDate past today (mirrors LogHabitCommand).
+        // It must still appear so it can be acknowledged -- but as done, never pending.
+        var habit = CreateHabit("Café da manhã");
+        habit.Log(Today);
+
+        var selected = InvokeSelectScheduledHabits([habit], Today);
+
+        selected.Should().ContainSingle();
+        var section = InvokeBuildHabitSection(selected);
+        section.Should().Contain("Café da manhã (done)");
+        section.Should().NotContain("pending");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_WeeklyGoodHabitLoggedToday_KeptAndLabeledDone()
+    {
+        var habit = CreateRecurring("Pesar na balança", FrequencyUnit.Week);
+        habit.Log(Today);
+
+        var selected = InvokeSelectScheduledHabits([habit], Today);
+
+        selected.Should().ContainSingle();
+        InvokeBuildHabitSection(selected).Should().Contain("Pesar na balança (done)");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_WeeklyChildResolvedOnItsOccurrence_NotSelected()
+    {
+        // Regression: a weekly child resolved on its real occurrence has a DueDate that has
+        // advanced past today, so it is neither due today nor overdue. The old code force-included
+        // every child of a due parent and labeled it pending because the prior-week completion
+        // fell outside today's range.
+        var parent = CreateHabit("Morning routine");
+        var weeklyChild = CreateRecurring(
+            "Pesar na balança", FrequencyUnit.Week, dueDate: Today.AddDays(7), parentId: parent.Id);
+        weeklyChild.Log(Today.AddDays(-7), advanceDueDate: false);
+
+        var selected = InvokeSelectScheduledHabits([parent, weeklyChild], Today);
+
+        selected.Should().ContainSingle(h => h.Id == parent.Id);
+        selected.Should().NotContain(h => h.Id == weeklyChild.Id);
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_RoutineWithNonDueChild_DoesNotSurfaceChildAsPending()
+    {
+        // Same defect viewed through the prompt: a monthly child whose DueDate has advanced
+        // past today must never be listed as a pending sub-task just because its parent is due.
+        var parent = CreateHabit("Morning routine");
+        var monthlyChild = CreateRecurring(
+            "Deep clean", FrequencyUnit.Month, dueDate: Today.AddDays(14), parentId: parent.Id);
+
+        var selected = InvokeSelectScheduledHabits([parent, monthlyChild], Today);
+        var section = InvokeBuildHabitSection(selected);
+
+        section.Should().NotContain("Deep clean");
+        section.Should().Contain("Morning routine (pending)");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_RoutineChildrenAllLoggedToday_NoChildPending()
+    {
+        var parent = CreateHabit("Morning routine");
+        var child1 = CreateHabit("Café da manhã", parentId: parent.Id);
+        var child2 = CreateHabit("Stretch", parentId: parent.Id);
+        child1.Log(Today);
+        child2.Log(Today);
+
+        var selected = InvokeSelectScheduledHabits([parent, child1, child2], Today);
+        var section = InvokeBuildHabitSection(selected);
+
+        section.Should().NotContain("pending)");
+        section.Should().Contain("Café da manhã (done)");
+        section.Should().Contain("Stretch (done)");
+    }
+
+    [Fact]
+    public void SelectScheduledHabits_OverdueHabit_StillSelected()
+    {
+        // An unresolved recurring habit (DueDate fell before today) is overdue and must remain.
+        var overdue = CreateRecurring("Take vitamins", FrequencyUnit.Day, dueDate: Today.AddDays(-2));
+
+        var selected = InvokeSelectScheduledHabits([overdue], Today);
+
+        selected.Should().ContainSingle();
+        InvokeBuildHabitSection(selected).Should().Contain("Take vitamins (pending)");
+    }
+
     // ── Helpers ──
 
     private static Habit CreateHabit(
@@ -505,6 +598,22 @@ public class AiSummaryServiceTests
             1,
             DueDate: dueDate ?? Today,
             DueTime: dueTime,
+            ParentHabitId: parentId)).Value;
+    }
+
+    private static Habit CreateRecurring(
+        string title,
+        FrequencyUnit unit,
+        int quantity = 1,
+        DateOnly? dueDate = null,
+        Guid? parentId = null)
+    {
+        return Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            title,
+            unit,
+            quantity,
+            DueDate: dueDate ?? Today,
             ParentHabitId: parentId)).Value;
     }
 
@@ -524,5 +633,13 @@ public class AiSummaryServiceTests
         var method = typeof(AiSummaryService)
             .GetMethod("BuildHabitSection", PrivateStatic)!;
         return (string)method.Invoke(null, [scheduledHabits, Today, Today])!;
+    }
+
+    private static List<Habit> InvokeSelectScheduledHabits(
+        List<Habit> allHabits, DateOnly userToday)
+    {
+        var method = typeof(AiSummaryService)
+            .GetMethod("SelectScheduledHabits", PrivateStatic)!;
+        return (List<Habit>)method.Invoke(null, [allHabits, userToday, userToday, userToday])!;
     }
 }
