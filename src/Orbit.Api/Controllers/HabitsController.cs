@@ -211,7 +211,6 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     public async Task<IActionResult> GetDailySummary(
         [FromQuery] DateOnly dateFrom,
         [FromQuery] DateOnly dateTo,
-        [FromQuery] bool includeOverdue = false,
         [FromQuery] string language = "en",
         CancellationToken cancellationToken = default)
     {
@@ -219,7 +218,6 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             HttpContext.GetUserId(),
             dateFrom,
             dateTo,
-            includeOverdue,
             language);
 
         var result = await mediator.Send(query, cancellationToken);

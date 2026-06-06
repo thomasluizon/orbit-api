@@ -50,7 +50,8 @@ public sealed partial class AiCompletionClient
         string systemPrompt,
         string userPrompt,
         double temperature = 0.7,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? maxOutputTokens = null)
     {
         var messages = new List<ChatMessage>
         {
@@ -62,6 +63,9 @@ public sealed partial class AiCompletionClient
         {
             Temperature = (float)temperature
         };
+
+        if (maxOutputTokens is int max)
+            options.MaxOutputTokenCount = max;
 
         LogCallingTextCompletion(_logger);
 
