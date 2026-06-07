@@ -167,11 +167,23 @@ public partial class User : Entity
 
     public void LinkPlayPurchaseToken(string purchaseToken) => PlayPurchaseToken = purchaseToken;
 
-    public void CancelSubscription()
+    public void CancelStripeSubscription()
+    {
+        StripeSubscriptionId = null;
+        if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
+            ClearEntitlement();
+    }
+
+    public void CancelPlaySubscription()
+    {
+        PlayPurchaseToken = null;
+        if (SubscriptionSource == Enums.SubscriptionSource.GooglePlay)
+            ClearEntitlement();
+    }
+
+    private void ClearEntitlement()
     {
         Plan = UserPlan.Free;
-        StripeSubscriptionId = null;
-        PlayPurchaseToken = null;
         PlanExpiresAt = null;
         SubscriptionInterval = null;
         SubscriptionSource = null;

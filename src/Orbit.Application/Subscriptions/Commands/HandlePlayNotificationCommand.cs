@@ -68,7 +68,7 @@ public partial class HandlePlayNotificationCommandHandler(
         if (state.IsActive)
             user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
         else
-            user.CancelSubscription();
+            user.CancelPlaySubscription();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         LogNotificationProcessed(logger, notification.NotificationType, user.Id, state.IsActive);

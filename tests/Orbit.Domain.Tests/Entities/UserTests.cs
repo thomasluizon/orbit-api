@@ -196,16 +196,17 @@ public class UserTests
     }
 
     [Fact]
-    public void CancelSubscription_RevertsFree_ClearsFields()
+    public void CancelStripeSubscription_WhenStripeIsSource_ClearsEntitlement()
     {
         var user = CreateValidUser();
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
 
-        user.CancelSubscription();
+        user.CancelStripeSubscription();
 
         user.Plan.Should().Be(UserPlan.Free);
         user.StripeSubscriptionId.Should().BeNull();
         user.PlanExpiresAt.Should().BeNull();
+        user.SubscriptionSource.Should().BeNull();
     }
 
     [Fact]
@@ -235,17 +236,68 @@ public class UserTests
     }
 
     [Fact]
-    public void CancelSubscription_ClearsPlaySourceAndToken()
+    public void CancelPlaySubscription_WhenPlayIsSource_ClearsEntitlementAndToken()
     {
         var user = CreateValidUser();
         user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
 
-        user.CancelSubscription();
+        user.CancelPlaySubscription();
 
         user.Plan.Should().Be(UserPlan.Free);
         user.PlayPurchaseToken.Should().BeNull();
         user.SubscriptionSource.Should().BeNull();
         user.SubscriptionInterval.Should().BeNull();
+    }
+
+    [Fact]
+    public void CancelStripeSubscription_WhenPlayIsActiveSource_KeepsPlayEntitlement()
+    {
+        var user = CreateValidUser();
+        var playExpiry = DateTime.UtcNow.AddDays(20);
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
+        user.SetPlaySubscription("play_token_123", playExpiry, SubscriptionInterval.Monthly);
+
+        user.CancelStripeSubscription();
+
+        user.StripeSubscriptionId.Should().BeNull();
+        user.Plan.Should().Be(UserPlan.Pro);
+        user.IsPro.Should().BeTrue();
+        user.PlayPurchaseToken.Should().Be("play_token_123");
+        user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
+        user.PlanExpiresAt.Should().Be(playExpiry);
+    }
+
+    [Fact]
+    public void CancelStripeSubscription_WhenStripeIsSourceWithLinkedPlayToken_PreservesPlayTokenForRecovery()
+    {
+        var user = CreateValidUser();
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
+        user.LinkPlayPurchaseToken("play_token_123");
+
+        user.CancelStripeSubscription();
+
+        user.Plan.Should().Be(UserPlan.Free);
+        user.StripeSubscriptionId.Should().BeNull();
+        user.SubscriptionSource.Should().BeNull();
+        user.PlayPurchaseToken.Should().Be("play_token_123");
+    }
+
+    [Fact]
+    public void CancelPlaySubscription_WhenStripeIsActiveSource_KeepsStripeEntitlement()
+    {
+        var user = CreateValidUser();
+        var stripeExpiry = DateTime.UtcNow.AddMonths(6);
+        user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly);
+        user.SetStripeSubscription("sub_123", stripeExpiry);
+
+        user.CancelPlaySubscription();
+
+        user.PlayPurchaseToken.Should().BeNull();
+        user.Plan.Should().Be(UserPlan.Pro);
+        user.IsPro.Should().BeTrue();
+        user.StripeSubscriptionId.Should().Be("sub_123");
+        user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
+        user.PlanExpiresAt.Should().Be(stripeExpiry);
     }
 
     [Fact]
