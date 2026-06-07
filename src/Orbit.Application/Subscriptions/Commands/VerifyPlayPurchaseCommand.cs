@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -14,8 +15,11 @@ public partial class VerifyPlayPurchaseCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IPlayBillingService playBilling,
+    IOptions<GooglePlaySettings> playSettings,
     ILogger<VerifyPlayPurchaseCommandHandler> logger) : IRequestHandler<VerifyPlayPurchaseCommand, Result<PlayVerifyResponse>>
 {
+    private readonly GooglePlaySettings _settings = playSettings.Value;
+
     public async Task<Result<PlayVerifyResponse>> Handle(VerifyPlayPurchaseCommand request, CancellationToken cancellationToken)
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
@@ -33,7 +37,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
             return Result.Failure<PlayVerifyResponse>("Payment service temporarily unavailable");
         }
 
-        if (state is null || !state.IsActive)
+        if (state is null || !state.GrantsOrbitPro(_settings))
         {
             LogPurchaseNotActive(logger, request.UserId);
             return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseNotActive, ErrorCodes.PlayPurchaseNotActive);

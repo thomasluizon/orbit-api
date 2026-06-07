@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
@@ -20,10 +21,13 @@ public class VerifyPlayPurchaseCommandHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
 
+    private static readonly IOptions<GooglePlaySettings> Settings = Options.Create(
+        new GooglePlaySettings { ProductId = "orbit_pro", MonthlyBasePlanId = "monthly", YearlyBasePlanId = "yearly" });
+
     public VerifyPlayPurchaseCommandHandlerTests()
     {
         _handler = new VerifyPlayPurchaseCommandHandler(
-            _userRepo, _unitOfWork, _playBilling,
+            _userRepo, _unitOfWork, _playBilling, Settings,
             Substitute.For<ILogger<VerifyPlayPurchaseCommandHandler>>());
     }
 
@@ -90,6 +94,38 @@ public class VerifyPlayPurchaseCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddMonths(-1), null, false, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseNotActive);
+        user.IsPro.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NonConfiguredProduct_ReturnsFailureAndDoesNotGrant()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "different_product", null, UserId.ToString()));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseNotActive);
+        user.IsPro.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UnrecognizedBasePlan_ReturnsFailureAndDoesNotGrant()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), null, false, "orbit_pro", null, UserId.ToString()));
 
         var result = await _handler.Handle(Command(), CancellationToken.None);
 

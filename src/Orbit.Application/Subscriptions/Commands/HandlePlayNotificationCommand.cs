@@ -2,7 +2,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -17,8 +19,11 @@ public partial class HandlePlayNotificationCommandHandler(
     IUnitOfWork unitOfWork,
     IPlayBillingService playBilling,
     IGenericRepository<ProcessedPlayNotification> processedNotificationRepository,
+    IOptions<GooglePlaySettings> playSettings,
     ILogger<HandlePlayNotificationCommandHandler> logger) : IRequestHandler<HandlePlayNotificationCommand, Result>
 {
+    private readonly GooglePlaySettings _settings = playSettings.Value;
+
     public async Task<Result> Handle(HandlePlayNotificationCommand request, CancellationToken cancellationToken)
     {
         DecodedPlayNotification? decoded;
@@ -74,7 +79,8 @@ public partial class HandlePlayNotificationCommandHandler(
             return Result.Success();
         }
 
-        if (state.IsActive)
+        var grantsPro = state.GrantsOrbitPro(_settings);
+        if (grantsPro)
             user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
         else
             user.CancelPlaySubscription();
@@ -82,8 +88,21 @@ public partial class HandlePlayNotificationCommandHandler(
         if (!string.IsNullOrEmpty(decoded.MessageId))
             await processedNotificationRepository.AddAsync(ProcessedPlayNotification.Create(decoded.MessageId), cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        LogNotificationProcessed(logger, notification.NotificationType, user.Id, state.IsActive);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (!string.IsNullOrEmpty(decoded.MessageId))
+        {
+            if (await processedNotificationRepository.AnyAsync(p => p.MessageId == decoded.MessageId, cancellationToken))
+            {
+                LogDuplicateNotification(logger, decoded.MessageId);
+                return Result.Success();
+            }
+            throw;
+        }
+
+        LogNotificationProcessed(logger, notification.NotificationType, user.Id, grantsPro);
         return Result.Success();
     }
 

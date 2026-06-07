@@ -2,7 +2,9 @@ using System.Linq.Expressions;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
@@ -21,10 +23,13 @@ public class HandlePlayNotificationCommandHandlerTests
     private readonly IGenericRepository<ProcessedPlayNotification> _processedRepo = Substitute.For<IGenericRepository<ProcessedPlayNotification>>();
     private readonly HandlePlayNotificationCommandHandler _handler;
 
+    private static readonly IOptions<GooglePlaySettings> Settings = Options.Create(
+        new GooglePlaySettings { ProductId = "orbit_pro", MonthlyBasePlanId = "monthly", YearlyBasePlanId = "yearly" });
+
     public HandlePlayNotificationCommandHandlerTests()
     {
         _handler = new HandlePlayNotificationCommandHandler(
-            _userRepo, _unitOfWork, _playBilling, _processedRepo,
+            _userRepo, _unitOfWork, _playBilling, _processedRepo, Settings,
             Substitute.For<ILogger<HandlePlayNotificationCommandHandler>>());
     }
 
@@ -186,5 +191,36 @@ public class HandlePlayNotificationCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _playBilling.DidNotReceive().VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UnrecognizedBasePlan_DoesNotGrantPro()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), null, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentDuplicate_SaveConflictButAlreadyRecorded_ReturnsSuccess()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+        _processedRepo.AnyAsync(
+            Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(false, true);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate key value violates unique constraint"));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
     }
 }
