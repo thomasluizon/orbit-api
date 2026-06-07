@@ -12,7 +12,7 @@ namespace Orbit.IntegrationTests;
 public sealed class CapturingPlayBillingService : IPlayBillingService
 {
     public PlaySubscriptionState? NextState { get; set; } =
-        new(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "orbit_pro", null);
+        new(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "orbit_pro", null, null);
 
     public string? LastVerifiedToken { get; private set; }
     public bool AcknowledgeCalled { get; private set; }

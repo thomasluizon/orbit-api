@@ -39,8 +39,9 @@ public static class ServiceCollectionExtensions
             var stripeSettings = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>();
             stripeSettings?.ValidatePriceIds();
 
-            var googlePlaySettings = builder.Configuration.GetSection(GooglePlaySettings.SectionName).Get<GooglePlaySettings>();
-            googlePlaySettings?.Validate();
+            var googlePlaySettings = builder.Configuration.GetSection(GooglePlaySettings.SectionName).Get<GooglePlaySettings>()
+                ?? new GooglePlaySettings();
+            googlePlaySettings.Validate();
         }
 
         if (!builder.Environment.IsProduction())

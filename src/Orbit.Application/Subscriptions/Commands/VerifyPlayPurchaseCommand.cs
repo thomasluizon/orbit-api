@@ -39,6 +39,12 @@ public partial class VerifyPlayPurchaseCommandHandler(
             return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseNotActive, ErrorCodes.PlayPurchaseNotActive);
         }
 
+        if (!Guid.TryParse(state.ObfuscatedAccountId, out var purchaseAccountId) || purchaseAccountId != request.UserId)
+        {
+            LogAccountMismatch(logger, request.UserId);
+            return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseAccountMismatch, ErrorCodes.PlayPurchaseAccountMismatch);
+        }
+
         if (!state.IsAcknowledged)
         {
             try
@@ -92,4 +98,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Play purchase verified for user {UserId}, expires {Expires}")]
     private static partial void LogPlayPurchaseVerified(ILogger logger, Guid userId, DateTime expires);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Play purchase account mismatch for user {UserId}")]
+    private static partial void LogAccountMismatch(ILogger logger, Guid userId);
 }

@@ -26,4 +26,5 @@ public sealed record PlaySubscriptionState(
     SubscriptionInterval? Interval,
     bool IsAcknowledged,
     string ProductId,
-    string? LinkedPurchaseToken);
+    string? LinkedPurchaseToken,
+    string? ObfuscatedAccountId);

@@ -18,12 +18,13 @@ public class HandlePlayNotificationCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPlayBillingService _playBilling = Substitute.For<IPlayBillingService>();
+    private readonly IGenericRepository<ProcessedPlayNotification> _processedRepo = Substitute.For<IGenericRepository<ProcessedPlayNotification>>();
     private readonly HandlePlayNotificationCommandHandler _handler;
 
     public HandlePlayNotificationCommandHandlerTests()
     {
         _handler = new HandlePlayNotificationCommandHandler(
-            _userRepo, _unitOfWork, _playBilling,
+            _userRepo, _unitOfWork, _playBilling, _processedRepo,
             Substitute.For<ILogger<HandlePlayNotificationCommandHandler>>());
     }
 
@@ -91,7 +92,7 @@ public class HandlePlayNotificationCommandHandlerTests
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         StubUser(user);
-        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null));
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
 
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
 
@@ -107,7 +108,7 @@ public class HandlePlayNotificationCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         StubUser(user);
-        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddDays(-1), null, false, "orbit_pro", null));
+        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddDays(-1), null, false, "orbit_pro", null, null));
 
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(13, "tok_old", "orbit_pro")), CancellationToken.None);
 
@@ -121,7 +122,7 @@ public class HandlePlayNotificationCommandHandlerTests
     public async Task Handle_UserNotFound_ReturnsSuccessWithoutSaving()
     {
         StubUser(null);
-        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null));
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
 
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_unknown", "orbit_pro")), CancellationToken.None);
 
@@ -139,7 +140,7 @@ public class HandlePlayNotificationCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns((User?)null, user);
-        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Yearly, true, "orbit_pro", "tok_old"));
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Yearly, true, "orbit_pro", "tok_old", null));
 
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(7, "tok_new", "orbit_pro")), CancellationToken.None);
 
@@ -169,6 +170,21 @@ public class HandlePlayNotificationCommandHandlerTests
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_DuplicateMessageId_SkipsProcessingWithoutVerifying()
+    {
+        _processedRepo.AnyAsync(
+            Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _playBilling.DidNotReceive().VerifyAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

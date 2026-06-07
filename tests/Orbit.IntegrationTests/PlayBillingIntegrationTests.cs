@@ -17,6 +17,8 @@ public class PlayBillingIntegrationTests : IAsyncLifetime
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    private Guid _userId;
+
     public PlayBillingIntegrationTests(IntegrationTestWebApplicationFactory factory)
     {
         _factory = factory;
@@ -26,7 +28,8 @@ public class PlayBillingIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
+        var login = await IntegrationTestHelpers.AuthenticateWithCodeAsync(_client, _email, TestCode, JsonOptions);
+        _userId = login.UserId;
     }
 
     public Task DisposeAsync()
@@ -39,7 +42,7 @@ public class PlayBillingIntegrationTests : IAsyncLifetime
     public async Task VerifyPlayPurchase_ActivePurchase_GrantsProAndStatusReflectsPlaySource()
     {
         _factory.PlayBilling.NextState = new PlaySubscriptionState(
-            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Yearly, false, "orbit_pro", null);
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Yearly, false, "orbit_pro", null, _userId.ToString());
 
         var response = await _client.PostAsJsonAsync(
             "/api/subscriptions/play/verify",
@@ -62,7 +65,7 @@ public class PlayBillingIntegrationTests : IAsyncLifetime
     public async Task VerifyPlayPurchase_InactivePurchase_DoesNotGrantPro()
     {
         _factory.PlayBilling.NextState = new PlaySubscriptionState(
-            false, DateTime.UtcNow.AddMonths(-1), null, false, "orbit_pro", null);
+            false, DateTime.UtcNow.AddMonths(-1), null, false, "orbit_pro", null, null);
 
         var response = await _client.PostAsJsonAsync(
             "/api/subscriptions/play/verify",

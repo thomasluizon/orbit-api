@@ -53,6 +53,7 @@ public class OrbitDbContext : DbContext
     public DbSet<AppFeatureFlag> AppFeatureFlags => Set<AppFeatureFlag>();
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
+    public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -106,6 +107,12 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(a => new { a.UserId, a.FrozenDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProcessedPlayNotification>(entity =>
+        {
+            entity.HasIndex(p => p.MessageId).IsUnique();
+            entity.Property(p => p.MessageId).IsRequired();
         });
 
         modelBuilder.Entity<Notification>(entity =>
@@ -293,6 +300,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
+            entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
 
             entity.Property(u => u.GoogleCalendarAutoSyncStatus)
                 .HasConversion<string>()

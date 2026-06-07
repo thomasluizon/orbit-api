@@ -60,7 +60,8 @@ public sealed class GooglePlayBillingService(
             interval,
             isAcknowledged,
             resolvedProductId,
-            purchase.LinkedPurchaseToken);
+            purchase.LinkedPurchaseToken,
+            purchase.ExternalAccountIdentifiers?.ObfuscatedExternalAccountId);
     }
 
     public async Task AcknowledgeAsync(string productId, string purchaseToken, CancellationToken cancellationToken)

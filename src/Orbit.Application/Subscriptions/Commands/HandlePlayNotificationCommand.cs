@@ -16,14 +16,15 @@ public partial class HandlePlayNotificationCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IPlayBillingService playBilling,
+    IGenericRepository<ProcessedPlayNotification> processedNotificationRepository,
     ILogger<HandlePlayNotificationCommandHandler> logger) : IRequestHandler<HandlePlayNotificationCommand, Result>
 {
     public async Task<Result> Handle(HandlePlayNotificationCommand request, CancellationToken cancellationToken)
     {
-        SubscriptionNotification? notification;
+        DecodedPlayNotification? decoded;
         try
         {
-            notification = DecodeSubscriptionNotification(request.PushBody);
+            decoded = DecodeNotification(request.PushBody);
         }
         catch (Exception ex) when (ex is JsonException or FormatException)
         {
@@ -31,10 +32,18 @@ public partial class HandlePlayNotificationCommandHandler(
             return Result.Success();
         }
 
+        var notification = decoded?.Notification;
         if (notification is null
             || string.IsNullOrEmpty(notification.PurchaseToken)
             || string.IsNullOrEmpty(notification.SubscriptionId))
             return Result.Success();
+
+        if (!string.IsNullOrEmpty(decoded!.MessageId)
+            && await processedNotificationRepository.AnyAsync(p => p.MessageId == decoded.MessageId, cancellationToken))
+        {
+            LogDuplicateNotification(logger, decoded.MessageId);
+            return Result.Success();
+        }
 
         PlaySubscriptionState? state;
         try
@@ -70,12 +79,15 @@ public partial class HandlePlayNotificationCommandHandler(
         else
             user.CancelPlaySubscription();
 
+        if (!string.IsNullOrEmpty(decoded.MessageId))
+            await processedNotificationRepository.AddAsync(ProcessedPlayNotification.Create(decoded.MessageId), cancellationToken);
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         LogNotificationProcessed(logger, notification.NotificationType, user.Id, state.IsActive);
         return Result.Success();
     }
 
-    private static SubscriptionNotification? DecodeSubscriptionNotification(string pushBody)
+    private static DecodedPlayNotification? DecodeNotification(string pushBody)
     {
         var envelope = JsonSerializer.Deserialize<PubSubEnvelope>(pushBody);
         if (string.IsNullOrEmpty(envelope?.Message?.Data))
@@ -83,7 +95,7 @@ public partial class HandlePlayNotificationCommandHandler(
 
         var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(envelope.Message.Data));
         var developerNotification = JsonSerializer.Deserialize<DeveloperNotification>(decoded);
-        return developerNotification?.SubscriptionNotification;
+        return new DecodedPlayNotification(envelope.Message.MessageId, developerNotification?.SubscriptionNotification);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Discarding malformed Play RTDN push")]
@@ -98,6 +110,9 @@ public partial class HandlePlayNotificationCommandHandler(
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Processed Play RTDN type {NotificationType} for user {UserId}, active={IsActive}")]
     private static partial void LogNotificationProcessed(ILogger logger, int notificationType, Guid userId, bool isActive);
 
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Discarding already-processed Play RTDN message {MessageId}")]
+    private static partial void LogDuplicateNotification(ILogger logger, string messageId);
+
     private sealed class PubSubEnvelope
     {
         [JsonPropertyName("message")] public PubSubMessage? Message { get; set; }
@@ -106,7 +121,10 @@ public partial class HandlePlayNotificationCommandHandler(
     private sealed class PubSubMessage
     {
         [JsonPropertyName("data")] public string? Data { get; set; }
+        [JsonPropertyName("messageId")] public string? MessageId { get; set; }
     }
+
+    private sealed record DecodedPlayNotification(string? MessageId, SubscriptionNotification? Notification);
 
     private sealed class DeveloperNotification
     {

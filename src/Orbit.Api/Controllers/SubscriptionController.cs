@@ -140,11 +140,8 @@ public partial class SubscriptionController(
     public async Task<IActionResult> HandlePlayNotification(CancellationToken cancellationToken)
     {
         var settings = googlePlaySettings.Value;
-        if (!string.IsNullOrEmpty(settings.RtdnAudience)
-            && !await IsValidPushTokenAsync(Request.Headers.Authorization.ToString(), settings))
-        {
+        if (!await IsValidPushTokenAsync(Request.Headers.Authorization.ToString(), settings))
             return Unauthorized();
-        }
 
         var body = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken);
         var result = await mediator.Send(new HandlePlayNotificationCommand(body), cancellationToken);

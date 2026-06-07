@@ -39,7 +39,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
             .Returns(state);
 
     private static PlaySubscriptionState ActiveState(bool acknowledged = false) =>
-        new(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, acknowledged, "orbit_pro", null);
+        new(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, acknowledged, "orbit_pro", null, UserId.ToString());
 
     private static VerifyPlayPurchaseCommand Command() => new(UserId, "orbit_pro", "play_token_123");
 
@@ -89,13 +89,30 @@ public class VerifyPlayPurchaseCommandHandlerTests
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         StubUser(user);
-        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddMonths(-1), null, false, "orbit_pro", null));
+        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow.AddMonths(-1), null, false, "orbit_pro", null, null));
 
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseNotActive);
         user.IsPro.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_AccountMismatch_ReturnsFailureAndDoesNotGrant()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "orbit_pro", null, Guid.NewGuid().ToString()));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseAccountMismatch);
+        user.IsPro.Should().BeFalse();
+        await _playBilling.DidNotReceive().AcknowledgeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
