@@ -13,7 +13,14 @@ public record SubscriptionStatusResponse(
     int AiMessagesUsed,
     int AiMessagesLimit,
     bool IsLifetimePro,
-    string? SubscriptionInterval);
+    string? SubscriptionInterval,
+    string? Source);
+
+public record PlayVerifyResponse(
+    bool HasProAccess,
+    string? Source,
+    string? SubscriptionInterval,
+    DateTime? PlanExpiresAt);
 
 public record AdRewardResponse(int BonusMessagesGranted, int TotalBonusMessages, int NewLimit);
 

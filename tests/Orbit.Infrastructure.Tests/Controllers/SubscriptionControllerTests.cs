@@ -5,8 +5,10 @@ using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Common;
 using Orbit.Application.Subscriptions;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Queries;
@@ -23,7 +25,7 @@ public class SubscriptionControllerTests
 
     public SubscriptionControllerTests()
     {
-        _controller = new SubscriptionController(_mediator, _logger);
+        _controller = new SubscriptionController(_mediator, Options.Create(new GooglePlaySettings()), _logger);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);

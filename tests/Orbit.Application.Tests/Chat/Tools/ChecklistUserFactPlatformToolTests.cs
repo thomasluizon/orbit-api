@@ -448,7 +448,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetSubscriptionStatusQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new SubscriptionStatusResponse("Pro", true, false, null, null, 3, 50, false, "monthly")));
+            .Returns(Result.Success(new SubscriptionStatusResponse("Pro", true, false, null, null, 3, 50, false, "monthly", "stripe")));
         mediator.Send(Arg.Any<GetBillingDetailsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new BillingDetailsResponse(
                 "active",
@@ -508,7 +508,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetSubscriptionStatusQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new SubscriptionStatusResponse("Free", false, false, null, null, 0, 10, false, null)));
+            .Returns(Result.Success(new SubscriptionStatusResponse("Free", false, false, null, null, 0, 10, false, null, null)));
         mediator.Send(Arg.Any<GetBillingDetailsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new BillingDetailsResponse(
                 "active",

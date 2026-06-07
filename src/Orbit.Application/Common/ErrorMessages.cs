@@ -22,6 +22,7 @@ public static class ErrorMessages
     public const string NoPushSubscriptions = "No push subscriptions found for this user.";
     public const string SubscriptionNotFound = "No subscription found.";
     public const string InvalidBillingInterval = "Invalid billing interval.";
+    public const string PlayPurchaseNotActive = "This Google Play purchase is not active.";
     public const string ChatHistoryTooLarge = "Chat history too large.";
     public const string MessageTooLong = "Message must be between 1 and 4000 characters.";
     public const string StreakFreezeNotAvailable = "No streak freeze available.";

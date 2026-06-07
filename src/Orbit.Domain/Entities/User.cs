@@ -27,6 +27,8 @@ public partial class User : Entity
     public int AiMessagesUsedThisMonth { get; private set; } = 0;
     public DateTime? AiMessagesResetAt { get; private set; }
     public SubscriptionInterval? SubscriptionInterval { get; private set; }
+    public SubscriptionSource? SubscriptionSource { get; private set; }
+    public string? PlayPurchaseToken { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
@@ -148,6 +150,17 @@ public partial class User : Entity
         StripeSubscriptionId = subscriptionId;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
+        SubscriptionSource = Enums.SubscriptionSource.Stripe;
+        if (interval.HasValue)
+            SubscriptionInterval = interval.Value;
+    }
+
+    public void SetPlaySubscription(string purchaseToken, DateTime expiresAt, SubscriptionInterval? interval = null)
+    {
+        PlayPurchaseToken = purchaseToken;
+        PlanExpiresAt = expiresAt;
+        Plan = UserPlan.Pro;
+        SubscriptionSource = Enums.SubscriptionSource.GooglePlay;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
     }
@@ -156,8 +169,10 @@ public partial class User : Entity
     {
         Plan = UserPlan.Free;
         StripeSubscriptionId = null;
+        PlayPurchaseToken = null;
         PlanExpiresAt = null;
         SubscriptionInterval = null;
+        SubscriptionSource = null;
     }
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;

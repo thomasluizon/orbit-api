@@ -209,6 +209,46 @@ public class UserTests
     }
 
     [Fact]
+    public void SetStripeSubscription_SetsSourceToStripe()
+    {
+        var user = CreateValidUser();
+
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
+
+        user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
+    }
+
+    [Fact]
+    public void SetPlaySubscription_SetsPlanProSourceAndToken()
+    {
+        var user = CreateValidUser();
+        var expires = DateTime.UtcNow.AddDays(30);
+
+        user.SetPlaySubscription("play_token_123", expires, SubscriptionInterval.Yearly);
+
+        user.Plan.Should().Be(UserPlan.Pro);
+        user.PlayPurchaseToken.Should().Be("play_token_123");
+        user.PlanExpiresAt.Should().Be(expires);
+        user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
+        user.SubscriptionInterval.Should().Be(SubscriptionInterval.Yearly);
+        user.IsPro.Should().BeTrue();
+    }
+
+    [Fact]
+    public void CancelSubscription_ClearsPlaySourceAndToken()
+    {
+        var user = CreateValidUser();
+        user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
+
+        user.CancelSubscription();
+
+        user.Plan.Should().Be(UserPlan.Free);
+        user.PlayPurchaseToken.Should().BeNull();
+        user.SubscriptionSource.Should().BeNull();
+        user.SubscriptionInterval.Should().BeNull();
+    }
+
+    [Fact]
     public void IncrementAiMessageCount_FirstTime_ResetsAndIncrements()
     {
         var user = CreateValidUser();

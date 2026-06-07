@@ -27,6 +27,7 @@ public record ProfileResponse(
     bool HasImportedCalendar,
     bool HasGoogleConnection,
     string? SubscriptionInterval,
+    string? SubscriptionSource,
     bool IsLifetimePro,
     int WeekStartDay,
     int TotalXp,
@@ -86,12 +87,13 @@ public class GetProfileQueryHandler(
             user.HasImportedCalendar,
             user.GoogleAccessToken is not null,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
+            user.SubscriptionSource.ToApiValue(),
             user.IsLifetimePro,
             user.WeekStartDay,
             user.TotalXp,
             user.Level,
             levelTitle,
-            user.LastAdRewardAt.HasValue && user.LastAdRewardAt.Value.Date == DateTime.UtcNow.Date
+            user.LastAdRewardLocalDate == today
                 ? user.AdRewardsClaimedToday
                 : 0,
             user.CurrentStreak,

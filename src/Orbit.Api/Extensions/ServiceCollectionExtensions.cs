@@ -3,6 +3,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Orbit.Api.Authentication;
 using Orbit.Api.Mcp.Tools;
@@ -37,6 +38,9 @@ public static class ServiceCollectionExtensions
         {
             var stripeSettings = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>();
             stripeSettings?.ValidatePriceIds();
+
+            var googlePlaySettings = builder.Configuration.GetSection(GooglePlaySettings.SectionName).Get<GooglePlaySettings>();
+            googlePlaySettings?.Validate();
         }
 
         if (!builder.Environment.IsProduction())
@@ -332,6 +336,24 @@ public static class ServiceCollectionExtensions
         builder.Services.AddSingleton<Stripe.CouponService>();
         builder.Services.AddScoped<Orbit.Application.Common.IBillingService, Orbit.Infrastructure.Services.StripeBillingService>();
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
+
+        builder.Services.Configure<GooglePlaySettings>(
+            builder.Configuration.GetSection(GooglePlaySettings.SectionName));
+        builder.Services.AddSingleton(sp =>
+        {
+            var googlePlaySettings = sp.GetRequiredService<IOptions<GooglePlaySettings>>().Value;
+            var credential = Google.Apis.Auth.OAuth2.CredentialFactory
+                .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(googlePlaySettings.ServiceAccountJson)
+                .ToGoogleCredential()
+                .CreateScoped(Google.Apis.AndroidPublisher.v3.AndroidPublisherService.Scope.Androidpublisher);
+            return new Google.Apis.AndroidPublisher.v3.AndroidPublisherService(
+                new Google.Apis.Services.BaseClientService.Initializer
+                {
+                    HttpClientInitializer = credential,
+                    ApplicationName = "Orbit",
+                });
+        });
+        builder.Services.AddScoped<Orbit.Application.Common.IPlayBillingService, Orbit.Infrastructure.Services.GooglePlayBillingService>();
 
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
