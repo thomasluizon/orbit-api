@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -64,15 +65,38 @@ public partial class VerifyPlayPurchaseCommandHandler(
         if (StripeCoversLaterPeriod(user, state))
         {
             user.LinkPlayPurchaseToken(request.PurchaseToken);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            LogStripeCoversLaterPeriod(logger, request.UserId);
-            return BuildResponse(user);
+            var linkResult = await SavePlayTokenAsync(request, user, cancellationToken);
+            if (linkResult.IsSuccess)
+                LogStripeCoversLaterPeriod(logger, request.UserId);
+            return linkResult;
         }
 
         user.SetPlaySubscription(request.PurchaseToken, state.ExpiresAt, state.Interval);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        LogPlayPurchaseVerified(logger, request.UserId, state.ExpiresAt);
-        return BuildResponse(user);
+        var verifyResult = await SavePlayTokenAsync(request, user, cancellationToken);
+        if (verifyResult.IsSuccess)
+            LogPlayPurchaseVerified(logger, request.UserId, state.ExpiresAt);
+        return verifyResult;
+    }
+
+    private async Task<Result<PlayVerifyResponse>> SavePlayTokenAsync(
+        VerifyPlayPurchaseCommand request, User user, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return BuildResponse(user);
+        }
+        catch (DbUpdateException)
+        {
+            if (await userRepository.AnyAsync(
+                u => u.PlayPurchaseToken == request.PurchaseToken && u.Id != request.UserId, cancellationToken))
+            {
+                LogAccountMismatch(logger, request.UserId);
+                return Result.Failure<PlayVerifyResponse>(
+                    ErrorMessages.PlayPurchaseAccountMismatch, ErrorCodes.PlayPurchaseAccountMismatch);
+            }
+            throw;
+        }
     }
 
     private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>

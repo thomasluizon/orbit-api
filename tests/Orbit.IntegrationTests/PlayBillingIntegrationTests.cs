@@ -74,6 +74,62 @@ public class PlayBillingIntegrationTests : IAsyncLifetime
         response.IsSuccessStatusCode.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task HandlePlayNotification_InvalidPushToken_ReturnsUnauthorized()
+    {
+        _factory.PushTokenValidator.IsValid = false;
+        try
+        {
+            var response = await _client.PostAsync(
+                "/api/subscriptions/play/rtdn",
+                new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+        finally
+        {
+            _factory.PushTokenValidator.IsValid = true;
+        }
+    }
+
+    [Fact]
+    public async Task HandlePlayNotification_ValidPushToken_CancelsEntitlementEndToEnd()
+    {
+        _factory.PushTokenValidator.IsValid = true;
+        var token = $"tok_rtdn_{Guid.NewGuid():N}";
+
+        _factory.PlayBilling.NextState = new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, false, "orbit_pro", null, _userId.ToString());
+        var verify = await _client.PostAsJsonAsync(
+            "/api/subscriptions/play/verify",
+            new { productId = "orbit_pro", purchaseToken = token });
+        verify.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        _factory.PlayBilling.NextState = new PlaySubscriptionState(
+            false, DateTime.UtcNow.AddDays(-1), null, false, "orbit_pro", null, null);
+        var rtdn = await _client.PostAsync(
+            "/api/subscriptions/play/rtdn",
+            new StringContent(BuildRtdnEnvelope(token, $"msg_{Guid.NewGuid():N}"), System.Text.Encoding.UTF8, "application/json"));
+
+        rtdn.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await _client.GetFromJsonAsync<StatusResult>("/api/subscriptions/status", JsonOptions);
+        status.Should().NotBeNull();
+        status!.Source.Should().BeNull();
+    }
+
+    private static string BuildRtdnEnvelope(string purchaseToken, string messageId)
+    {
+        var developerNotification = JsonSerializer.Serialize(new
+        {
+            version = "1.0",
+            packageName = "org.useorbit.app",
+            eventTimeMillis = "1700000000000",
+            subscriptionNotification = new { version = "1.0", notificationType = 13, purchaseToken, subscriptionId = "orbit_pro" },
+        });
+        var data = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(developerNotification));
+        return JsonSerializer.Serialize(new { message = new { data, messageId }, subscription = "projects/x/subscriptions/y" });
+    }
+
     private record PlayVerifyResult(bool HasProAccess, string? Source, string? SubscriptionInterval, DateTime? PlanExpiresAt);
     private record StatusResult(string Plan, bool HasProAccess, string? Source);
 }

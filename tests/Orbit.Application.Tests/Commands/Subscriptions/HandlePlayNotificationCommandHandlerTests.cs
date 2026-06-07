@@ -207,6 +207,21 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_NotificationAccountMismatch_SkipsWithoutMutating()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("tok", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, Guid.NewGuid().ToString()));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeTrue();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ConcurrentDuplicate_SaveConflictButAlreadyRecorded_ReturnsSuccess()
     {
         var user = User.Create("Thomas", "test@example.com").Value;

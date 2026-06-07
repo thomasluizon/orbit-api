@@ -355,6 +355,7 @@ public static class ServiceCollectionExtensions
                 });
         });
         builder.Services.AddScoped<Orbit.Application.Common.IPlayBillingService, Orbit.Infrastructure.Services.GooglePlayBillingService>();
+        builder.Services.AddSingleton<Orbit.Application.Common.IPlayPushTokenValidator, Orbit.Infrastructure.Services.GooglePlayPushTokenValidator>();
 
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
@@ -377,6 +378,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
         builder.Services.AddHostedService<DataEncryptionMigrationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
+        builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
 

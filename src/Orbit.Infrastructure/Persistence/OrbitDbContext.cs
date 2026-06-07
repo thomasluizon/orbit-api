@@ -112,7 +112,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<ProcessedPlayNotification>(entity =>
         {
             entity.HasIndex(p => p.MessageId).IsUnique();
-            entity.Property(p => p.MessageId).IsRequired();
+            entity.Property(p => p.MessageId).IsRequired().HasMaxLength(255);
         });
 
         modelBuilder.Entity<Notification>(entity =>

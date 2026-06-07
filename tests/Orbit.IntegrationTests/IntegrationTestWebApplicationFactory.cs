@@ -42,6 +42,8 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
 
     public CapturingPlayBillingService PlayBilling { get; } = new();
 
+    public CapturingPlayPushTokenValidator PushTokenValidator { get; } = new();
+
     public CapturingEmailService Email { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -52,6 +54,7 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
         {
             services.AddScoped<IBillingService>(_ => BillingService);
             services.AddScoped<IPlayBillingService>(_ => PlayBilling);
+            services.AddSingleton<IPlayPushTokenValidator>(PushTokenValidator);
             services.RemoveAll<IEmailService>();
             services.AddSingleton<IEmailService>(Email);
         });

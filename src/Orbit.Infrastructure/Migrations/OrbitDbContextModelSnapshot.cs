@@ -995,7 +995,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("MessageId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<DateTime>("ProcessedAtUtc")
                         .HasColumnType("timestamp with time zone");

@@ -79,6 +79,12 @@ public partial class HandlePlayNotificationCommandHandler(
             return Result.Success();
         }
 
+        if (Guid.TryParse(state.ObfuscatedAccountId, out var purchaseAccountId) && purchaseAccountId != user.Id)
+        {
+            LogAccountMismatch(logger, user.Id);
+            return Result.Success();
+        }
+
         var grantsPro = state.GrantsOrbitPro(_settings);
         if (grantsPro)
             user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
@@ -131,6 +137,9 @@ public partial class HandlePlayNotificationCommandHandler(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Discarding already-processed Play RTDN message {MessageId}")]
     private static partial void LogDuplicateNotification(ILogger logger, string messageId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Play RTDN account mismatch for user {UserId}; skipping")]
+    private static partial void LogAccountMismatch(ILogger logger, Guid userId);
 
     private sealed class PubSubEnvelope
     {

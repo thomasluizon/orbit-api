@@ -1,8 +1,6 @@
-using Google.Apis.Auth;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions;
@@ -16,7 +14,7 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 public partial class SubscriptionController(
     IMediator mediator,
-    IOptions<GooglePlaySettings> googlePlaySettings,
+    IPlayPushTokenValidator pushTokenValidator,
     ILogger<SubscriptionController> logger) : ControllerBase
 {
     [HttpPost("checkout")]
@@ -139,8 +137,7 @@ public partial class SubscriptionController(
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> HandlePlayNotification(CancellationToken cancellationToken)
     {
-        var settings = googlePlaySettings.Value;
-        if (!await IsValidPushTokenAsync(Request.Headers.Authorization.ToString(), settings))
+        if (!await pushTokenValidator.IsValidAsync(Request.Headers.Authorization.ToString()))
             return Unauthorized();
 
         var body = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken);
@@ -151,26 +148,6 @@ public partial class SubscriptionController(
         return StatusCode(500, new { error = result.Error });
     }
 #pragma warning restore S6932
-
-    private static async Task<bool> IsValidPushTokenAsync(string authorizationHeader, GooglePlaySettings settings)
-    {
-        const string bearerPrefix = "Bearer ";
-        if (!authorizationHeader.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        try
-        {
-            var payload = await GoogleJsonWebSignature.ValidateAsync(
-                authorizationHeader[bearerPrefix.Length..],
-                new GoogleJsonWebSignature.ValidationSettings { Audience = [settings.RtdnAudience] });
-            return payload.EmailVerified
-                && string.Equals(payload.Email, settings.RtdnServiceAccountEmail, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (InvalidJwtException)
-        {
-            return false;
-        }
-    }
 
     public record CreateCheckoutRequest(string Interval);
 
