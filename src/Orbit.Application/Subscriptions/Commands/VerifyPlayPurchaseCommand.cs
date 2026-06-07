@@ -39,14 +39,6 @@ public partial class VerifyPlayPurchaseCommandHandler(
             return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseNotActive, ErrorCodes.PlayPurchaseNotActive);
         }
 
-        if (StripeCoversLaterPeriod(user, state))
-        {
-            LogStripeCoversLaterPeriod(logger, request.UserId);
-            return BuildResponse(user);
-        }
-
-        user.SetPlaySubscription(request.PurchaseToken, state.ExpiresAt, state.Interval);
-
         if (!state.IsAcknowledged)
         {
             try
@@ -59,6 +51,15 @@ public partial class VerifyPlayPurchaseCommandHandler(
             }
         }
 
+        if (StripeCoversLaterPeriod(user, state))
+        {
+            user.LinkPlayPurchaseToken(request.PurchaseToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            LogStripeCoversLaterPeriod(logger, request.UserId);
+            return BuildResponse(user);
+        }
+
+        user.SetPlaySubscription(request.PurchaseToken, state.ExpiresAt, state.Interval);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         LogPlayPurchaseVerified(logger, request.UserId, state.ExpiresAt);
         return BuildResponse(user);

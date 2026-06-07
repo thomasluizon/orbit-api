@@ -127,10 +127,11 @@ public class VerifyPlayPurchaseCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_StripeCoversLaterPeriod_SkipsPlayGrant()
+    public async Task Handle_StripeCoversLaterPeriod_LinksTokenAndAcknowledgesWithoutShorteningExpiry()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
-        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
+        var stripeExpiry = DateTime.UtcNow.AddMonths(6);
+        user.SetStripeSubscription("sub_123", stripeExpiry);
         StubUser(user);
         StubVerify(ActiveState());
 
@@ -138,8 +139,10 @@ public class VerifyPlayPurchaseCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Source.Should().Be("stripe");
-        user.PlayPurchaseToken.Should().BeNull();
-        await _playBilling.DidNotReceive().AcknowledgeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
+        user.PlanExpiresAt.Should().Be(stripeExpiry);
+        user.PlayPurchaseToken.Should().Be("play_token_123");
+        await _playBilling.Received().AcknowledgeAsync("orbit_pro", "play_token_123", Arg.Any<CancellationToken>());
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

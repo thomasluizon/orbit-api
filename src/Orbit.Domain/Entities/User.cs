@@ -165,6 +165,8 @@ public partial class User : Entity
             SubscriptionInterval = interval.Value;
     }
 
+    public void LinkPlayPurchaseToken(string purchaseToken) => PlayPurchaseToken = purchaseToken;
+
     public void CancelSubscription()
     {
         Plan = UserPlan.Free;
