@@ -24,6 +24,13 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
         SetIfMissing("Stripe__YearlyPriceIdBrl", "price_test_yearly_brl");
         SetIfMissing("Stripe__SuccessUrl", "https://app.test/success");
         SetIfMissing("Stripe__CancelUrl", "https://app.test/cancel");
+        SetIfMissing("GooglePlay__PackageName", "org.useorbit.app");
+        SetIfMissing("GooglePlay__ServiceAccountJson", "{}");
+        SetIfMissing("GooglePlay__ProductId", "orbit_pro");
+        SetIfMissing("GooglePlay__MonthlyBasePlanId", "monthly");
+        SetIfMissing("GooglePlay__YearlyBasePlanId", "yearly");
+        SetIfMissing("GooglePlay__RtdnAudience", "https://api.useorbit.test/play/rtdn");
+        SetIfMissing("GooglePlay__RtdnServiceAccountEmail", "rtdn@orbit-test.iam.gserviceaccount.com");
     }
 
     /// <summary>
@@ -32,6 +39,10 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
     /// back immediately after their own request.
     /// </summary>
     public CapturingBillingService BillingService { get; } = new();
+
+    public CapturingPlayBillingService PlayBilling { get; } = new();
+
+    public CapturingPlayPushTokenValidator PushTokenValidator { get; } = new();
 
     public CapturingEmailService Email { get; } = new();
 
@@ -42,6 +53,8 @@ public sealed class IntegrationTestWebApplicationFactory : WebApplicationFactory
         builder.ConfigureTestServices(services =>
         {
             services.AddScoped<IBillingService>(_ => BillingService);
+            services.AddScoped<IPlayBillingService>(_ => PlayBilling);
+            services.AddSingleton<IPlayPushTokenValidator>(PushTokenValidator);
             services.RemoveAll<IEmailService>();
             services.AddSingleton<IEmailService>(Email);
         });

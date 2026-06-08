@@ -25,7 +25,7 @@ public class SubscriptionDtosTests
         var expiresAt = DateTime.UtcNow.AddDays(30);
         var trialEndsAt = DateTime.UtcNow.AddDays(7);
         var response = new SubscriptionStatusResponse(
-            "Pro", true, true, trialEndsAt, expiresAt, 5, 500, false, "monthly");
+            "Pro", true, true, trialEndsAt, expiresAt, 5, 500, false, "monthly", "stripe");
 
         response.Plan.Should().Be("Pro");
         response.HasProAccess.Should().BeTrue();
@@ -36,13 +36,14 @@ public class SubscriptionDtosTests
         response.AiMessagesLimit.Should().Be(500);
         response.IsLifetimePro.Should().BeFalse();
         response.SubscriptionInterval.Should().Be("monthly");
+        response.Source.Should().Be("stripe");
     }
 
     [Fact]
     public void SubscriptionStatusResponse_NullOptionalFields()
     {
         var response = new SubscriptionStatusResponse(
-            "Free", false, false, null, null, 0, 20, false, null);
+            "Free", false, false, null, null, 0, 20, false, null, null);
 
         response.TrialEndsAt.Should().BeNull();
         response.PlanExpiresAt.Should().BeNull();

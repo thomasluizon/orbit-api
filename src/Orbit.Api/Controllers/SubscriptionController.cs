@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Application.Subscriptions;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Queries;
@@ -11,7 +12,10 @@ namespace Orbit.Api.Controllers;
 [ApiController]
 [Route("api/subscriptions")]
 [Authorize]
-public partial class SubscriptionController(IMediator mediator, ILogger<SubscriptionController> logger) : ControllerBase
+public partial class SubscriptionController(
+    IMediator mediator,
+    IPlayPushTokenValidator pushTokenValidator,
+    ILogger<SubscriptionController> logger) : ControllerBase
 {
     [HttpPost("checkout")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -110,8 +114,48 @@ public partial class SubscriptionController(IMediator mediator, ILogger<Subscrip
     }
 #pragma warning restore S6932
 
+    [HttpPost("play/verify")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> VerifyPlayPurchase([FromBody] VerifyPlayPurchaseRequest request, CancellationToken cancellationToken)
+    {
+        var command = new VerifyPlayPurchaseCommand(
+            HttpContext.GetUserId(),
+            request.ProductId,
+            request.PurchaseToken);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+#pragma warning disable S6932 // Raw Request.Body and Request.Headers needed for Play RTDN push verification
+    [HttpPost("play/rtdn")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> HandlePlayNotification(CancellationToken cancellationToken)
+    {
+        if (!await pushTokenValidator.IsValidAsync(Request.Headers.Authorization.ToString()))
+            return Unauthorized();
+
+        var body = await new StreamReader(HttpContext.Request.Body).ReadToEndAsync(cancellationToken);
+        var result = await mediator.Send(new HandlePlayNotificationCommand(body), cancellationToken);
+        if (result.IsSuccess) return Ok();
+        if (logger.IsEnabled(LogLevel.Error))
+            LogPlayNotificationFailed(logger, result.Error);
+        return StatusCode(500, new { error = result.Error });
+    }
+#pragma warning restore S6932
+
     public record CreateCheckoutRequest(string Interval);
+
+    public record VerifyPlayPurchaseRequest(string ProductId, string PurchaseToken);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Webhook processing failed: {Error}")]
     private static partial void LogWebhookProcessingFailed(ILogger logger, string? error);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Play RTDN processing failed: {Error}")]
+    private static partial void LogPlayNotificationFailed(ILogger logger, string? error);
 }

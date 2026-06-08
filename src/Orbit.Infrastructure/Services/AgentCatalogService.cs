@@ -1025,7 +1025,9 @@ public class AgentCatalogService : IAgentCatalogService
                     "SubscriptionController.CreateCheckout",
                     "SubscriptionController.CreatePortal",
                     "SubscriptionController.ClaimAdReward",
-                    "SubscriptionController.HandleWebhook"
+                    "SubscriptionController.HandleWebhook",
+                    "SubscriptionController.VerifyPlayPurchase",
+                    "SubscriptionController.HandlePlayNotification"
                 ]),
 
             CreateCapability(

@@ -24,6 +24,8 @@ public static class ErrorCodes
     public const string NoPushSubscriptions = "NO_PUSH_SUBSCRIPTIONS";
     public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";
     public const string InvalidBillingInterval = "INVALID_BILLING_INTERVAL";
+    public const string PlayPurchaseNotActive = "PLAY_PURCHASE_NOT_ACTIVE";
+    public const string PlayPurchaseAccountMismatch = "PLAY_PURCHASE_ACCOUNT_MISMATCH";
     public const string ChatHistoryTooLarge = "CHAT_HISTORY_TOO_LARGE";
     public const string MessageTooLong = "MESSAGE_TOO_LONG";
     public const string StreakFreezeNotAvailable = "STREAK_FREEZE_NOT_AVAILABLE";

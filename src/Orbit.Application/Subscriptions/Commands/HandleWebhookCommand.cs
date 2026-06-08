@@ -158,7 +158,7 @@ public partial class HandleWebhookCommandHandler(
         if (user is null)
             return;
 
-        user.CancelSubscription();
+        user.CancelStripeSubscription();
         await unitOfWork.SaveChangesAsync(ct);
         LogUserDowngraded(logger, user.Id);
     }
@@ -184,7 +184,7 @@ public partial class HandleWebhookCommandHandler(
         }
         else if (subscription.Status is "canceled" or "unpaid")
         {
-            user.CancelSubscription();
+            user.CancelStripeSubscription();
         }
 
         await unitOfWork.SaveChangesAsync(ct);

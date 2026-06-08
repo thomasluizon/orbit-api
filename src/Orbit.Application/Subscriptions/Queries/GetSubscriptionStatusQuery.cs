@@ -27,6 +27,7 @@ public class GetSubscriptionStatusQueryHandler(
             user.AiMessagesUsedThisMonth,
             await payGate.GetAiMessageLimit(user.Id, cancellationToken),
             user.IsLifetimePro,
-            user.SubscriptionInterval?.ToString().ToLowerInvariant()));
+            user.SubscriptionInterval?.ToString().ToLowerInvariant(),
+            user.SubscriptionSource.ToApiValue()));
     }
 }

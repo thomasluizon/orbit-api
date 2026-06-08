@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Subscriptions.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Queries.Subscriptions;
@@ -55,6 +56,21 @@ public class GetSubscriptionStatusQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task Handle_PlaySubscription_ReturnsPlaySource()
+    {
+        var user = CreateTestUser();
+        user.SetPlaySubscription("tok_123", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(500);
+
+        var result = await _handler.Handle(new GetSubscriptionStatusQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Source.Should().Be("play");
+        result.Value.SubscriptionInterval.Should().Be("monthly");
     }
 
     [Fact]

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Common;
 using Orbit.Application.Subscriptions;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Queries;
@@ -17,13 +18,14 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public class SubscriptionControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IPlayPushTokenValidator _pushTokenValidator = Substitute.For<IPlayPushTokenValidator>();
     private readonly ILogger<SubscriptionController> _logger = Substitute.For<ILogger<SubscriptionController>>();
     private readonly SubscriptionController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
     public SubscriptionControllerTests()
     {
-        _controller = new SubscriptionController(_mediator, _logger);
+        _controller = new SubscriptionController(_mediator, _pushTokenValidator, _logger);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
@@ -385,5 +387,35 @@ public class SubscriptionControllerTests
 
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(500);
+    }
+
+    [Fact]
+    public async Task HandlePlayNotification_InvalidPushToken_ReturnsUnauthorizedWithoutProcessing()
+    {
+        _pushTokenValidator.IsValidAsync(Arg.Any<string>()).Returns(false);
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Body = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{}"));
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var result = await _controller.HandlePlayNotification(CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedResult>();
+        await _mediator.DidNotReceive().Send(Arg.Any<HandlePlayNotificationCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandlePlayNotification_ValidPushToken_ProcessesAndReturnsOk()
+    {
+        _pushTokenValidator.IsValidAsync(Arg.Any<string>()).Returns(true);
+        _mediator.Send(Arg.Any<HandlePlayNotificationCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Body = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("{}"));
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var result = await _controller.HandlePlayNotification(CancellationToken.None);
+
+        result.Should().BeOfType<OkResult>();
+        await _mediator.Received(1).Send(Arg.Any<HandlePlayNotificationCommand>(), Arg.Any<CancellationToken>());
     }
 }
