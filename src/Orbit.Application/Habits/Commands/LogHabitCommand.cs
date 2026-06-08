@@ -1,3 +1,4 @@
+using System.Data.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -144,7 +145,15 @@ public partial class LogHabitCommandHandler(
 
         var goalUpdates = await UpdateLinkedGoalProgress(habit, 1, today, cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            return await BuildAlreadyLoggedResultAsync(habit, targetDate, cancellationToken);
+        }
+
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
 
@@ -162,6 +171,36 @@ public partial class LogHabitCommandHandler(
             LinkedGoalUpdates: goalUpdates,
             XpEarned: gamificationResult?.XpEarned,
             NewAchievementIds: gamificationResult?.NewAchievementIds));
+    }
+
+    private async Task<Result<LogHabitResponse>> BuildAlreadyLoggedResultAsync(
+        Habit habit, DateOnly targetDate, CancellationToken cancellationToken)
+    {
+        var existingLogs = await repos.HabitLogRepository.FindAsync(
+            l => l.HabitId == habit.Id && l.Date == targetDate && l.Value > 0, cancellationToken);
+        var winningLog = existingLogs.OrderByDescending(l => l.Id).First();
+
+        var users = await repos.UserRepository.FindAsync(u => u.Id == habit.UserId, cancellationToken);
+        var currentStreak = users.SingleOrDefault()?.CurrentStreak ?? 0;
+
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
+
+        return Result.Success(new LogHabitResponse(
+            winningLog.Id,
+            IsFirstCompletionToday: false,
+            CurrentStreak: currentStreak));
+    }
+
+    private const string PostgresUniqueViolationSqlState = "23505";
+
+    private static bool IsUniqueViolation(Exception exception)
+    {
+        return exception switch
+        {
+            DbUpdateException dbUpdateException => IsUniqueViolation(dbUpdateException.InnerException ?? dbUpdateException),
+            DbException dbException => dbException.SqlState == PostgresUniqueViolationSqlState,
+            _ => false
+        };
     }
 
     private async Task<HabitLogGamificationResult?> ProcessGamificationSafeAsync(

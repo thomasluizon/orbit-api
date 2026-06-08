@@ -435,7 +435,11 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<HabitLog>(entity =>
         {
-            entity.HasIndex(l => new { l.HabitId, l.Date });
+            entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date");
+
+            entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date_Completed")
+                .HasFilter("\"Value\" > 0")
+                .IsUnique();
 
             if (nullableEncConverter is null)
                 return;

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -8,6 +9,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using System.Data.Common;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Commands.Habits;
@@ -374,5 +376,52 @@ public class LogHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.CurrentStreak.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentDuplicateCompletion_ReturnsAlreadyLoggedWithoutDoubleCounting()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var winningLog = HabitLog.Create(habit.Id, Today, 1);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new[] { winningLog });
+
+        var streakUser = User.Create("Streak", "streak@test.com").Value;
+        streakUser.SetStreakState(4, 9, Today);
+        _userRepo.FindAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new[] { streakUser });
+
+        var command = new LogHabitCommand(UserId, habit.Id);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.LogId.Should().Be(winningLog.Id);
+        result.Value.IsFirstCompletionToday.Should().BeFalse();
+        result.Value.CurrentStreak.Should().Be(4);
+        result.Value.XpEarned.Should().BeNull();
+        result.Value.NewAchievementIds.Should().BeNull();
+        await _gamificationService.DidNotReceive().ProcessHabitLogged(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _userStreakService.DidNotReceive().RecalculateAsync(
+            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 }
