@@ -197,7 +197,8 @@ public partial class LogHabitCommandHandler(
     {
         return exception switch
         {
-            DbUpdateException dbUpdateException => IsUniqueViolation(dbUpdateException.InnerException ?? dbUpdateException),
+            DbUpdateException dbUpdateException => dbUpdateException.InnerException is not null
+                && IsUniqueViolation(dbUpdateException.InnerException),
             DbException dbException => dbException.SqlState == PostgresUniqueViolationSqlState,
             _ => false
         };

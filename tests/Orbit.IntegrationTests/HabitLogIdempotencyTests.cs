@@ -43,9 +43,10 @@ public class HabitLogIdempotencyTests : IAsyncLifetime
                     await _client.DeleteAsync($"/api/habits/{h.Id}");
             }
         }
-        catch { }
-
-        _client.Dispose();
+        finally
+        {
+            _client.Dispose();
+        }
     }
 
     [Fact]
