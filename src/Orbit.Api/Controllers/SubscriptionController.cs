@@ -62,10 +62,13 @@ public partial class SubscriptionController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetBillingDetails(CancellationToken cancellationToken)
     {
         var query = new GetBillingDetailsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
+        if (result.IsFailure && result.ErrorCode == ErrorCodes.NoActiveSubscription)
+            return NotFound(new { error = result.Error, errorCode = result.ErrorCode });
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 

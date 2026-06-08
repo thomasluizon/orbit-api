@@ -230,6 +230,18 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
+    public async Task GetBillingDetails_NoActiveSubscription_ReturnsNotFound()
+    {
+        _mediator.Send(Arg.Any<GetBillingDetailsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription, ErrorCodes.NoActiveSubscription));
+
+        var result = await _controller.GetBillingDetails(CancellationToken.None);
+
+        var notFound = result.Should().BeOfType<NotFoundObjectResult>().Subject;
+        notFound.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
     public async Task GetPlans_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())

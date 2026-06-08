@@ -39,15 +39,13 @@ public class GamificationController(IMediator mediator) : ControllerBase
 
     [HttpGet("streak")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetStreakInfo(CancellationToken cancellationToken)
     {
         var query = new GetStreakInfoQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 }

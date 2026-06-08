@@ -21,6 +21,7 @@ public static class ErrorMessages
     public const string NotificationNotFound = "Notification not found.";
     public const string NoPushSubscriptions = "No push subscriptions found for this user.";
     public const string SubscriptionNotFound = "No subscription found.";
+    public const string NoActiveSubscription = "No active subscription found.";
     public const string InvalidBillingInterval = "Invalid billing interval.";
     public const string PlayPurchaseNotActive = "This Google Play purchase is not active.";
     public const string PlayPurchaseAccountMismatch = "This Google Play purchase belongs to a different account.";
