@@ -54,6 +54,7 @@ public class GetBillingDetailsQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("No active subscription found");
+        result.ErrorCode.Should().Be(ErrorCodes.NoActiveSubscription);
     }
 
     [Fact]

@@ -23,6 +23,7 @@ public static class ErrorCodes
     public const string NotificationNotFound = "NOTIFICATION_NOT_FOUND";
     public const string NoPushSubscriptions = "NO_PUSH_SUBSCRIPTIONS";
     public const string SubscriptionNotFound = "SUBSCRIPTION_NOT_FOUND";
+    public const string NoActiveSubscription = "NO_ACTIVE_SUBSCRIPTION";
     public const string InvalidBillingInterval = "INVALID_BILLING_INTERVAL";
     public const string PlayPurchaseNotActive = "PLAY_PURCHASE_NOT_ACTIVE";
     public const string PlayPurchaseAccountMismatch = "PLAY_PURCHASE_ACCOUNT_MISMATCH";

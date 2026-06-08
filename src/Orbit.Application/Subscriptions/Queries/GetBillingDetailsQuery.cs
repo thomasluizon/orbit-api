@@ -21,7 +21,7 @@ public partial class GetBillingDetailsQueryHandler(
             return Result.Failure<BillingDetailsResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
 
         if (string.IsNullOrEmpty(user.StripeSubscriptionId) || string.IsNullOrEmpty(user.StripeCustomerId))
-            return Result.Failure<BillingDetailsResponse>("No active subscription found");
+            return Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription, ErrorCodes.NoActiveSubscription);
 
         try
         {

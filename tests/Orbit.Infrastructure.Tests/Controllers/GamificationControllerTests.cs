@@ -95,4 +95,16 @@ public class GamificationControllerTests
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
+
+    [Fact]
+    public async Task GetStreakInfo_PayGateFailure_Returns403()
+    {
+        _mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure<StreakInfoResponse>("Pro required"));
+
+        var result = await _controller.GetStreakInfo(CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+    }
 }
