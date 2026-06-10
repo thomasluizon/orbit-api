@@ -6,4 +6,6 @@ public sealed class AiSettings
     public string ApiKey { get; init; } = string.Empty;
     public string Model { get; init; } = "gpt-4.1-mini";
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
+    public int NetworkTimeoutSeconds { get; init; } = 15;
+    public int MaxRetries { get; init; } = 2;
 }

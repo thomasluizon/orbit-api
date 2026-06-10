@@ -8,17 +8,18 @@ namespace Orbit.Application.Calendar.Commands;
 
 public record DismissCalendarImportCommand(Guid UserId) : IRequest<Result>;
 
+/// <summary>
+/// Suppresses the calendar-import prompt for the user. Intentionally NOT pay-gated:
+/// the prompt is shown to every onboarded user, so every user must be able to
+/// dismiss it permanently — gating this behind Pro made the modal resurrect on
+/// every app restart for free accounts.
+/// </summary>
 public class DismissCalendarImportCommandHandler(
     IGenericRepository<User> userRepository,
-    IPayGateService payGate,
     IUnitOfWork unitOfWork) : IRequestHandler<DismissCalendarImportCommand, Result>
 {
     public async Task<Result> Handle(DismissCalendarImportCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanManageCalendar(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == request.UserId,
             cancellationToken: cancellationToken);

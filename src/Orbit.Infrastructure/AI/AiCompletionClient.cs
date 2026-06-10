@@ -31,7 +31,8 @@ public sealed partial class AiCompletionClient
             options: new OpenAIClientOptions
             {
                 Endpoint = new Uri(settings.BaseUrl),
-                NetworkTimeout = TimeSpan.FromSeconds(60)
+                NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
+                RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
             });
     }
 

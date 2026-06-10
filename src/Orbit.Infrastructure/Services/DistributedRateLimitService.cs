@@ -8,7 +8,7 @@ using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistributedRateLimitService
+public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider clock) : IDistributedRateLimitService
 {
     private static readonly Dictionary<string, RateLimitPolicy> Policies =
         new Dictionary<string, RateLimitPolicy>(StringComparer.OrdinalIgnoreCase)
@@ -86,7 +86,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext) : IDistribute
         RateLimitPolicy policy,
         CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
+        var now = clock.GetUtcNow().UtcDateTime;
         var segmentWindow = TimeSpan.FromTicks(policy.Window.Ticks / policy.SegmentCount);
         var segmentStartUtc = FloorUtc(now, segmentWindow);
         var segmentEndUtc = segmentStartUtc.Add(segmentWindow);
