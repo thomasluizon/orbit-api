@@ -14,6 +14,7 @@ public record DuplicateHabitCommand(
 
 public class DuplicateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IPayGateService payGateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<DuplicateHabitCommand, Result<Guid>>
@@ -45,7 +46,9 @@ public class DuplicateHabitCommandHandler(
             ? 0
             : rootSiblings.Max(h => h.Position ?? -1) + 1;
 
-        var rootCopy = CloneHabit(original, original.ParentHabitId, nextRootPosition);
+        var completionLogsBySourceId = await LoadCompletionLogs(original, childLookup, cancellationToken);
+
+        var rootCopy = CloneHabit(original, original.ParentHabitId, nextRootPosition, completionLogsBySourceId);
         if (rootCopy.IsFailure)
             return Result.Failure<Guid>(rootCopy.Error);
 
@@ -54,7 +57,7 @@ public class DuplicateHabitCommandHandler(
         foreach (var tag in original.Tags)
             rootCopy.Value.AddTag(tag);
 
-        await DuplicateChildren(original.Id, rootCopy.Value.Id, childLookup, habitRepository, cancellationToken);
+        await DuplicateChildren(original.Id, rootCopy.Value.Id, childLookup, completionLogsBySourceId, habitRepository, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -63,17 +66,48 @@ public class DuplicateHabitCommandHandler(
         return Result.Success(rootCopy.Value.Id);
     }
 
+    private async Task<Dictionary<Guid, HabitLog>> LoadCompletionLogs(
+        Habit original,
+        ILookup<Guid?, Habit> childLookup,
+        CancellationToken cancellationToken)
+    {
+        var completedOneTimeIds = EnumerateSubtree(original, childLookup)
+            .Where(h => h.FrequencyUnit is null && h.IsCompleted)
+            .Select(h => h.Id)
+            .ToHashSet();
+
+        if (completedOneTimeIds.Count == 0)
+            return new Dictionary<Guid, HabitLog>();
+
+        var completionLogs = await habitLogRepository.FindAsync(
+            l => completedOneTimeIds.Contains(l.HabitId) && l.Value > 0,
+            cancellationToken);
+
+        return completionLogs
+            .GroupBy(l => l.HabitId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(l => l.Date).First());
+    }
+
+    private static IEnumerable<Habit> EnumerateSubtree(Habit root, ILookup<Guid?, Habit> childLookup)
+    {
+        yield return root;
+        foreach (var child in childLookup[root.Id])
+            foreach (var descendant in EnumerateSubtree(child, childLookup))
+                yield return descendant;
+    }
+
     private static async Task DuplicateChildren(
         Guid originalParentId,
         Guid newParentId,
         ILookup<Guid?, Habit> childLookup,
+        IReadOnlyDictionary<Guid, HabitLog> completionLogsBySourceId,
         IGenericRepository<Habit> repository,
         CancellationToken cancellationToken)
     {
         var childPosition = 0;
         foreach (var child in childLookup[originalParentId])
         {
-            var childCopy = CloneHabit(child, newParentId, childPosition++);
+            var childCopy = CloneHabit(child, newParentId, childPosition++, completionLogsBySourceId);
             if (childCopy.IsFailure) continue;
 
             await repository.AddAsync(childCopy.Value, cancellationToken);
@@ -81,13 +115,17 @@ public class DuplicateHabitCommandHandler(
             foreach (var tag in child.Tags)
                 childCopy.Value.AddTag(tag);
 
-            await DuplicateChildren(child.Id, childCopy.Value.Id, childLookup, repository, cancellationToken);
+            await DuplicateChildren(child.Id, childCopy.Value.Id, childLookup, completionLogsBySourceId, repository, cancellationToken);
         }
     }
 
-    private static Result<Habit> CloneHabit(Habit source, Guid? parentHabitId, int position)
+    private static Result<Habit> CloneHabit(
+        Habit source,
+        Guid? parentHabitId,
+        int position,
+        IReadOnlyDictionary<Guid, HabitLog> completionLogsBySourceId)
     {
-        return Habit.Create(new HabitCreateParams(
+        var created = Habit.Create(new HabitCreateParams(
             source.UserId,
             source.Title,
             source.FrequencyUnit,
@@ -106,5 +144,14 @@ public class DuplicateHabitCommandHandler(
             EndDate: source.EndDate,
             ScheduledReminders: source.ScheduledReminders,
             Position: position));
+
+        if (created.IsFailure)
+            return created;
+
+        if (!completionLogsBySourceId.TryGetValue(source.Id, out var completionLog))
+            return created;
+
+        var replayed = created.Value.Log(completionLog.Date, completionLog.Note);
+        return replayed.IsFailure ? Result.Failure<Habit>(replayed.Error) : created;
     }
 }
