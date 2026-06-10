@@ -378,6 +378,7 @@ public class AgentCatalogService : IAgentCatalogService
                 controllerActions:
                 [
                     "ChatController.ProcessChat",
+                    "ChatController.ProcessChatStream",
                     "AiController.ConfirmPendingOperation",
                     "AiController.MarkPendingOperationStepUp",
                     "AiController.VerifyPendingOperationStepUp",
@@ -1192,7 +1193,7 @@ public class AgentCatalogService : IAgentCatalogService
                 ["Send a prompt to the chat endpoint.", "The backend resolves tool calls.", "Review pending confirmations before destructive actions."],
                 ["Chat may use clientContext as UI hints only.", "Authorization is always backend-enforced."],
                 [AgentCapabilityIds.ChatInteract],
-                ["ChatController.ProcessChat"]),
+                ["ChatController.ProcessChat", "ChatController.ProcessChatStream"]),
 
             new AppSurface(
                 "profile-preferences",

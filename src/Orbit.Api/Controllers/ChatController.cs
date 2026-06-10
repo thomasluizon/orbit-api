@@ -1,10 +1,13 @@
 using System.Text.Json;
+using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -64,6 +67,104 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+    [HttpPost("stream")]
+    [RequestSizeLimit(10_485_760)]    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)]    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ProcessChatStream(
+        [FromForm] string message,
+        [FromForm] string? history,
+        IFormFile? image,
+        CancellationToken cancellationToken,
+        [FromForm] string? clientContext = null,
+        [FromForm] string? confirmationToken = null)
+    {
+        if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
+            return BadRequest(new { error = $"Message must be between 1 and {AppConstants.MaxChatMessageLength} characters" });
+
+        var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
+        if (imageError is not null)
+            return imageError;
+
+        var (chatHistory, historyError) = ParseChatHistory(history);
+        if (historyError is not null)
+            return historyError;
+
+        var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
+        if (clientContextError is not null)
+            return clientContextError;
+
+        await StartEventStreamAsync(cancellationToken);
+
+        var command = new ProcessUserChatCommand(
+            HttpContext.GetUserId(),
+            message,
+            imageData,
+            imageMimeType,
+            chatHistory,
+            parsedClientContext,
+            confirmationToken,
+            HttpContext.User.GetAgentAuthMethod(),
+            HttpContext.User.GetGrantedAgentScopes(),
+            HttpContext.User.IsReadOnlyCredential(),
+            HttpContext.TraceIdentifier,
+            streamEvent => WriteEventAsync(streamEvent, cancellationToken));
+
+        await StreamCommandResultAsync(command, cancellationToken);
+        return new EmptyResult();
+    }
+
+    private async Task StartEventStreamAsync(CancellationToken cancellationToken)
+    {
+        Response.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache, no-store";
+        Response.Headers["X-Accel-Buffering"] = "no";
+        HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+        await WriteEventAsync(ChatStreamEvent.Started(), cancellationToken);
+    }
+
+    private async Task StreamCommandResultAsync(ProcessUserChatCommand command, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await mediator.Send(command, cancellationToken);
+            var finalEvent = result.IsSuccess
+                ? ChatStreamEvent.Final(result.Value)
+                : ToErrorEvent(result);
+            await WriteEventAsync(finalEvent, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (ValidationException ex)
+        {
+            await WriteEventAsync(
+                ChatStreamEvent.Failure(StatusCodes.Status400BadRequest, ex.Message),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogChatStreamFailed(logger, ex);
+            await WriteEventAsync(
+                ChatStreamEvent.Failure(StatusCodes.Status500InternalServerError, "AI service temporarily unavailable"),
+                cancellationToken);
+        }
+    }
+
+    private static ChatStreamEvent ToErrorEvent(Result<ChatResponse> result)
+    {
+        var status = result.ErrorCode == Result.PayGateErrorCode
+            ? StatusCodes.Status403Forbidden
+            : StatusCodes.Status400BadRequest;
+        return ChatStreamEvent.Failure(status, result.Error, result.ErrorCode);
+    }
+
+    private async Task WriteEventAsync(ChatStreamEvent streamEvent, CancellationToken cancellationToken)
+    {
+        await Response.WriteAsync($"data: {streamEvent.ToJson()}\n\n", cancellationToken);
+        await Response.Body.FlushAsync(cancellationToken);
     }
 
     private async Task<(byte[]? Data, string? MimeType, IActionResult? Error)> ProcessImageAsync(
@@ -156,5 +257,8 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Chat client context parse failed: {Error}")]
     private static partial void LogClientContextParseFailed(ILogger logger, Exception ex, string error);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Chat stream processing failed")]
+    private static partial void LogChatStreamFailed(ILogger logger, Exception ex);
 
 }

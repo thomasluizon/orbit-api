@@ -217,6 +217,28 @@ public class ActiveHabitsSectionTests
     }
 
     [Fact]
+    public void Build_WithUserToday_IncludesExhaustiveTodayListingInstruction()
+    {
+        var context = CreateContext(habits: [CreateHabit("Test")], userToday: Today);
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("enumerate EVERY entry labeled TODAY or OVERDUE");
+        result.Should().Contain("verify your list matches those counts");
+        result.Should().Contain("must not be listed");
+    }
+
+    [Fact]
+    public void Build_NullUserToday_OmitsExhaustiveTodayListingInstruction()
+    {
+        var context = CreateContext(habits: [CreateHabit("Test")], userToday: null, useDefaultToday: false);
+
+        var result = _sut.Build(context);
+
+        result.Should().NotContain("enumerate EVERY entry");
+    }
+
+    [Fact]
     public void Build_LongTitle_TruncatesTo100Chars()
     {
         var longTitle = new string('A', 150);
