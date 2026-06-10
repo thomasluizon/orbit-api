@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,6 +19,7 @@ public partial class HandlePlayNotificationCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IPlayBillingService playBilling,
+    IPlayReferralCouponConsumer referralCouponConsumer,
     IGenericRepository<ProcessedPlayNotification> processedNotificationRepository,
     IOptions<GooglePlaySettings> playSettings,
     ILogger<HandlePlayNotificationCommandHandler> logger) : IRequestHandler<HandlePlayNotificationCommand, Result>
@@ -87,9 +89,14 @@ public partial class HandlePlayNotificationCommandHandler(
 
         var grantsPro = state.GrantsOrbitPro(_settings);
         if (grantsPro)
+        {
+            await referralCouponConsumer.ConsumeOnNewPurchaseAsync(user, state, notification.PurchaseToken, cancellationToken);
             user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
+        }
         else
+        {
             user.CancelPlaySubscription();
+        }
 
         if (!string.IsNullOrEmpty(decoded.MessageId))
             await processedNotificationRepository.AddAsync(ProcessedPlayNotification.Create(decoded.MessageId), cancellationToken);

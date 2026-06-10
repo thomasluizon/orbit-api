@@ -10,6 +10,7 @@ public class GooglePlaySettings
     public string ProductId { get; set; } = "";
     public string MonthlyBasePlanId { get; set; } = "";
     public string YearlyBasePlanId { get; set; } = "";
+    public string ReferralOfferId { get; set; } = "";
     public string RtdnAudience { get; set; } = "";
     public string RtdnServiceAccountEmail { get; set; } = "";
 
@@ -26,6 +27,7 @@ public class GooglePlaySettings
         if (string.IsNullOrWhiteSpace(ProductId)) missingKeys.Add($"{SectionName}:{nameof(ProductId)}");
         if (string.IsNullOrWhiteSpace(MonthlyBasePlanId)) missingKeys.Add($"{SectionName}:{nameof(MonthlyBasePlanId)}");
         if (string.IsNullOrWhiteSpace(YearlyBasePlanId)) missingKeys.Add($"{SectionName}:{nameof(YearlyBasePlanId)}");
+        if (string.IsNullOrWhiteSpace(ReferralOfferId)) missingKeys.Add($"{SectionName}:{nameof(ReferralOfferId)}");
         if (string.IsNullOrWhiteSpace(RtdnAudience)) missingKeys.Add($"{SectionName}:{nameof(RtdnAudience)}");
         if (string.IsNullOrWhiteSpace(RtdnServiceAccountEmail)) missingKeys.Add($"{SectionName}:{nameof(RtdnServiceAccountEmail)}");
 

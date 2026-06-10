@@ -9,6 +9,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -20,6 +21,7 @@ public class HandlePlayNotificationCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPlayBillingService _playBilling = Substitute.For<IPlayBillingService>();
+    private readonly IPlayReferralCouponConsumer _referralConsumer = Substitute.For<IPlayReferralCouponConsumer>();
     private readonly IGenericRepository<ProcessedPlayNotification> _processedRepo = Substitute.For<IGenericRepository<ProcessedPlayNotification>>();
     private readonly HandlePlayNotificationCommandHandler _handler;
 
@@ -29,7 +31,7 @@ public class HandlePlayNotificationCommandHandlerTests
     public HandlePlayNotificationCommandHandlerTests()
     {
         _handler = new HandlePlayNotificationCommandHandler(
-            _userRepo, _unitOfWork, _playBilling, _processedRepo, Settings,
+            _userRepo, _unitOfWork, _playBilling, _referralConsumer, _processedRepo, Settings,
             Substitute.For<ILogger<HandlePlayNotificationCommandHandler>>());
     }
 
@@ -120,7 +122,29 @@ public class HandlePlayNotificationCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.Plan.Should().Be(UserPlan.Free);
         user.PlayPurchaseToken.Should().BeNull();
+        await _referralConsumer.DidNotReceive().ConsumeOnNewPurchaseAsync(
+            Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_PurchaseGrantingPro_InvokesCouponConsumerBeforeTokenOverwrite()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
+        string? tokenWhenConsumerRan = "unset";
+        _referralConsumer
+            .When(c => c.ConsumeOnNewPurchaseAsync(user, Arg.Any<PlaySubscriptionState>(), "tok_purchase", Arg.Any<CancellationToken>()))
+            .Do(_ => tokenWhenConsumerRan = user.PlayPurchaseToken);
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_purchase", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        tokenWhenConsumerRan.Should().BeNull();
+        await _referralConsumer.Received(1).ConsumeOnNewPurchaseAsync(
+            user, Arg.Any<PlaySubscriptionState>(), "tok_purchase", Arg.Any<CancellationToken>());
     }
 
     [Fact]
