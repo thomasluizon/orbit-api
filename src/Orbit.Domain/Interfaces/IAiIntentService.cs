@@ -12,10 +12,12 @@ public interface IAiIntentService
         byte[]? imageData = null,
         string? imageMimeType = null,
         IReadOnlyList<ChatHistoryMessage>? history = null,
+        Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default);
 
     Task<Result<AiResponse>> ContinueWithToolResultsAsync(
         AiConversationContext conversationContext,
         IReadOnlyList<AiToolCallResult> results,
+        Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default);
 }

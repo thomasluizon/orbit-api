@@ -28,7 +28,8 @@ public record ProcessUserChatCommand(
     AgentAuthMethod AuthMethod = AgentAuthMethod.Jwt,
     IReadOnlyList<string>? GrantedScopes = null,
     bool IsReadOnlyCredential = false,
-    string? CorrelationId = null) : IRequest<Result<ChatResponse>>;
+    string? CorrelationId = null,
+    Func<ChatStreamEvent, Task>? StreamSink = null) : IRequest<Result<ChatResponse>>;
 
 public record ChatResponse(
     string? AiMessage,
@@ -168,6 +169,8 @@ public partial class ProcessUserChatCommandHandler(
         LogCallingAiIntentService(logger, toolDeclarations.Count);
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
+        var aiStreamSink = BuildAiStreamSink(request.StreamSink);
+
         var response = await ai.IntentService.SendWithToolsAsync(
             request.Message,
             systemPrompt,
@@ -175,6 +178,7 @@ public partial class ProcessUserChatCommandHandler(
             request.ImageData,
             request.ImageMimeType,
             request.History,
+            aiStreamSink,
             cancellationToken);
 
         aiStopwatch.Stop();
@@ -192,11 +196,15 @@ public partial class ProcessUserChatCommandHandler(
         while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
         {
             iteration++;
+            if (request.StreamSink is not null)
+                await request.StreamSink(ChatStreamEvent.Round(iteration));
+
             var continueResponse = await ProcessToolCallsAsync(
                 aiResponse,
                 request,
                 executionResults,
                 iteration,
+                aiStreamSink,
                 cancellationToken);
 
             if (continueResponse is null)
@@ -251,11 +259,22 @@ public partial class ProcessUserChatCommandHandler(
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
     /// back to the AI. Returns the next AI response, or null if continuation failed.
     /// </summary>
+    private static Func<AiStreamEvent, Task>? BuildAiStreamSink(Func<ChatStreamEvent, Task>? streamSink)
+    {
+        if (streamSink is null)
+            return null;
+
+        return aiEvent => streamSink(aiEvent.Kind == AiStreamEventKind.Delta
+            ? ChatStreamEvent.Delta(aiEvent.Text ?? "")
+            : ChatStreamEvent.Reset());
+    }
+
     private async Task<AiResponse?> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
         int iteration,
+        Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
@@ -274,7 +293,7 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.Add(actionResult, operationResult, policyDenial, pendingOperation);
         }
 
-        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, cancellationToken);
+        var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
         if (continueResult.IsFailure)
         {
             LogContinueWithToolResultsFailed(logger, continueResult.Error);

@@ -36,6 +36,12 @@ public sealed partial class AiCompletionClient
             });
     }
 
+    internal AiCompletionClient(ChatClient chatClient, ILogger<AiCompletionClient> logger)
+    {
+        _chatClient = chatClient;
+        _logger = logger;
+    }
+
     /// <summary>
     /// Direct access to the underlying ChatClient for advanced scenarios (tool calling, multi-turn).
     /// </summary>

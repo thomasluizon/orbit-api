@@ -32,6 +32,7 @@ public sealed partial class AiIntentService(
         byte[]? imageData = null,
         string? imageMimeType = null,
         IReadOnlyList<ChatHistoryMessage>? history = null,
+        Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default)
     {
         var messages = new List<ChatMessage>
@@ -71,12 +72,13 @@ public sealed partial class AiIntentService(
                 options.Tools.Add(tool);
         }
 
-        return await CallWithToolsAsync(messages, options, cancellationToken);
+        return await CallWithToolsAsync(messages, options, streamSink, cancellationToken);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
         AiConversationContext conversationContext,
         IReadOnlyList<AiToolCallResult> results,
+        Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default)
     {
         if (conversationContext?.Messages is not List<ChatMessage> messages ||
@@ -101,40 +103,30 @@ public sealed partial class AiIntentService(
             messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }
 
-        return await CallWithToolsAsync(messages, options, cancellationToken);
+        return await CallWithToolsAsync(messages, options, streamSink, cancellationToken);
     }
 
     private async Task<Result<AiResponse>> CallWithToolsAsync(
-        List<ChatMessage> messages, ChatCompletionOptions options, CancellationToken cancellationToken)
+        List<ChatMessage> messages,
+        ChatCompletionOptions options,
+        Func<AiStreamEvent, Task>? streamSink,
+        CancellationToken cancellationToken)
     {
         try
         {
             LogCallingAiWithTools(logger);
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            var completion = await aiClient.ChatClient.CompleteChatAsync(
-                messages, options, cancellationToken);
+            var round = streamSink is null
+                ? await CompleteBufferedRoundAsync(messages, options, cancellationToken)
+                : await CompleteStreamingRoundAsync(messages, options, streamSink, stopwatch, cancellationToken);
 
             stopwatch.Stop();
             LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
 
-            var result = completion.Value;
-
-            messages.Add(new AssistantChatMessage(result));
-
-            if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
+            if (round.ToolCalls.Count > 0)
             {
-                var toolCalls = result.ToolCalls
-                    .Select(tc =>
-                    {
-                        using var argsDoc = JsonDocument.Parse(tc.FunctionArguments);
-                        if (argsDoc.RootElement.ValueKind != JsonValueKind.Object)
-                            throw new JsonException("Tool call arguments must be a JSON object.");
-
-                        var args = argsDoc.RootElement.Clone();
-                        return new AiToolCall(tc.FunctionName, tc.Id, args);
-                    })
-                    .ToList();
+                var toolCalls = ToAiToolCalls(round.ToolCalls);
 
                 LogAiReturnedToolCalls(logger, toolCalls.Count,
                     string.Join(", ", toolCalls.Select(tc => tc.Name)));
@@ -143,12 +135,11 @@ public sealed partial class AiIntentService(
                 return Result.Success(new AiResponse { ToolCalls = toolCalls, ConversationContext = convCtx });
             }
 
-            var text = result.Content.FirstOrDefault()?.Text;
-            if (string.IsNullOrWhiteSpace(text))
+            if (string.IsNullOrWhiteSpace(round.Text))
                 return Result.Failure<AiResponse>("AI returned neither tool calls nor text.");
 
-            LogAiReturnedTextResponse(logger, text.Length);
-            return Result.Success(new AiResponse { TextMessage = text });
+            LogAiReturnedTextResponse(logger, round.Text.Length);
+            return Result.Success(new AiResponse { TextMessage = round.Text });
         }
         catch (JsonException ex)
         {
@@ -159,6 +150,121 @@ public sealed partial class AiIntentService(
         {
             LogAiApiCallFailed(logger, ex);
             return Result.Failure<AiResponse>("AI service temporarily unavailable");
+        }
+    }
+
+    private async Task<CompletedRound> CompleteBufferedRoundAsync(
+        List<ChatMessage> messages, ChatCompletionOptions options, CancellationToken cancellationToken)
+    {
+        var completion = await aiClient.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
+        var result = completion.Value;
+
+        messages.Add(new AssistantChatMessage(result));
+
+        if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
+            return new CompletedRound(null, result.ToolCalls);
+
+        return new CompletedRound(result.Content.FirstOrDefault()?.Text, []);
+    }
+
+    private async Task<CompletedRound> CompleteStreamingRoundAsync(
+        List<ChatMessage> messages,
+        ChatCompletionOptions options,
+        Func<AiStreamEvent, Task> streamSink,
+        System.Diagnostics.Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        var contentBuilder = new StringBuilder();
+        var toolCallBuilders = new SortedDictionary<int, StreamingToolCallBuilder>();
+        ChatFinishReason? finishReason = null;
+        var firstTokenLogged = false;
+
+        await foreach (var update in aiClient.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
+        {
+            foreach (var part in update.ContentUpdate)
+            {
+                if (string.IsNullOrEmpty(part.Text))
+                    continue;
+
+                if (!firstTokenLogged)
+                {
+                    firstTokenLogged = true;
+                    LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
+                }
+
+                contentBuilder.Append(part.Text);
+                await streamSink(AiStreamEvent.Delta(part.Text));
+            }
+
+            foreach (var toolCallUpdate in update.ToolCallUpdates)
+            {
+                if (!toolCallBuilders.TryGetValue(toolCallUpdate.Index, out var builder))
+                {
+                    builder = new StreamingToolCallBuilder();
+                    toolCallBuilders[toolCallUpdate.Index] = builder;
+                }
+
+                builder.Apply(toolCallUpdate);
+            }
+
+            if (update.FinishReason is { } reason)
+                finishReason = reason;
+        }
+
+        if (finishReason == ChatFinishReason.ToolCalls && toolCallBuilders.Count > 0)
+        {
+            if (contentBuilder.Length > 0)
+                await streamSink(AiStreamEvent.Reset());
+
+            var toolCalls = toolCallBuilders.Values.Select(builder => builder.Build()).ToList();
+            messages.Add(new AssistantChatMessage(toolCalls));
+            return new CompletedRound(null, toolCalls);
+        }
+
+        var text = contentBuilder.ToString();
+        if (!string.IsNullOrWhiteSpace(text))
+            messages.Add(new AssistantChatMessage(text));
+
+        return new CompletedRound(text, []);
+    }
+
+    private static List<AiToolCall> ToAiToolCalls(IReadOnlyList<ChatToolCall> toolCalls)
+    {
+        return toolCalls
+            .Select(tc =>
+            {
+                using var argsDoc = JsonDocument.Parse(tc.FunctionArguments);
+                if (argsDoc.RootElement.ValueKind != JsonValueKind.Object)
+                    throw new JsonException("Tool call arguments must be a JSON object.");
+
+                var args = argsDoc.RootElement.Clone();
+                return new AiToolCall(tc.FunctionName, tc.Id, args);
+            })
+            .ToList();
+    }
+
+    private sealed record CompletedRound(string? Text, IReadOnlyList<ChatToolCall> ToolCalls);
+
+    private sealed class StreamingToolCallBuilder
+    {
+        private string _id = "";
+        private string _name = "";
+        private readonly StringBuilder _args = new();
+
+        public void Apply(StreamingChatToolCallUpdate update)
+        {
+            if (!string.IsNullOrEmpty(update.ToolCallId))
+                _id = update.ToolCallId;
+            if (!string.IsNullOrEmpty(update.FunctionName))
+                _name = update.FunctionName;
+            if (update.FunctionArgumentsUpdate is { } argsChunk)
+                _args.Append(argsChunk.ToString());
+        }
+
+        public ChatToolCall Build()
+        {
+            var argsJson = _args.Length > 0 ? _args.ToString() : "{}";
+            return ChatToolCall.CreateFunctionToolCall(_id, _name, BinaryData.FromString(argsJson));
         }
     }
 
@@ -238,5 +344,8 @@ public sealed partial class AiIntentService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "AI API call failed")]
     private static partial void LogAiApiCallFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "First content token after {ElapsedMs}ms")]
+    private static partial void LogFirstContentToken(ILogger logger, long elapsedMs);
 
 }

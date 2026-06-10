@@ -104,6 +104,17 @@ public class GlobalRulesSectionTests
 
         result.Should().Contain("describe_feature");
     }
+
+    [Fact]
+    public void Build_ContainsExhaustiveListingRules()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new GlobalRulesSection().Build(ctx);
+
+        result.Should().Contain("list EVERY matching entry");
+        result.Should().Contain("your list must match them");
+        result.Should().Contain("Conciseness applies to prose, never to lists");
+    }
 }
 
 public class StructuringStrategySectionTests

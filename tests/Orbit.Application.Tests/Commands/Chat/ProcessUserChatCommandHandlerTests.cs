@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Chat.Commands;
+using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -200,7 +201,7 @@ public class ProcessUserChatCommandHandlerTests
         _aiIntentService.SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
     }
 
@@ -209,7 +210,7 @@ public class ProcessUserChatCommandHandlerTests
         _aiIntentService.SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>(error));
     }
 
@@ -415,7 +416,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create a habit");
@@ -428,6 +429,68 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.Actions[0].Status.Should().Be(ActionStatus.Success);
         result.Value.Actions[0].EntityName.Should().Be("Morning Run");
         result.Value.Operations.Should().ContainSingle(op => op.OperationId == "create_habit" && op.Status == AgentOperationStatus.Succeeded);
+    }
+
+    [Fact]
+    public async Task Handle_WithStreamSink_EmitsRoundPerIterationAndBridgesAiEvents()
+    {
+        SetupUserAndPayGate();
+
+        var mockTool = Substitute.For<IAiTool>();
+        mockTool.Name.Returns("create_habit");
+        mockTool.Description.Returns("Creates a habit");
+        mockTool.IsReadOnly.Returns(false);
+        mockTool.GetParameterSchema().Returns(new { type = "object" });
+        mockTool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: "Morning Run"));
+
+        var handler = CreateHandler(mockTool);
+
+        var toolCall = new AiToolCall("create_habit", "call_1", JsonDocument.Parse("{}").RootElement);
+        SetupAiResponse(new AiResponse { ToolCalls = [toolCall], ConversationContext = TestConversationContext });
+
+        Func<AiStreamEvent, Task>? bridgedSink = null;
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Do<Func<AiStreamEvent, Task>?>(sink => bridgedSink = sink), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!" }));
+
+        var streamEvents = new List<ChatStreamEvent>();
+        var command = new ProcessUserChatCommand(UserId, "Create a habit", StreamSink: streamEvent =>
+        {
+            streamEvents.Add(streamEvent);
+            return Task.CompletedTask;
+        });
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        streamEvents.Should().ContainSingle(streamEvent => streamEvent.Type == "round" && streamEvent.Iteration == 1);
+
+        bridgedSink.Should().NotBeNull();
+        await bridgedSink!(AiStreamEvent.Delta("chunk"));
+        await bridgedSink!(AiStreamEvent.Reset());
+        streamEvents.Should().Contain(streamEvent => streamEvent.Type == "delta" && streamEvent.Text == "chunk");
+        streamEvents[^1].Type.Should().Be("reset");
+    }
+
+    [Fact]
+    public async Task Handle_WithoutStreamSink_PassesNullSinkToIntentService()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hello there" });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Hello there");
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
+            Arg.Is<Func<AiStreamEvent, Task>?>(sink => sink == null),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -454,7 +517,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Could not find that habit.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Delete my habit");
@@ -506,7 +569,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Please confirm that deletion.", ToolCalls = null }));
 
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Delete my habit"), CancellationToken.None);
@@ -543,7 +606,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Here are your habits.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Show my habits");
@@ -581,7 +644,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Streaks work like this.", ToolCalls = null }));
 
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "How do streaks work?"), CancellationToken.None);
@@ -614,7 +677,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Created your habit!", ToolCalls = null }));
 
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create a habit"), CancellationToken.None);
@@ -659,7 +722,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTools);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create and log habits");
@@ -704,7 +767,7 @@ public class ProcessUserChatCommandHandlerTests
         var finalResponse = new AiResponse { TextMessage = "Created two habits!", ToolCalls = null };
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(secondResponse), Result.Success(finalResponse));
 
         var command = new ProcessUserChatCommand(UserId, "Create two habits");
@@ -728,7 +791,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Sorry!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Do something");
@@ -764,7 +827,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Error occurred.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create habit");
@@ -795,6 +858,7 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Is<byte[]?>(b => b != null && b.Length == 4),
             Arg.Is<string?>(s => s == "image/png"),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -819,6 +883,7 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Is<IReadOnlyList<ChatHistoryMessage>?>(h => h != null && h.Count == 2),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -859,7 +924,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Here are my suggestions.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Break down my habit");
@@ -900,7 +965,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(toolResponse);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(toolResponse));
 
         var command = new ProcessUserChatCommand(UserId, "Keep going");
@@ -934,7 +999,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>("Connection lost"));
 
         var command = new ProcessUserChatCommand(UserId, "Create habit");
@@ -1053,7 +1118,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTools);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create parent and child");
@@ -1089,7 +1154,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTools);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create parent, child, and tag");
@@ -1139,7 +1204,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Hmm.", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Break it down");
@@ -1205,7 +1270,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Sent!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Contact support", CorrelationId: "req-trace-9");
@@ -1247,7 +1312,7 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(aiResponseWithTool);
 
         _aiIntentService.ContinueWithToolResultsAsync(
-            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
 
         var command = new ProcessUserChatCommand(UserId, "Create a habit", CorrelationId: "req-trace-9");
