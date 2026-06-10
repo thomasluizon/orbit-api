@@ -14,6 +14,7 @@ namespace Orbit.Application.Tests.Commands.Habits;
 public class DuplicateHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -23,7 +24,7 @@ public class DuplicateHabitCommandHandlerTests
 
     public DuplicateHabitCommandHandlerTests()
     {
-        _handler = new DuplicateHabitCommandHandler(_habitRepo, _payGate, _unitOfWork, _cache);
+        _handler = new DuplicateHabitCommandHandler(_habitRepo, _habitLogRepo, _payGate, _unitOfWork, _cache);
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -172,6 +173,89 @@ public class DuplicateHabitCommandHandlerTests
         _cache.TryGetValue(cacheKey, out _).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Handle_CompletedOneTimeTask_PreservesCompletionOnDuplicate()
+    {
+        var original = Habit.Create(new HabitCreateParams(
+            UserId, "Buy hiking boots", null, null,
+            DueDate: new DateOnly(2026, 6, 1))).Value;
+        original.Log(new DateOnly(2026, 6, 2), "found them on sale").IsSuccess.Should().BeTrue();
+
+        SetupAllHabitsForUser(new List<Habit> { original });
+        SetupCompletionLogs(original.Logs);
+        var added = CaptureAddedHabits();
+
+        var result = await _handler.Handle(new DuplicateHabitCommand(UserId, original.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var copy = added.Single();
+        copy.Id.Should().NotBe(original.Id);
+        copy.IsCompleted.Should().BeTrue();
+        copy.Logs.Should().ContainSingle(l =>
+            l.Date == new DateOnly(2026, 6, 2) && l.Note == "found them on sale" && l.Value > 0);
+    }
+
+    [Fact]
+    public async Task Handle_CompletedOneTimeChild_PreservesCompletionOnDuplicatedChild()
+    {
+        var parent = Habit.Create(new HabitCreateParams(
+            UserId, "Plan trip", FrequencyUnit.Day, 1)).Value;
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Book hotel", null, null,
+            ParentHabitId: parent.Id)).Value;
+        child.Log(new DateOnly(2026, 6, 3)).IsSuccess.Should().BeTrue();
+
+        SetupAllHabitsForUser(new List<Habit> { parent, child });
+        SetupCompletionLogs(child.Logs);
+        var added = CaptureAddedHabits();
+
+        var result = await _handler.Handle(new DuplicateHabitCommand(UserId, parent.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var childCopy = added.Single(h => h.Title == "Book hotel");
+        childCopy.IsCompleted.Should().BeTrue();
+        childCopy.Logs.Should().ContainSingle(l => l.Date == new DateOnly(2026, 6, 3));
+        var parentCopy = added.Single(h => h.Title == "Plan trip");
+        parentCopy.IsCompleted.Should().BeFalse();
+        parentCopy.Logs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_UncompletedOneTimeTask_StaysUncompleted()
+    {
+        var original = Habit.Create(new HabitCreateParams(UserId, "Renew passport", null, null)).Value;
+
+        SetupAllHabitsForUser(new List<Habit> { original });
+        var added = CaptureAddedHabits();
+
+        var result = await _handler.Handle(new DuplicateHabitCommand(UserId, original.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        added.Single().IsCompleted.Should().BeFalse();
+        added.Single().Logs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_RecurringHabitWithLogs_DoesNotCopyLogs()
+    {
+        var original = Habit.Create(new HabitCreateParams(
+            UserId, "Run", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 6, 1))).Value;
+        original.Log(new DateOnly(2026, 6, 1)).IsSuccess.Should().BeTrue();
+
+        SetupAllHabitsForUser(new List<Habit> { original });
+        var added = CaptureAddedHabits();
+
+        var result = await _handler.Handle(new DuplicateHabitCommand(UserId, original.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        added.Single().Logs.Should().BeEmpty();
+        added.Single().IsCompleted.Should().BeFalse();
+        await _habitLogRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>());
+    }
+
     private void SetupAllHabitsForUser(List<Habit> habits)
     {
         _habitRepo.FindTrackedAsync(
@@ -179,5 +263,20 @@ public class DuplicateHabitCommandHandlerTests
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habits);
+    }
+
+    private void SetupCompletionLogs(IEnumerable<HabitLog> logs)
+    {
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(logs.ToList());
+    }
+
+    private List<Habit> CaptureAddedHabits()
+    {
+        var added = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Do<Habit>(added.Add), Arg.Any<CancellationToken>());
+        return added;
     }
 }
