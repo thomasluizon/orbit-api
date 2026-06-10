@@ -356,6 +356,7 @@ public static class ServiceCollectionExtensions
         });
         builder.Services.AddScoped<Orbit.Application.Common.IPlayBillingService, Orbit.Infrastructure.Services.GooglePlayBillingService>();
         builder.Services.AddSingleton<Orbit.Application.Common.IPlayPushTokenValidator, Orbit.Infrastructure.Services.GooglePlayPushTokenValidator>();
+        builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPlayReferralCouponConsumer, Orbit.Application.Subscriptions.Services.PlayReferralCouponConsumer>();
 
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
@@ -435,7 +436,8 @@ public static class ServiceCollectionExtensions
 
         builder.WebHost.ConfigureKestrel(options =>
         {
-            options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;        });
+            options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
+        });
 
         builder.Services.AddMcpServer()
             .WithHttpTransport()

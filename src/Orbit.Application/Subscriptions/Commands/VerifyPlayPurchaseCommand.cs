@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -16,6 +17,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
     IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork,
     IPlayBillingService playBilling,
+    IPlayReferralCouponConsumer referralCouponConsumer,
     IOptions<GooglePlaySettings> playSettings,
     ILogger<VerifyPlayPurchaseCommandHandler> logger) : IRequestHandler<VerifyPlayPurchaseCommand, Result<PlayVerifyResponse>>
 {
@@ -61,6 +63,8 @@ public partial class VerifyPlayPurchaseCommandHandler(
                 LogAcknowledgeError(logger, ex, request.UserId);
             }
         }
+
+        await referralCouponConsumer.ConsumeOnNewPurchaseAsync(user, state, request.PurchaseToken, cancellationToken);
 
         if (StripeCoversLaterPeriod(user, state))
         {

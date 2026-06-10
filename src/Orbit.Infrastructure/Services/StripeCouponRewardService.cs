@@ -57,6 +57,15 @@ public partial class StripeCouponRewardService(
             LogCouponApplied(logger, couponId, subscriptionId);
     }
 
+    public async Task CancelCouponAsync(string couponId, CancellationToken cancellationToken = default)
+    {
+        var couponService = new CouponService();
+        await couponService.DeleteAsync(couponId, cancellationToken: cancellationToken);
+
+        if (logger.IsEnabled(LogLevel.Information))
+            LogCouponCanceled(logger, couponId);
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "User {UserId} not found for referral coupon creation")]
     private static partial void LogUserNotFoundForCoupon(ILogger logger, Guid userId);
 
@@ -65,5 +74,8 @@ public partial class StripeCouponRewardService(
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Applied coupon {CouponId} to subscription {SubscriptionId}")]
     private static partial void LogCouponApplied(ILogger logger, string couponId, string subscriptionId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Canceled referral coupon {CouponId}")]
+    private static partial void LogCouponCanceled(ILogger logger, string couponId);
 
 }

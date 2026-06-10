@@ -7,6 +7,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
+using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -18,6 +19,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPlayBillingService _playBilling = Substitute.For<IPlayBillingService>();
+    private readonly IPlayReferralCouponConsumer _referralConsumer = Substitute.For<IPlayReferralCouponConsumer>();
     private readonly VerifyPlayPurchaseCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -28,7 +30,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
     public VerifyPlayPurchaseCommandHandlerTests()
     {
         _handler = new VerifyPlayPurchaseCommandHandler(
-            _userRepo, _unitOfWork, _playBilling, Settings,
+            _userRepo, _unitOfWork, _playBilling, _referralConsumer, Settings,
             Substitute.For<ILogger<VerifyPlayPurchaseCommandHandler>>());
     }
 
@@ -150,7 +152,41 @@ public class VerifyPlayPurchaseCommandHandlerTests
         result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseAccountMismatch);
         user.IsPro.Should().BeFalse();
         await _playBilling.DidNotReceive().AcknowledgeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _referralConsumer.DidNotReceive().ConsumeOnNewPurchaseAsync(
+            Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ActivePurchase_InvokesCouponConsumerBeforeLinkingToken()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(ActiveState());
+        string? tokenWhenConsumerRan = "unset";
+        _referralConsumer
+            .When(c => c.ConsumeOnNewPurchaseAsync(user, Arg.Any<PlaySubscriptionState>(), "play_token_123", Arg.Any<CancellationToken>()))
+            .Do(_ => tokenWhenConsumerRan = user.PlayPurchaseToken);
+
+        await _handler.Handle(Command(), CancellationToken.None);
+
+        tokenWhenConsumerRan.Should().BeNull();
+        await _referralConsumer.Received(1).ConsumeOnNewPurchaseAsync(
+            user, Arg.Any<PlaySubscriptionState>(), "play_token_123", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_StripeCoversLaterPeriod_StillInvokesCouponConsumer()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6));
+        StubUser(user);
+        StubVerify(ActiveState());
+
+        await _handler.Handle(Command(), CancellationToken.None);
+
+        await _referralConsumer.Received(1).ConsumeOnNewPurchaseAsync(
+            user, Arg.Any<PlaySubscriptionState>(), "play_token_123", Arg.Any<CancellationToken>());
     }
 
     [Fact]

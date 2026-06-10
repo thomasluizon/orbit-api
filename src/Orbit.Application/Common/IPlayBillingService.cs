@@ -27,4 +27,5 @@ public sealed record PlaySubscriptionState(
     bool IsAcknowledged,
     string ProductId,
     string? LinkedPurchaseToken,
-    string? ObfuscatedAccountId);
+    string? ObfuscatedAccountId,
+    string? OfferId = null);
