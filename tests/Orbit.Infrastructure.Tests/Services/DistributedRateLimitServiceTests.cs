@@ -10,6 +10,9 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class DistributedRateLimitServiceTests : IDisposable
 {
+    private static readonly DateTimeOffset MidWindowInstant =
+        new(2026, 1, 15, 12, 30, 30, TimeSpan.Zero);
+
     private readonly OrbitDbContext _dbContext;
     private readonly DistributedRateLimitService _service;
 
@@ -20,7 +23,7 @@ public class DistributedRateLimitServiceTests : IDisposable
             .Options;
 
         _dbContext = new OrbitDbContext(options);
-        _service = new DistributedRateLimitService(_dbContext);
+        _service = new DistributedRateLimitService(_dbContext, new FixedTimeProvider(MidWindowInstant));
     }
 
     public void Dispose()
@@ -69,7 +72,7 @@ public class DistributedRateLimitServiceTests : IDisposable
 
         using var context = new RateLimitOnlyOrbitDbContext(options);
         context.Database.EnsureCreated();
-        var service = new DistributedRateLimitService(context);
+        var service = new DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant));
 
         DistributedRateLimitDecision decision = new(true, 0, 0, DateTime.UtcNow);
 
@@ -79,6 +82,11 @@ public class DistributedRateLimitServiceTests : IDisposable
         decision.Allowed.Should().BeFalse();
         decision.PermitLimit.Should().Be(5);
         decision.CurrentCount.Should().Be(5);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => instant;
     }
 
     private sealed class RateLimitOnlyOrbitDbContext(DbContextOptions<OrbitDbContext> options)
