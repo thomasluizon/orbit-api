@@ -17,7 +17,7 @@ public class QueryHabitsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Query and filter the user's habits. Use this tool whenever you need to look up, list, or find habits. Supports filtering by date, search text, frequency, tags, completion status, general habits, bad habits, and more. Always call this before answering questions about habits or before bulk-updating habit emojis.";
+        "Deep lookup for habits beyond the prompt index: metrics, streaks, completion percentages, descriptions, checklist items, completed habits, and filtered searches by text, date, frequency, tag, or status. The active-habit index in the system prompt already lists titles, IDs, hierarchy, and due status - do not call this just to list habits or answer what is due today.";
 
     public object GetParameterSchema() => new
     {

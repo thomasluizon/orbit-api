@@ -132,7 +132,9 @@ src/
     Migrations/           #   20+ EF Core migrations
 
 tests/
-  Orbit.IntegrationTests/ # xUnit + FluentAssertions (real DB + Gemini API)
+  Orbit.Domain.Tests/         # xUnit + FluentAssertions
+  Orbit.Application.Tests/    # xUnit + FluentAssertions
+  Orbit.Infrastructure.Tests/ # xUnit + FluentAssertions
 ```
 
 ### Key Patterns
@@ -217,11 +219,11 @@ Dual delivery system via `PushNotificationService`:
 ## Testing
 
 ```bash
-# Run integration tests (requires real DB + Gemini API)
-dotnet test tests/Orbit.IntegrationTests
+# Run all unit tests
+dotnet test
 ```
 
-Tests use xUnit with FluentAssertions and hit the real database and Gemini API (sequential execution).
+Tests use xUnit with FluentAssertions. Unit tests only — there is no integration suite.
 
 ## Deployment
 

@@ -14,7 +14,7 @@ public class QueryGoalsTool(
     public bool IsReadOnly => true;
 
     public string Description =>
-        "Query and filter the user's goals. Use this tool whenever you need to look up, list, or find goals, including titles, descriptions, progress, linked habits, deadlines, and status. Always call this before answering questions about goals.";
+        "Deep lookup for goals beyond the prompt index: completed or abandoned goals and filtered searches by text or status. The active-goal list in the system prompt already shows titles, IDs, progress, status, deadlines, descriptions, and linked habits - do not call this just to list active goals.";
 
     public object GetParameterSchema() => new
     {

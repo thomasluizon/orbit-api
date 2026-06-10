@@ -44,8 +44,8 @@ Branch protection on `main`: no direct pushes, no force pushes, no branch deleti
 
 ## Testing
 
-- xUnit + FluentAssertions. Real database, sequential execution, never mock the DB.
-- Every new feature needs unit tests (commands, queries, validators, domain logic) AND integration tests in `tests/Orbit.IntegrationTests`.
+- xUnit + FluentAssertions. Unit tests only — the integration suite was removed as outdated; do not add integration tests or a real-DB harness.
+- Every new feature needs unit tests: commands, queries, validators, domain logic.
 - Test accounts bypass email verification via `REVIEWER_TEST_EMAIL` / `QA_TEST_CODE` env vars — see `tests/CLAUDE.md`.
 
 ## Deployment
