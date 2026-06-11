@@ -55,7 +55,7 @@ public class ReorderHabitsTool(
         var result = await mediator.Send(new ReorderHabitsCommand(userId, positions), ct);
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityName: $"{positions.Count} habits");
     }

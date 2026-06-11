@@ -52,7 +52,7 @@ public class UpdateChecklistTool(
         var result = await mediator.Send(new UpdateChecklistCommand(userId, habitId, items), ct);
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: habitId.ToString());
     }

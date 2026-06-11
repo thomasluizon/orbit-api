@@ -22,7 +22,7 @@ public class ListTagsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetTagsQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -52,7 +52,7 @@ public class CreateTagTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new CreateTagCommand(userId, name, color), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: result.Value.ToString(), EntityName: name)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -87,7 +87,7 @@ public class UpdateTagTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new UpdateTagCommand(userId, tagId, name, color), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: tagId.ToString(), EntityName: name)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -115,6 +115,6 @@ public class DeleteTagTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new DeleteTagCommand(userId, tagId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: tagId.ToString(), EntityName: "Deleted tag")
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }

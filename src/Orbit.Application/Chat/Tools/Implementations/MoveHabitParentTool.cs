@@ -40,7 +40,7 @@ public class MoveHabitParentTool(
         var result = await mediator.Send(new MoveHabitParentCommand(userId, habitId, parentId), ct);
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: habitId.ToString());
     }

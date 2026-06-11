@@ -40,6 +40,20 @@ public class ChatStreamEventTests
     }
 
     [Fact]
+    public void Final_WritesNullResponseFieldsExplicitly()
+    {
+        var response = new ChatResponse(
+            "done",
+            [new ActionResult("CreateSubHabit", ActionStatus.Failed, Error: "Sub-habits are a Pro feature. Upgrade to unlock!")]);
+
+        var json = ChatStreamEvent.Final(response).ToJson();
+
+        json.Should().Contain("\"entityId\":null");
+        json.Should().Contain("\"operations\":null");
+        json.Should().Contain("\"error\":\"Sub-habits are a Pro feature. Upgrade to unlock!\"");
+    }
+
+    [Fact]
     public void Final_SerializesChatResponseWithStringEnumsAndCamelCase()
     {
         var response = new ChatResponse(

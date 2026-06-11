@@ -49,7 +49,7 @@ public class BulkCreateHabitsTool(
         var result = await mediator.Send(new BulkCreateHabitsCommand(userId, items), ct);
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         var successCount = result.Value.Results.Count(item => item.Status == BulkItemStatus.Success);
         return new ToolResult(true, EntityName: $"{successCount}/{items.Count} habits created", Payload: result.Value);

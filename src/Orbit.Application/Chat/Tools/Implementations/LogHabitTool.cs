@@ -57,7 +57,7 @@ public class LogHabitTool(
         var shouldAdvanceDueDate = targetDate >= today;
         var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
         if (logResult.IsFailure)
-            return new ToolResult(false, Error: logResult.Error);
+            return ToolResult.FromFailure(logResult);
 
         await habitLogRepository.AddAsync(logResult.Value, ct);
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);

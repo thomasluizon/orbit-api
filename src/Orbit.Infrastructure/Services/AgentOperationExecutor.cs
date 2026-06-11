@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Orbit.Application.Chat.Tools;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -215,7 +216,10 @@ public class AgentOperationExecutor(
         try
         {
             var result = await tool.ExecuteAsync(arguments, request.UserId, cancellationToken);
-            var outcomeStatus = result.Success ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed;
+            var isPayGateDenial = !result.Success && result.ErrorCode == Result.PayGateErrorCode;
+            var outcomeStatus = result.Success
+                ? AgentOperationStatus.Succeeded
+                : isPayGateDenial ? AgentOperationStatus.Denied : AgentOperationStatus.Failed;
 
             await TryAuditAsync(
                 CreateAuditContext(
@@ -232,17 +236,26 @@ public class AgentOperationExecutor(
                     policyDecision.ShadowReason),
                 cancellationToken);
 
-            return new AgentExecuteOperationResponse(new AgentOperationResult(
-                operation.Id,
-                operation.Id,
-                capability.RiskClass,
-                capability.ConfirmationRequirement,
-                outcomeStatus,
-                Summary: summary,
-                TargetId: result.EntityId,
-                TargetName: result.EntityName,
-                PolicyReason: result.Success ? null : result.Error,
-                Payload: result.Payload));
+            return new AgentExecuteOperationResponse(
+                new AgentOperationResult(
+                    operation.Id,
+                    operation.Id,
+                    capability.RiskClass,
+                    capability.ConfirmationRequirement,
+                    outcomeStatus,
+                    Summary: summary,
+                    TargetId: result.EntityId,
+                    TargetName: result.EntityName,
+                    PolicyReason: result.Success ? null : result.Error,
+                    Payload: result.Payload),
+                PolicyDenial: isPayGateDenial
+                    ? new AgentPolicyDenial(
+                        operation.Id,
+                        operation.Id,
+                        capability.RiskClass,
+                        capability.ConfirmationRequirement,
+                        result.Error ?? Result.PayGateErrorCode)
+                    : null);
         }
         catch (Exception ex)
         {

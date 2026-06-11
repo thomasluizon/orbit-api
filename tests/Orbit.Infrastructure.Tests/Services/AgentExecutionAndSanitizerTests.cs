@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
@@ -221,6 +222,37 @@ public class AgentExecutionAndSanitizerTests
 
         response.Operation.Status.Should().Be(AgentOperationStatus.Failed);
         response.Operation.PolicyReason.Should().Be("tool_failed");
+        response.PolicyDenial.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task AgentOperationExecutor_MapsPayGateToolFailuresToDeniedWithPolicyDenial()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("create_sub_habit", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+        var executor = CreateExecutor(
+            catalog,
+            policyEvaluator: policy,
+            toolRegistry: new AiToolRegistry([new StubTool(operation.Id, (_, _, _) => Task.FromResult(
+                ToolResult.FromFailure(Result.PayGateFailure("Sub-habits are a Pro feature. Upgrade to unlock!"))))]));
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId,
+            operation.Id,
+            Parse("""{"parent_habit_id":"123","title":"Test"}"""),
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Denied);
+        response.Operation.PolicyReason.Should().Be("Sub-habits are a Pro feature. Upgrade to unlock!");
+        response.PolicyDenial.Should().NotBeNull();
+        response.PolicyDenial!.Reason.Should().Be("Sub-habits are a Pro feature. Upgrade to unlock!");
     }
 
     [Fact]
