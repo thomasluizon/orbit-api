@@ -12,7 +12,7 @@ public sealed partial class AiSummaryService(
     AiCompletionClient aiClient,
     ILogger<AiSummaryService> logger) : ISummaryService
 {
-    private const int MaxSummaryChars = 200;
+    private const int MaxSummaryChars = 140;
 
     public async Task<Result<string>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
@@ -37,7 +37,7 @@ public sealed partial class AiSummaryService(
                 prompt,
                 temperature: 0.7,
                 cancellationToken,
-                maxOutputTokens: 200);
+                maxOutputTokens: 120);
 
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<string>("AI returned empty response");
@@ -115,13 +115,13 @@ public sealed partial class AiSummaryService(
 
             Rules:
             - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
-            - THEN, gently point at one or two of the still-pending habits as easy next moves -- never list everything, never frame it as a checklist, never guilt-trip
+            - THEN, gently point at ONE still-pending habit as an easy next move -- never list everything, never frame it as a checklist, never guilt-trip
             - If EVERYTHING is already done (nothing is pending), simply celebrate the full day warmly and leave it there -- do NOT invent, imply, or suggest any remaining task
             - If nothing is done yet, stay warm and forward-looking; do NOT imply they are behind or failing
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
             - GOOD: "Nice work getting your run in -- some guitar later could be a great way to unwind."
-            - Keep it to one or two short sentences, under ~200 characters total, warm and close, like a friend who actually knows you -- never corporate or coach-like
+            - Keep it to ONE short sentence -- two very short ones only when the day truly needs both -- under ~140 characters total, warm and close, like a friend who actually knows you -- never corporate or coach-like
             - This message is shown for the WHOLE current part of the day, so it must read correctly whether they see it at the start or the end of that window
             - Treat the time of day as a broad window, not an exact moment; never imply a precise instant
             - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"
