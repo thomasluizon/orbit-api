@@ -45,21 +45,21 @@ public class GetGamificationOverviewTool(IMediator mediator) : IAiTool
         if (includeProfile)
         {
             var profileResult = await mediator.Send(new GetGamificationProfileQuery(userId), ct);
-            if (profileResult.IsFailure) return new ToolResult(false, Error: profileResult.Error);
+            if (profileResult.IsFailure) return ToolResult.FromFailure(profileResult);
             profile = profileResult.Value;
         }
 
         if (includeAchievements)
         {
             var achievementsResult = await mediator.Send(new GetAchievementsQuery(userId), ct);
-            if (achievementsResult.IsFailure) return new ToolResult(false, Error: achievementsResult.Error);
+            if (achievementsResult.IsFailure) return ToolResult.FromFailure(achievementsResult);
             achievements = achievementsResult.Value;
         }
 
         if (includeStreak)
         {
             var streakResult = await mediator.Send(new GetStreakInfoQuery(userId), ct);
-            if (streakResult.IsFailure) return new ToolResult(false, Error: streakResult.Error);
+            if (streakResult.IsFailure) return ToolResult.FromFailure(streakResult);
             streak = streakResult.Value;
         }
 
@@ -84,7 +84,7 @@ public class GetReferralOverviewTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetReferralDashboardQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -104,7 +104,7 @@ public class GetReferralCodeTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetOrCreateReferralCodeCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: result.Value, Payload: new { code = result.Value })
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -138,21 +138,21 @@ public class GetSubscriptionOverviewTool(IMediator mediator) : IAiTool
         if (includeStatus)
         {
             var statusResult = await mediator.Send(new GetSubscriptionStatusQuery(userId), ct);
-            if (statusResult.IsFailure) return new ToolResult(false, Error: statusResult.Error);
+            if (statusResult.IsFailure) return ToolResult.FromFailure(statusResult);
             status = statusResult.Value;
         }
 
         if (includeBilling)
         {
             var billingResult = await mediator.Send(new GetBillingDetailsQuery(userId), ct);
-            if (billingResult.IsFailure) return new ToolResult(false, Error: billingResult.Error);
+            if (billingResult.IsFailure) return ToolResult.FromFailure(billingResult);
             billing = billingResult.Value;
         }
 
         if (includePlans)
         {
             var plansResult = await mediator.Send(new GetPlansQuery(userId, null, null), ct);
-            if (plansResult.IsFailure) return new ToolResult(false, Error: plansResult.Error);
+            if (plansResult.IsFailure) return ToolResult.FromFailure(plansResult);
             plans = plansResult.Value;
         }
 
@@ -200,7 +200,7 @@ public class ManageSubscriptionTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new CreateCheckoutCommand(userId, interval, null, null), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Created checkout session", Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> CreatePortalAsync(Guid userId, CancellationToken ct)
@@ -208,7 +208,7 @@ public class ManageSubscriptionTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new CreatePortalSessionCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Created billing portal session", Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> ClaimAdRewardAsync(Guid userId, CancellationToken ct)
@@ -216,7 +216,7 @@ public class ManageSubscriptionTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new ClaimAdRewardCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Claimed ad reward", Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 }
 
@@ -237,7 +237,7 @@ public class GetApiKeysTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetApiKeysQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -299,7 +299,7 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new CreateApiKeyCommand(userId, name, scopes, isReadOnly, expiresAtUtc), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: result.Value.Id.ToString(), EntityName: result.Value.Name, Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> RevokeAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -311,7 +311,7 @@ public class ManageApiKeysTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new RevokeApiKeyCommand(userId, parsedId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: parsedId.ToString(), EntityName: "Revoked API key", Payload: new { id = parsedId })
-            : new ToolResult(false, EntityId: parsedId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, parsedId.ToString());
     }
 
     private static bool TryParseUtcTimestamp(string? value, out DateTime? parsedUtc)
@@ -372,7 +372,7 @@ public class SendSupportRequestTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new SendSupportCommand(userId, name, email, subject, message), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Support request sent", Payload: new { subject })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 }
 
@@ -412,7 +412,7 @@ public class ManageAccountTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new ResetAccountCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Account reset completed", Payload: new { success = true })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> RequestDeletionAsync(Guid userId, CancellationToken ct)
@@ -420,7 +420,7 @@ public class ManageAccountTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new RequestAccountDeletionCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Deletion code requested", Payload: new { success = true })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> ConfirmDeletionAsync(JsonElement args, Guid userId, CancellationToken ct)
@@ -432,6 +432,6 @@ public class ManageAccountTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new ConfirmAccountDeletionCommand(userId, code), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Account deletion confirmed", Payload: new { scheduledDeletionAt = result.Value })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 }

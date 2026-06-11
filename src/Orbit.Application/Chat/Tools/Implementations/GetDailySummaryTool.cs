@@ -37,6 +37,6 @@ public class GetDailySummaryTool(IMediator mediator, IUserDateService userDateSe
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }

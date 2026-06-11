@@ -102,7 +102,7 @@ public class UpdateHabitTool(
 
         var result = habit.Update(updateParams);
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }

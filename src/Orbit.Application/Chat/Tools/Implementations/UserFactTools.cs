@@ -23,7 +23,7 @@ public class GetUserFactsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetUserFactsQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -55,7 +55,7 @@ public class DeleteUserFactsTool(IMediator mediator) : IAiTool
             var bulkResult = await mediator.Send(new BulkDeleteUserFactsCommand(userId, factIds), ct);
             return bulkResult.IsSuccess
                 ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Deleted user facts", Payload: new { deleted = bulkResult.Value, factIds })
-                : new ToolResult(false, EntityId: userId.ToString(), Error: bulkResult.Error);
+                : ToolResult.FromFailure(bulkResult, userId.ToString());
         }
 
         var factId = JsonArgumentParser.GetOptionalString(args, "fact_id");
@@ -65,6 +65,6 @@ public class DeleteUserFactsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new DeleteUserFactCommand(userId, parsedId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: parsedId.ToString(), EntityName: "Deleted user fact", Payload: new { id = parsedId })
-            : new ToolResult(false, EntityId: parsedId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, parsedId.ToString());
     }
 }

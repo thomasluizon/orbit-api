@@ -9,21 +9,22 @@ namespace Orbit.Application.Chat.Models;
 /// started/round/delta/reset report progress, final carries the complete ChatResponse,
 /// and error carries an HTTP-equivalent status plus the same error/code shape the
 /// buffered endpoint returns. Serialized camelCase with enums as strings, mirroring
-/// the regular API responses.
+/// the regular API responses. Only the envelope fields skip nulls — the nested
+/// ChatResponse must serialize null fields exactly like the buffered endpoint does,
+/// because the shared client schema treats them as part of the contract.
 /// </summary>
 public sealed record ChatStreamEvent(
     string Type,
-    string? Text = null,
-    int? Iteration = null,
-    ChatResponse? Response = null,
-    int? Status = null,
-    string? Error = null,
-    string? Code = null)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Iteration = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ChatResponse? Response = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Status = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Error = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Code = null)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter() }
     };
 

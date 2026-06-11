@@ -108,7 +108,7 @@ public class CreateSubHabitTool(
                     ScheduledReminders: scheduledReminders)), ct);
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: title);
     }

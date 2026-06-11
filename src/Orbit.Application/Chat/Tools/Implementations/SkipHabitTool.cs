@@ -90,7 +90,7 @@ public class SkipHabitTool(
 
             var skipResult = habit.SkipFlexible(targetDate);
             if (skipResult.IsFailure)
-                return new ToolResult(false, Error: skipResult.Error);
+                return ToolResult.FromFailure(skipResult);
 
             await habitLogRepository.AddAsync(skipResult.Value, ct);
         }
