@@ -151,7 +151,7 @@ public class CreateHabitTool(
 
         var habitGate = await payGate.CanCreateHabits(userId, 1, ct);
         if (habitGate.IsFailure)
-            return new ToolResult(false, Error: habitGate.Error);
+            return ToolResult.FromFailure(habitGate);
 
         if (!args.TryGetProperty("frequency_unit", out _) && IsHabitFlavoredTitle(title))
         {
@@ -162,7 +162,7 @@ public class CreateHabitTool(
 
         var habitResult = BuildParentHabit(args, userId, title, today);
         if (habitResult.IsFailure)
-            return new ToolResult(false, Error: habitResult.Error);
+            return ToolResult.FromFailure(habitResult);
 
         var habit = habitResult.Value;
 
@@ -211,7 +211,7 @@ public class CreateHabitTool(
 
         var subGate = await payGate.CanCreateSubHabits(userId, ct);
         if (subGate.IsFailure)
-            return new ToolResult(false, Error: subGate.Error);
+            return ToolResult.FromFailure(subGate);
 
         var parentFreqUnit = JsonArgumentParser.ParseFrequencyUnit(args);
         var parentFreqQty = JsonArgumentParser.GetOptionalInt(args, "frequency_quantity")
@@ -222,7 +222,7 @@ public class CreateHabitTool(
         {
             var childResult = BuildChildHabit(sub, userId, parent.Id, parentFreqUnit, parentFreqQty, parentDays, parentDueDate);
             if (childResult.IsFailure)
-                return new ToolResult(false, Error: childResult.Error);
+                return ToolResult.FromFailure(childResult);
 
             await habitRepository.AddAsync(childResult.Value, ct);
         }

@@ -24,7 +24,7 @@ public class GetNotificationsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetNotificationsQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -118,7 +118,7 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new MarkAllNotificationsReadCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Marked all notifications as read", Payload: new { action = "mark_all_read", markedCount = result.Value })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> TestPushAsync(Guid userId, CancellationToken ct)
@@ -126,7 +126,7 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new TestPushNotificationCommand(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Test push requested", Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> ExecuteAsync(IRequest<Result> command, Guid entityId, string entityName, object payload, CancellationToken ct)
@@ -134,7 +134,7 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)
-            : new ToolResult(false, EntityId: entityId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, entityId.ToString());
     }
 }
 
@@ -187,6 +187,6 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)
-            : new ToolResult(false, EntityId: entityId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, entityId.ToString());
     }
 }

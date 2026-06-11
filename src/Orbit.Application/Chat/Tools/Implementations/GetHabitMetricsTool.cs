@@ -32,6 +32,6 @@ public class GetHabitMetricsTool(IMediator mediator) : IAiTool
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }

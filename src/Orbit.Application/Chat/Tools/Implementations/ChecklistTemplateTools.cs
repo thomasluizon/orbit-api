@@ -24,7 +24,7 @@ public class GetChecklistTemplatesTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetChecklistTemplatesQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -59,7 +59,7 @@ public class CreateChecklistTemplateTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new CreateChecklistTemplateCommand(userId, name, items), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: result.Value.ToString(), EntityName: name, Payload: new { id = result.Value, name, items })
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -87,6 +87,6 @@ public class DeleteChecklistTemplateTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new DeleteChecklistTemplateCommand(userId, parsedId), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: parsedId.ToString(), EntityName: "Deleted checklist template", Payload: new { id = parsedId })
-            : new ToolResult(false, EntityId: parsedId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, parsedId.ToString());
     }
 }

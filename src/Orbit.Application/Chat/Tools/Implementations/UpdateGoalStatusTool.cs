@@ -64,7 +64,7 @@ public class UpdateGoalStatusTool(
         };
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         await unitOfWork.SaveChangesAsync(ct);
 

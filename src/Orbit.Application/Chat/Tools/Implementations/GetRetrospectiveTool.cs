@@ -43,7 +43,7 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
 
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 
     private static int PeriodToDays(string period) => period switch

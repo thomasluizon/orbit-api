@@ -55,7 +55,7 @@ public class CreateGoalTool(
             description,
             deadline,
             Type: goalType));
-        if (goalResult.IsFailure) return new ToolResult(false, Error: goalResult.Error);
+        if (goalResult.IsFailure) return ToolResult.FromFailure(goalResult);
 
         await goalRepository.AddAsync(goalResult.Value, ct);
         await unitOfWork.SaveChangesAsync(ct);

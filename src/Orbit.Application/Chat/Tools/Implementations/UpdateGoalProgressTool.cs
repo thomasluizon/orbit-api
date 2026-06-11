@@ -40,7 +40,7 @@ public class UpdateGoalProgressTool(
         await progressLogRepository.AddAsync(progressLog, ct);
 
         var result = goal.UpdateProgress(valueEl.GetDecimal());
-        if (result.IsFailure) return new ToolResult(false, Error: result.Error);
+        if (result.IsFailure) return ToolResult.FromFailure(result);
 
         await unitOfWork.SaveChangesAsync(ct);
         return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);

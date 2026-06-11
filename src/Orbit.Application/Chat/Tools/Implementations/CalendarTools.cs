@@ -34,14 +34,14 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
             ? await mediator.Send(new GetCalendarEventsQuery(userId), ct)
             : Result.Success(new List<CalendarEventItem>());
         if (events.IsFailure)
-            return new ToolResult(false, Error: events.Error);
+            return ToolResult.FromFailure(events);
 
         CalendarAutoSyncStateResponse? autoSyncState = null;
         if (includeAutoSyncState)
         {
             var autoSyncStateResult = await mediator.Send(new GetCalendarAutoSyncStateQuery(userId), ct);
             if (autoSyncStateResult.IsFailure)
-                return new ToolResult(false, Error: autoSyncStateResult.Error);
+                return ToolResult.FromFailure(autoSyncStateResult);
 
             autoSyncState = autoSyncStateResult.Value;
         }
@@ -50,7 +50,7 @@ public class GetCalendarOverviewTool(IMediator mediator) : IAiTool
             ? await mediator.Send(new GetCalendarSyncSuggestionsQuery(userId), ct)
             : Result.Success(new List<CalendarSyncSuggestionItem>());
         if (suggestions.IsFailure)
-            return new ToolResult(false, Error: suggestions.Error);
+            return ToolResult.FromFailure(suggestions);
 
         return new ToolResult(true, Payload: new
         {
@@ -131,7 +131,7 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new RunCalendarAutoSyncCommand(userId, IsOpportunistic: false), ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Calendar sync requested", Payload: result.Value)
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 
     private async Task<ToolResult> ExecuteAsync(IRequest<Result> command, Guid entityId, string entityName, object payload, CancellationToken ct)
@@ -139,6 +139,6 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)
-            : new ToolResult(false, EntityId: entityId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, entityId.ToString());
     }
 }

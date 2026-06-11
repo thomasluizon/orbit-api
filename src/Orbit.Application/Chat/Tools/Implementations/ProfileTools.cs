@@ -23,7 +23,7 @@ public class GetProfileTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(new GetProfileQuery(userId), ct);
         return result.IsSuccess
             ? new ToolResult(true, Payload: result.Value)
-            : new ToolResult(false, Error: result.Error);
+            : ToolResult.FromFailure(result);
     }
 }
 
@@ -120,7 +120,7 @@ public class UpdateProfilePreferencesTool(IMediator mediator) : IAiTool
         var result = await mediator.Send(command, ct);
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: entityName, Payload: new { success = true })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 }
 
@@ -149,7 +149,7 @@ public class SetColorSchemeTool(IMediator mediator) : IAiTool
 
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Color scheme updated", Payload: new { color_scheme = colorScheme })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 }
 
@@ -187,7 +187,7 @@ public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool
                 EntityId: userId.ToString(),
                 EntityName: $"{SettingLabel} {(enabled.Value ? EnabledState : DisabledState)}",
                 Payload: new { enabled })
-            : new ToolResult(false, EntityId: userId.ToString(), Error: result.Error);
+            : ToolResult.FromFailure(result, userId.ToString());
     }
 }
 

@@ -39,7 +39,7 @@ public class BulkDeleteHabitsTool(
         var result = await mediator.Send(new BulkDeleteHabitsCommand(userId, habitIds), ct);
 
         if (result.IsFailure)
-            return new ToolResult(false, Error: result.Error);
+            return ToolResult.FromFailure(result);
 
         var successCount = result.Value.Results.Count(item => item.Status == BulkItemStatus.Success);
         return new ToolResult(true, EntityName: $"{successCount}/{habitIds.Count} habits deleted", Payload: result.Value);

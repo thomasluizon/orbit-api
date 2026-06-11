@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Chat.Tools;
 
@@ -17,4 +18,9 @@ public record ToolResult(
     string? EntityId = null,
     string? EntityName = null,
     string? Error = null,
-    object? Payload = null);
+    object? Payload = null,
+    string? ErrorCode = null)
+{
+    public static ToolResult FromFailure(Result result, string? entityId = null) =>
+        new(false, EntityId: entityId, Error: result.Error, ErrorCode: result.ErrorCode);
+}
