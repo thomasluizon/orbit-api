@@ -3,6 +3,7 @@ using NSubstitute;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Queries.Gamification;
@@ -12,6 +13,8 @@ public class GetStreakInfoQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetStreakInfoQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -19,7 +22,8 @@ public class GetStreakInfoQueryHandlerTests
 
     public GetStreakInfoQueryHandlerTests()
     {
-        _handler = new GetStreakInfoQueryHandler(_userRepo, _streakFreezeRepo, _userDateService);
+        _handler = new GetStreakInfoQueryHandler(
+            _userRepo, _streakFreezeRepo, _userDateService, _userStreakService, _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
@@ -55,6 +59,31 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.CanEarnMore.Should().BeTrue();
         result.Value.IsFrozenToday.Should().BeFalse();
         result.Value.RecentFreezeDates.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_RecalculatesStreakOnRead_AndReturnsFreshValues()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), awardFreezeIfEligible: false)
+            .Returns(new UserStreakState(11, 43, Today));
+
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var query = new GetStreakInfoQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentStreak.Should().Be(11);
+        result.Value.LongestStreak.Should().Be(43);
+        result.Value.LastActiveDate.Should().Be(Today);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

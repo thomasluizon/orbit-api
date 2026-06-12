@@ -12,7 +12,7 @@ public sealed partial class AiSummaryService(
     AiCompletionClient aiClient,
     ILogger<AiSummaryService> logger) : ISummaryService
 {
-    private const int MaxSummaryChars = 140;
+    private const int MaxSummaryChars = 300;
 
     public async Task<Result<string>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
@@ -37,7 +37,7 @@ public sealed partial class AiSummaryService(
                 prompt,
                 temperature: 0.7,
                 cancellationToken,
-                maxOutputTokens: 120);
+                maxOutputTokens: 180);
 
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<string>("AI returned empty response");
@@ -121,7 +121,7 @@ public sealed partial class AiSummaryService(
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
             - GOOD: "Nice work getting your run in -- some guitar later could be a great way to unwind."
-            - Keep it to ONE short sentence -- two very short ones only when the day truly needs both -- under ~140 characters total, warm and close, like a friend who actually knows you -- never corporate or coach-like
+            - Keep it to TWO short sentences -- three only when the day truly needs them -- under ~300 characters total, warm and close, like a friend who actually knows you -- never corporate or coach-like
             - This message is shown for the WHOLE current part of the day, so it must read correctly whether they see it at the start or the end of that window
             - Treat the time of day as a broad window, not an exact moment; never imply a precise instant
             - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"

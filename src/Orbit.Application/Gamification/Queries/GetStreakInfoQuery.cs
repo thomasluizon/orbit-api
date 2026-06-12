@@ -26,7 +26,9 @@ public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoRespon
 public class GetStreakInfoQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
-    IUserDateService userDateService) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
+    IUserDateService userDateService,
+    IUserStreakService userStreakService,
+    IUnitOfWork unitOfWork) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
 {
     public async Task<Result<StreakInfoResponse>> Handle(GetStreakInfoQuery request, CancellationToken cancellationToken)
     {
@@ -36,6 +38,15 @@ public class GetStreakInfoQueryHandler(
 
         if (!user.HasProAccess)
             return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
+
+        var recalculatedStreak = await userStreakService.RecalculateAsync(
+            request.UserId, cancellationToken, awardFreezeIfEligible: false);
+        if (recalculatedStreak is not null)
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var currentStreak = recalculatedStreak?.CurrentStreak ?? user.CurrentStreak;
+        var longestStreak = recalculatedStreak?.LongestStreak ?? user.LongestStreak;
+        var lastActiveDate = recalculatedStreak?.LastActiveDate ?? user.LastActiveDate;
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
@@ -56,11 +67,11 @@ public class GetStreakInfoQueryHandler(
 
         var freezesAvailableToUse = Math.Min(user.StreakFreezesAccumulated, remainingMonthlyQuota);
 
-        var daysSinceLastAward = Math.Max(0, user.CurrentStreak - user.LastFreezeAwardStreak);
-        var daysUntilNextFreeze = user.CurrentStreak <= 0
+        var daysSinceLastAward = Math.Max(0, currentStreak - user.LastFreezeAwardStreak);
+        var daysUntilNextFreeze = currentStreak <= 0
             ? AppConstants.StreakDaysPerFreeze
             : Math.Max(0, AppConstants.StreakDaysPerFreeze - (daysSinceLastAward % AppConstants.StreakDaysPerFreeze));
-        if (daysUntilNextFreeze == 0 && user.CurrentStreak > 0 && user.StreakFreezesAccumulated >= AppConstants.MaxStreakFreezesAccumulated)
+        if (daysUntilNextFreeze == 0 && currentStreak > 0 && user.StreakFreezesAccumulated >= AppConstants.MaxStreakFreezesAccumulated)
         {
             daysUntilNextFreeze = AppConstants.StreakDaysPerFreeze;
         }
@@ -73,9 +84,9 @@ public class GetStreakInfoQueryHandler(
             .ToList();
 
         return Result.Success(new StreakInfoResponse(
-            user.CurrentStreak,
-            user.LongestStreak,
-            user.LastActiveDate,
+            currentStreak,
+            longestStreak,
+            lastActiveDate,
             freezesUsedThisMonth,
             user.StreakFreezesAccumulated,
             AppConstants.MaxStreakFreezesPerMonth,
