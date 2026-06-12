@@ -30,6 +30,7 @@ public static class AppConstants
     public const int MaxNotificationsReturned = 50;
     public const int MaxChecklistItems = 50;
     public const int MaxTagNameLength = 50;
+    public const int MaxUserNameLength = DomainConstants.MaxUserNameLength;
     public const int MaxLanguageLength = 10;
     public const int MaxVerificationAttempts = 3;
     public const int MaxChatMessageLength = 4000;

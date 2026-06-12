@@ -29,4 +29,8 @@
     <InternalsVisibleTo Include="Orbit.Infrastructure.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Email\Templates\**" />
+  </ItemGroup>
+
 </Project>
