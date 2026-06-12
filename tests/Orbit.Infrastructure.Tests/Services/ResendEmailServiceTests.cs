@@ -144,6 +144,105 @@ public class ResendEmailServiceTests
         _handler.LastRequestBody.Should().Contain("reply_to");
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public async Task SendVerificationCodeAsync_IncludesPlainTextPart(string language)
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendVerificationCodeAsync("user@test.com", "123456", language);
+
+        _handler.LastRequestBody.Should().Contain("\"text\":");
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_HtmlHasNoUnreplacedTokens()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendVerificationCodeAsync("user@test.com", "123456");
+
+        _handler.LastRequestBody.Should().NotContain("{{");
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_IncludesLogoAndPreheader()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendVerificationCodeAsync("user@test.com", "123456");
+
+        _handler.LastRequestBody.Should().Contain("logo-no-bg.png");
+        _handler.LastRequestBody.Should().Contain("It expires in 5 minutes.");
+    }
+
+    [Fact]
+    public async Task SendWelcomeEmailAsync_IncludesTextPartWithRawUserName()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendWelcomeEmailAsync("user@test.com", "Ana & Co");
+
+        _handler.LastRequestBody.Should().Contain("\"text\":");
+        _handler.LastRequestBody.Should().Contain("Welcome aboard, Ana \\u0026 Co!");
+        _handler.LastRequestBody.Should().Contain("Welcome aboard, Ana \\u0026amp; Co!");
+    }
+
+    [Fact]
+    public async Task SendWelcomeEmailAsync_UsesGradientHeaderWithSolidFallback()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendWelcomeEmailAsync("user@test.com", "Thomas");
+
+        _handler.LastRequestBody.Should().Contain("#22094F");
+    }
+
+    [Fact]
+    public async Task SendAccountDeletionCodeAsync_IncludesPlainTextPart()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendAccountDeletionCodeAsync("user@test.com", "654321", "en");
+
+        _handler.LastRequestBody.Should().Contain("\"text\":");
+        _handler.LastRequestBody.Should().Contain("654321");
+    }
+
+    [Fact]
+    public async Task SendSupportEmailAsync_AdoptsSharedLayoutWithTextPart()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendSupportEmailAsync("John", "john@test.com", "Bug Report", "Found a bug");
+
+        _handler.LastRequestBody.Should().Contain("logo-no-bg.png");
+        _handler.LastRequestBody.Should().Contain("\"text\":");
+        _handler.LastRequestBody.Should().Contain("Reply directly to respond to the user.");
+    }
+
+    [Fact]
+    public async Task SendSupportEmailAsync_EncodesHtmlInUserContent()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendSupportEmailAsync("<b>John</b>", "john@test.com", "Bug", "line1\nline2");
+
+        _handler.LastRequestBody.Should().Contain("\\u0026lt;b\\u0026gt;John\\u0026lt;/b\\u0026gt;");
+        _handler.LastRequestBody.Should().Contain("line1\\u003Cbr\\u003Eline2");
+    }
+
+    [Fact]
+    public async Task SendWelcomeEmailAsync_UserNameWithTokenSyntax_IsNotSubstituted()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendWelcomeEmailAsync("user@test.com", "{{footer}}");
+
+        _handler.LastRequestBody.Should().Contain("Welcome aboard, {{footer}}!");
+    }
+
     [Fact]
     public async Task SendVerificationCodeAsync_TestAccount_SkipsSend()
     {

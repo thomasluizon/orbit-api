@@ -17,6 +17,7 @@ namespace Orbit.Api.Controllers;
 public partial class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
+    public record SetNameRequest(string Name);
     public record SetAiMemoryRequest([property: JsonRequired] bool Enabled);
     public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
@@ -53,6 +54,25 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
         if (result.IsSuccess)
             LogTimezoneChanged(logger, request.TimeZone, HttpContext.GetUserId());
+
+        return result.IsSuccess
+            ? NoContent()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPut("name")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetName(
+        [FromBody] SetNameRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetNameCommand(HttpContext.GetUserId(), request.Name);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogNameChanged(logger, HttpContext.GetUserId());
 
         return result.IsSuccess
             ? NoContent()
@@ -257,5 +277,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Account reset for user {UserId}")]
     private static partial void LogAccountReset(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Display name changed for user {UserId}")]
+    private static partial void LogNameChanged(ILogger logger, Guid userId);
 
 }

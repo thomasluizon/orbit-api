@@ -183,6 +183,99 @@ public class UserTests
     }
 
     [Fact]
+    public void SetName_ValidName_UpdatesName()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetName("Ana Clara");
+
+        result.IsSuccess.Should().BeTrue();
+        user.Name.Should().Be("Ana Clara");
+    }
+
+    [Fact]
+    public void SetName_TrimsWhitespace()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetName("  Ana Clara  ");
+
+        result.IsSuccess.Should().BeTrue();
+        user.Name.Should().Be("Ana Clara");
+    }
+
+    [Fact]
+    public void SetName_AllowsAccentedCharacters()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetName("João Sebastião");
+
+        result.IsSuccess.Should().BeTrue();
+        user.Name.Should().Be("João Sebastião");
+    }
+
+    [Fact]
+    public void SetName_EmptyName_ReturnsFailure()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetName("");
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Name is required");
+        user.Name.Should().Be("Thomas");
+    }
+
+    [Fact]
+    public void SetName_WhitespaceName_ReturnsFailure()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetName("   ");
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Name is required");
+        user.Name.Should().Be("Thomas");
+    }
+
+    [Fact]
+    public void SetName_TooLongName_ReturnsFailure()
+    {
+        var user = CreateValidUser();
+
+        var result = user.SetName(new string('a', 51));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("at most 50 characters");
+        user.Name.Should().Be("Thomas");
+    }
+
+    [Fact]
+    public void SetName_ExactlyMaxLength_Succeeds()
+    {
+        var user = CreateValidUser();
+        var name = new string('a', 50);
+
+        var result = user.SetName(name);
+
+        result.IsSuccess.Should().BeTrue();
+        user.Name.Should().Be(name);
+    }
+
+    [Fact]
+    public void SetName_TrimmedWithinMaxLength_Succeeds()
+    {
+        var user = CreateValidUser();
+        var name = new string('a', 50);
+
+        var result = user.SetName($"  {name}  ");
+
+        result.IsSuccess.Should().BeTrue();
+        user.Name.Should().Be(name);
+    }
+
+    [Fact]
     public void SetStripeSubscription_SetsPlanToPro()
     {
         var user = CreateValidUser();

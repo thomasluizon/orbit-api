@@ -100,6 +100,19 @@ public partial class User : Entity
         Email = email.Trim().ToLowerInvariant();
     }
 
+    public Result SetName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Failure("Name is required");
+
+        var trimmedName = name.Trim();
+        if (trimmedName.Length > DomainConstants.MaxUserNameLength)
+            return Result.Failure($"Name must be at most {DomainConstants.MaxUserNameLength} characters");
+
+        Name = trimmedName;
+        return Result.Success();
+    }
+
     public Result SetTimeZone(string ianaTimeZoneId)
     {
         try

@@ -722,7 +722,7 @@ public class AgentCatalogService : IAgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.ProfilePreferencesWrite,
                 "Write Preferences",
-                "Writes timezone, language, theme, onboarding, and week-start preferences.",
+                "Writes display name, timezone, language, theme, onboarding, and week-start preferences.",
                 "profile",
                 AgentScopes.WriteProfilePreferences,
                 AgentRiskClass.Low,
@@ -733,6 +733,7 @@ public class AgentCatalogService : IAgentCatalogService
                 mcpTools: ["set_timezone", "set_language", "set_week_start_day"],
                 controllerActions:
                 [
+                    "ProfileController.SetName",
                     "ProfileController.SetTimezone",
                     "ProfileController.SetLanguage",
                     "ProfileController.SetWeekStartDay",

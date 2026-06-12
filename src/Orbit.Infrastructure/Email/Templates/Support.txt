@@ -1,0 +1,8 @@
+Orbit Support Request
+
+From: {{fromName}} <{{fromEmail}}>
+Subject: {{subject}}
+
+{{message}}
+
+Reply directly to respond to the user.
