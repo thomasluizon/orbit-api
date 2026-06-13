@@ -26,9 +26,12 @@ public class SkipHabitCommandHandler(
 {
     public async Task<Result> Handle(SkipHabitCommand request, CancellationToken cancellationToken)
     {
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
             cancellationToken);
 
         if (habit is null)
@@ -39,8 +42,6 @@ public class SkipHabitCommandHandler(
 
         if (habit.IsCompleted)
             return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
-
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         if (habit.FrequencyUnit is null)
             return await HandleOneTimeSkip(habit, today, cancellationToken);
@@ -116,9 +117,10 @@ public class SkipHabitCommandHandler(
         if (habit.Goals.Count == 0) return;
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
+        var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
         var trackedGoals = await goalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
 
         var streakGoals = trackedGoals

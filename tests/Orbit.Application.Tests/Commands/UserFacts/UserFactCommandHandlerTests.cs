@@ -149,11 +149,10 @@ public class UserFactCommandHandlerTests
         var fact1 = UserFact.Create(UserId, "Fact one", null).Value;
         var fact2 = UserFact.Create(UserId, "Fact two", null).Value;
 
-        _factRepo.FindOneTrackedAsync(
+        _factRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<Func<IQueryable<UserFact>, IQueryable<UserFact>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(fact1, fact2);
+            .Returns(new List<UserFact> { fact1, fact2 }.AsReadOnly());
 
         var handler = new BulkDeleteUserFactsCommandHandler(_factRepo, _payGate, _unitOfWork);
         var command = new BulkDeleteUserFactsCommand(UserId, new List<Guid> { fact1.Id, fact2.Id });
