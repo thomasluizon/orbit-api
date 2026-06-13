@@ -20,16 +20,16 @@ public class Tag : Entity, ITimestamped, ISoftDeletable
     public static Result<Tag> Create(Guid userId, string name, string color)
     {
         if (userId == Guid.Empty)
-            return Result.Failure<Tag>("User ID is required.");
+            return Result.Failure<Tag>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure<Tag>("Tag name is required.");
+            return Result.Failure<Tag>(DomainErrors.TagNameRequired);
 
         if (name.Trim().Length > 50)
-            return Result.Failure<Tag>("Tag name must be 50 characters or less.");
+            return Result.Failure<Tag>(DomainErrors.TagNameTooLong);
 
         if (string.IsNullOrWhiteSpace(color))
-            return Result.Failure<Tag>("Tag color is required.");
+            return Result.Failure<Tag>(DomainErrors.TagColorRequired);
 
         var trimmed = name.Trim();
         return Result.Success(new Tag
@@ -51,13 +51,13 @@ public class Tag : Entity, ITimestamped, ISoftDeletable
     public Result Update(string name, string color)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure("Tag name is required.");
+            return Result.Failure(DomainErrors.TagNameRequired);
 
         if (name.Trim().Length > 50)
-            return Result.Failure("Tag name must be 50 characters or less.");
+            return Result.Failure(DomainErrors.TagNameTooLong);
 
         if (string.IsNullOrWhiteSpace(color))
-            return Result.Failure("Tag color is required.");
+            return Result.Failure(DomainErrors.TagColorRequired);
 
         var trimmed = name.Trim();
         Name = char.ToUpper(trimmed[0]) + trimmed[1..].ToLower();

@@ -137,6 +137,17 @@ public static class ServiceCollectionExtensions
 
     public static WebApplicationBuilder AddOrbitAiServices(this WebApplicationBuilder builder)
     {
+        AddAiPlatformServices(builder);
+        AddAiChatTools(builder);
+        AddHabitCommandDependencies(builder);
+        AddCalendarCommandDependencies(builder);
+        AddChatCommandDependencies(builder);
+
+        return builder;
+    }
+
+    private static void AddAiPlatformServices(WebApplicationBuilder builder)
+    {
         builder.Services.Configure<AiSettings>(
             builder.Configuration.GetSection(AiSettings.SectionName));
         builder.Services.Configure<AgentPlatformSettings>(
@@ -156,7 +167,10 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentTargetOwnershipService, AgentTargetOwnershipService>();
         builder.Services.AddScoped<IAgentOperationExecutor, AgentOperationExecutor>();
         builder.Services.AddScoped<Orbit.Api.Mcp.McpExecutorBridge>();
+    }
 
+    private static void AddAiChatTools(WebApplicationBuilder builder)
+    {
         builder.Services.AddScoped<IAiTool, LogHabitTool>();
         builder.Services.AddScoped<IAiTool, SkipHabitTool>();
         builder.Services.AddScoped<IAiTool, CreateHabitTool>();
@@ -221,7 +235,10 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<AiToolRegistry>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         builder.Services.AddSingleton<IFeatureExplanationService, FeatureExplanationService>();
+    }
 
+    private static void AddHabitCommandDependencies(WebApplicationBuilder builder)
+    {
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitRepositories>(sp =>
             new Orbit.Application.Habits.Commands.LogHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
@@ -245,7 +262,10 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
+    }
 
+    private static void AddCalendarCommandDependencies(WebApplicationBuilder builder)
+    {
         builder.Services.AddScoped<Orbit.Application.Calendar.Commands.CalendarAutoSyncDependencies>(sp =>
             new Orbit.Application.Calendar.Commands.CalendarAutoSyncDependencies(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
@@ -255,7 +275,10 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGoogleTokenService>(),
                 sp.GetRequiredService<Orbit.Application.Calendar.Services.ICalendarEventFetcher>(),
                 sp.GetRequiredService<IUnitOfWork>()));
+    }
 
+    private static void AddChatCommandDependencies(WebApplicationBuilder builder)
+    {
         builder.Services.AddScoped<Orbit.Application.Chat.Commands.ChatAiDependencies>(sp =>
             new Orbit.Application.Chat.Commands.ChatAiDependencies(
                 sp.GetRequiredService<IAiIntentService>(),
@@ -280,8 +303,6 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<IAgentOperationExecutor>(),
                 sp.GetRequiredService<IPendingClarificationStore>()));
-
-        return builder;
     }
 
     public static WebApplicationBuilder AddOrbitInfrastructure(this WebApplicationBuilder builder)
@@ -294,6 +315,45 @@ public static class ServiceCollectionExtensions
 
         var httpTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
 
+        AddEmailAndSupabaseClients(builder, httpTimeout);
+
+        builder.Services.Configure<GoogleSettings>(
+            builder.Configuration.GetSection(GoogleSettings.SectionName));
+
+        builder.Services.AddSingleton<OAuthAuthorizationStore>();
+
+        AddStripeBilling(builder);
+        AddGooglePlayBilling(builder);
+        AddPushAndReferralServices(builder, httpTimeout);
+        AddBackgroundServices(builder);
+
+        InitializeFirebase(builder.Configuration);
+
+        builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
+
+        builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>()
+            .ConfigureHttpClient(c => c.Timeout = httpTimeout);
+
+        builder.Services.AddMemoryCache();
+
+        builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
+
+        builder.Services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly);
+            cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+        });
+
+        AddCorsPolicies(builder);
+        AddCookieAndKestrelLimits(builder);
+        AddMcpToolServer(builder);
+        AddApiPipeline(builder);
+
+        return builder;
+    }
+
+    private static void AddEmailAndSupabaseClients(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    {
         builder.Services.AddHttpClient("Supabase", client =>
         {
             client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
@@ -314,12 +374,10 @@ public static class ServiceCollectionExtensions
         });
 
         builder.Services.AddScoped<IEmailService, ResendEmailService>();
+    }
 
-        builder.Services.Configure<GoogleSettings>(
-            builder.Configuration.GetSection(GoogleSettings.SectionName));
-
-        builder.Services.AddSingleton<OAuthAuthorizationStore>();
-
+    private static void AddStripeBilling(WebApplicationBuilder builder)
+    {
         builder.Services.Configure<StripeSettings>(
             builder.Configuration.GetSection(StripeSettings.SectionName));
         var stripeKey = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>()?.SecretKey;
@@ -337,7 +395,10 @@ public static class ServiceCollectionExtensions
         builder.Services.AddSingleton<Stripe.CouponService>();
         builder.Services.AddScoped<Orbit.Application.Common.IBillingService, Orbit.Infrastructure.Services.StripeBillingService>();
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
+    }
 
+    private static void AddGooglePlayBilling(WebApplicationBuilder builder)
+    {
         builder.Services.Configure<GooglePlaySettings>(
             builder.Configuration.GetSection(GooglePlaySettings.SectionName));
         builder.Services.AddSingleton(sp =>
@@ -357,7 +418,10 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Common.IPlayBillingService, Orbit.Infrastructure.Services.GooglePlayBillingService>();
         builder.Services.AddSingleton<Orbit.Application.Common.IPlayPushTokenValidator, Orbit.Infrastructure.Services.GooglePlayPushTokenValidator>();
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPlayReferralCouponConsumer, Orbit.Application.Subscriptions.Services.PlayReferralCouponConsumer>();
+    }
 
+    private static void AddPushAndReferralServices(WebApplicationBuilder builder, TimeSpan httpTimeout)
+    {
         builder.Services.Configure<VapidSettings>(
             builder.Configuration.GetSection(VapidSettings.SectionName));
         builder.Services.AddHttpClient<IPushNotificationService, PushNotificationService>()
@@ -370,7 +434,10 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
+    }
 
+    private static void AddBackgroundServices(WebApplicationBuilder builder)
+    {
         builder.Services.AddHostedService<ReminderSchedulerService>();
         builder.Services.AddHostedService<GoalDeadlineNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
@@ -385,24 +452,10 @@ public static class ServiceCollectionExtensions
 
         builder.Services.AddHealthChecks()
             .AddCheck<BackgroundServiceHealthCheck>("background-services");
+    }
 
-        InitializeFirebase(builder.Configuration);
-
-        builder.Services.AddSingleton<IImageValidationService, ImageValidationService>();
-
-        builder.Services.AddHttpClient<IGeoLocationService, GeoLocationService>()
-            .ConfigureHttpClient(c => c.Timeout = httpTimeout);
-
-        builder.Services.AddMemoryCache();
-
-        builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
-
-        builder.Services.AddMediatR(cfg =>
-        {
-            cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly);
-            cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
-        });
-
+    private static void AddCorsPolicies(WebApplicationBuilder builder)
+    {
         var firstPartyOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
             ?? ["http://localhost:3000"];
         var thirdPartyOrigins = builder.Configuration.GetSection("Cors:ThirdPartyOrigins").Get<string[]>()
@@ -426,7 +479,10 @@ public static class ServiceCollectionExtensions
                 });
             }
         });
+    }
 
+    private static void AddCookieAndKestrelLimits(WebApplicationBuilder builder)
+    {
         builder.Services.Configure<CookiePolicyOptions>(options =>
         {
             options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
@@ -438,7 +494,10 @@ public static class ServiceCollectionExtensions
         {
             options.Limits.MaxRequestBodySize = 10 * 1024 * 1024;
         });
+    }
 
+    private static void AddMcpToolServer(WebApplicationBuilder builder)
+    {
         builder.Services.AddMcpServer()
             .WithHttpTransport()
             .WithTools<AgentTools>()
@@ -456,7 +515,10 @@ public static class ServiceCollectionExtensions
             .WithTools<SupportTools>()
             .WithTools<ChecklistTemplateTools>()
             .WithTools<FeatureTools>();
+    }
 
+    private static void AddApiPipeline(WebApplicationBuilder builder)
+    {
         builder.Services.AddControllers()
             .AddJsonOptions(options =>
             {
@@ -478,8 +540,6 @@ public static class ServiceCollectionExtensions
         {
             options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
         });
-
-        return builder;
     }
 
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)

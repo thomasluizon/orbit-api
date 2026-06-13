@@ -43,7 +43,7 @@ public class GetGoalReviewQueryHandler(
         var goalList = goals.ToList();
 
         if (goalList.Count == 0)
-            return Result.Failure<GoalReviewResponse>("No active goals found.");
+            return Result.Failure<GoalReviewResponse>(ErrorMessages.NoActiveGoals);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
@@ -55,7 +55,7 @@ public class GetGoalReviewQueryHandler(
             cancellationToken);
 
         if (result.IsFailure)
-            return Result.Failure<GoalReviewResponse>(result.Error);
+            return result.PropagateError<GoalReviewResponse>();
 
         cache.Set(cacheKey, result.Value, new MemoryCacheEntryOptions
         {

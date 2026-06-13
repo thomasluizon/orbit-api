@@ -41,11 +41,11 @@ public partial class GetCalendarEventsQueryHandler(
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound);
 
         var accessToken = await ResolveAccessTokenAsync(user, cancellationToken);
         if (accessToken is null)
-            return Result.Failure<List<CalendarEventItem>>("Google Calendar not connected. Please sign in with Google first.");
+            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarNotConnected);
 
         try
         {
@@ -65,9 +65,9 @@ public partial class GetCalendarEventsQueryHandler(
             {
                 user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
                 await unitOfWork.SaveChangesAsync(cancellationToken);
-                return Result.Failure<List<CalendarEventItem>>(GoogleCalendarReconnectMessage);
+                return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarReconnectRequired);
             }
-            return Result.Failure<List<CalendarEventItem>>("Failed to fetch calendar events. Please try again.");
+            return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarFetchFailed);
         }
     }
 

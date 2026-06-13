@@ -143,6 +143,11 @@ public class GamificationServiceTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(habits.ToList());
+
+        _habitLogRepo.CountAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habits.Sum(h => h.Logs.Count));
     }
 
     private void SetupHabitLogs(params HabitLog[] logs)
@@ -598,6 +603,107 @@ public class GamificationServiceTests
         await _sut.ProcessHabitLogged(UserId, habit.Id);
 
         user.TotalXp.Should().Be(initialXp + 10 + 5);
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_ThreeHabits_LoadsSharedContextOnceAndGrantsXpPerHabit()
+    {
+        var user = CreateProUser();
+        var initialXp = user.TotalXp;
+        SetupUserLookup(user);
+        SetupEarnedAchievements(AchievementDefinitions.Comeback);
+
+        var habit1 = CreateTestHabit();
+        habit1.Log(Today);
+        var habit2 = CreateTestHabit();
+        habit2.Log(Today);
+        var habit3 = CreateTestHabit();
+        habit3.Log(Today);
+        SetupUserHabits(habit1, habit2, habit3);
+
+        var results = await _sut.ProcessHabitsLogged(UserId, [habit1.Id, habit2.Id, habit3.Id]);
+
+        results.Should().HaveCount(3);
+        results.Should().AllSatisfy(r => r.XpEarned.Should().Be(10 + 1));
+        user.TotalXp.Should().Be(initialXp + 3 * (10 + 1));
+        await _habitRepo.Received(2).FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>());
+        await _achievementRepo.Received(1).FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_ThreeHabits_DoesNotGrantLiftoffSinceTotalLogsExceedOne()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var habit1 = CreateTestHabit();
+        habit1.Log(Today);
+        var habit2 = CreateTestHabit();
+        habit2.Log(Today);
+        var habit3 = CreateTestHabit();
+        habit3.Log(Today);
+        SetupUserHabits(habit1, habit2, habit3);
+
+        await _sut.ProcessHabitsLogged(UserId, [habit1.Id, habit2.Id, habit3.Id]);
+
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.Liftoff),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_TwoHabitsCrossingSameThreshold_GrantsAchievementOnce()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        _habitLogRepo.AnyAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var habit1 = CreateDailyHabitWithStreak(7);
+        var habit2 = CreateDailyHabitWithStreak(7);
+        SetupUserHabits(habit1, habit2);
+
+        await _sut.ProcessHabitsLogged(UserId, [habit1.Id, habit2.Id]);
+
+        await _achievementRepo.Received(1).AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.WeekWarrior),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_FreeUser_ReturnsEmptyWithoutSaving()
+    {
+        var user = CreateFreeUser();
+        SetupUserLookup(user);
+
+        var results = await _sut.ProcessHabitsLogged(UserId, [Guid.NewGuid()]);
+
+        results.Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_NoMatchingHabits_ReturnsEmptyWithoutSaving()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        SetupUserHabits();
+
+        var results = await _sut.ProcessHabitsLogged(UserId, [Guid.NewGuid()]);
+
+        results.Should().BeEmpty();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

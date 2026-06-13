@@ -27,7 +27,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
         if (user is null)
-            return Result.Failure<PlayVerifyResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<PlayVerifyResponse>(ErrorMessages.UserNotFound);
 
         PlaySubscriptionState? state;
         try
@@ -37,19 +37,19 @@ public partial class VerifyPlayPurchaseCommandHandler(
         catch (BillingProviderException ex)
         {
             LogVerifyError(logger, ex, request.UserId);
-            return Result.Failure<PlayVerifyResponse>("Payment service temporarily unavailable");
+            return Result.Failure<PlayVerifyResponse>(ErrorMessages.PaymentServiceUnavailable);
         }
 
         if (state is null || !state.GrantsOrbitPro(_settings))
         {
             LogPurchaseNotActive(logger, request.UserId);
-            return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseNotActive, ErrorCodes.PlayPurchaseNotActive);
+            return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseNotActive);
         }
 
         if (!Guid.TryParse(state.ObfuscatedAccountId, out var purchaseAccountId) || purchaseAccountId != request.UserId)
         {
             LogAccountMismatch(logger, request.UserId);
-            return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseAccountMismatch, ErrorCodes.PlayPurchaseAccountMismatch);
+            return Result.Failure<PlayVerifyResponse>(ErrorMessages.PlayPurchaseAccountMismatch);
         }
 
         if (!state.IsAcknowledged)
@@ -97,7 +97,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
             {
                 LogAccountMismatch(logger, request.UserId);
                 return Result.Failure<PlayVerifyResponse>(
-                    ErrorMessages.PlayPurchaseAccountMismatch, ErrorCodes.PlayPurchaseAccountMismatch);
+                    ErrorMessages.PlayPurchaseAccountMismatch);
             }
             throw;
         }

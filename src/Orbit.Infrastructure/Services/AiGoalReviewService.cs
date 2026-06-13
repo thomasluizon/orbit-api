@@ -16,7 +16,7 @@ public sealed partial class AiGoalReviewService(
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(goalsContext))
-            return Result.Failure<string>("No goals data provided.");
+            return Result.Failure<string>(ErrorMessages.NoGoalsData);
 
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
@@ -45,7 +45,7 @@ public sealed partial class AiGoalReviewService(
                 cancellationToken);
 
             if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<string>("AI returned empty response");
+                return Result.Failure<string>(ErrorMessages.AiEmptyResponse);
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
 
@@ -56,7 +56,7 @@ public sealed partial class AiGoalReviewService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogGoalReviewFailed(logger, ex);
-            return Result.Failure<string>("AI goal review temporarily unavailable");
+            return Result.Failure<string>(ErrorMessages.AiGoalReviewUnavailable);
         }
     }
 

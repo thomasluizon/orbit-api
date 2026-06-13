@@ -21,7 +21,7 @@ public class DeleteTagCommandHandler(
             cancellationToken: cancellationToken);
 
         if (tag is null)
-            return Result.Failure(ErrorMessages.TagNotFound, ErrorCodes.TagNotFound);
+            return Result.Failure(ErrorMessages.TagNotFound);
 
         tag.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);

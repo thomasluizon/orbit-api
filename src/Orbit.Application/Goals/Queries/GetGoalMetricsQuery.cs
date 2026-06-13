@@ -30,7 +30,7 @@ public class GetGoalMetricsQueryHandler(
             cancellationToken);
 
         if (goal is null)
-            return Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         if (GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday))

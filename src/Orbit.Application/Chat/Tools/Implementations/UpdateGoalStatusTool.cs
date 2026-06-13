@@ -60,7 +60,7 @@ public class UpdateGoalStatusTool(
             GoalStatus.Completed => goal.MarkCompleted(),
             GoalStatus.Abandoned => goal.MarkAbandoned(),
             GoalStatus.Active => goal.Reactivate(),
-            _ => Orbit.Domain.Common.Result.Failure("Invalid status.")
+            _ => Orbit.Domain.Common.Result.Failure(ErrorMessages.InvalidGoalStatus)
         };
 
         if (result.IsFailure)

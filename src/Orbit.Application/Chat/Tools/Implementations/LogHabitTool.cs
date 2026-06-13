@@ -38,7 +38,7 @@ public class LogHabitTool(
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
 
         if (habit.UserId != userId)
-            return new ToolResult(false, Error: ErrorMessages.HabitNotOwned);
+            return new ToolResult(false, Error: ErrorMessages.HabitNotOwned.Message);
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 

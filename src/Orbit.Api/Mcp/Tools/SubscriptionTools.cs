@@ -36,7 +36,7 @@ public class SubscriptionTools(
         var userId = GetUserId(user);
         var u = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (u is null)
-            return $"Error: {ErrorMessages.UserNotFound}";
+            return $"Error: {ErrorMessages.UserNotFound.Message}";
 
         var aiLimit = await payGate.GetAiMessageLimit(userId, cancellationToken);
 

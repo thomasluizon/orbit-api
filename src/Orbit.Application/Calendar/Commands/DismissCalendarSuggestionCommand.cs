@@ -23,7 +23,7 @@ public class DismissCalendarSuggestionCommandHandler(
             cancellationToken: cancellationToken);
 
         if (suggestion is null)
-            return Result.Failure("Suggestion not found.");
+            return Result.Failure(ErrorMessages.SuggestionNotFound);
 
         suggestion.MarkDismissed(DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);

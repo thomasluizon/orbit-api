@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Persistence.Migrations
+namespace Orbit.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class AuditFixes : Migration

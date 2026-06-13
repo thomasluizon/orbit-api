@@ -9,11 +9,11 @@ using Orbit.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Persistence.Migrations
+namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260326224802_AddGamificationSystem")]
-    partial class AddGamificationSystem
+    [Migration("20260330174150_AddStreakAndFreezeSystem")]
+    partial class AddStreakAndFreezeSystem
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -92,6 +92,18 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                             Key = "MaxTagsPerHabit",
                             Description = "Maximum number of tags per habit",
                             Value = "5"
+                        },
+                        new
+                        {
+                            Key = "ReferralRewardDays",
+                            Description = "Days of Pro added per successful referral",
+                            Value = "10"
+                        },
+                        new
+                        {
+                            Key = "MaxReferrals",
+                            Description = "Maximum successful referrals per user",
+                            Value = "10"
                         });
                 });
 
@@ -252,6 +264,8 @@ namespace Orbit.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ParentHabitId");
 
+                    b.HasIndex("UserId");
+
                     b.ToTable("Habits");
                 });
 
@@ -353,6 +367,40 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                     b.ToTable("PushSubscriptions");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.Referral", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ReferredUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ReferrerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RewardGrantedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReferredUserId")
+                        .IsUnique();
+
+                    b.HasIndex("ReferrerId");
+
+                    b.ToTable("Referrals");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.SentReminder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -402,6 +450,29 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                     b.ToTable("SentSlipAlerts");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.StreakFreeze", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("UsedOnDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "UsedOnDate")
+                        .IsUnique();
+
+                    b.ToTable("StreakFreezes");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.Tag", b =>
                 {
                     b.Property<Guid>("Id")
@@ -436,6 +507,12 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AdRewardBonusMessages")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AdRewardsClaimedToday")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("AiMemoryEnabled")
                         .HasColumnType("boolean");
 
@@ -453,6 +530,9 @@ namespace Orbit.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentStreak")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("DeactivatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -485,7 +565,16 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                     b.Property<string>("Language")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("LastActiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("LastAdRewardAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LongestStreak")
                         .HasColumnType("integer");
 
                     b.Property<string>("Name")
@@ -497,6 +586,15 @@ namespace Orbit.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("PlanExpiresAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReferralCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReferralCouponId")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ReferredByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("ScheduledDeletionAt")
                         .HasColumnType("timestamp with time zone");
@@ -526,6 +624,10 @@ namespace Orbit.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("ReferralCode")
+                        .IsUnique()
+                        .HasFilter("\"ReferralCode\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
@@ -644,6 +746,24 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                     b.HasOne("Orbit.Domain.Entities.Habit", null)
                         .WithMany("Logs")
                         .HasForeignKey("HabitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.PushSubscription", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.StreakFreeze", b =>
+                {
+                    b.HasOne("Orbit.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

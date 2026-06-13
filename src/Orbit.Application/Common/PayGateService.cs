@@ -13,7 +13,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         if (user.HasProAccess)
             return Result.Success();
@@ -32,7 +32,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var subHabitsProOnly = await appConfig.GetAsync(AppConfigKeys.SubHabitsProOnly, true, ct);
         if (subHabitsProOnly && !user.HasProAccess)
@@ -45,7 +45,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
@@ -68,7 +68,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var summaryProOnly = await appConfig.GetAsync(AppConfigKeys.DailySummaryProOnly, true, ct);
         if (summaryProOnly && !user.HasProAccess)
@@ -81,7 +81,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var proOnly = await appConfig.GetAsync(AppConfigKeys.RetrospectiveProOnly, true, ct);
         if (proOnly && !user.IsYearlyPro)
@@ -94,7 +94,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var goalsProOnly = await appConfig.GetAsync(AppConfigKeys.GoalsProOnly, true, ct);
         if (goalsProOnly && !user.HasProAccess)
@@ -162,7 +162,7 @@ public class PayGateService(
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         return user.HasProAccess
             ? Result.Success()

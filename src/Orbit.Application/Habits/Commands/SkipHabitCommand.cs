@@ -32,13 +32,13 @@ public class SkipHabitCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.HabitNotOwned, ErrorCodes.HabitNotOwned);
+            return Result.Failure(ErrorMessages.HabitNotOwned);
 
         if (habit.IsCompleted)
-            return Result.Failure("Cannot skip a completed habit.");
+            return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
@@ -74,16 +74,16 @@ public class SkipHabitCommandHandler(
     private static Result? ValidateSkipTarget(Habit habit, DateOnly targetDate, DateOnly today)
     {
         if (targetDate > today)
-            return Result.Failure("Cannot skip a future date.");
+            return Result.Failure(ErrorMessages.CannotSkipFutureDate);
 
         if (!habit.IsFlexible && habit.DueDate > targetDate)
-            return Result.Failure("Cannot skip a habit that is not yet due.");
+            return Result.Failure(ErrorMessages.HabitNotYetDue);
 
         if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
         {
             var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
-                return Result.Failure("Habit is not scheduled on this date.");
+                return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
 
         return null;
@@ -95,11 +95,11 @@ public class SkipHabitCommandHandler(
         {
             var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
             if (remaining <= 0)
-                return Result.Failure("All instances for this period have already been completed or skipped.");
+                return Result.Failure(ErrorMessages.AllInstancesDone);
 
             var skipResult = habit.SkipFlexible(targetDate);
             if (skipResult.IsFailure)
-                return Result.Failure(skipResult.Error);
+                return skipResult.PropagateError();
 
             await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
         }

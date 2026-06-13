@@ -16,10 +16,10 @@ public class UserSession : Entity
     public static Result<UserSession> Create(Guid userId, string tokenHash, DateTime? expiresAtUtc)
     {
         if (userId == Guid.Empty)
-            return Result.Failure<UserSession>("User ID is required.");
+            return Result.Failure<UserSession>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(tokenHash))
-            return Result.Failure<UserSession>("Token hash is required.");
+            return Result.Failure<UserSession>(DomainErrors.TokenHashRequired);
 
         return Result.Success(new UserSession
         {

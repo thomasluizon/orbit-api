@@ -22,10 +22,10 @@ public class DeleteHabitCommandHandler(
         var habit = await habitRepository.GetByIdAsync(request.HabitId, cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.NoPermission, ErrorCodes.NoPermission);
+            return Result.Failure(ErrorMessages.NoPermission);
 
         habit.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);

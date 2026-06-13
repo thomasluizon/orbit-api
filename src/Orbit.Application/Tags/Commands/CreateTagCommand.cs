@@ -21,11 +21,11 @@ public class CreateTagCommandHandler(
             cancellationToken);
 
         if (existing.Count > 0)
-            return Result.Failure<Guid>("A tag with this name already exists.");
+            return Result.Failure<Guid>(ErrorMessages.DuplicateTagName);
 
         var result = Tag.Create(request.UserId, request.Name, request.Color);
         if (result.IsFailure)
-            return Result.Failure<Guid>(result.Error);
+            return result.PropagateError<Guid>();
 
         await tagRepository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

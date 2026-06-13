@@ -44,7 +44,7 @@ public class GetRetrospectiveQueryHandler(
         var habitList = habits.ToList();
 
         if (habitList.Count == 0)
-            return Result.Failure<RetrospectiveResponse>("No habits found for this period.");
+            return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
 
         var result = await retrospectiveService.GenerateRetrospectiveAsync(
             habitList,
@@ -55,7 +55,7 @@ public class GetRetrospectiveQueryHandler(
             cancellationToken);
 
         if (result.IsFailure)
-            return Result.Failure<RetrospectiveResponse>(result.Error);
+            return result.PropagateError<RetrospectiveResponse>();
 
         cache.Set(cacheKey, result.Value, new MemoryCacheEntryOptions
         {

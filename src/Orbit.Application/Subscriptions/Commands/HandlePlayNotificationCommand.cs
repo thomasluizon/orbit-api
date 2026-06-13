@@ -60,7 +60,7 @@ public partial class HandlePlayNotificationCommandHandler(
         catch (BillingProviderException ex)
         {
             LogVerifyFailed(logger, ex, notification.NotificationType);
-            return Result.Failure("Failed to verify Play notification");
+            return Result.Failure(ErrorMessages.PlayNotificationVerificationFailed);
         }
 
         if (state is null)

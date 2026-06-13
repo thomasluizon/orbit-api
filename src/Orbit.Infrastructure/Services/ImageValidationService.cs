@@ -1,5 +1,6 @@
 using FileSignatures;
 using FileSignatures.Formats;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -18,25 +19,24 @@ public sealed class ImageValidationService : IImageValidationService
     {
         if (length > MaxFileSizeBytes)
             return Task.FromResult(Result.Failure<(string, long)>(
-                $"File size exceeds maximum allowed size of {MaxFileSizeBytes / (1024 * 1024)}MB."));
+                ErrorMessages.ImageTooLarge.Format(MaxFileSizeBytes / (1024 * 1024))));
 
         if (length == 0)
-            return Task.FromResult(Result.Failure<(string, long)>("File is empty."));
+            return Task.FromResult(Result.Failure<(string, long)>(ErrorMessages.ImageEmpty));
 
         var extension = Path.GetExtension(fileName);
         if (string.IsNullOrWhiteSpace(extension) || !AllowedExtensions.Contains(extension))
             return Task.FromResult(Result.Failure<(string, long)>(
-                $"File extension '{extension}' is not allowed. Allowed: {string.Join(", ", AllowedExtensions)}."));
+                ErrorMessages.ImageExtensionNotAllowed.Format(extension, string.Join(", ", AllowedExtensions))));
 
         var format = Inspector.DetermineFileFormat(stream);
 
         if (format == null)
-            return Task.FromResult(Result.Failure<(string, long)>(
-                "Unable to determine file format from magic bytes."));
+            return Task.FromResult(Result.Failure<(string, long)>(ErrorMessages.ImageFormatUnknown));
 
         if (format is not Image)
             return Task.FromResult(Result.Failure<(string, long)>(
-                $"File is not a recognized image format. Detected: {format.GetType().Name}"));
+                ErrorMessages.ImageNotAnImage.Format(format.GetType().Name)));
 
         return Task.FromResult(Result.Success((format.MediaType, length)));
     }

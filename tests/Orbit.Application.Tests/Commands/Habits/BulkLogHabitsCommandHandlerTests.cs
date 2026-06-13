@@ -179,8 +179,79 @@ public class BulkLogHabitsCommandHandlerTests
 
         await _handler.Handle(command, CancellationToken.None);
 
-        await _gamificationService.Received(1).ProcessHabitLogged(
-            UserId, habit.Id, Arg.Any<CancellationToken>());
+        await _gamificationService.Received(1).ProcessHabitsLogged(
+            UserId,
+            Arg.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == habit.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ThreeHabits_BatchesGamificationIntoSingleCall()
+    {
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(UserId, "Habit 3", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { habit1, habit2, habit3 });
+
+        var items = new List<BulkLogItem>
+        {
+            new(habit1.Id),
+            new(habit2.Id),
+            new(habit3.Id)
+        };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
+        await _gamificationService.Received(1).ProcessHabitsLogged(
+            UserId,
+            Arg.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { habit1.Id, habit2.Id, habit3.Id })),
+            Arg.Any<CancellationToken>());
+        await _gamificationService.DidNotReceive().ProcessHabitLogged(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _userStreakService.Received(1).RecalculateAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_MixedResults_PassesOnlySuccessfulIdsToGamification()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { habit });
+
+        var items = new List<BulkLogItem>
+        {
+            new(habit.Id),
+            new(Guid.NewGuid())
+        };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _gamificationService.Received(1).ProcessHabitsLogged(
+            UserId,
+            Arg.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == habit.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoSuccessfulLogs_SkipsStreakAndGamification()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { habit });
+
+        var futureDate = Today.AddDays(5);
+        var items = new List<BulkLogItem> { new(habit.Id, futureDate) };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
+        await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _gamificationService.DidNotReceive().ProcessHabitsLogged(
+            Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

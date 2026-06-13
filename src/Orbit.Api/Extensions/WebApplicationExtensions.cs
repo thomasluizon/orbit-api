@@ -12,7 +12,7 @@ using Scalar.AspNetCore;
 
 namespace Orbit.Api.Extensions;
 
-public static class WebApplicationExtensions
+public static partial class WebApplicationExtensions
 {
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
@@ -434,10 +434,17 @@ public static class WebApplicationExtensions
                 ShadowPolicyDecision: auditContext.ShadowPolicyDecision,
                 ShadowReason: auditContext.ShadowReason), cancellationToken);
         }
-        catch
+        catch (Exception ex)
         {
+            var logger = context.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(WebApplicationExtensions));
+            LogLegacyMcpAuditWriteFailed(logger, ex, auditContext.SourceName, context.TraceIdentifier);
         }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to write MCP audit entry for {SourceName}. TraceId={TraceId}")]
+    private static partial void LogLegacyMcpAuditWriteFailed(ILogger logger, Exception ex, string sourceName, string traceId);
 
     private sealed record McpToolCallRequest(
         string ToolName,

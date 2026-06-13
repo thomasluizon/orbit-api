@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
@@ -301,7 +302,8 @@ public class AgentExecutionAndSanitizerTests
             policyEvaluator ?? Substitute.For<IAgentPolicyEvaluator>(),
             auditService ?? Substitute.For<IAgentAuditService>(),
             ownershipService,
-            toolRegistry ?? new AiToolRegistry([]));
+            toolRegistry ?? new AiToolRegistry([]),
+            NullLogger<AgentOperationExecutor>.Instance);
     }
 
     private static AgentCapability CreateCapability(

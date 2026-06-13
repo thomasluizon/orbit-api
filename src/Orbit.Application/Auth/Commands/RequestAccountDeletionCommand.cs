@@ -19,7 +19,7 @@ public class RequestAccountDeletionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var cacheKey = $"delete:{user.Email.ToLowerInvariant()}";
 
@@ -27,7 +27,7 @@ public class RequestAccountDeletionCommandHandler(
         {
             var elapsed = DateTime.UtcNow - existing.CreatedAt;
             if (elapsed.TotalSeconds < 60)
-                return Result.Failure("Please wait before requesting a new code");
+                return Result.Failure(ErrorMessages.CodeRequestCooldown);
         }
 
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();

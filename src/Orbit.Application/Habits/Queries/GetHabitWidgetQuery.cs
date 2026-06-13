@@ -38,7 +38,7 @@ public class GetHabitWidgetQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<HabitWidgetResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<HabitWidgetResponse>(ErrorMessages.UserNotFound);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(

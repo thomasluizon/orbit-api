@@ -29,7 +29,7 @@ public class UpdateGoalProgressCommandHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound);
 
         var previousValue = goal.CurrentValue;
         var progressLog = GoalProgressLog.Create(goal.Id, previousValue, request.NewValue, request.Note);

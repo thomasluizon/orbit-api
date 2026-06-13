@@ -21,7 +21,7 @@ public partial class GetPlansQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<PlansResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<PlansResponse>(ErrorMessages.UserNotFound);
 
         var countryCode = await SubscriptionPricingCountryResolver.ResolveCountryCodeAsync(
             user,
@@ -64,7 +64,7 @@ public partial class GetPlansQueryHandler(
         catch (BillingProviderException ex)
         {
             LogFetchPlansFailed(logger, ex);
-            return Result.Failure<PlansResponse>("Payment service temporarily unavailable");
+            return Result.Failure<PlansResponse>(ErrorMessages.PaymentServiceUnavailable);
         }
     }
 

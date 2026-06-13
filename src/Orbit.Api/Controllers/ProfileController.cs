@@ -38,7 +38,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     {
         var query = new GetProfileQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
     }
 
     [HttpPut("timezone")]
@@ -55,9 +55,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogTimezoneChanged(logger, request.TimeZone, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("name")]
@@ -74,9 +72,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogNameChanged(logger, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("ai-memory")]
@@ -127,9 +123,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogLanguageChanged(logger, request.Language, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("week-start-day")]
@@ -146,9 +140,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogWeekStartDayChanged(logger, request.WeekStartDay, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("theme-preference")]
@@ -165,9 +157,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogThemePreferenceChanged(logger, request.ThemePreference, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("color-scheme")]
@@ -195,7 +185,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     {
         var command = new CompleteOnboardingCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("tour")]
@@ -206,7 +196,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     {
         var command = new CompleteTourCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpDelete("tour")]
@@ -217,7 +207,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     {
         var command = new ResetTourCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPost("reset")]
@@ -232,9 +222,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (result.IsSuccess)
             LogAccountReset(logger, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? Ok()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult();
     }
 
     [HttpGet("export")]

@@ -52,7 +52,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.UserNotFound);
 
         var utcNow = timeProvider.GetUtcNow().UtcDateTime;
 
@@ -62,7 +62,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
 
         if (user.GoogleAccessToken is null)
-            return Result.Failure<CalendarAutoSyncResult>("Google Calendar not connected.", "calendar.autoSync.notConnected");
+            return Result.Failure<CalendarAutoSyncResult>(ErrorMessages.AutoSyncNotConnected);
 
         if (!request.IsOpportunistic
             && user.GoogleCalendarLastSyncedAt is { } lastSync

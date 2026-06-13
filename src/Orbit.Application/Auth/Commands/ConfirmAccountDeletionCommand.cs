@@ -19,18 +19,18 @@ public class ConfirmAccountDeletionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DateTime>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<DateTime>(ErrorMessages.UserNotFound);
 
         var email = user.Email.ToLowerInvariant();
         var cacheKey = $"delete:{email}";
 
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure<DateTime>("Deletion code expired or not found");
+            return Result.Failure<DateTime>(ErrorMessages.DeletionCodeExpired);
 
         if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
-            return Result.Failure<DateTime>("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
+            return Result.Failure<DateTime>(ErrorMessages.TooManyCodeAttempts);
         }
 
         if (!CryptographicOperations.FixedTimeEquals(
@@ -46,7 +46,7 @@ public class ConfirmAccountDeletionCommandHandler(
                     AbsoluteExpirationRelativeToNow = remaining
                 });
             }
-            return Result.Failure<DateTime>("Invalid code", ErrorCodes.InvalidVerificationCode);
+            return Result.Failure<DateTime>(ErrorMessages.InvalidDeletionCode);
         }
 
         cache.Remove(cacheKey);

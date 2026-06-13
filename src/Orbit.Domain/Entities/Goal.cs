@@ -53,16 +53,16 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public static Result<Goal> Create(CreateGoalParams p)
     {
         if (p.UserId == Guid.Empty)
-            return Result.Failure<Goal>("User ID is required.");
+            return Result.Failure<Goal>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(p.Title))
-            return Result.Failure<Goal>("Title is required.");
+            return Result.Failure<Goal>(DomainErrors.TitleRequired);
 
         if (p.TargetValue <= 0)
-            return Result.Failure<Goal>("Target value must be greater than 0.");
+            return Result.Failure<Goal>(DomainErrors.TargetValueInvalid);
 
         if (string.IsNullOrWhiteSpace(p.Unit))
-            return Result.Failure<Goal>("Unit is required.");
+            return Result.Failure<Goal>(DomainErrors.UnitRequired);
 
         return Result.Success(new Goal
         {
@@ -92,10 +92,10 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public Result UpdateProgress(decimal newValue)
     {
         if (Status != GoalStatus.Active)
-            return Result.Failure("Cannot update progress on a non-active goal.");
+            return Result.Failure(DomainErrors.GoalNotActive);
 
         if (newValue < 0)
-            return Result.Failure("Progress value cannot be negative.");
+            return Result.Failure(DomainErrors.ProgressValueNegative);
 
         CurrentValue = newValue;
 
@@ -112,10 +112,10 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public Result SyncStreakProgress(int currentStreak)
     {
         if (Type != GoalType.Streak)
-            return Result.Failure("Cannot sync streak on a non-streak goal.");
+            return Result.Failure(DomainErrors.NotStreakGoal);
 
         if (Status != GoalStatus.Active)
-            return Result.Failure("Cannot update progress on a non-active goal.");
+            return Result.Failure(DomainErrors.GoalNotActive);
 
         CurrentValue = currentStreak;
         StreakSyncedAtUtc = DateTime.UtcNow;
@@ -133,13 +133,13 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public Result Update(string title, string? description, decimal targetValue, string unit, DateOnly? deadline)
     {
         if (string.IsNullOrWhiteSpace(title))
-            return Result.Failure("Title is required.");
+            return Result.Failure(DomainErrors.TitleRequired);
 
         if (targetValue <= 0)
-            return Result.Failure("Target value must be greater than 0.");
+            return Result.Failure(DomainErrors.TargetValueInvalid);
 
         if (string.IsNullOrWhiteSpace(unit))
-            return Result.Failure("Unit is required.");
+            return Result.Failure(DomainErrors.UnitRequired);
 
         Title = title.Trim();
         Description = description?.Trim();
@@ -172,7 +172,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public Result MarkCompleted()
     {
         if (Status == GoalStatus.Completed)
-            return Result.Failure("Goal is already completed.");
+            return Result.Failure(DomainErrors.GoalAlreadyCompleted);
 
         Status = GoalStatus.Completed;
         CompletedAtUtc = DateTime.UtcNow;
@@ -183,7 +183,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public Result MarkAbandoned()
     {
         if (Status == GoalStatus.Abandoned)
-            return Result.Failure("Goal is already abandoned.");
+            return Result.Failure(DomainErrors.GoalAlreadyAbandoned);
 
         Status = GoalStatus.Abandoned;
         CompletedAtUtc = null;
@@ -194,7 +194,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public Result Reactivate()
     {
         if (Status == GoalStatus.Active)
-            return Result.Failure("Goal is already active.");
+            return Result.Failure(DomainErrors.GoalAlreadyActive);
 
         Status = GoalStatus.Active;
         CompletedAtUtc = null;

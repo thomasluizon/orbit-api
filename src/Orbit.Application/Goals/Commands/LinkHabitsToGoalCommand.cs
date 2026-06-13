@@ -25,7 +25,7 @@ public class LinkHabitsToGoalCommandHandler(
             return gateCheck;
 
         if (request.HabitIds.Count > AppConstants.MaxHabitsPerGoal)
-            return Result.Failure($"A goal can have at most {AppConstants.MaxHabitsPerGoal} linked habits.");
+            return Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal));
 
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
@@ -33,7 +33,7 @@ public class LinkHabitsToGoalCommandHandler(
             cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound);
 
         var habits = await habitRepository.FindTrackedAsync(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,

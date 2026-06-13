@@ -26,7 +26,8 @@ public class HabitDueDateAdvancementServiceTests
         int quantity = 1,
         DateOnly? dueDate = null,
         DateOnly? endDate = null,
-        bool isFlexible = false)
+        bool isFlexible = false,
+        bool isBadHabit = false)
     {
         return Habit.Create(new HabitCreateParams(
             ValidUserId,
@@ -35,8 +36,12 @@ public class HabitDueDateAdvancementServiceTests
             quantity,
             DueDate: dueDate ?? Today.AddDays(-10),
             EndDate: endDate,
-            IsFlexible: isFlexible)).Value;
+            IsFlexible: isFlexible,
+            IsBadHabit: isBadHabit)).Value;
     }
+
+    private static Func<Habit, bool> StaleBadHabitFilterFor(DateOnly cutoff) =>
+        HabitDueDateAdvancementService.StaleBadHabitFilter(cutoff).Compile();
 
     [Fact]
     public void CatchUpDueDate_DailyHabit_PastDue_AdvancesToToday()
@@ -197,47 +202,52 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public void QueryFilter_CompletedHabit_Excluded()
     {
-        var habit = CreateRecurringHabit(FrequencyUnit.Day, 1, Today.AddDays(-5));
-        habit.Log(Today.AddDays(-5));
-        habit.IsCompleted.Should().BeFalse();
+        var cutoff = Today.AddDays(-1);
+        var habit = CreateRecurringHabit(
+            dueDate: cutoff.AddDays(-10), endDate: cutoff.AddDays(-5), isBadHabit: true);
+        habit.CatchUpDueDate(cutoff.AddDays(-4));
+        habit.IsCompleted.Should().BeTrue();
+        habit.DueDate.Should().BeBefore(cutoff);
+
+        StaleBadHabitFilterFor(cutoff)(habit).Should().BeFalse();
     }
 
     [Fact]
     public void QueryFilter_OneTimeTask_Excluded()
     {
+        var cutoff = Today.AddDays(-1);
         var oneTime = Habit.Create(new HabitCreateParams(
             ValidUserId,
             "One-time task",
-            null,            null,            DueDate: Today.AddDays(-5))).Value;
+            null,
+            null,
+            IsBadHabit: true,
+            DueDate: cutoff.AddDays(-1))).Value;
 
-        var shouldInclude = oneTime.FrequencyUnit != null
-            && oneTime.FrequencyQuantity != null;
-
-        shouldInclude.Should().BeFalse();
+        StaleBadHabitFilterFor(cutoff)(oneTime).Should().BeFalse();
     }
 
     [Fact]
     public void QueryFilter_FlexibleHabit_Excluded()
     {
-        var flexible = CreateRecurringHabit(isFlexible: true);
+        var cutoff = Today.AddDays(-1);
+        var flexible = CreateRecurringHabit(
+            dueDate: cutoff.AddDays(-1), isFlexible: true, isBadHabit: true);
 
-        flexible.IsFlexible.Should().BeTrue();
+        StaleBadHabitFilterFor(cutoff)(flexible).Should().BeFalse();
     }
 
     [Fact]
     public void QueryFilter_OnlyBadHabitsAdvanced()
     {
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-        var nonBad = CreateRecurringHabit(FrequencyUnit.Day, 1, cutoff.AddDays(-1));
-        var bad = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: cutoff.AddDays(-1))).Value;
+        var cutoff = Today.AddDays(-1);
+        var nonBad = CreateRecurringHabit(dueDate: cutoff.AddDays(-1));
+        var bad = CreateRecurringHabit(dueDate: cutoff.AddDays(-1), isBadHabit: true);
 
-        bool ShouldAdvance(Habit h) =>
-            !h.IsCompleted && h.FrequencyUnit != null && h.FrequencyQuantity != null
-            && !h.IsFlexible && h.IsBadHabit && h.DueDate < cutoff;
+        var includesHabit = StaleBadHabitFilterFor(cutoff);
 
-        ShouldAdvance(nonBad).Should().BeFalse();
-        ShouldAdvance(bad).Should().BeTrue();
+        includesHabit(nonBad).Should().BeFalse();
+        includesHabit(bad).Should().BeTrue();
     }
 
     [Fact]
@@ -292,61 +302,50 @@ public class HabitDueDateAdvancementServiceTests
     [Fact]
     public void QueryFilter_ConservativeCutoff_IsYesterdayUtc()
     {
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var cutoff = HabitDueDateAdvancementService.ConservativeCutoffUtc();
 
-        cutoff.Should().Be(today.AddDays(-1));
+        cutoff.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
     }
 
     [Fact]
     public void QueryFilter_HabitDueDateAtCutoff_NotIncluded()
     {
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var cutoff = Today.AddDays(-1);
+        var habit = CreateRecurringHabit(dueDate: cutoff, isBadHabit: true);
 
-        var habit = CreateRecurringHabit(dueDate: cutoff);
-
-        var shouldAdvance = habit.DueDate < cutoff;
-        shouldAdvance.Should().BeFalse();
+        StaleBadHabitFilterFor(cutoff)(habit).Should().BeFalse();
     }
 
     [Fact]
     public void QueryFilter_HabitDueDateBeforeCutoff_Included()
     {
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var cutoff = Today.AddDays(-1);
+        var habit = CreateRecurringHabit(dueDate: cutoff.AddDays(-1), isBadHabit: true);
 
-        var habit = CreateRecurringHabit(dueDate: cutoff.AddDays(-1));
-
-        var shouldAdvance = habit.DueDate < cutoff;
-        shouldAdvance.Should().BeTrue();
+        StaleBadHabitFilterFor(cutoff)(habit).Should().BeTrue();
     }
 
     [Fact]
     public void TimezoneGuard_HabitDueDateBeforeUserToday_ShouldAdvance()
     {
-        var userToday = Today;
         var habit = CreateRecurringHabit(dueDate: Today.AddDays(-3));
 
-        var shouldSkip = habit.DueDate >= userToday;
-        shouldSkip.Should().BeFalse();
+        HabitDueDateAdvancementService.ShouldAdvanceForUserToday(habit, Today).Should().BeTrue();
     }
 
     [Fact]
     public void TimezoneGuard_HabitDueDateIsUserToday_ShouldSkip()
     {
-        var userToday = Today;
         var habit = CreateRecurringHabit(dueDate: Today);
 
-        var shouldSkip = habit.DueDate >= userToday;
-        shouldSkip.Should().BeTrue();
+        HabitDueDateAdvancementService.ShouldAdvanceForUserToday(habit, Today).Should().BeFalse();
     }
 
     [Fact]
     public void TimezoneGuard_HabitDueDateAfterUserToday_ShouldSkip()
     {
-        var userToday = Today;
         var habit = CreateRecurringHabit(dueDate: Today.AddDays(1));
 
-        var shouldSkip = habit.DueDate >= userToday;
-        shouldSkip.Should().BeTrue();
+        HabitDueDateAdvancementService.ShouldAdvanceForUserToday(habit, Today).Should().BeFalse();
     }
 }

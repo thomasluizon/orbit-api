@@ -36,11 +36,11 @@ public class GetHabitFullDetailQueryHandler(
 
         var habit = habits.Count > 0 ? habits[0] : null;
         if (habit is null)
-            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound);
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<HabitFullDetailResponse>(ErrorMessages.UserNotFound);
 
         var userTimeZone = user.TimeZone is not null
             ? TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone)

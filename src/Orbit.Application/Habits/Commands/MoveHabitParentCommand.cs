@@ -24,7 +24,7 @@ public class MoveHabitParentCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         if (request.ParentId is null)
         {
@@ -34,17 +34,17 @@ public class MoveHabitParentCommandHandler(
         }
 
         if (request.ParentId == request.HabitId)
-            return Result.Failure("A habit cannot be its own parent.");
+            return Result.Failure(ErrorMessages.SelfParent);
 
         var parent = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.ParentId && h.UserId == request.UserId,
             cancellationToken: cancellationToken);
 
         if (parent is null)
-            return Result.Failure(ErrorMessages.TargetParentNotFound, ErrorCodes.TargetParentNotFound);
+            return Result.Failure(ErrorMessages.TargetParentNotFound);
 
         if (await WouldCreateCycle(request.HabitId, request.ParentId.Value, request.UserId, cancellationToken))
-            return Result.Failure("Cannot move a habit under its own descendant.");
+            return Result.Failure(ErrorMessages.CircularReference);
 
         habit.SetParentHabitId(request.ParentId);
         await unitOfWork.SaveChangesAsync(cancellationToken);

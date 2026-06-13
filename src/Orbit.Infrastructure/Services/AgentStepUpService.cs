@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -30,17 +31,17 @@ public class AgentStepUpService(
                 cancellationToken);
 
         if (pendingOperation is null || pendingOperation.IsExpired(DateTime.UtcNow) || pendingOperation.ConsumedAtUtc.HasValue)
-            return Result.Failure<AgentStepUpChallenge>("Pending operation not found or expired.");
+            return Result.Failure<AgentStepUpChallenge>(ErrorMessages.PendingOperationNotFound);
 
         if (pendingOperation.ConfirmationRequirement != AgentConfirmationRequirement.StepUp)
-            return Result.Failure<AgentStepUpChallenge>("Step-up authorization is not required for this operation.");
+            return Result.Failure<AgentStepUpChallenge>(ErrorMessages.StepUpNotRequired);
 
         var user = await dbContext.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
 
         if (user is null)
-            return Result.Failure<AgentStepUpChallenge>("User not found.");
+            return Result.Failure<AgentStepUpChallenge>(ErrorMessages.UserNotFound);
 
         var cooldownBoundary = DateTime.UtcNow.AddSeconds(-Math.Max(1, _settings.StepUpChallengeCooldownSeconds));
         var recentChallenge = await dbContext.AgentStepUpChallenges
@@ -55,10 +56,7 @@ public class AgentStepUpService(
             .FirstOrDefaultAsync(cancellationToken);
 
         if (recentChallenge is not null)
-        {
-            return Result.Failure<AgentStepUpChallenge>(
-                "Please wait before requesting another step-up code.");
-        }
+            return Result.Failure<AgentStepUpChallenge>(ErrorMessages.StepUpCooldown);
 
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var challenge = AgentStepUpChallengeState.Create(
@@ -98,13 +96,13 @@ public class AgentStepUpService(
                 cancellationToken);
 
         if (challenge is null || !challenge.CanVerify(_settings.StepUpMaxAttempts, DateTime.UtcNow))
-            return Result.Failure<PendingAgentOperation>("Step-up challenge not found or expired.");
+            return Result.Failure<PendingAgentOperation>(ErrorMessages.StepUpChallengeNotFound);
 
         if (!MatchesHash(challenge.CodeHash, code))
         {
             challenge.RecordFailedAttempt();
             await dbContext.SaveChangesAsync(cancellationToken);
-            return Result.Failure<PendingAgentOperation>("Invalid step-up code.");
+            return Result.Failure<PendingAgentOperation>(ErrorMessages.InvalidStepUpCode);
         }
 
         var pendingOperation = await dbContext.PendingAgentOperations
@@ -113,7 +111,7 @@ public class AgentStepUpService(
                 cancellationToken);
 
         if (pendingOperation is null || pendingOperation.IsExpired(DateTime.UtcNow) || pendingOperation.ConsumedAtUtc.HasValue)
-            return Result.Failure<PendingAgentOperation>("Pending operation not found or expired.");
+            return Result.Failure<PendingAgentOperation>(ErrorMessages.PendingOperationNotFound);
 
         challenge.MarkVerified();
         pendingOperation.MarkStepUpSatisfied();

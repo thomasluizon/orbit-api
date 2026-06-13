@@ -29,11 +29,11 @@ public partial class VerifyCodeCommandHandler(
 
         var codeValidation = ValidateCode(email, request.Code);
         if (codeValidation.IsFailure)
-            return Result.Failure<LoginResponse>(codeValidation.Error, codeValidation.ErrorCode!);
+            return codeValidation.PropagateError<LoginResponse>();
 
         var findResult = await FindOrCreateUserAsync(email, request.Language, cancellationToken);
         if (findResult.IsFailure)
-            return Result.Failure<LoginResponse>(findResult.Error);
+            return findResult.PropagateError<LoginResponse>();
 
         var (user, isNewUser) = findResult.Value;
 
@@ -41,7 +41,7 @@ public partial class VerifyCodeCommandHandler(
 
         var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)
-            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode ?? ErrorCodes.SessionCreationFailed);
+            return sessionResult.PropagateError<LoginResponse>();
 
         return Result.Success(new LoginResponse(
             user.Id,
@@ -57,12 +57,12 @@ public partial class VerifyCodeCommandHandler(
         var cacheKey = $"verify:{email}";
 
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure("Verification code expired or not found", ErrorCodes.CodeExpired);
+            return Result.Failure(ErrorMessages.VerificationCodeExpired);
 
         if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
         {
             cache.Remove(cacheKey);
-            return Result.Failure("Too many attempts. Please request a new code", ErrorCodes.TooManyAttempts);
+            return Result.Failure(ErrorMessages.TooManyCodeAttempts);
         }
 
         if (!CryptographicOperations.FixedTimeEquals(
@@ -70,7 +70,7 @@ public partial class VerifyCodeCommandHandler(
             System.Text.Encoding.UTF8.GetBytes(code)))
         {
             RecordFailedAttempt(cacheKey, entry);
-            return Result.Failure("Invalid verification code", ErrorCodes.InvalidVerificationCode);
+            return Result.Failure(ErrorMessages.InvalidVerificationCode);
         }
 
         cache.Remove(cacheKey);
@@ -103,7 +103,7 @@ public partial class VerifyCodeCommandHandler(
         var namePart = email.Split('@')[0];
         var createResult = User.Create(namePart, email);
         if (createResult.IsFailure)
-            return Result.Failure<(User, bool)>(createResult.Error);
+            return createResult.PropagateError<(User, bool)>();
 
         user = createResult.Value;
         user.SetLanguage(language);

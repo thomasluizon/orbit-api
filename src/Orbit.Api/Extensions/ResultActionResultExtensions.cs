@@ -5,42 +5,46 @@ namespace Orbit.Api.Extensions;
 
 public static class ResultActionResultExtensions
 {
-    public static IActionResult ToPayGateAwareResult(this Result result, Func<IActionResult> onSuccess)
+    public static IActionResult ToPayGateAwareResult(
+        this Result result,
+        Func<IActionResult> onSuccess,
+        int failureStatusCode = StatusCodes.Status400BadRequest)
     {
-        if (result.IsSuccess)
-            return onSuccess();
-
-        if (result.ErrorCode == Result.PayGateErrorCode)
-            return new ObjectResult(new { error = result.Error, errorCode = Result.PayGateErrorCode }) { StatusCode = 403 };
-
-        return result.ErrorCode is not null
-            ? new BadRequestObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
-            : new BadRequestObjectResult(new { error = result.Error });
+        return result.IsSuccess ? onSuccess() : result.ToErrorResult(failureStatusCode);
     }
 
-    public static IActionResult ToPayGateAwareResult(this Result result)
+    public static IActionResult ToPayGateAwareResult(
+        this Result result,
+        int failureStatusCode = StatusCodes.Status400BadRequest)
     {
-        if (result.IsSuccess)
-            return new OkResult();
-
-        if (result.ErrorCode == Result.PayGateErrorCode)
-            return new ObjectResult(new { error = result.Error, errorCode = Result.PayGateErrorCode }) { StatusCode = 403 };
-
-        return result.ErrorCode is not null
-            ? new BadRequestObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
-            : new BadRequestObjectResult(new { error = result.Error });
+        return result.IsSuccess ? new OkResult() : result.ToErrorResult(failureStatusCode);
     }
 
-    public static IActionResult ToPayGateAwareResult<T>(this Result<T> result, Func<T, IActionResult> onSuccess)
+    public static IActionResult ToPayGateAwareResult<T>(
+        this Result<T> result,
+        Func<T, IActionResult> onSuccess,
+        int failureStatusCode = StatusCodes.Status400BadRequest)
     {
-        if (result.IsSuccess)
-            return onSuccess(result.Value);
-
-        if (result.ErrorCode == Result.PayGateErrorCode)
-            return new ObjectResult(new { error = result.Error, errorCode = Result.PayGateErrorCode }) { StatusCode = 403 };
-
-        return result.ErrorCode is not null
-            ? new BadRequestObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
-            : new BadRequestObjectResult(new { error = result.Error });
+        return result.IsSuccess ? onSuccess(result.Value) : result.ToErrorResult(failureStatusCode);
     }
+
+    /// <summary>
+    /// Serializes a failed result as the uniform error payload, honoring pay-gate 403s.
+    /// Every failure carries both the English fallback message and its stable errorCode.
+    /// </summary>
+    public static IActionResult ToErrorResult(
+        this Result result,
+        int failureStatusCode = StatusCodes.Status400BadRequest)
+    {
+        return new ObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
+        {
+            StatusCode = result.ErrorCode == Result.PayGateErrorCode
+                ? StatusCodes.Status403Forbidden
+                : failureStatusCode
+        };
+    }
+
+    /// <summary>Uniform error body for controller-authored failures that bypass Result.</summary>
+    public static object ToErrorBody(this AppError error) =>
+        new { error = error.Message, errorCode = error.Code };
 }

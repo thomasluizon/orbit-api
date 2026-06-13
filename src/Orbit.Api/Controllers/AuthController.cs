@@ -307,6 +307,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [Authorize]
     [HttpPost("request-deletion")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -327,6 +328,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [Authorize]
     [HttpPost("confirm-deletion")]
+    [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

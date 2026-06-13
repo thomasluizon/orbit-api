@@ -29,7 +29,7 @@ public partial class HandleWebhookCommandHandler(
         if (string.IsNullOrEmpty(_settings.WebhookSecret))
         {
             LogWebhookSecretNotConfigured(logger);
-            return Result.Failure("Webhook secret not configured");
+            return Result.Failure(ErrorMessages.WebhookSecretNotConfigured);
         }
 
         Event stripeEvent;
@@ -44,7 +44,7 @@ public partial class HandleWebhookCommandHandler(
         catch (StripeException ex)
         {
             LogWebhookSignatureVerificationFailed(logger, ex);
-            return Result.Failure("Invalid webhook signature");
+            return Result.Failure(ErrorMessages.InvalidWebhookSignature);
         }
 
         LogStripeEventType(logger, stripeEvent.Type, stripeEvent.Id);
@@ -73,12 +73,12 @@ public partial class HandleWebhookCommandHandler(
         catch (StripeException ex)
         {
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
-            return Result.Failure("Stripe API error processing webhook event");
+            return Result.Failure(ErrorMessages.WebhookStripeApiError);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
-            return Result.Failure("Webhook processing failed");
+            return Result.Failure(ErrorMessages.WebhookProcessingFailed);
         }
 
         return Result.Success();

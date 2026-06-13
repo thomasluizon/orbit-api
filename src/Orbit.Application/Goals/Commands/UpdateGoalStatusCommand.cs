@@ -31,14 +31,14 @@ public partial class UpdateGoalStatusCommandHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound);
 
         var result = request.NewStatus switch
         {
             GoalStatus.Completed => goal.MarkCompleted(),
             GoalStatus.Abandoned => goal.MarkAbandoned(),
             GoalStatus.Active => goal.Reactivate(),
-            _ => Result.Failure("Invalid status.")
+            _ => Result.Failure(ErrorMessages.InvalidGoalStatus)
         };
 
         if (result.IsFailure) return result;

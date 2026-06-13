@@ -42,7 +42,7 @@ public partial class CreateGoalCommandHandler(
             request.Type));
 
         if (goalResult.IsFailure)
-            return Result.Failure<Guid>(goalResult.Error);
+            return goalResult.PropagateError<Guid>();
 
         var goal = goalResult.Value;
         await goalRepository.AddAsync(goal, cancellationToken);

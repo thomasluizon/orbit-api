@@ -23,14 +23,18 @@ public class ReorderGoalsCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck;
 
+        var ids = request.Positions.Select(p => p.GoalId).ToHashSet();
+
+        var goals = await goalRepository.FindTrackedAsync(
+            g => ids.Contains(g.Id) && g.UserId == request.UserId,
+            cancellationToken);
+
+        var goalMap = goals.ToDictionary(g => g.Id);
+
         foreach (var update in request.Positions)
         {
-            var goal = await goalRepository.FindOneTrackedAsync(
-                g => g.Id == update.GoalId && g.UserId == request.UserId,
-                cancellationToken: cancellationToken);
-
-            if (goal is null)
-                return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            if (!goalMap.TryGetValue(update.GoalId, out var goal))
+                return Result.Failure(ErrorMessages.GoalNotFound);
 
             goal.UpdatePosition(update.Position);
         }

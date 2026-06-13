@@ -22,7 +22,7 @@ public class GetOrCreateReferralCodeCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure<string>("User not found.");
+            return Result.Failure<string>(ErrorMessages.UserNotFound);
 
         if (user.ReferralCode is not null)
             return Result.Success(user.ReferralCode);

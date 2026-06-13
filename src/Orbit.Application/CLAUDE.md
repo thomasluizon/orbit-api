@@ -4,22 +4,19 @@ MediatR commands/queries, validators, application services. The business glue be
 
 ## Feature folder layout
 
-One folder per resource (`Habits/`, `Notifications/`, `Auth/`, `Profile/`, `Tags/`, `Chat/`, `UserFacts/`, `Goals/`, `Achievements/`, `Gamification/`, `Calendar/`, `Subscription/`, `Support/`, `ApiKeys/`, `Sync/`, `Referral/`):
+One folder per resource (`Habits/`, `Notifications/`, `Auth/`, `Profile/`, `Tags/`, `Chat/`, `UserFacts/`, `Goals/`, `Gamification/`, `Calendar/`, `Subscriptions/`, `Support/`, `ApiKeys/`, `ChecklistTemplates/`, `Referrals/`):
 
 ```
 Habits/
-  Commands/           - one file per write op (CreateHabit.cs, LogHabit.cs, ...)
-    Handlers/         - matching MediatR handler
+  Commands/           - one file per write op (CreateHabitCommand.cs, LogHabitCommand.cs, ...); the MediatR handler lives in the same file
   Queries/            - one file per read op
-    Handlers/
   Validators/         - FluentValidation rules per command/query
   Services/           - feature-internal services (e.g., HabitScheduleService)
-  DTOs/               - request/response shapes (when not inline)
 ```
 
 ## Result<T> pattern
 
-Every handler returns `Result<T>` from `Common/`. Never throw for expected failures.
+Every handler returns `Result<T>` from `Orbit.Domain/Common/`. Never throw for expected failures.
 
 - `Result<T>.Success(value)` for OK
 - `Result<T>.Failure(errorCode, message)` for known failures (404, 400, 403)
@@ -69,4 +66,4 @@ ALL frequency/days/interval logic lives in `Habits/Services/HabitScheduleService
 | New read query | `Habits/Queries/GetHabitsQuery.cs` |
 | Shared validator rules | `Habits/Validators/SharedHabitRules.cs` |
 | Feature service (non-handler logic) | `Habits/Services/HabitScheduleService.cs` |
-| MediatR pipeline behavior | `Common/` — search for `IPipelineBehavior` |
+| MediatR pipeline behavior | `Behaviors/ValidationBehavior.cs` |

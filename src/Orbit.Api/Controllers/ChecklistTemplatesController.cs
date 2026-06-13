@@ -24,7 +24,7 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
     {
         var query = new GetChecklistTemplatesQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost]

@@ -9,7 +9,7 @@ using Orbit.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Persistence.Migrations
+namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
     [Migration("20260330152208_AddAdRewardFields")]

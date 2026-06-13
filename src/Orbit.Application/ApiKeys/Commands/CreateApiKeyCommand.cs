@@ -41,7 +41,7 @@ public class CreateApiKeyCommandHandler(
             cancellationToken);
 
         if (activeKeys.Count >= MaxActiveKeys)
-            return Result.Failure<CreateApiKeyResponse>($"You can have at most {MaxActiveKeys} active API keys.");
+            return Result.Failure<CreateApiKeyResponse>(ErrorMessages.MaxApiKeys.Format(MaxActiveKeys));
 
         var createResult = ApiKey.Create(
             request.UserId,
@@ -50,7 +50,7 @@ public class CreateApiKeyCommandHandler(
             request.IsReadOnly,
             request.ExpiresAtUtc);
         if (createResult.IsFailure)
-            return Result.Failure<CreateApiKeyResponse>(createResult.Error);
+            return createResult.PropagateError<CreateApiKeyResponse>();
 
         var (apiKey, rawKey) = createResult.Value;
 

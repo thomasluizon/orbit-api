@@ -10,7 +10,7 @@ Orbit.Infrastructure.Tests/ - services, prompt sections, controllers, MCP tools
 
 ## Conventions
 
-- **xUnit + FluentAssertions** everywhere. `result.Should().BeSuccess()`, `value.Should().Be(...)`.
+- **xUnit + FluentAssertions** everywhere. `result.IsSuccess.Should().BeTrue()`, `value.Should().Be(...)`.
 - **Unit tests mock at the ports.** Handlers use the real Application + Domain, mocking only Infrastructure interfaces (NSubstitute). Never spin up a real database.
 - **Every new feature needs:**
   - Unit tests for commands, queries, validators (in `Orbit.Application.Tests`)
@@ -19,12 +19,11 @@ Orbit.Infrastructure.Tests/ - services, prompt sections, controllers, MCP tools
 
 ## Test accounts (bypass email verification)
 
-The auth flow normally requires a code emailed via Resend. Two env-controlled accounts bypass this:
+The auth flow normally requires a code emailed via Resend. Env-controlled test accounts bypass this:
 
-- `REVIEWER_TEST_EMAIL` + `REVIEWER_TEST_CODE` — used by reviewer flows (e.g. Play review).
-- `QA_TEST_EMAIL` + `QA_TEST_CODE` — used by QA runs.
+- `TEST_ACCOUNTS` — comma-separated `email:code` pairs (reviewer flows, e.g. Play review, and QA runs).
 
-When `SendCodeCommand` matches one of these emails, the verification code is NOT randomized; it's the static value from env. Do not enable in production.
+When `SendCodeCommand` matches one of these emails, the verification code is NOT randomized; it's the static code from the pair. Inert in production — the handler skips the bypass when `ASPNETCORE_ENVIRONMENT` is `Production`.
 
 ## Running
 
@@ -43,7 +42,7 @@ dotnet test --filter "FullyQualifiedName~CreateHabit_Should_Succeed"
 
 | Want to add… | Look at… |
 |---|---|
-| Handler unit test | `Orbit.Application.Tests/Habits/CreateHabitCommandTests.cs` |
+| Handler unit test | `Orbit.Application.Tests/Commands/Habits/CreateHabitCommandHandlerTests.cs` |
 | Domain entity test | `Orbit.Domain.Tests/Entities/HabitTests.cs` |
 | Service test | `Orbit.Infrastructure.Tests/Services/UserDateServiceTests.cs` |
-| Validator test | `Orbit.Application.Tests/Habits/Validators/*Tests.cs` |
+| Validator test | `Orbit.Application.Tests/Validators/*Tests.cs` |
