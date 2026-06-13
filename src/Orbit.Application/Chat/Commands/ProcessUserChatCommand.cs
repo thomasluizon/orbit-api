@@ -171,7 +171,7 @@ public partial class ProcessUserChatCommandHandler(
         var promptHabits = BuildPromptHabitIndex(userHabits);
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
-        var aiMemoryEnabled = hasProAccess && (user?.AiMemoryEnabled ?? true);
+        var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
         var activeGoals = hasProAccess
             ? await data.GoalRepository.FindAsync(
                 g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
