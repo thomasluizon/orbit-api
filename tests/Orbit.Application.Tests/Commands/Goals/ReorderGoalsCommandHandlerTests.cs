@@ -83,7 +83,7 @@ public class ReorderGoalsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.GoalNotFound);
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
     }
 

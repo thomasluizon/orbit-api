@@ -102,7 +102,7 @@ public class BulkSkipHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[0].Error.Should().Be(ErrorMessages.HabitNotFound);
+        result.Value.Results[0].Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]

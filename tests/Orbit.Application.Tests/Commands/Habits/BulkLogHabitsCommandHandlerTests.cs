@@ -84,7 +84,7 @@ public class BulkLogHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
         result.Value.Results[1].Status.Should().Be(BulkItemStatus.Failed);
-        result.Value.Results[1].Error.Should().Be(ErrorMessages.HabitNotFound);
+        result.Value.Results[1].Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     [Fact]

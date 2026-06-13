@@ -103,7 +103,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.HabitNotFound);
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
     }
 
@@ -121,7 +121,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.HabitNotOwned);
+        result.Error.Should().Be(ErrorMessages.HabitNotOwned.Message);
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotOwned);
     }
 

@@ -120,7 +120,7 @@ public class ProcessReferralCodeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.InvalidReferralCode);
+        result.Error.Should().Be(ErrorMessages.InvalidReferralCode.Message);
         await _referralRepo.DidNotReceive().AddAsync(Arg.Any<Referral>(), Arg.Any<CancellationToken>());
     }
 
@@ -150,7 +150,7 @@ public class ProcessReferralCodeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.ReferralCapReached);
+        result.Error.Should().Be(ErrorMessages.ReferralCapReached.Message);
     }
 
     [Fact]
@@ -168,7 +168,7 @@ public class ProcessReferralCodeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.SelfReferral);
+        result.Error.Should().Be(ErrorMessages.SelfReferral.Message);
     }
 
     [Fact]
@@ -188,6 +188,6 @@ public class ProcessReferralCodeCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.AlreadyReferred);
+        result.Error.Should().Be(ErrorMessages.AlreadyReferred.Message);
     }
 }

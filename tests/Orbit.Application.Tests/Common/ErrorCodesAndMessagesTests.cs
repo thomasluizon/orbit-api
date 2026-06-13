@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Common;
 
@@ -31,7 +32,7 @@ public class ErrorCodesAndMessagesTests
 
         foreach (var field in fields)
         {
-            var value = (string)field.GetValue(null)!;
+            var value = ((AppError)field.GetValue(null)!).Message;
             value.Should().NotEndWith(" ",
                 $"ErrorMessage '{field.Name}' should not end with a space");
         }
@@ -59,7 +60,7 @@ public class ErrorCodesAndMessagesTests
 
         foreach (var field in fields)
         {
-            var value = (string)field.GetValue(null)!;
+            var value = ((AppError)field.GetValue(null)!).Message;
             value.Should().NotBeNullOrWhiteSpace(
                 $"ErrorMessage '{field.Name}' should not be empty");
         }

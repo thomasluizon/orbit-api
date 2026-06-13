@@ -54,7 +54,7 @@ public class AuthControllerTests
         var request = new AuthController.SendCodeRequest("test@example.com");
         var result = await _controller.SendCode(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class AuthControllerTests
 
         var result = await _controller.RequestDeletion(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -148,6 +148,6 @@ public class AuthControllerTests
         var request = new AuthController.ConfirmDeletionRequest("000000");
         var result = await _controller.ConfirmDeletion(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

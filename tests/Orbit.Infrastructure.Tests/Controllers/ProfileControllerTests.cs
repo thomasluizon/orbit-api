@@ -50,7 +50,7 @@ public class ProfileControllerTests
 
         var result = await _controller.GetProfile(CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetTimezoneRequest("Invalid/TZ");
         var result = await _controller.SetTimezone(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetAiMemoryRequest(true);
         var result = await _controller.SetAiMemory(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetAiSummaryRequest(true);
         var result = await _controller.SetAiSummary(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetLanguageRequest("invalid");
         var result = await _controller.SetLanguage(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetWeekStartDayRequest(99);
         var result = await _controller.SetWeekStartDay(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -194,7 +194,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetThemePreferenceRequest("invalid");
         var result = await _controller.SetThemePreference(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class ProfileControllerTests
         var request = new ProfileController.SetColorSchemeRequest("invalid");
         var result = await _controller.SetColorScheme(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public class ProfileControllerTests
 
         var result = await _controller.CompleteOnboarding(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -262,6 +262,6 @@ public class ProfileControllerTests
 
         var result = await _controller.ResetAccount(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

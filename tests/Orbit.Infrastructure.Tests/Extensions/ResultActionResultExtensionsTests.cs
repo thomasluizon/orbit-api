@@ -24,7 +24,7 @@ public class ResultActionResultExtensionsTests
 
         var actionResult = result.ToPayGateAwareResult();
 
-        actionResult.Should().BeOfType<BadRequestObjectResult>();
+        actionResult.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

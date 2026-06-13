@@ -65,7 +65,7 @@ public class GetHabitMetricsToolTests
         var result = await Execute($$$"""{"habit_id": "{{{HabitId}}}"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be(ErrorMessages.HabitNotFound);
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     private async Task<ToolResult> Execute(string json)

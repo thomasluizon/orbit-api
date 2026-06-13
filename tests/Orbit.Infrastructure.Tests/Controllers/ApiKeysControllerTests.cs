@@ -66,7 +66,7 @@ public class ApiKeysControllerTests
         var request = new ApiKeysController.CreateApiKeyRequest("Test Key");
         var result = await _controller.CreateApiKey(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class ApiKeysControllerTests
 
         var result = await _controller.GetApiKeys(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -110,6 +110,6 @@ public class ApiKeysControllerTests
 
         var result = await _controller.RevokeApiKey(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 }

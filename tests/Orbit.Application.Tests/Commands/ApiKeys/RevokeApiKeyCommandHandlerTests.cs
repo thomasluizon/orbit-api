@@ -55,7 +55,7 @@ public class RevokeApiKeyCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.ApiKeyNotFound);
+        result.Error.Should().Be(ErrorMessages.ApiKeyNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.ApiKeyNotFound);
     }
 }

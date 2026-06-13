@@ -180,7 +180,7 @@ public class AiControllerTests
 
         var result = await _controller.ConfirmPendingOperation(pendingOperationId, CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
         await _auditService.Received(1).RecordAsync(
             Arg.Is<AgentAuditEntry>(entry =>
                 entry.TargetId == pendingOperationId.ToString() &&
@@ -229,7 +229,7 @@ public class AiControllerTests
             new AiController.StepUpChallengeRequest("pt-BR"),
             CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
         await _auditService.Received(1).RecordAsync(
             Arg.Is<AgentAuditEntry>(entry => entry.Error == "step_up_failed"),
             Arg.Any<CancellationToken>());
@@ -278,7 +278,7 @@ public class AiControllerTests
             new AiController.VerifyStepUpRequest(challengeId, "123456"),
             CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
         await _auditService.Received(1).RecordAsync(
             Arg.Is<AgentAuditEntry>(entry => entry.Error == "verify_failed"),
             Arg.Any<CancellationToken>());
@@ -319,7 +319,7 @@ public class AiControllerTests
             new AiController.ExecutePendingOperationRequest("agc_token"),
             CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -405,7 +405,7 @@ public class AiControllerTests
             new ResolveClarificationRequest(""),
             CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
         await _pendingClarificationStore.DidNotReceiveWithAnyArgs()
             .GetForResolutionAsync(default, default, default);
     }
@@ -423,7 +423,7 @@ public class AiControllerTests
             new ResolveClarificationRequest("{\"frequency_unit\":\"Day\"}"),
             CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
         await _operationExecutor.DidNotReceiveWithAnyArgs()
             .ExecuteAsync(default!, default);
     }
@@ -439,7 +439,7 @@ public class AiControllerTests
             new ResolveClarificationRequest("{\"frequency_unit\":\"InjectedValue\"}"),
             CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
         await _operationExecutor.DidNotReceiveWithAnyArgs()
             .ExecuteAsync(default!, default);
     }

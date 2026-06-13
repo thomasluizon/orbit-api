@@ -53,7 +53,7 @@ public class CalendarControllerTests
 
         var result = await _controller.GetEvents(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class CalendarControllerTests
 
         var result = await _controller.DismissImport(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class CalendarControllerTests
 
         var result = await _controller.GetAutoSyncState(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class CalendarControllerTests
         var request = new CalendarController.SetAutoSyncRequest(true);
         var result = await _controller.SetAutoSync(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class CalendarControllerTests
 
         var result = await _controller.GetSuggestions(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class CalendarControllerTests
 
         var result = await _controller.DismissSuggestion(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -203,6 +203,6 @@ public class CalendarControllerTests
 
         var result = await _controller.RunSyncNow(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

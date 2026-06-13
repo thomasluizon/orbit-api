@@ -51,6 +51,6 @@ public class SupportControllerTests
         var request = new SupportController.SupportRequest("John", "john@example.com", "Bug Report", "Something broke");
         var result = await _controller.SendSupport(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

@@ -52,7 +52,7 @@ public class ReferralControllerTests
 
         var result = await _controller.GetOrCreateCode(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class ReferralControllerTests
 
         var result = await _controller.GetStats(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -96,6 +96,6 @@ public class ReferralControllerTests
 
         var result = await _controller.GetDashboard(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

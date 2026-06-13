@@ -71,7 +71,7 @@ public class SubscriptionControllerTests
         var request = new SubscriptionController.CreateCheckoutRequest("invalid");
         var result = await _controller.CreateCheckout(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class SubscriptionControllerTests
 
         var result = await _controller.GetBillingDetails(CancellationToken.None);
 
-        var notFound = result.Should().BeOfType<NotFoundObjectResult>().Subject;
+        var notFound = result.Should().BeAssignableTo<ObjectResult>().Subject;
         notFound.StatusCode.Should().Be(404);
     }
 

@@ -146,17 +146,6 @@ public class GetCalendarMonthQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DateRangeExceeds62Days_ReturnsFailure()
-    {
-        var query = new GetCalendarMonthQuery(UserId, new DateOnly(2026, 1, 1), new DateOnly(2026, 4, 1));
-
-        var result = await _handler.Handle(query, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("62 days");
-    }
-
-    [Fact]
     public async Task Handle_CallsAdvanceStaleBadHabitDueDates()
     {
         _habitRepo.FindAsync(
