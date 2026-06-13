@@ -1,13 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Api.OAuth;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public class OAuthAuthorizationStoreTests : IDisposable
 {
-    private readonly OAuthAuthorizationStore _store = new();
+    private readonly OAuthAuthorizationStore _store = new(NullLogger<OAuthAuthorizationStore>.Instance);
 
     public void Dispose()
     {

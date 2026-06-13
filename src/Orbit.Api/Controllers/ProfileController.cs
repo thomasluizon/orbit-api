@@ -235,7 +235,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
-            return NotFound(new { error = result.Error });
+            return result.ToErrorResult(StatusCodes.Status404NotFound);
 
         var fileName = $"orbit-data-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);

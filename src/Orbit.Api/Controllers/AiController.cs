@@ -8,6 +8,7 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -178,7 +179,7 @@ public class AiController(
             Error: confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
 
         return confirmation is null
-            ? NotFound(new { error = "Pending operation not found or expired." })
+            ? NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody())
             : Ok(new ConfirmPendingOperationResponse(
                 confirmation.PendingOperationId,
                 confirmation.ConfirmationToken,
@@ -281,7 +282,7 @@ public class AiController(
                 TargetId: id.ToString(),
                 Error: "pending_operation_not_found"), cancellationToken);
 
-            return NotFound(new { error = "Pending operation not found or expired." });
+            return NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody());
         }
 
         var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -320,7 +321,7 @@ public class AiController(
                 authMethod,
                 operationId,
                 $"invalid_clarification_value:{firstError.PropertyName}",
-                BadRequest(new { error = firstError.ErrorMessage }),
+                BadRequest(new AppError(firstError.ErrorCode ?? ErrorCodes.ValidationError, firstError.ErrorMessage).ToErrorBody()),
                 cancellationToken);
         }
 
@@ -332,7 +333,7 @@ public class AiController(
                 authMethod,
                 operationId,
                 "clarification_not_found",
-                NotFound(new { error = ErrorMessages.ClarificationNotFound }),
+                NotFound(ErrorMessages.ClarificationNotFound.ToErrorBody()),
                 cancellationToken);
         }
 
@@ -343,7 +344,7 @@ public class AiController(
                 authMethod,
                 operationId,
                 "clarification_value_not_offered",
-                BadRequest(new { error = ErrorMessages.ClarificationValueNotOffered }),
+                BadRequest(ErrorMessages.ClarificationValueNotOffered.ToErrorBody()),
                 cancellationToken);
         }
 
@@ -359,7 +360,7 @@ public class AiController(
                 authMethod,
                 operationId,
                 "invalid_clarification_value",
-                BadRequest(new { error = ErrorMessages.ClarificationValueNotJsonObject }),
+                BadRequest(ErrorMessages.ClarificationValueNotJsonObject.ToErrorBody()),
                 cancellationToken);
         }
 
@@ -374,7 +375,7 @@ public class AiController(
                 authMethod,
                 operationId,
                 auditError,
-                Conflict(new { error = ErrorMessages.ClarificationAlreadyResolved }),
+                Conflict(ErrorMessages.ClarificationAlreadyResolved.ToErrorBody()),
                 cancellationToken);
         }
 

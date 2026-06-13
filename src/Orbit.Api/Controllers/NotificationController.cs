@@ -96,7 +96,7 @@ public partial class NotificationController(
             return Ok();
         }
 
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPost("unsubscribe")]
@@ -126,7 +126,7 @@ public partial class NotificationController(
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return result.ToErrorResult();
 
         if (result.Value.Status == "failed")
             LogTestPushFailed(logger, HttpContext.GetUserId());

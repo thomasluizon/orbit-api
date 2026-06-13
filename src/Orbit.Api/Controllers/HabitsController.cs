@@ -428,21 +428,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             return NoContent();
         }
 
-        return BadRequest(new { error = result.Error });
-    }
-
-    [HttpGet("logs")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetAllLogs(
-        [FromQuery] DateOnly dateFrom,
-        [FromQuery] DateOnly dateTo,
-        CancellationToken cancellationToken)
-    {
-        var query = new GetAllHabitLogsQuery(HttpContext.GetUserId(), dateFrom, dateTo);
-        var result = await mediator.Send(query, cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v));
+        return result.ToErrorResult();
     }
 
     [HttpGet("{id:guid}/logs")]
@@ -597,9 +583,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new DuplicateHabitCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? CreatedAtAction(nameof(GetHabitById), new { id = result.Value }, new { id = result.Value })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(
+            v => CreatedAtAction(nameof(GetHabitById), new { id = v }, new { id = v }));
     }
 
     [HttpPost("{parentId:guid}/sub-habits")]

@@ -36,11 +36,11 @@ public class CreateApiKeyCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CreateApiKeyResponse>();
 
-        var activeKeys = await apiKeyRepository.FindAsync(
+        var activeKeyCount = await apiKeyRepository.CountAsync(
             k => k.UserId == request.UserId && !k.IsRevoked,
             cancellationToken);
 
-        if (activeKeys.Count >= MaxActiveKeys)
+        if (activeKeyCount >= MaxActiveKeys)
             return Result.Failure<CreateApiKeyResponse>(ErrorMessages.MaxApiKeys.Format(MaxActiveKeys));
 
         var createResult = ApiKey.Create(

@@ -260,29 +260,18 @@ public class HabitsControllerTests
     }
 
     [Fact]
-    public async Task DeleteHabit_Failure_ReturnsBadRequest()
+    public async Task DeleteHabit_Failure_ReturnsBadRequestWithErrorCode()
     {
-        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
+        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.HabitNotFound));
         var result = await _controller.DeleteHabit(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task GetAllLogs_Success_ReturnsOk()
-    {
-        _mediator.Send(Arg.Any<GetAllHabitLogsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new Dictionary<Guid, List<HabitLogResponse>>()));
-        var result = await _controller.GetAllLogs(DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)), CancellationToken.None);
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task GetAllLogs_Failure_ReturnsBadRequest()
-    {
-        _mediator.Send(Arg.Any<GetAllHabitLogsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Dictionary<Guid, List<HabitLogResponse>>>("Error"));
-        var result = await _controller.GetAllLogs(DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)), CancellationToken.None);
-        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+        var objectResult = result.Should().BeAssignableTo<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.HabitNotFound.Message,
+            errorCode = ErrorMessages.HabitNotFound.Code
+        });
     }
 
     [Fact]

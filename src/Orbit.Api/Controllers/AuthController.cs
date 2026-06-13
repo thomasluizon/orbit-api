@@ -45,7 +45,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogFailedToSendCode(logger, request.Email, result.Error, HttpContext.GetRequestId());
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPost("operations/send-code")]
@@ -94,7 +94,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogCodeVerificationFailed(logger, request.Email, result.Error, HttpContext.GetRequestId());
-        return Unauthorized(new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
     [HttpPost("operations/verify-code")]
@@ -155,7 +155,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogGoogleAuthFailed(logger, result.Error, HttpContext.GetRequestId());
-        return Unauthorized(new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
     [HttpPost("operations/google")]
@@ -221,7 +221,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogSessionRefreshFailed(logger, result.Error, HttpContext.GetRequestId());
-        return Unauthorized(new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
     [HttpPost("operations/refresh")]
@@ -274,7 +274,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
-        return Unauthorized(new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
     [HttpPost("operations/logout")]
@@ -323,7 +323,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogDeletionRequestFailed(logger, HttpContext.GetUserId(), result.Error);
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [Authorize]
@@ -346,7 +346,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         }
 
         LogDeletionConfirmationFailed(logger, HttpContext.GetUserId(), result.Error);
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent to {Email}. RequestId={RequestId}")]

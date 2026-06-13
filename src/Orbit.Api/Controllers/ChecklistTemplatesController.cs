@@ -43,7 +43,7 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
             LogChecklistTemplateCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/checklist-templates/{result.Value}", new { id = result.Value });
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpDelete("{id:guid}")]
@@ -60,7 +60,7 @@ public partial class ChecklistTemplatesController(IMediator mediator, ILogger<Ch
             LogChecklistTemplateDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "ChecklistTemplate created {TemplateId} by user {UserId}")]

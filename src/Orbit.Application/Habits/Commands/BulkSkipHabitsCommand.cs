@@ -37,9 +37,10 @@ public class BulkSkipHabitsCommandHandler(
         var results = new List<BulkSkipItemResult>();
 
         var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
+        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
-            q => q.Include(h => h.Logs),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)),
             cancellationToken);
         var habitMap = habits.ToDictionary(h => h.Id);
 

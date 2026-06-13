@@ -17,16 +17,18 @@ public class CreateUserFactCommandHandler(
     {
         var maxFacts = await appConfigService.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, cancellationToken);
 
-        var existingFacts = await userFactRepository.FindAsync(
+        var activeFactCount = await userFactRepository.CountAsync(
             f => f.UserId == request.UserId && !f.IsDeleted,
             cancellationToken);
 
-        if (existingFacts.Count >= maxFacts)
+        if (activeFactCount >= maxFacts)
             return Result.Failure<Guid>(ErrorMessages.UserFactsLimitReached.Format(maxFacts));
 
         var normalizedNew = request.FactText.Trim();
-        var isDuplicate = existingFacts.Any(f =>
-            string.Equals(f.FactText, normalizedNew, StringComparison.OrdinalIgnoreCase));
+        var isDuplicate = await userFactRepository.AnyAsync(
+            f => f.UserId == request.UserId && !f.IsDeleted &&
+                 string.Equals(f.FactText, normalizedNew, StringComparison.OrdinalIgnoreCase),
+            cancellationToken);
 
         if (isDuplicate)
             return Result.Failure<Guid>(ErrorMessages.DuplicateFact);

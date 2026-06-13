@@ -530,7 +530,6 @@ public class AgentCatalogService : IAgentCatalogService
                     "HabitsController.GetCalendarMonth",
                     "HabitsController.GetHabitById",
                     "HabitsController.GetHabitDetail",
-                    "HabitsController.GetAllLogs",
                     "HabitsController.GetLogs"
                 ]),
 

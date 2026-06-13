@@ -24,10 +24,10 @@ public class CreateApiKeyCommandHandlerTests
         _payGate.CanCreateApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
 
-        _apiKeyRepo.FindAsync(
+        _apiKeyRepo.CountAsync(
             Arg.Any<Expression<Func<ApiKey, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<ApiKey>());
+            .Returns(0);
     }
 
     [Fact]
@@ -64,14 +64,10 @@ public class CreateApiKeyCommandHandlerTests
     [Fact]
     public async Task Handle_MaxKeysReached_ReturnsFailure()
     {
-        var existingKeys = Enumerable.Range(0, 5)
-            .Select(_ => ApiKey.Create(UserId, "Key").Value.Entity)
-            .ToList();
-
-        _apiKeyRepo.FindAsync(
+        _apiKeyRepo.CountAsync(
             Arg.Any<Expression<Func<ApiKey, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(existingKeys.AsReadOnly());
+            .Returns(5);
 
         var command = new CreateApiKeyCommand(UserId, "One too many");
 

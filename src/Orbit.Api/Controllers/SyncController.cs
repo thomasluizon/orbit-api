@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
@@ -152,13 +153,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var userId = HttpContext.GetUserId();
 
         if (DateTime.UtcNow - since > MaxSyncWindow)
-        {
-            return StatusCode(StatusCodes.Status410Gone, new
-            {
-                error = "Sync window exceeded. Full re-sync required.",
-                code = "SYNC_WINDOW_EXCEEDED"
-            });
-        }
+            return StatusCode(StatusCodes.Status410Gone, ErrorMessages.SyncWindowExceeded.ToErrorBody());
 
         var sinceUtc = DateTime.SpecifyKind(since, DateTimeKind.Utc);
 
@@ -240,13 +235,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var userId = HttpContext.GetUserId();
 
         if (DateTime.UtcNow - since > MaxSyncWindow)
-        {
-            return StatusCode(StatusCodes.Status410Gone, new
-            {
-                error = "Sync window exceeded. Full re-sync required.",
-                code = "SYNC_WINDOW_EXCEEDED"
-            });
-        }
+            return StatusCode(StatusCodes.Status410Gone, ErrorMessages.SyncWindowExceeded.ToErrorBody());
 
         var sinceUtc = DateTime.SpecifyKind(since, DateTimeKind.Utc);
 
@@ -326,10 +315,10 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var userId = HttpContext.GetUserId();
 
         if (request.Mutations.Count == 0)
-            return BadRequest(new { error = "No mutations provided." });
+            return BadRequest(ErrorMessages.NoMutations.ToErrorBody());
 
         if (request.Mutations.Count > 100)
-            return BadRequest(new { error = "Maximum 100 mutations per batch." });
+            return BadRequest(ErrorMessages.TooManyMutations.Format(100).ToErrorBody());
 
         var results = new List<SyncMutationResult>();
         var processed = 0;
@@ -374,7 +363,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             catch (Exception ex)
             {
                 LogMutationFailed(logger, index, mutation.Entity, mutation.Action, ex);
-                results.Add(new SyncMutationResult(index, "failed", "Mutation failed"));
+                results.Add(new SyncMutationResult(index, "failed", ErrorMessages.MutationFailed.Message));
                 failed++;
             }
         }

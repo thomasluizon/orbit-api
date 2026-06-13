@@ -28,7 +28,7 @@ public class ReferralController(
         if (result.IsSuccess)
             return Ok(new { code = result.Value, link = $"{frontendSettings.Value.BaseUrl}/r/{result.Value}" });
 
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpGet("stats")]
@@ -43,7 +43,7 @@ public class ReferralController(
         if (result.IsSuccess)
             return Ok(result.Value);
 
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpGet("dashboard")]
@@ -58,6 +58,6 @@ public class ReferralController(
         if (result.IsSuccess)
             return Ok(result.Value);
 
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 }

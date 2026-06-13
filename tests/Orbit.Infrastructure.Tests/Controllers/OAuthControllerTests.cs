@@ -8,12 +8,14 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Api.OAuth;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -24,7 +26,7 @@ namespace Orbit.Infrastructure.Tests.Controllers;
 public class OAuthControllerTests : IDisposable
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
-    private readonly OAuthAuthorizationStore _authStore = new();
+    private readonly OAuthAuthorizationStore _authStore = new(NullLogger<OAuthAuthorizationStore>.Instance);
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -203,15 +205,21 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task SendCode_Failure_ReturnsBadRequest()
+    public async Task SendCode_Failure_ReturnsBadRequestWithErrorCode()
     {
         _mediator.Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Rate limited"));
+            .Returns(Result.Failure(ErrorMessages.TooManyRequests));
 
         var request = new OAuthController.SendCodeRequest("test@example.com");
         var result = await _controller.SendCode(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.TooManyRequests.Message,
+            errorCode = ErrorMessages.TooManyRequests.Code
+        });
     }
 
     [Fact]
@@ -249,10 +257,10 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task VerifyCode_Failure_ReturnsBadRequest()
+    public async Task VerifyCode_Failure_ReturnsBadRequestWithErrorCode()
     {
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<LoginResponse>("Invalid code"));
+            .Returns(Result.Failure<LoginResponse>(ErrorMessages.InvalidVerificationCode));
 
         var request = new OAuthController.VerifyCodeRequest(
             "test@example.com", "000000", "state-abc",
@@ -260,7 +268,13 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.InvalidVerificationCode.Message,
+            errorCode = ErrorMessages.InvalidVerificationCode.Code
+        });
     }
 
     [Fact]

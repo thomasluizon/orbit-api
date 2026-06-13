@@ -37,7 +37,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? confirmationToken = null)
     {
         if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
-            return BadRequest(new { error = $"Message must be between 1 and {AppConstants.MaxChatMessageLength} characters" });
+            return BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody());
 
         var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
         if (imageError is not null)
@@ -82,7 +82,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? confirmationToken = null)
     {
         if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
-            return BadRequest(new { error = $"Message must be between 1 and {AppConstants.MaxChatMessageLength} characters" });
+            return BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody());
 
         var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
         if (imageError is not null)
@@ -148,7 +148,10 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         {
             LogChatStreamFailed(logger, ex);
             await WriteEventAsync(
-                ChatStreamEvent.Failure(StatusCodes.Status500InternalServerError, "AI service temporarily unavailable"),
+                ChatStreamEvent.Failure(
+                    StatusCodes.Status500InternalServerError,
+                    ErrorMessages.AiUnavailable.Message,
+                    ErrorMessages.AiUnavailable.Code),
                 cancellationToken);
         }
     }
@@ -179,7 +182,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatImageValidationFailed(logger, validationResult.Error);
-            return (null, null, BadRequest(new { error = validationResult.Error }));
+            return (null, null, validationResult.ToErrorResult());
         }
 
         using var ms = new MemoryStream();
@@ -193,16 +196,16 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
             return (null, null);
 
         if (history.Length > AppConstants.MaxChatHistoryLength)
-            return (null, BadRequest(new { error = "Chat history too large" }));
+            return (null, BadRequest(ErrorMessages.ChatHistoryTooLarge.ToErrorBody()));
 
         try
         {
             var chatHistory = JsonSerializer.Deserialize<List<ChatHistoryMessage>>(history, ChatHistoryJsonOptions);
             if (chatHistory is null)
-                return (null, BadRequest(new { error = "Invalid chat history format" }));
+                return (null, BadRequest(ErrorMessages.InvalidChatHistory.ToErrorBody()));
 
             if (chatHistory.Count > AppConstants.MaxChatHistoryMessages)
-                return (null, BadRequest(new { error = "Chat history too large" }));
+                return (null, BadRequest(ErrorMessages.ChatHistoryTooLarge.ToErrorBody()));
 
             var normalizedHistory = new List<ChatHistoryMessage>(chatHistory.Count);
 
@@ -213,7 +216,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
                     string.IsNullOrWhiteSpace(item.Content) ||
                     item.Content.Length > AppConstants.MaxChatHistoryMessageLength)
                 {
-                    return (null, BadRequest(new { error = "Invalid chat history format" }));
+                    return (null, BadRequest(ErrorMessages.InvalidChatHistory.ToErrorBody()));
                 }
 
                 normalizedHistory.Add(new ChatHistoryMessage(normalizedRole, item.Content));
@@ -225,7 +228,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogChatHistoryParseFailed(logger, ex, ex.Message);
-            return (null, BadRequest(new { error = "Invalid chat history format" }));
+            return (null, BadRequest(ErrorMessages.InvalidChatHistory.ToErrorBody()));
         }
     }
 
@@ -238,14 +241,14 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         {
             var parsed = JsonSerializer.Deserialize<AgentClientContext>(clientContext, ChatHistoryJsonOptions);
             return parsed is null
-                ? (null, BadRequest(new { error = "Invalid client context format" }))
+                ? (null, BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody()))
                 : (parsed, null);
         }
         catch (JsonException ex)
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogClientContextParseFailed(logger, ex, ex.Message);
-            return (null, BadRequest(new { error = "Invalid client context format" }));
+            return (null, BadRequest(ErrorMessages.InvalidClientContext.ToErrorBody()));
         }
     }
 

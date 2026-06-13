@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Application.Common;
 
 namespace Orbit.Api.Controllers;
 
@@ -72,7 +73,7 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     public async Task<IActionResult> SetAutoSync([FromBody] SetAutoSyncRequest request, CancellationToken cancellationToken)
     {
         if (request.Enabled is null)
-            return BadRequest(new { error = "Enabled is required." });
+            return BadRequest(ErrorMessages.AutoSyncEnabledRequired.ToErrorBody());
 
         var command = new SetCalendarAutoSyncCommand(HttpContext.GetUserId(), request.Enabled.Value);
         var result = await mediator.Send(command, cancellationToken);

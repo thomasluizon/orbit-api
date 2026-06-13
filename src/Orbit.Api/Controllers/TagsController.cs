@@ -45,7 +45,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
             LogTagCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPut("{id:guid}")]
@@ -65,7 +65,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
             LogTagUpdated(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpDelete("{id:guid}")]
@@ -82,7 +82,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
             LogTagDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPut("{habitId:guid}/assign")]

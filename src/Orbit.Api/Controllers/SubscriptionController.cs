@@ -113,7 +113,7 @@ public partial class SubscriptionController(
         if (result.IsSuccess) return Ok();
         if (logger.IsEnabled(LogLevel.Error))
             LogWebhookProcessingFailed(logger, result.Error);
-        return StatusCode(500, new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status500InternalServerError);
     }
 #pragma warning restore S6932
 
@@ -148,7 +148,7 @@ public partial class SubscriptionController(
         if (result.IsSuccess) return Ok();
         if (logger.IsEnabled(LogLevel.Error))
             LogPlayNotificationFailed(logger, result.Error);
-        return StatusCode(500, new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status500InternalServerError);
     }
 #pragma warning restore S6932
 

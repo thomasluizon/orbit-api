@@ -1,21 +1,22 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace Orbit.Api.OAuth;
 
-public sealed class OAuthAuthorizationStore : IDisposable
+public sealed partial class OAuthAuthorizationStore : IDisposable
 {
     private readonly ConcurrentDictionary<string, AuthorizationEntry> _codes = new();
     private readonly Timer _cleanupTimer;
     private static readonly TimeSpan CodeExpiry = TimeSpan.FromMinutes(5);
 
-    public OAuthAuthorizationStore()
+    public OAuthAuthorizationStore(ILogger<OAuthAuthorizationStore> logger)
     {
         _cleanupTimer = new Timer(_ =>
         {
             try { Cleanup(); }
-            catch (Exception) { }
+            catch (Exception ex) { LogCleanupFailed(logger, ex); }
         }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
 
@@ -61,6 +62,9 @@ public sealed class OAuthAuthorizationStore : IDisposable
     }
 
     public void Dispose() => _cleanupTimer.Dispose();
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "OAuth authorization store cleanup failed")]
+    private static partial void LogCleanupFailed(ILogger logger, Exception ex);
 }
 
 public record AuthorizationEntry(
