@@ -59,7 +59,7 @@ public class UpdateHabitCommandHandler(
                 cancellationToken: cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         var opts = request.Options ?? new UpdateHabitCommandOptions();
 

@@ -48,7 +48,7 @@ public class ChatControllerTests
     {
         var result = await _controller.ProcessChat("", null, null, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class ChatControllerTests
         var longMessage = new string('a', 4001);
         var result = await _controller.ProcessChat(longMessage, null, null, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class ChatControllerTests
 
         var result = await _controller.ProcessChat("Hello", null, null, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class ChatControllerTests
     {
         var result = await _controller.ProcessChat("Hello", "not-valid-json{{{", null, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class ChatControllerTests
 
         var result = await _controller.ProcessChat("Hello", history, null, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -114,6 +114,6 @@ public class ChatControllerTests
 
         var result = await _controller.ProcessChat("Hello", null, file, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

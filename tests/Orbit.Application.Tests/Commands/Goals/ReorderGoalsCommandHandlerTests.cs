@@ -25,22 +25,21 @@ public class ReorderGoalsCommandHandlerTests
             .Returns(Result.Success());
     }
 
+    private void SetupGoalsForUser(params Goal[] goals)
+    {
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goals.ToList());
+    }
+
     [Fact]
     public async Task Handle_ValidReorder_UpdatesPositionsAndSaves()
     {
         var goal1 = Goal.Create(new Goal.CreateGoalParams(UserId, "Goal 1", 10, "units", Position: 0)).Value;
         var goal2 = Goal.Create(new Goal.CreateGoalParams(UserId, "Goal 2", 20, "units", Position: 1)).Value;
 
-        var callCount = 0;
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(ci =>
-            {
-                callCount++;
-                return callCount == 1 ? goal1 : goal2;
-            });
+        SetupGoalsForUser(goal1, goal2);
 
         var positions = new List<GoalPositionUpdate>
         {
@@ -60,6 +59,8 @@ public class ReorderGoalsCommandHandlerTests
     [Fact]
     public async Task Handle_EmptyList_SavesWithoutChanges()
     {
+        SetupGoalsForUser();
+
         var command = new ReorderGoalsCommand(UserId, new List<GoalPositionUpdate>());
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -71,11 +72,7 @@ public class ReorderGoalsCommandHandlerTests
     [Fact]
     public async Task Handle_GoalNotFound_ReturnsFailure()
     {
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Goal?)null);
+        SetupGoalsForUser();
 
         var positions = new List<GoalPositionUpdate>
         {
@@ -86,8 +83,40 @@ public class ReorderGoalsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.GoalNotFound);
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
+    }
+
+    [Fact]
+    public async Task Handle_MultipleGoals_LoadsInSingleQuery()
+    {
+        var goal1 = Goal.Create(new Goal.CreateGoalParams(UserId, "G1", 10, "units", Position: 0)).Value;
+        var goal2 = Goal.Create(new Goal.CreateGoalParams(UserId, "G2", 20, "units", Position: 1)).Value;
+        var goal3 = Goal.Create(new Goal.CreateGoalParams(UserId, "G3", 30, "units", Position: 2)).Value;
+
+        SetupGoalsForUser(goal1, goal2, goal3);
+
+        var positions = new List<GoalPositionUpdate>
+        {
+            new(goal1.Id, 2),
+            new(goal2.Id, 0),
+            new(goal3.Id, 1)
+        };
+        var command = new ReorderGoalsCommand(UserId, positions);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal1.Position.Should().Be(2);
+        goal2.Position.Should().Be(0);
+        goal3.Position.Should().Be(1);
+        await _goalRepo.Received(1).FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>());
+        await _goalRepo.DidNotReceive().FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

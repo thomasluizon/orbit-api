@@ -60,12 +60,12 @@ public class GetHabitMetricsToolTests
     public async Task HabitNotFound_PropagatesError()
     {
         _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<HabitMetrics>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound));
+            .Returns(Result.Failure<HabitMetrics>(ErrorMessages.HabitNotFound));
 
         var result = await Execute($$$"""{"habit_id": "{{{HabitId}}}"}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be(ErrorMessages.HabitNotFound);
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
     }
 
     private async Task<ToolResult> Execute(string json)

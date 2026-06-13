@@ -16,7 +16,7 @@ Common/           - cross-entity domain primitives
 ## Entity rules
 
 - **Factory methods only for construction.** `Habit.Create(...)`, `User.Create(...)`, `Tag.Create(...)`. Constructors are private/protected. Factories enforce invariants and return `Result<T>` (or throw a domain exception for impossible states).
-- **All mutations through methods.** No public setters on aggregates. Use `habit.SetTitle(...)`, `user.SetTimezone(...)`, etc. Methods enforce invariants.
+- **All mutations through methods.** No public setters on aggregates. Use `habit.Update(...)`, `user.SetTimeZone(...)`, etc. Methods enforce invariants.
 - **`CreatedAtUtc` set inside the factory.** Use `DateTime.UtcNow` — this is one of the two places it's acceptable (the other is cache key generation in Application).
 - **Soft deletes for entities that need history.** `UserFact` uses soft delete via `DeletedAtUtc`.
 

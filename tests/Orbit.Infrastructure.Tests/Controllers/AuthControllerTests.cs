@@ -8,6 +8,7 @@ using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Auth.Queries;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -54,7 +55,7 @@ public class AuthControllerTests
         var request = new AuthController.SendCodeRequest("test@example.com");
         var result = await _controller.SendCode(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -70,15 +71,21 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task VerifyCode_Failure_ReturnsUnauthorized()
+    public async Task VerifyCode_Failure_ReturnsUnauthorizedWithErrorCode()
     {
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<LoginResponse>("Invalid code"));
+            .Returns(Result.Failure<LoginResponse>(ErrorMessages.InvalidVerificationCode));
 
         var request = new AuthController.VerifyCodeRequest("test@example.com", "000000");
         var result = await _controller.VerifyCode(request, CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedObjectResult>();
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(401);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.InvalidVerificationCode.Message,
+            errorCode = ErrorMessages.InvalidVerificationCode.Code
+        });
     }
 
     [Fact]
@@ -94,15 +101,21 @@ public class AuthControllerTests
     }
 
     [Fact]
-    public async Task GoogleAuth_Failure_ReturnsUnauthorized()
+    public async Task GoogleAuth_Failure_ReturnsUnauthorizedWithErrorCode()
     {
         _mediator.Send(Arg.Any<GoogleAuthCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<LoginResponse>("Google auth failed"));
+            .Returns(Result.Failure<LoginResponse>(ErrorMessages.InvalidGoogleToken));
 
         var request = new AuthController.GoogleAuthRequest("invalid-token");
         var result = await _controller.GoogleAuth(request, CancellationToken.None);
 
-        result.Should().BeOfType<UnauthorizedObjectResult>();
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(401);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.InvalidGoogleToken.Message,
+            errorCode = ErrorMessages.InvalidGoogleToken.Code
+        });
     }
 
     [Fact]
@@ -124,7 +137,7 @@ public class AuthControllerTests
 
         var result = await _controller.RequestDeletion(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -148,6 +161,6 @@ public class AuthControllerTests
         var request = new AuthController.ConfirmDeletionRequest("000000");
         var result = await _controller.ConfirmDeletion(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

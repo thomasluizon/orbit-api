@@ -27,7 +27,7 @@ public class RevokeApiKeyCommandHandler(
 
         var apiKey = keys.Count > 0 ? keys[0] : null;
         if (apiKey is null)
-            return Result.Failure(ErrorMessages.ApiKeyNotFound, ErrorCodes.ApiKeyNotFound);
+            return Result.Failure(ErrorMessages.ApiKeyNotFound);
 
         apiKey.Revoke();
         await unitOfWork.SaveChangesAsync(cancellationToken);

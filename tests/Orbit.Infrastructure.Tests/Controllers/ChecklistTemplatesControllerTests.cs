@@ -50,7 +50,7 @@ public class ChecklistTemplatesControllerTests
 
         var result = await _controller.GetTemplates(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class ChecklistTemplatesControllerTests
         var request = new ChecklistTemplatesController.CreateTemplateRequest("", []);
         var result = await _controller.CreateTemplate(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -97,6 +97,6 @@ public class ChecklistTemplatesControllerTests
 
         var result = await _controller.DeleteTemplate(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

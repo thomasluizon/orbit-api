@@ -72,7 +72,33 @@ public class OrbitDbContext : DbContext
         ConfigureHabitLogEntity(modelBuilder, nullableEncConverter);
         ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
+        ConfigureTagEntity(modelBuilder);
+        ConfigurePushSubscriptionEntity(modelBuilder);
+        ConfigureSentReminderEntity(modelBuilder);
+        ConfigureSentSlipAlertEntity(modelBuilder);
+        ConfigureSentStreakFreezeAlertEntity(modelBuilder);
+        ConfigureProcessedPlayNotificationEntity(modelBuilder);
+        ConfigureNotificationEntity(modelBuilder);
+        ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
+        ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
+        ConfigureReferralEntity(modelBuilder);
+        ConfigureUserAchievementEntity(modelBuilder);
+        ConfigureStreakFreezeEntity(modelBuilder);
+        ConfigureUserSessionEntity(modelBuilder);
+        ConfigureApiKeyEntity(modelBuilder);
+        ConfigurePendingAgentOperationEntity(modelBuilder);
+        ConfigureAgentStepUpChallengeEntity(modelBuilder);
+        ConfigurePendingClarificationEntity(modelBuilder);
+        ConfigureAgentAuditLogEntity(modelBuilder);
+        ConfigureDistributedRateLimitBucketEntity(modelBuilder);
+        ConfigureAppConfigEntity(modelBuilder);
+        ConfigureChecklistTemplateEntity(modelBuilder);
+        ConfigureAppFeatureFlagEntity(modelBuilder);
+        ConfigureContentBlockEntity(modelBuilder);
+    }
 
+    private static void ConfigureTagEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Tag>(entity =>
         {
             entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
@@ -85,64 +111,92 @@ public class OrbitDbContext : DbContext
                     l => l.HasOne(typeof(Habit)).WithMany().HasForeignKey(nameof(Habit) + nameof(Habit.Id)).OnDelete(DeleteBehavior.Cascade),
                     r => r.HasOne(typeof(Tag)).WithMany().HasForeignKey(nameof(Tag) + nameof(Tag.Id)).OnDelete(DeleteBehavior.Cascade));
         });
+    }
 
+    private static void ConfigurePushSubscriptionEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<PushSubscription>(entity =>
         {
             entity.HasIndex(s => s.UserId);
             entity.HasIndex(s => s.Endpoint).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+    }
 
+    private static void ConfigureSentReminderEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<SentReminder>(entity =>
         {
             entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore }).IsUnique();
         });
+    }
 
+    private static void ConfigureSentSlipAlertEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<SentSlipAlert>(entity =>
         {
             entity.HasIndex(a => new { a.HabitId, a.WeekStart }).IsUnique();
         });
+    }
 
+    private static void ConfigureSentStreakFreezeAlertEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<SentStreakFreezeAlert>(entity =>
         {
             entity.HasIndex(a => new { a.UserId, a.FrozenDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+    }
 
+    private static void ConfigureProcessedPlayNotificationEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ProcessedPlayNotification>(entity =>
         {
             entity.HasIndex(p => p.MessageId).IsUnique();
             entity.Property(p => p.MessageId).IsRequired().HasMaxLength(255);
         });
+    }
 
+    private static void ConfigureNotificationEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.HasIndex(n => new { n.UserId, n.IsRead });
+            entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
         });
+    }
 
-        ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
-        ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
-
+    private static void ConfigureReferralEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Referral>(entity =>
         {
             entity.HasIndex(r => r.ReferrerId);
             entity.HasIndex(r => r.ReferredUserId).IsUnique();
         });
+    }
 
+    private static void ConfigureUserAchievementEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<UserAchievement>(entity =>
         {
             entity.HasIndex(ua => new { ua.UserId, ua.AchievementId }).IsUnique();
             entity.HasIndex(ua => ua.UserId);
             entity.Property(ua => ua.AchievementId).HasMaxLength(50);
         });
+    }
 
+    private static void ConfigureStreakFreezeEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<StreakFreeze>(entity =>
         {
             entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+    }
 
+    private static void ConfigureUserSessionEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<UserSession>(entity =>
         {
             entity.HasIndex(s => s.TokenHash).IsUnique();
@@ -150,7 +204,10 @@ public class OrbitDbContext : DbContext
             entity.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(s => s.TokenHash).HasMaxLength(128);
         });
+    }
 
+    private static void ConfigureApiKeyEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ApiKey>(entity =>
         {
             entity.HasIndex(k => k.KeyPrefix);
@@ -166,7 +223,10 @@ public class OrbitDbContext : DbContext
                 .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<string>());
         });
+    }
 
+    private static void ConfigurePendingAgentOperationEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<PendingAgentOperationState>(entity =>
         {
             entity.HasIndex(item => new { item.UserId, item.CapabilityId });
@@ -182,13 +242,19 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.RiskClass).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.ConfirmationRequirement).HasConversion<string>().HasMaxLength(32);
         });
+    }
 
+    private static void ConfigureAgentStepUpChallengeEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<AgentStepUpChallengeState>(entity =>
         {
             entity.HasIndex(item => new { item.UserId, item.PendingOperationId, item.CreatedAtUtc });
             entity.Property(item => item.CodeHash).HasMaxLength(64);
         });
+    }
 
+    private static void ConfigurePendingClarificationEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<PendingClarification>(entity =>
         {
             entity.HasIndex(item => new { item.UserId, item.CreatedAtUtc });
@@ -200,7 +266,10 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.QuickActionsJson).HasColumnType(JsonbColumnType);
             entity.HasOne<User>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
         });
+    }
 
+    private static void ConfigureAgentAuditLogEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<AgentAuditLog>(entity =>
         {
             entity.HasIndex(item => new { item.UserId, item.CreatedAtUtc });
@@ -220,14 +289,20 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.OutcomeStatus).HasConversion<string>().HasMaxLength(32);
             entity.Property(item => item.ShadowPolicyDecision).HasConversion<string>().HasMaxLength(32);
         });
+    }
 
+    private static void ConfigureDistributedRateLimitBucketEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<DistributedRateLimitBucket>(entity =>
         {
             entity.HasIndex(item => new { item.PolicyName, item.PartitionKey, item.WindowStartUtc }).IsUnique();
             entity.Property(item => item.PolicyName).HasMaxLength(64);
             entity.Property(item => item.PartitionKey).HasMaxLength(256);
         });
+    }
 
+    private static void ConfigureAppConfigEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<AppConfig>(entity =>
         {
             entity.HasKey(c => c.Key);
@@ -242,7 +317,10 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
                 AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"));
         });
+    }
 
+    private static void ConfigureChecklistTemplateEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ChecklistTemplate>(entity =>
         {
             entity.HasIndex(ct => ct.UserId);
@@ -260,7 +338,10 @@ public class OrbitDbContext : DbContext
                         c => JsonSerializer.Serialize(c, (JsonSerializerOptions?)null).GetHashCode(),
                         c => JsonSerializer.Deserialize<List<string>>(JsonSerializer.Serialize(c, (JsonSerializerOptions?)null), (JsonSerializerOptions?)null)!));
         });
+    }
 
+    private static void ConfigureAppFeatureFlagEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<AppFeatureFlag>(entity =>
         {
             entity.HasKey(f => f.Key);
@@ -284,7 +365,10 @@ public class OrbitDbContext : DbContext
                 new { Key = "calendar_integration", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Google Calendar integration", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) },
                 new { Key = "api_keys", Enabled = true, PlanRequirement = (string?)"Pro", Description = (string?)"Personal API keys", UpdatedAtUtc = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc) });
         });
+    }
 
+    private static void ConfigureContentBlockEntity(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<ContentBlock>(entity =>
         {
             entity.HasIndex(cb => new { cb.Key, cb.Locale }).IsUnique();

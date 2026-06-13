@@ -91,7 +91,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
             return $"Error: {result.Error}";
 
         var g = result.Value;
-        var info = $"Title: {g.Title}\nID: {g.Id}\n" +
+        var goalSummary = $"Title: {g.Title}\nID: {g.Id}\n" +
                    $"Progress: {g.CurrentValue}/{g.TargetValue} {g.Unit} ({g.ProgressPercentage:F1}%)\n" +
                    $"Status: {g.Status}\n" +
                    (g.Description is not null ? $"Description: {g.Description}\n" : "") +
@@ -100,7 +100,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
                    (g.CompletedAtUtc is not null ? $"Completed: {g.CompletedAtUtc:yyyy-MM-dd}\n" : "") +
                    (g.LinkedHabits.Count > 0 ? $"Linked habits: {string.Join(", ", g.LinkedHabits.Select(h => $"{h.Title} ({h.Id})"))}\n" : "") +
                    (g.ProgressHistory.Count > 0 ? $"Recent progress: {string.Join(", ", g.ProgressHistory.Take(5).Select(p => $"{p.PreviousValue}->{p.Value}"))}\n" : "");
-        return info;
+        return goalSummary;
     }
 
     [McpServerTool(Name = "update_goal"), Description("Update a goal's title, description, target value, unit, or deadline.")]
@@ -231,7 +231,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
             return $"Error: {result.Error}";
 
         var m = result.Value;
-        var info = $"Metrics for goal {goalId}:\n" +
+        var metricsSummary = $"Metrics for goal {goalId}:\n" +
                    $"Progress: {m.ProgressPercentage:F1}%\n" +
                    $"Velocity: {m.VelocityPerDay:F2}/day\n" +
                    $"Tracking: {m.TrackingStatus}\n" +
@@ -240,12 +240,12 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 
         if (m.HabitAdherence.Count > 0)
         {
-            info += "Linked habit performance:\n" +
+            metricsSummary += "Linked habit performance:\n" +
                     string.Join("\n", m.HabitAdherence.Select(h =>
                         $"  - {h.HabitTitle}: weekly {h.WeeklyCompletionRate:F0}%, streak {h.CurrentStreak}d"));
         }
 
-        return info;
+        return metricsSummary;
     }
 
     [McpServerTool(Name = "get_goal_review"), Description("Get an AI-generated review of all active goals. Requires Pro subscription.")]

@@ -294,7 +294,6 @@ public static class OAuthLoginPage
         let userEmail = '';
         let resendTimer = null;
 
-        // Code input behavior
         const codeInputs = document.querySelectorAll('#code-inputs input');
         codeInputs.forEach((input, i) => {
             input.addEventListener('input', (e) => {
@@ -435,7 +434,6 @@ public static class OAuthLoginPage
             }
         }
 
-        // Google Sign-In
         function googleSignIn() {
             if (!googleClientId) { showError('Google sign-in is not configured'); return; }
             google.accounts.id.initialize({
@@ -477,7 +475,6 @@ public static class OAuthLoginPage
             }
         }
 
-        // Enter key on email
         document.getElementById('email').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendCode();
         });

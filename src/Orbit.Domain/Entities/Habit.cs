@@ -106,10 +106,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public static Result<Habit> Create(HabitCreateParams p)
     {
         if (p.UserId == Guid.Empty)
-            return Result.Failure<Habit>("User ID is required.");
+            return Result.Failure<Habit>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(p.Title))
-            return Result.Failure<Habit>("Title is required.");
+            return Result.Failure<Habit>(DomainErrors.TitleRequired);
 
         var emojiValidation = ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
@@ -165,10 +165,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public Result<HabitLog> Log(DateOnly date, string? note = null, bool advanceDueDate = true)
     {
         if (IsCompleted)
-            return Result.Failure<HabitLog>("Cannot log a completed habit.");
+            return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
 
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date))
-            return Result.Failure<HabitLog>("This habit has already been logged for this date.");
+            return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
 
         var log = HabitLog.Create(Id, date, 1, note);
         _logs.Add(log);
@@ -290,10 +290,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public Result<HabitLog> SkipFlexible(DateOnly date)
     {
         if (!IsFlexible)
-            return Result.Failure<HabitLog>("Only flexible habits can be skipped this way.");
+            return Result.Failure<HabitLog>(DomainErrors.OnlyFlexibleHabitsSkippable);
 
         if (FrequencyUnit is null)
-            return Result.Failure<HabitLog>("Cannot skip a one-time task.");
+            return Result.Failure<HabitLog>(DomainErrors.CannotSkipOneTimeTask);
 
         var log = HabitLog.Create(Id, date, 0, null);
         _logs.Add(log);
@@ -305,7 +305,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     {
         var log = _logs.Find(l => l.Date == date && l.Value > 0);
         if (log is null)
-            return Result.Failure<HabitLog>("No log found for this date.");
+            return Result.Failure<HabitLog>(DomainErrors.LogNotFoundForDate);
 
         _logs.Remove(log);
 
@@ -325,7 +325,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public Result Update(HabitUpdateParams p)
     {
         if (string.IsNullOrWhiteSpace(p.Title))
-            return Result.Failure("Title is required.");
+            return Result.Failure(DomainErrors.TitleRequired);
 
         var validationError = ValidateUpdateParams(p);
         if (validationError is not null)
@@ -338,7 +338,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         return Result.Success();
     }
 
-    private string? ValidateUpdateParams(HabitUpdateParams p)
+    private AppError? ValidateUpdateParams(HabitUpdateParams p)
     {
         var effectiveIsGeneral = p.IsGeneral ?? IsGeneral;
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
@@ -351,10 +351,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var effectiveDueEndTime = p.DueEndTime ?? DueEndTime;
         var effectiveDueTime = p.DueTime ?? DueTime;
         if (effectiveDueEndTime.HasValue && effectiveDueTime.HasValue && effectiveDueEndTime.Value <= effectiveDueTime.Value)
-            return "End time must be after start time.";
+            return DomainErrors.EndTimeBeforeStartTime;
 
         if (p.EndDate.HasValue && p.EndDate.Value < (p.DueDate ?? DueDate))
-            return "End date must be on or after the start date.";
+            return DomainErrors.EndDateBeforeStartDate;
 
         var emojiValidation = ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
@@ -453,76 +453,76 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public void RemoveGoal(Goal goal) => _goals.Remove(goal);
 
-    private static string? ValidateScheduleOptions(
+    private static AppError? ValidateScheduleOptions(
         bool isGeneral, bool isFlexible, bool isBadHabit,
         FrequencyUnit? frequencyUnit, int? frequencyQuantity,
         IReadOnlyList<System.DayOfWeek>? days)
     {
         if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
-            return "General habits cannot have a frequency.";
+            return DomainErrors.GeneralHabitHasFrequency;
 
         if (isGeneral && isBadHabit)
-            return "General habits cannot be bad habits.";
+            return DomainErrors.GeneralHabitIsBadHabit;
 
         if (frequencyQuantity is not null && frequencyQuantity <= 0)
-            return "Frequency quantity must be greater than 0.";
+            return DomainErrors.FrequencyQuantityInvalid;
 
         if (isFlexible && frequencyUnit is null)
-            return "Flexible habits must have a frequency unit.";
+            return DomainErrors.FlexibleNeedsFrequencyUnit;
 
         if (isFlexible && days?.Count > 0)
-            return "Flexible habits cannot have specific days set.";
+            return DomainErrors.FlexibleHasDays;
 
         if (!isFlexible && days?.Count > 0 && frequencyQuantity != 1)
-            return "Days can only be set when frequency quantity is 1.";
+            return DomainErrors.DaysRequireQuantityOne;
 
         return null;
     }
 
-    private static string? ValidateDateOptions(
+    private static AppError? ValidateDateOptions(
         TimeOnly? dueTime, TimeOnly? dueEndTime,
         DateOnly? endDate, FrequencyUnit? frequencyUnit,
         bool isGeneral, DateOnly? dueDate)
     {
         if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
-            return "End time must be after start time.";
+            return DomainErrors.EndTimeBeforeStartTime;
 
         if (endDate.HasValue && frequencyUnit is null && !isGeneral)
-            return "One-time tasks cannot have an end date.";
+            return DomainErrors.OneTimeTaskHasEndDate;
 
         var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
         if (endDate.HasValue && endDate.Value < effectiveDueDate)
-            return "End date must be on or after the start date.";
+            return DomainErrors.EndDateBeforeStartDate;
 
         return null;
     }
 
-    private static string? ValidateScheduledReminders(
+    private static AppError? ValidateScheduledReminders(
         IReadOnlyList<ScheduledReminderTime>? scheduledReminders)
     {
         if (scheduledReminders is null)
             return null;
 
         if (scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
-            return $"A habit can have at most {DomainConstants.MaxScheduledReminders} scheduled reminders.";
+            return DomainErrors.MaxScheduledReminders.Format(DomainConstants.MaxScheduledReminders);
 
         var hasDuplicates = scheduledReminders
             .GroupBy(sr => (sr.When, sr.Time))
             .Any(g => g.Count() > 1);
 
         if (hasDuplicates)
-            return "Scheduled reminders must not contain duplicate entries.";
+            return DomainErrors.DuplicateScheduledReminders;
 
         return null;
     }
 
-    private static string? ValidateEmoji(string? emoji)
+    private static AppError? ValidateEmoji(string? emoji)
     {
         if (emoji is null)
             return null;
 
         if (emoji.Trim().Length > DomainConstants.MaxHabitEmojiLength)
-            return $"Habit emoji must not exceed {DomainConstants.MaxHabitEmojiLength} characters.";
+            return DomainErrors.EmojiTooLong.Format(DomainConstants.MaxHabitEmojiLength);
 
         return null;
     }

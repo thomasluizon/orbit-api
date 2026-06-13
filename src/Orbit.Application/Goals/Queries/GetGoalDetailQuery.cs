@@ -36,7 +36,7 @@ public class GetGoalDetailQueryHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 

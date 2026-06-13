@@ -46,7 +46,7 @@ Branch protection on `main`: no direct pushes, no force pushes, no branch deleti
 
 - xUnit + FluentAssertions. Unit tests only — the integration suite was removed as outdated; do not add integration tests or a real-DB harness.
 - Every new feature needs unit tests: commands, queries, validators, domain logic.
-- Test accounts bypass email verification via `REVIEWER_TEST_EMAIL` / `QA_TEST_CODE` env vars — see `tests/CLAUDE.md`.
+- Test accounts bypass email verification via the `TEST_ACCOUNTS` env var (`email:code` pairs) — see `tests/CLAUDE.md`.
 
 ## Deployment
 

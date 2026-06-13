@@ -51,7 +51,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetHabitScheduleQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<PaginatedResponse<HabitScheduleItem>>("Invalid date range"));
         var result = await _controller.GetHabits(new HabitsController.GetHabitsFilterRequest());
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetCalendarMonthQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<CalendarMonthResponse>("Error"));
         var result = await _controller.GetCalendarMonth(DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)));
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<DailySummaryResponse>("Error"));
         var result = await _controller.GetDailySummary(DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)));
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<HabitDetailResponse>("Habit not found"));
         var result = await _controller.GetHabitById(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetHabitFullDetailQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<HabitFullDetailResponse>("Habit not found"));
         var result = await _controller.GetHabitDetail(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<CreateHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<Guid>("Validation failed"));
         var result = await _controller.CreateHabit(new HabitsController.CreateHabitRequest("Test", null, null, null), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<LogHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<LogHabitResponse>("Habit not found"));
         var result = await _controller.LogHabit(Guid.NewGuid(), null, CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<SkipHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
         var result = await _controller.SkipHabit(Guid.NewGuid(), null, CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<UpdateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
         var result = await _controller.UpdateHabit(Guid.NewGuid(), new HabitsController.UpdateHabitRequest("Updated", null, null, null), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<UpdateChecklistCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
         var result = await _controller.UpdateChecklist(Guid.NewGuid(), new HabitsController.UpdateChecklistRequest([]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -260,29 +260,18 @@ public class HabitsControllerTests
     }
 
     [Fact]
-    public async Task DeleteHabit_Failure_ReturnsBadRequest()
+    public async Task DeleteHabit_Failure_ReturnsBadRequestWithErrorCode()
     {
-        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
+        _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure(ErrorMessages.HabitNotFound));
         var result = await _controller.DeleteHabit(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
-    }
-
-    [Fact]
-    public async Task GetAllLogs_Success_ReturnsOk()
-    {
-        _mediator.Send(Arg.Any<GetAllHabitLogsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new Dictionary<Guid, List<HabitLogResponse>>()));
-        var result = await _controller.GetAllLogs(DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)), CancellationToken.None);
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task GetAllLogs_Failure_ReturnsBadRequest()
-    {
-        _mediator.Send(Arg.Any<GetAllHabitLogsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<Dictionary<Guid, List<HabitLogResponse>>>("Error"));
-        var result = await _controller.GetAllLogs(DateOnly.FromDateTime(DateTime.UtcNow), DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        var objectResult = result.Should().BeAssignableTo<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.HabitNotFound.Message,
+            errorCode = ErrorMessages.HabitNotFound.Code
+        });
     }
 
     [Fact]
@@ -300,7 +289,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetHabitLogsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<IReadOnlyList<HabitLogResponse>>("Error"));
         var result = await _controller.GetLogs(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -318,7 +307,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<GetHabitMetricsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<HabitMetrics>("Error"));
         var result = await _controller.GetMetrics(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -379,7 +368,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<BulkCreateHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<BulkCreateResult>("Error"));
         var result = await _controller.BulkCreate(new HabitsController.BulkCreateHabitsRequest([]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -397,7 +386,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<BulkDeleteHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<BulkDeleteResult>("Error"));
         var result = await _controller.BulkDelete(new HabitsController.BulkDeleteHabitsRequest([Guid.NewGuid()]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -415,7 +404,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<BulkLogHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<BulkLogResult>("Error"));
         var result = await _controller.BulkLog(new HabitsController.BulkLogHabitsRequest([]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -433,7 +422,7 @@ public class HabitsControllerTests
         _mediator.Send(Arg.Any<BulkSkipHabitsCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<BulkSkipResult>("Error"));
         var result = await _controller.BulkSkip(new HabitsController.BulkSkipHabitsRequest([]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -449,7 +438,7 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<ReorderHabitsCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
         var result = await _controller.ReorderHabits(new HabitsController.ReorderHabitsRequest([]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -465,7 +454,7 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
         var result = await _controller.MoveHabitParent(Guid.NewGuid(), new HabitsController.MoveHabitParentRequest(null), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -481,7 +470,7 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<DuplicateHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure<Guid>("Error"));
         var result = await _controller.DuplicateHabit(Guid.NewGuid(), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -514,6 +503,6 @@ public class HabitsControllerTests
     {
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>()).Returns(Result.Failure("Error"));
         var result = await _controller.LinkGoals(Guid.NewGuid(), new HabitsController.LinkGoalsRequest([Guid.NewGuid()]), CancellationToken.None);
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

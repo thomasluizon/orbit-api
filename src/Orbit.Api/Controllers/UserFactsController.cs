@@ -43,9 +43,7 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
         if (result.IsSuccess)
             LogUserFactDeleted(logger, id, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? NoContent()
-            : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent(), StatusCodes.Status404NotFound);
     }
 
     [HttpDelete("bulk")]

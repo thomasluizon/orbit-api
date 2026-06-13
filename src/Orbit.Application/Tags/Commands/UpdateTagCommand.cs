@@ -23,14 +23,14 @@ public class UpdateTagCommandHandler(
             cancellationToken: cancellationToken);
 
         if (tag is null)
-            return Result.Failure(ErrorMessages.TagNotFound, ErrorCodes.TagNotFound);
+            return Result.Failure(ErrorMessages.TagNotFound);
 
         var existing = await tagRepository.FindAsync(
             t => t.UserId == request.UserId && t.Name == request.Name.Trim() && t.Id != request.TagId,
             cancellationToken);
 
         if (existing.Count > 0)
-            return Result.Failure("A tag with this name already exists.");
+            return Result.Failure(ErrorMessages.DuplicateTagName);
 
         var result = tag.Update(request.Name, request.Color);
         if (result.IsFailure)

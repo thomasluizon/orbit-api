@@ -50,7 +50,7 @@ public class TagsControllerTests
 
         var result = await _controller.GetTags(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class TagsControllerTests
         var request = new TagsController.CreateTagRequest("", "#FF0000");
         var result = await _controller.CreateTag(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class TagsControllerTests
         var request = new TagsController.UpdateTagRequest("Updated", "#00FF00");
         var result = await _controller.UpdateTag(Guid.NewGuid(), request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class TagsControllerTests
 
         var result = await _controller.DeleteTag(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -145,6 +145,6 @@ public class TagsControllerTests
         var request = new TagsController.AssignTagsRequest([Guid.NewGuid()]);
         var result = await _controller.AssignTags(Guid.NewGuid(), request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

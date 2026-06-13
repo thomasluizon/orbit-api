@@ -41,12 +41,12 @@ public class CreateSubHabitCommandHandler(
             cancellationToken: cancellationToken);
 
         if (parent is null)
-            return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound, ErrorCodes.ParentHabitNotFound);
+            return Result.Failure<Guid>(ErrorMessages.ParentHabitNotFound);
 
         var maxDepth = await appConfigService.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
         var depth = await GetDepthAsync(parent, habitRepository, cancellationToken);
         if (depth >= maxDepth - 1)
-            return Result.Failure<Guid>($"Maximum nesting depth reached ({maxDepth} levels).");
+            return Result.Failure<Guid>(ErrorMessages.MaxDepthReached.Format(maxDepth));
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var childDueDate = request.DueDate
@@ -85,7 +85,7 @@ public class CreateSubHabitCommandHandler(
             Position: nextPosition));
 
         if (childResult.IsFailure)
-            return Result.Failure<Guid>(childResult.Error);
+            return childResult.PropagateError<Guid>();
 
         var child = childResult.Value;
 

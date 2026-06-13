@@ -27,7 +27,7 @@ public partial class NotificationController(
     {
         var query = new GetNotificationsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPut("{id:guid}/read")]
@@ -38,7 +38,7 @@ public partial class NotificationController(
     {
         var command = new MarkNotificationReadCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent(), StatusCodes.Status404NotFound);
     }
 
     [HttpPut("read-all")]
@@ -49,7 +49,7 @@ public partial class NotificationController(
     {
         var command = new MarkAllNotificationsReadCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpDelete("{id:guid}")]
@@ -60,7 +60,7 @@ public partial class NotificationController(
     {
         var command = new DeleteNotificationCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpDelete("all")]
@@ -71,7 +71,7 @@ public partial class NotificationController(
     {
         var command = new DeleteAllNotificationsCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPost("subscribe")]
@@ -96,7 +96,7 @@ public partial class NotificationController(
             return Ok();
         }
 
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPost("unsubscribe")]
@@ -113,7 +113,7 @@ public partial class NotificationController(
         if (result.IsSuccess)
             LogPushSubscriptionRemoved(logger, HttpContext.GetUserId());
 
-        return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult();
     }
 
     [HttpPost("test-push")]
@@ -126,7 +126,7 @@ public partial class NotificationController(
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return result.ToErrorResult();
 
         if (result.Value.Status == "failed")
             LogTestPushFailed(logger, HttpContext.GetUserId());

@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -23,7 +24,7 @@ public class DismissCalendarSuggestionCommandHandler(
             cancellationToken: cancellationToken);
 
         if (suggestion is null)
-            return Result.Failure("Suggestion not found.");
+            return Result.Failure(ErrorMessages.SuggestionNotFound);
 
         suggestion.MarkDismissed(DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);

@@ -26,7 +26,7 @@ public partial class CreateCheckoutCommandHandler(
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
         if (user is null)
-            return Result.Failure<CheckoutResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<CheckoutResponse>(ErrorMessages.UserNotFound);
 
         var countryCode = await SubscriptionPricingCountryResolver.ResolveCountryCodeAsync(
             user,
@@ -39,7 +39,7 @@ public partial class CreateCheckoutCommandHandler(
         var allowedIntervals = new[] { "monthly", "yearly" };
         var interval = request.Interval?.ToLower();
         if (string.IsNullOrEmpty(interval) || !allowedIntervals.Contains(interval))
-            return Result.Failure<CheckoutResponse>(ErrorMessages.InvalidBillingInterval, ErrorCodes.InvalidBillingInterval);
+            return Result.Failure<CheckoutResponse>(ErrorMessages.InvalidBillingInterval);
 
         var priceId = priceResolver.Resolve(interval, isBrazil);
 
@@ -73,7 +73,7 @@ public partial class CreateCheckoutCommandHandler(
         catch (BillingProviderException ex)
         {
             LogStripeCheckoutError(logger, ex, request.UserId);
-            return Result.Failure<CheckoutResponse>("Payment service temporarily unavailable");
+            return Result.Failure<CheckoutResponse>(ErrorMessages.PaymentServiceUnavailable);
         }
     }
 

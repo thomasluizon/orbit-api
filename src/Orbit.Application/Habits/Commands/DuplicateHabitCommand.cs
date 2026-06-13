@@ -28,7 +28,7 @@ public class DuplicateHabitCommandHandler(
 
         var original = allHabits.FirstOrDefault(h => h.Id == request.HabitId);
         if (original is null)
-            return Result.Failure<Guid>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure<Guid>(ErrorMessages.HabitNotFound);
 
         var canCreate = await payGateService.CanCreateHabits(request.UserId, 1, cancellationToken);
         if (!canCreate.IsSuccess) return canCreate.PropagateError<Guid>();
@@ -50,7 +50,7 @@ public class DuplicateHabitCommandHandler(
 
         var rootCopy = CloneHabit(original, original.ParentHabitId, nextRootPosition, completionLogsBySourceId);
         if (rootCopy.IsFailure)
-            return Result.Failure<Guid>(rootCopy.Error);
+            return rootCopy.PropagateError<Guid>();
 
         await habitRepository.AddAsync(rootCopy.Value, cancellationToken);
 
@@ -152,6 +152,6 @@ public class DuplicateHabitCommandHandler(
             return created;
 
         var replayed = created.Value.Log(completionLog.Date, completionLog.Note);
-        return replayed.IsFailure ? Result.Failure<Habit>(replayed.Error) : created;
+        return replayed.IsFailure ? replayed.PropagateError<Habit>() : created;
     }
 }

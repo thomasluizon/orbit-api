@@ -1,9 +1,11 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -43,19 +45,28 @@ public partial class HabitDueDateAdvancementService(
         }
     }
 
+    internal static DateOnly ConservativeCutoffUtc() =>
+        DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+
+    internal static Expression<Func<Habit, bool>> StaleBadHabitFilter(DateOnly cutoff) =>
+        h => !h.IsCompleted
+            && h.FrequencyUnit != null
+            && h.FrequencyQuantity != null
+            && !h.IsFlexible
+            && h.IsBadHabit
+            && h.DueDate < cutoff;
+
+    internal static bool ShouldAdvanceForUserToday(Habit habit, DateOnly userToday) =>
+        habit.DueDate < userToday;
+
     internal async Task AdvanceStaleDueDates(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+        var cutoff = ConservativeCutoffUtc();
         var habits = await dbContext.Habits
-            .Where(h => !h.IsCompleted
-                && h.FrequencyUnit != null
-                && h.FrequencyQuantity != null
-                && !h.IsFlexible
-                && h.IsBadHabit
-                && h.DueDate < cutoff)
+            .Where(StaleBadHabitFilter(cutoff))
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;
@@ -74,7 +85,7 @@ public partial class HabitDueDateAdvancementService(
             var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
             var userToday = DateOnly.FromDateTime(userNow);
 
-            if (habit.DueDate >= userToday) continue;
+            if (!ShouldAdvanceForUserToday(habit, userToday)) continue;
 
             habit.CatchUpDueDate(userToday);
             advanced++;

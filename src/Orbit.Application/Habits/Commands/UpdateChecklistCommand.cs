@@ -23,7 +23,7 @@ public class UpdateChecklistCommandHandler(
             cancellationToken: cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         habit.UpdateChecklist(request.ChecklistItems);
 

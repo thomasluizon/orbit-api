@@ -29,13 +29,13 @@ public partial class GoogleAuthCommandHandler(
     {
         var tokenResult = await ValidateGoogleTokenAsync(request.AccessToken, cancellationToken);
         if (tokenResult.IsFailure)
-            return Result.Failure<LoginResponse>(tokenResult.Error);
+            return tokenResult.PropagateError<LoginResponse>();
 
         var (email, name) = tokenResult.Value;
 
         var findResult = await FindOrCreateUserAsync(email, name, request.Language, cancellationToken);
         if (findResult.IsFailure)
-            return Result.Failure<LoginResponse>(findResult.Error);
+            return findResult.PropagateError<LoginResponse>();
 
         var (user, isNewUser) = findResult.Value;
 
@@ -46,7 +46,7 @@ public partial class GoogleAuthCommandHandler(
 
         var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)
-            return Result.Failure<LoginResponse>(sessionResult.Error, sessionResult.ErrorCode ?? ErrorCodes.SessionCreationFailed);
+            return sessionResult.PropagateError<LoginResponse>();
 
         return Result.Success(new LoginResponse(
             user.Id,
@@ -66,7 +66,7 @@ public partial class GoogleAuthCommandHandler(
 
         var response = await client.SendAsync(httpRequest, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            return Result.Failure<(string, string)>("Invalid or expired Google sign-in token");
+            return Result.Failure<(string, string)>(ErrorMessages.InvalidGoogleToken);
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         using var doc = JsonDocument.Parse(json);
@@ -74,7 +74,7 @@ public partial class GoogleAuthCommandHandler(
 
         var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
         if (string.IsNullOrEmpty(email))
-            return Result.Failure<(string, string)>("Could not retrieve email from Google account");
+            return Result.Failure<(string, string)>(ErrorMessages.GoogleEmailUnavailable);
 
         var name = ExtractNameFromMetadata(root);
 
@@ -107,7 +107,7 @@ public partial class GoogleAuthCommandHandler(
 
         var createResult = User.Create(name, email);
         if (createResult.IsFailure)
-            return Result.Failure<(User, bool)>(createResult.Error);
+            return createResult.PropagateError<(User, bool)>();
 
         user = createResult.Value;
         user.SetLanguage(language);

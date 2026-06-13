@@ -15,7 +15,7 @@ public class RefreshSessionCommandHandler(IAuthSessionService authSessionService
     {
         var result = await authSessionService.RefreshSessionAsync(request.RefreshToken, cancellationToken);
         if (result.IsFailure)
-            return Result.Failure<RefreshSessionResponse>(result.Error, result.ErrorCode ?? ErrorCodes.InvalidSession);
+            return result.PropagateError<RefreshSessionResponse>();
 
         return Result.Success(new RefreshSessionResponse(
             result.Value.AccessToken,

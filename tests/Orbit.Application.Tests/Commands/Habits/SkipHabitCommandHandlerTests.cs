@@ -103,7 +103,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.HabitNotFound);
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
     }
 
@@ -121,7 +121,7 @@ public class SkipHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.HabitNotOwned);
+        result.Error.Should().Be(ErrorMessages.HabitNotOwned.Message);
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotOwned);
     }
 
@@ -241,6 +241,41 @@ public class SkipHabitCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         goal.CurrentValue.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_FlexibleHabit_WithRemainingCompletions_SkipsAndAddsLog()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Workout", FrequencyUnit.Week, 3,
+            IsFlexible: true, DueDate: Today)).Value;
+        SetupHabitFound(habit);
+
+        var command = new SkipHabitCommand(UserId, habit.Id, Today);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FlexibleHabit_AllInstancesDoneInWindow_ReturnsFailure()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Workout", FrequencyUnit.Week, 1,
+            IsFlexible: true, DueDate: Today)).Value;
+        habit.Log(Today, advanceDueDate: false);
+        SetupHabitFound(habit);
+
+        var command = new SkipHabitCommand(UserId, habit.Id, Today);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.AllInstancesDone);
+        await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
     }
 
     private void SetupHabitFound(Habit habit)

@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -36,9 +35,6 @@ public class GetCalendarMonthQueryHandler(
 {
     public async Task<Result<CalendarMonthResponse>> Handle(GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
-        if (request.DateTo.DayNumber - request.DateFrom.DayNumber > AppConstants.MaxCalendarRangeDays)
-            return Result.Failure<CalendarMonthResponse>("Date range must not exceed 62 days.");
-
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);

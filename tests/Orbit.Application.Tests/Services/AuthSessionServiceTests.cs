@@ -123,7 +123,7 @@ public class AuthSessionServiceTests
         var refreshResult = await _service.RefreshSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
 
         refreshResult.IsFailure.Should().BeTrue();
-        refreshResult.Error.Should().Be(ErrorMessages.InvalidSession);
+        refreshResult.Error.Should().Be(ErrorMessages.InvalidSession.Message);
         refreshResult.ErrorCode.Should().Be(ErrorCodes.InvalidSession);
     }
 

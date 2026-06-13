@@ -161,7 +161,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitWidgetQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet]
@@ -186,7 +186,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             filter.PageSize,
             filter.IncludeGeneral ?? false);
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("calendar-month")]
@@ -200,7 +200,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetCalendarMonthQuery(HttpContext.GetUserId(), dateFrom, dateTo);
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("summary")]
@@ -265,7 +265,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitByIdQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
     }
 
     [HttpGet("{id:guid}/detail")]
@@ -276,7 +276,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitFullDetailQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
     }
 
     [HttpPost]
@@ -337,9 +337,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("{id:guid}/skip")]
@@ -393,9 +391,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("{id:guid}/checklist")]
@@ -414,9 +410,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpDelete("{id:guid}")]
@@ -434,21 +428,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             return NoContent();
         }
 
-        return BadRequest(new { error = result.Error });
-    }
-
-    [HttpGet("logs")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetAllLogs(
-        [FromQuery] DateOnly dateFrom,
-        [FromQuery] DateOnly dateTo,
-        CancellationToken cancellationToken)
-    {
-        var query = new GetAllHabitLogsQuery(HttpContext.GetUserId(), dateFrom, dateTo);
-        var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpGet("{id:guid}/logs")]
@@ -459,7 +439,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitLogsQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("{id:guid}/metrics")]
@@ -470,7 +450,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitMetricsQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("bulk")]
@@ -514,9 +494,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         if (result.IsSuccess)
             LogBulkDeleted(logger, request.HabitIds.Count, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("bulk/log")]
@@ -537,9 +515,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         if (result.IsSuccess)
             LogBulkLogged(logger, request.Items.Count, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("bulk/skip")]
@@ -560,9 +536,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         if (result.IsSuccess)
             LogBulkSkipped(logger, request.Items.Count, HttpContext.GetUserId());
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPut("reorder")]
@@ -580,9 +554,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new ReorderHabitsCommand(HttpContext.GetUserId(), positions);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("{id:guid}/parent")]
@@ -597,9 +569,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new MoveHabitParentCommand(HttpContext.GetUserId(), id, request.ParentId);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? NoContent()
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPost("{id:guid}/duplicate")]
@@ -613,9 +583,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         var command = new DuplicateHabitCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess
-            ? CreatedAtAction(nameof(GetHabitById), new { id = result.Value }, new { id = result.Value })
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(
+            v => CreatedAtAction(nameof(GetHabitById), new { id = v }, new { id = v }));
     }
 
     [HttpPost("{parentId:guid}/sub-habits")]

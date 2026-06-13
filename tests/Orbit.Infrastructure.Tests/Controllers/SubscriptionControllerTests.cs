@@ -71,7 +71,7 @@ public class SubscriptionControllerTests
         var request = new SubscriptionController.CreateCheckoutRequest("invalid");
         var result = await _controller.CreateCheckout(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -233,11 +233,11 @@ public class SubscriptionControllerTests
     public async Task GetBillingDetails_NoActiveSubscription_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetBillingDetailsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription, ErrorCodes.NoActiveSubscription));
+            .Returns(Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription));
 
         var result = await _controller.GetBillingDetails(CancellationToken.None);
 
-        var notFound = result.Should().BeOfType<NotFoundObjectResult>().Subject;
+        var notFound = result.Should().BeAssignableTo<ObjectResult>().Subject;
         notFound.StatusCode.Should().Be(404);
     }
 

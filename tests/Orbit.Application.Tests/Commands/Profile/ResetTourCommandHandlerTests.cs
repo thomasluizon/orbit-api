@@ -62,7 +62,7 @@ public class ResetTourCommandHandlerTests
         var result = await _handler.Handle(new ResetTourCommand(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.UserNotFound);
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.UserNotFound);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }

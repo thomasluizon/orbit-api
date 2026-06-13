@@ -73,7 +73,7 @@ public partial class ApiKeysController(IMediator mediator, ILogger<ApiKeysContro
             LogApiKeyRevoked(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
-        return NotFound(new { error = result.Error });
+        return result.ToErrorResult(StatusCodes.Status404NotFound);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "API key created {KeyId} by user {UserId}")]

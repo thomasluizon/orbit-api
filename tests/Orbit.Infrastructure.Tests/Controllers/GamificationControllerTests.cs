@@ -93,7 +93,7 @@ public class GamificationControllerTests
 
         var result = await _controller.GetStreakInfo(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

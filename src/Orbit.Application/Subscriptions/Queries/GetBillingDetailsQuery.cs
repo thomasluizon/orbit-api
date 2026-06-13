@@ -18,16 +18,16 @@ public partial class GetBillingDetailsQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<BillingDetailsResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<BillingDetailsResponse>(ErrorMessages.UserNotFound);
 
         if (string.IsNullOrEmpty(user.StripeSubscriptionId) || string.IsNullOrEmpty(user.StripeCustomerId))
-            return Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription, ErrorCodes.NoActiveSubscription);
+            return Result.Failure<BillingDetailsResponse>(ErrorMessages.NoActiveSubscription);
 
         try
         {
             var subscription = await billingService.GetSubscriptionDetailsAsync(user.StripeSubscriptionId, cancellationToken);
             if (subscription is null)
-                return Result.Failure<BillingDetailsResponse>("Subscription not found");
+                return Result.Failure<BillingDetailsResponse>(ErrorMessages.SubscriptionNotFound);
 
             var invoices = await billingService.ListInvoicesAsync(user.StripeCustomerId, limit: 12, cancellationToken);
 
@@ -60,7 +60,7 @@ public partial class GetBillingDetailsQueryHandler(
         catch (BillingProviderException ex)
         {
             LogFetchBillingDetailsFailed(logger, ex, request.UserId);
-            return Result.Failure<BillingDetailsResponse>("Failed to load billing details from payment provider");
+            return Result.Failure<BillingDetailsResponse>(ErrorMessages.BillingDetailsUnavailable);
         }
     }
 

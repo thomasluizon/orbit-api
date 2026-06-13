@@ -8,6 +8,7 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -178,7 +179,7 @@ public class AiController(
             Error: confirmation is null ? "pending_operation_not_found" : null), cancellationToken);
 
         return confirmation is null
-            ? NotFound(new { error = "Pending operation not found or expired." })
+            ? NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody())
             : Ok(new ConfirmPendingOperationResponse(
                 confirmation.PendingOperationId,
                 confirmation.ConfirmationToken,
@@ -216,9 +217,7 @@ public class AiController(
             TargetId: id.ToString(),
             Error: result.IsSuccess ? null : result.Error), cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("pending-operations/{id:guid}/step-up/verify")]
@@ -253,9 +252,7 @@ public class AiController(
             TargetId: id.ToString(),
             Error: result.IsSuccess ? null : result.Error), cancellationToken);
 
-        return result.IsSuccess
-            ? Ok(result.Value)
-            : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("pending-operations/{id:guid}/execute")]
@@ -285,7 +282,7 @@ public class AiController(
                 TargetId: id.ToString(),
                 Error: "pending_operation_not_found"), cancellationToken);
 
-            return NotFound(new { error = "Pending operation not found or expired." });
+            return NotFound(ErrorMessages.PendingOperationNotFound.ToErrorBody());
         }
 
         var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
@@ -319,42 +316,36 @@ public class AiController(
         if (!validation.IsValid)
         {
             var firstError = validation.Errors[0];
-            await RecordResolveAuditAsync(
+            return await DenyResolveClarificationAsync(
                 userId,
                 authMethod,
                 operationId,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Failed,
                 $"invalid_clarification_value:{firstError.PropertyName}",
+                BadRequest(new AppError(firstError.ErrorCode ?? ErrorCodes.ValidationError, firstError.ErrorMessage).ToErrorBody()),
                 cancellationToken);
-            return BadRequest(new { error = firstError.ErrorMessage });
         }
 
         var pending = await pendingClarificationStore.GetForResolutionAsync(operationId, userId, cancellationToken);
         if (pending is null)
         {
-            await RecordResolveAuditAsync(
+            return await DenyResolveClarificationAsync(
                 userId,
                 authMethod,
                 operationId,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Failed,
                 "clarification_not_found",
+                NotFound(ErrorMessages.ClarificationNotFound.ToErrorBody()),
                 cancellationToken);
-            return NotFound(new { error = ErrorMessages.ClarificationNotFound });
         }
 
         if (!pending.AllowedValues.Contains(body.Value, StringComparer.Ordinal))
         {
-            await RecordResolveAuditAsync(
+            return await DenyResolveClarificationAsync(
                 userId,
                 authMethod,
                 operationId,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Failed,
                 "clarification_value_not_offered",
+                BadRequest(ErrorMessages.ClarificationValueNotOffered.ToErrorBody()),
                 cancellationToken);
-            return BadRequest(new { error = ErrorMessages.ClarificationValueNotOffered });
         }
 
         JsonElement mergedArgs;
@@ -364,15 +355,13 @@ public class AiController(
         }
         catch (JsonException)
         {
-            await RecordResolveAuditAsync(
+            return await DenyResolveClarificationAsync(
                 userId,
                 authMethod,
                 operationId,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Failed,
                 "invalid_clarification_value",
+                BadRequest(ErrorMessages.ClarificationValueNotJsonObject.ToErrorBody()),
                 cancellationToken);
-            return BadRequest(new { error = ErrorMessages.ClarificationValueNotJsonObject });
         }
 
         var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
@@ -381,17 +370,46 @@ public class AiController(
             var auditError = pending.ExpiresAtUtc <= DateTime.UtcNow
                 ? "clarification_expired_mid_flight"
                 : "clarification_already_resolved";
-            await RecordResolveAuditAsync(
+            return await DenyResolveClarificationAsync(
                 userId,
                 authMethod,
                 operationId,
-                AgentPolicyDecisionStatus.Denied,
-                AgentOperationStatus.Failed,
                 auditError,
+                Conflict(ErrorMessages.ClarificationAlreadyResolved.ToErrorBody()),
                 cancellationToken);
-            return Conflict(new { error = ErrorMessages.ClarificationAlreadyResolved });
         }
 
+        return await ExecuteResolvedClarificationAsync(userId, authMethod, operationId, pending, mergedArgs, cancellationToken);
+    }
+
+    private async Task<IActionResult> DenyResolveClarificationAsync(
+        Guid userId,
+        AgentAuthMethod authMethod,
+        Guid operationId,
+        string auditError,
+        IActionResult response,
+        CancellationToken cancellationToken)
+    {
+        await RecordResolveAuditAsync(
+            userId,
+            authMethod,
+            operationId,
+            AgentPolicyDecisionStatus.Denied,
+            AgentOperationStatus.Failed,
+            auditError,
+            cancellationToken);
+
+        return response;
+    }
+
+    private async Task<IActionResult> ExecuteResolvedClarificationAsync(
+        Guid userId,
+        AgentAuthMethod authMethod,
+        Guid operationId,
+        PendingClarificationData pending,
+        JsonElement mergedArgs,
+        CancellationToken cancellationToken)
+    {
         var result = await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             userId,
             pending.ToolName,

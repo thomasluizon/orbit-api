@@ -40,7 +40,7 @@ public sealed partial class AiSummaryService(
                 maxOutputTokens: 180);
 
             if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<string>("AI returned empty response");
+                return Result.Failure<string>(ErrorMessages.AiEmptyResponse);
 
             var trimmed = CapToSentence(StripMarkdownFences(text), MaxSummaryChars);
 
@@ -51,7 +51,7 @@ public sealed partial class AiSummaryService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogDailySummaryFailed(logger, ex);
-            return Result.Failure<string>("AI summary temporarily unavailable");
+            return Result.Failure<string>(ErrorMessages.AiSummaryUnavailable);
         }
     }
 

@@ -21,8 +21,8 @@ public class TagCommandHandlerTests
     [Fact]
     public async Task CreateTag_Valid_CreatesAndSaves()
     {
-        _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Tag>());
+        _tagRepo.AnyAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
 
         var handler = new CreateTagCommandHandler(_tagRepo, _unitOfWork);
         var command = new CreateTagCommand(UserId, "Fitness", "#ff0000");
@@ -40,9 +40,8 @@ public class TagCommandHandlerTests
     [Fact]
     public async Task CreateTag_DuplicateName_ReturnsFailure()
     {
-        var existingTag = Tag.Create(UserId, "Fitness", "#00ff00").Value;
-        _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Tag> { existingTag });
+        _tagRepo.AnyAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var handler = new CreateTagCommandHandler(_tagRepo, _unitOfWork);
         var command = new CreateTagCommand(UserId, "Fitness", "#ff0000");

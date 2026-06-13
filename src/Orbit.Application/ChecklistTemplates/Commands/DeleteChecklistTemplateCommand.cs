@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -20,7 +21,7 @@ public class DeleteChecklistTemplateCommandHandler(
             cancellationToken: cancellationToken);
 
         if (template is null)
-            return Result.Failure("Template not found.");
+            return Result.Failure(ErrorMessages.TemplateNotFound);
 
         repository.Remove(template);
         await unitOfWork.SaveChangesAsync(cancellationToken);

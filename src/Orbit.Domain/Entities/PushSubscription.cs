@@ -19,16 +19,16 @@ public class PushSubscription : Entity
         string auth)
     {
         if (userId == Guid.Empty)
-            return Result.Failure<PushSubscription>("User ID is required.");
+            return Result.Failure<PushSubscription>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(endpoint))
-            return Result.Failure<PushSubscription>("Endpoint is required.");
+            return Result.Failure<PushSubscription>(DomainErrors.PushEndpointRequired);
 
         if (string.IsNullOrWhiteSpace(p256dh))
-            return Result.Failure<PushSubscription>("P256dh key is required.");
+            return Result.Failure<PushSubscription>(DomainErrors.PushP256dhRequired);
 
         if (string.IsNullOrWhiteSpace(auth))
-            return Result.Failure<PushSubscription>("Auth key is required.");
+            return Result.Failure<PushSubscription>(DomainErrors.PushAuthKeyRequired);
 
         return Result.Success(new PushSubscription
         {

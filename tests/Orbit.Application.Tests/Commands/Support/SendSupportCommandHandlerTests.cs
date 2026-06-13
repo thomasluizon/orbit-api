@@ -41,7 +41,7 @@ public class SendSupportCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.SubjectRequired);
+        result.Error.Should().Be(ErrorMessages.SubjectRequired.Message);
         await _emailService.DidNotReceive().SendSupportEmailAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<CancellationToken>());
@@ -57,7 +57,7 @@ public class SendSupportCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.MessageRequired);
+        result.Error.Should().Be(ErrorMessages.MessageRequired.Message);
     }
 
     [Fact]
@@ -67,6 +67,6 @@ public class SendSupportCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.SubjectRequired);
+        result.Error.Should().Be(ErrorMessages.SubjectRequired.Message);
     }
 }

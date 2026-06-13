@@ -49,7 +49,7 @@ public class GetHabitByIdQueryHandler(
 
         var habit = habits.Count > 0 ? habits[0] : null;
         if (habit is null)
-            return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var descendantLogsByHabitId = await HabitDetailDescendantLogLoader.LoadAsync(

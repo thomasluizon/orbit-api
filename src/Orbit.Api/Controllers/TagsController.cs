@@ -26,7 +26,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     {
         var query = new GetTagsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost]
@@ -45,7 +45,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
             LogTagCreated(logger, result.Value, HttpContext.GetUserId());
             return Created($"/api/tags/{result.Value}", new { id = result.Value });
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPut("{id:guid}")]
@@ -65,7 +65,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
             LogTagUpdated(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpDelete("{id:guid}")]
@@ -82,7 +82,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
             LogTagDeleted(logger, id, HttpContext.GetUserId());
             return NoContent();
         }
-        return BadRequest(new { error = result.Error });
+        return result.ToErrorResult();
     }
 
     [HttpPut("{habitId:guid}/assign")]
@@ -97,7 +97,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         var command = new AssignTagsCommand(HttpContext.GetUserId(), habitId, request.TagIds);
         var result = await mediator.Send(command, cancellationToken);
 
-        return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Tag created {TagId} by user {UserId}")]

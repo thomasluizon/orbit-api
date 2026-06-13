@@ -50,7 +50,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(query, cancellationToken);
         if (result.ErrorCode == Result.PayGateErrorCode)
             return result.ToPayGateAwareResult(v => Ok(v));
-        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
     }
 
     [HttpPost]
@@ -148,7 +148,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(query, cancellationToken);
         if (result.ErrorCode == Result.PayGateErrorCode)
             return result.ToPayGateAwareResult(v => Ok(v));
-        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
     }
 
     [HttpGet("{id:guid}/metrics")]
@@ -162,7 +162,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         var result = await mediator.Send(query, cancellationToken);
         if (result.ErrorCode == Result.PayGateErrorCode)
             return result.ToPayGateAwareResult(v => Ok(v));
-        return result.IsSuccess ? Ok(result.Value) : BadRequest(new { error = result.Error });
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("review")]

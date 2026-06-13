@@ -24,7 +24,7 @@ public class DeleteUserFactCommandHandler(
             cancellationToken: cancellationToken);
 
         if (fact is null)
-            return Result.Failure(ErrorMessages.FactNotFound, ErrorCodes.FactNotFound);
+            return Result.Failure(ErrorMessages.FactNotFound);
 
         fact.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);

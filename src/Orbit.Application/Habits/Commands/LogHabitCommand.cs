@@ -57,23 +57,25 @@ public partial class LogHabitCommandHandler(
 {
     public async Task<Result<LogHabitResponse>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
     {
+        var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+
         var habit = await repos.HabitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned, ErrorCodes.HabitNotOwned);
+            return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotOwned);
 
-        var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var targetDate = request.Date ?? today;
 
         var dateValidation = ValidateTargetDate(habit, targetDate, today);
         if (dateValidation.IsFailure)
-            return Result.Failure<LogHabitResponse>(dateValidation.Error);
+            return dateValidation.PropagateError<LogHabitResponse>();
 
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
 
@@ -87,17 +89,17 @@ public partial class LogHabitCommandHandler(
     private static Result ValidateTargetDate(Habit habit, DateOnly targetDate, DateOnly today)
     {
         if (targetDate > today && habit.FrequencyUnit is not null)
-            return Result.Failure("Cannot log a future date.");
+            return Result.Failure(ErrorMessages.CannotLogFutureDate);
 
         if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
-            return Result.Failure("Cannot log a date beyond the overdue window.");
+            return Result.Failure(ErrorMessages.BeyondOverdueWindow);
 
         if (habit.FrequencyUnit is not null && !habit.IsFlexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
         {
             var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
-                return Result.Failure("Habit is not scheduled on this date.");
+                return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
 
         return Result.Success();
@@ -108,7 +110,7 @@ public partial class LogHabitCommandHandler(
     {
         var unlogResult = habit.Unlog(targetDate);
         if (unlogResult.IsFailure)
-            return Result.Failure<LogHabitResponse>(unlogResult.Error);
+            return unlogResult.PropagateError<LogHabitResponse>();
 
         repos.HabitLogRepository.Remove(unlogResult.Value);
 
@@ -139,7 +141,7 @@ public partial class LogHabitCommandHandler(
         var shouldAdvanceDueDate = targetDate >= today;
         var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
         if (logResult.IsFailure)
-            return Result.Failure<LogHabitResponse>(logResult.Error);
+            return logResult.PropagateError<LogHabitResponse>();
 
         await repos.HabitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
@@ -235,10 +237,11 @@ public partial class LogHabitCommandHandler(
         if (habit.Goals.Count == 0) return null;
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
+        var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
 
         var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             ct);
 
         var updates = new List<LinkedGoalUpdate>();

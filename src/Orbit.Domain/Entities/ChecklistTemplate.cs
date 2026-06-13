@@ -15,16 +15,16 @@ public class ChecklistTemplate : Entity, ITimestamped
     public static Result<ChecklistTemplate> Create(Guid userId, string name, IReadOnlyList<string> items)
     {
         if (userId == Guid.Empty)
-            return Result.Failure<ChecklistTemplate>("User ID is required.");
+            return Result.Failure<ChecklistTemplate>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure<ChecklistTemplate>("Template name is required.");
+            return Result.Failure<ChecklistTemplate>(DomainErrors.TemplateNameRequired);
 
         if (name.Trim().Length > 100)
-            return Result.Failure<ChecklistTemplate>("Template name must be 100 characters or less.");
+            return Result.Failure<ChecklistTemplate>(DomainErrors.TemplateNameTooLong);
 
         if (items.Count == 0)
-            return Result.Failure<ChecklistTemplate>("At least one item is required.");
+            return Result.Failure<ChecklistTemplate>(DomainErrors.TemplateItemsRequired);
 
         return Result.Success(new ChecklistTemplate
         {
@@ -39,13 +39,13 @@ public class ChecklistTemplate : Entity, ITimestamped
     public Result Update(string name, IReadOnlyList<string> items)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure("Template name is required.");
+            return Result.Failure(DomainErrors.TemplateNameRequired);
 
         if (name.Trim().Length > 100)
-            return Result.Failure("Template name must be 100 characters or less.");
+            return Result.Failure(DomainErrors.TemplateNameTooLong);
 
         if (items.Count == 0)
-            return Result.Failure("At least one item is required.");
+            return Result.Failure(DomainErrors.TemplateItemsRequired);
 
         Name = name.Trim();
         Items = items.Select(i => i.Trim()).Where(i => !string.IsNullOrEmpty(i)).ToList();

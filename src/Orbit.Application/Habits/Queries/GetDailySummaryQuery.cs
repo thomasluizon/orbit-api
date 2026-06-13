@@ -33,10 +33,10 @@ public class GetDailySummaryQueryHandler(
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<DailySummaryResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<DailySummaryResponse>(ErrorMessages.UserNotFound);
 
         if (!user.AiSummaryEnabled)
-            return Result.Failure<DailySummaryResponse>("AI summary is disabled.");
+            return Result.Failure<DailySummaryResponse>(ErrorMessages.AiSummaryDisabled);
 
         string effectiveLanguage;
         if (!string.IsNullOrWhiteSpace(user.Language))
@@ -83,7 +83,7 @@ public class GetDailySummaryQueryHandler(
             cancellationToken);
 
         if (summaryResult.IsFailure)
-            return Result.Failure<DailySummaryResponse>(summaryResult.Error);
+            return summaryResult.PropagateError<DailySummaryResponse>();
 
         var endOfDay = new DateTimeOffset(request.DateFrom.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
         var expiry = endOfDay > DateTimeOffset.UtcNow ? endOfDay : DateTimeOffset.UtcNow.AddMinutes(5);

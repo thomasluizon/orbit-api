@@ -24,7 +24,7 @@ public class SetColorSchemeCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var result = user.SetColorScheme(request.ColorScheme);
         if (!result.IsSuccess)

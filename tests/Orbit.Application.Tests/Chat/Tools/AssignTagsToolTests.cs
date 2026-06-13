@@ -54,11 +54,10 @@ public class AssignTagsToolTests
         SetupHabitFound(habit);
 
         var existingTag = Tag.Create(UserId, "Health", "#ff0000").Value;
-        _tagRepo.FindOneTrackedAsync(
+        _tagRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(),
-            Arg.Any<Func<IQueryable<Tag>, IQueryable<Tag>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns(existingTag);
+        ).Returns(new List<Tag> { existingTag }.AsReadOnly());
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "tag_names": ["Health"]}""");
 

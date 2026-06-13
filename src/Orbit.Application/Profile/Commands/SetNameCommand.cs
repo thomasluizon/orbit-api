@@ -19,7 +19,7 @@ public class SetNameCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         var result = user.SetName(request.Name);
 

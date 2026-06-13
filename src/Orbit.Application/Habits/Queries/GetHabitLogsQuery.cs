@@ -29,7 +29,7 @@ public class GetHabitLogsQueryHandler(
             cancellationToken: cancellationToken);
 
         if (habit is null)
-            return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var cutoff = userToday.AddDays(-DefaultLookbackDays);

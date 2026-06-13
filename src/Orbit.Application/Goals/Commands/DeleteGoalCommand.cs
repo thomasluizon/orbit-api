@@ -26,7 +26,7 @@ public class DeleteGoalCommandHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure(ErrorMessages.GoalNotFound);
 
         goal.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);

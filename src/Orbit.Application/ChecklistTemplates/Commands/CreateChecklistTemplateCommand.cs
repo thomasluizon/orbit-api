@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,7 +19,7 @@ public class CreateChecklistTemplateCommandHandler(
     {
         var result = ChecklistTemplate.Create(request.UserId, request.Name, request.Items);
         if (result.IsFailure)
-            return Result.Failure<Guid>(result.Error);
+            return result.PropagateError<Guid>();
 
         await repository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

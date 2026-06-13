@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
@@ -46,7 +47,7 @@ public class SendCodeCommandHandler(
         {
             var elapsed = DateTime.UtcNow - existing.CreatedAt;
             if (elapsed.TotalSeconds < 60)
-                return Result.Failure("Please wait before requesting a new code");
+                return Result.Failure(ErrorMessages.CodeRequestCooldown);
         }
 
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();

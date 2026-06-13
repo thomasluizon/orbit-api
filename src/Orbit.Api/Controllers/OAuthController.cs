@@ -1,8 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
@@ -15,6 +17,7 @@ using Orbit.Infrastructure.Configuration;
 namespace Orbit.Api.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 #pragma warning disable S6931 // OAuth/MCP well-known URLs follow protocol-mandated paths with no common prefix
 #pragma warning disable S107 // OAuth controller legitimately requires many DI dependencies
 public partial class OAuthController(
@@ -138,7 +141,7 @@ public partial class OAuthController(
     {
         var result = await mediator.Send(new SendCodeCommand(request.Email, request.Language ?? "en"), ct);
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return result.ToErrorResult();
 
         return Ok(new { success = true });
     }
@@ -158,7 +161,7 @@ public partial class OAuthController(
             new VerifyCodeCommand(request.Email, request.Code), ct);
 
         if (result.IsFailure)
-            return BadRequest(new { error = result.Error });
+            return result.ToErrorResult();
 
         var loginResponse = result.Value;
         var authCode = authStore.CreateCode(
@@ -186,7 +189,7 @@ public partial class OAuthController(
             $"https://oauth2.googleapis.com/tokeninfo?id_token={Uri.EscapeDataString(request.Credential)}", ct);
 
         if (!response.IsSuccessStatusCode)
-            return BadRequest(new { error = "Invalid or expired Google sign-in token" });
+            return BadRequest(ErrorMessages.InvalidGoogleToken.ToErrorBody());
 
         var json = await response.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);
@@ -194,12 +197,12 @@ public partial class OAuthController(
 
         var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
         if (string.IsNullOrEmpty(email))
-            return BadRequest(new { error = "Could not retrieve email from Google account" });
+            return BadRequest(ErrorMessages.GoogleEmailUnavailable.ToErrorBody());
 
         var tokenAud = root.TryGetProperty("aud", out var audProp) ? audProp.GetString() : null;
         var expectedClientId = googleSettings.Value.ClientId;
         if (!string.IsNullOrEmpty(expectedClientId) && tokenAud != expectedClientId)
-            return BadRequest(new { error = "Google token was not issued for this application" });
+            return BadRequest(ErrorMessages.GoogleTokenAudienceMismatch.ToErrorBody());
 
         var user = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
         if (user is null)
@@ -209,7 +212,7 @@ public partial class OAuthController(
 
             var createResult = Domain.Entities.User.Create(name, email);
             if (createResult.IsFailure)
-                return BadRequest(new { error = createResult.Error });
+                return createResult.ToErrorResult();
 
             user = createResult.Value;
             await userRepository.AddAsync(user, ct);

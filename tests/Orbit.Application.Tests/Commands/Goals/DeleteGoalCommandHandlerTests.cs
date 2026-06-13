@@ -59,7 +59,7 @@ public class DeleteGoalCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.GoalNotFound);
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
         _goalRepo.DidNotReceive().Remove(Arg.Any<Goal>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());

@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -16,16 +17,17 @@ public class CreateTagCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateTagCommand request, CancellationToken cancellationToken)
     {
-        var existing = await tagRepository.FindAsync(
-            t => t.UserId == request.UserId && t.Name == request.Name.Trim(),
+        var trimmedName = request.Name.Trim();
+        var nameAlreadyExists = await tagRepository.AnyAsync(
+            t => t.UserId == request.UserId && t.Name == trimmedName,
             cancellationToken);
 
-        if (existing.Count > 0)
-            return Result.Failure<Guid>("A tag with this name already exists.");
+        if (nameAlreadyExists)
+            return Result.Failure<Guid>(ErrorMessages.DuplicateTagName);
 
         var result = Tag.Create(request.UserId, request.Name, request.Color);
         if (result.IsFailure)
-            return Result.Failure<Guid>(result.Error);
+            return result.PropagateError<Guid>();
 
         await tagRepository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

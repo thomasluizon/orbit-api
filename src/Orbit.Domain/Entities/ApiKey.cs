@@ -26,16 +26,16 @@ public class ApiKey : Entity
         DateTime? expiresAtUtc = null)
     {
         if (userId == Guid.Empty)
-            return Result.Failure<(ApiKey, string)>("User ID is required.");
+            return Result.Failure<(ApiKey, string)>(DomainErrors.UserIdRequired);
 
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure<(ApiKey, string)>("API key name is required.");
+            return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyNameRequired);
 
         if (name.Trim().Length > 50)
-            return Result.Failure<(ApiKey, string)>("API key name must be 50 characters or less.");
+            return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyNameTooLong);
 
         if (expiresAtUtc.HasValue && expiresAtUtc.Value <= DateTime.UtcNow)
-            return Result.Failure<(ApiKey, string)>("API key expiry must be in the future.");
+            return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyExpiryInPast);
 
         var normalizedScopes = (scopes ?? [])
             .Where(scope => !string.IsNullOrWhiteSpace(scope))
@@ -45,7 +45,7 @@ public class ApiKey : Entity
             .ToList();
 
         if (scopes is not null && normalizedScopes.Count != scopes.Count)
-            return Result.Failure<(ApiKey, string)>("API key scopes must be non-empty strings.");
+            return Result.Failure<(ApiKey, string)>(DomainErrors.ApiKeyScopesInvalid);
 
         var rawKey = GenerateKey();
         var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);

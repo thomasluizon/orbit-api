@@ -22,10 +22,10 @@ public partial class CreatePortalSessionCommandHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<PortalResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<PortalResponse>(ErrorMessages.UserNotFound);
 
         if (string.IsNullOrEmpty(user.StripeCustomerId))
-            return Result.Failure<PortalResponse>(ErrorMessages.SubscriptionNotFound, ErrorCodes.SubscriptionNotFound);
+            return Result.Failure<PortalResponse>(ErrorMessages.SubscriptionNotFound);
 
         try
         {
@@ -36,7 +36,7 @@ public partial class CreatePortalSessionCommandHandler(
         catch (BillingProviderException ex)
         {
             LogStripePortalError(logger, ex, request.UserId);
-            return Result.Failure<PortalResponse>("Payment service temporarily unavailable");
+            return Result.Failure<PortalResponse>(ErrorMessages.PaymentServiceUnavailable);
         }
     }
 

@@ -50,7 +50,7 @@ public class NotificationControllerTests
 
         var result = await _controller.GetNotifications(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class NotificationControllerTests
 
         var result = await _controller.MarkAsRead(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class NotificationControllerTests
 
         var result = await _controller.MarkAllAsRead(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class NotificationControllerTests
 
         var result = await _controller.Delete(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class NotificationControllerTests
 
         var result = await _controller.DeleteAll(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class NotificationControllerTests
         var request = new NotificationController.SubscribeRequest("https://endpoint", "p256dh", "auth");
         var result = await _controller.Subscribe(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class NotificationControllerTests
         var request = new NotificationController.SubscribeRequest("https://endpoint", "p256dh", "auth");
         var result = await _controller.Unsubscribe(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class NotificationControllerTests
 
         var result = await _controller.TestPush(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

@@ -17,24 +17,26 @@ public class CreateUserFactCommandHandler(
     {
         var maxFacts = await appConfigService.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, cancellationToken);
 
-        var existingFacts = await userFactRepository.FindAsync(
+        var activeFactCount = await userFactRepository.CountAsync(
             f => f.UserId == request.UserId && !f.IsDeleted,
             cancellationToken);
 
-        if (existingFacts.Count >= maxFacts)
-            return Result.Failure<Guid>($"You've reached the maximum of {maxFacts} saved facts. Delete some to add new ones.");
+        if (activeFactCount >= maxFacts)
+            return Result.Failure<Guid>(ErrorMessages.UserFactsLimitReached.Format(maxFacts));
 
         var normalizedNew = request.FactText.Trim();
-        var isDuplicate = existingFacts.Any(f =>
-            string.Equals(f.FactText, normalizedNew, StringComparison.OrdinalIgnoreCase));
+        var isDuplicate = await userFactRepository.AnyAsync(
+            f => f.UserId == request.UserId && !f.IsDeleted &&
+                 string.Equals(f.FactText, normalizedNew, StringComparison.OrdinalIgnoreCase),
+            cancellationToken);
 
         if (isDuplicate)
-            return Result.Failure<Guid>("A similar fact already exists.");
+            return Result.Failure<Guid>(ErrorMessages.DuplicateFact);
 
         var factResult = UserFact.Create(request.UserId, request.FactText, request.Category);
 
         if (factResult.IsFailure)
-            return Result.Failure<Guid>(factResult.Error);
+            return factResult.PropagateError<Guid>();
 
         await userFactRepository.AddAsync(factResult.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

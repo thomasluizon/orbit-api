@@ -50,7 +50,7 @@ public class UserFactsControllerTests
 
         var result = await _controller.GetUserFacts(CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public class UserFactsControllerTests
 
         var result = await _controller.DeleteUserFact(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -96,6 +96,6 @@ public class UserFactsControllerTests
         var request = new UserFactsController.BulkDeleteUserFactsRequest([Guid.NewGuid()]);
         var result = await _controller.BulkDeleteUserFacts(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 }

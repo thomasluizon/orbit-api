@@ -1,6 +1,8 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
@@ -18,13 +20,57 @@ public class ResultActionResultExtensionsTests
     }
 
     [Fact]
+    public void ToErrorResult_Failure_EmitsErrorAndErrorCode()
+    {
+        var result = Result.Failure(ErrorMessages.HabitNotFound);
+
+        var actionResult = result.ToErrorResult(StatusCodes.Status404NotFound);
+
+        var objectResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(404);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.HabitNotFound.Message,
+            errorCode = ErrorMessages.HabitNotFound.Code
+        });
+    }
+
+    [Fact]
+    public void ToErrorResult_PayGateFailure_Emits403AndPayGateCode()
+    {
+        var result = Result.PayGateFailure("Upgrade required");
+
+        var actionResult = result.ToErrorResult();
+
+        var objectResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(403);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = "Upgrade required",
+            errorCode = Result.PayGateErrorCode
+        });
+    }
+
+    [Fact]
+    public void ToErrorBody_AppError_EmitsErrorAndErrorCode()
+    {
+        var body = ErrorMessages.InvalidChatHistory.ToErrorBody();
+
+        body.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.InvalidChatHistory.Message,
+            errorCode = ErrorMessages.InvalidChatHistory.Code
+        });
+    }
+
+    [Fact]
     public void ToPayGateAwareResult_Failure_ReturnsBadRequest()
     {
         var result = Result.Failure("Something went wrong");
 
         var actionResult = result.ToPayGateAwareResult();
 
-        actionResult.Should().BeOfType<BadRequestObjectResult>();
+        actionResult.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

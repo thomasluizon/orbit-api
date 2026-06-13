@@ -51,7 +51,7 @@ public class GetGoalByIdQueryHandler(
             cancellationToken: cancellationToken);
 
         if (goal is null)
-            return Result.Failure<GoalDetailDto>(ErrorMessages.GoalNotFound, ErrorCodes.GoalNotFound);
+            return Result.Failure<GoalDetailDto>(ErrorMessages.GoalNotFound);
 
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))

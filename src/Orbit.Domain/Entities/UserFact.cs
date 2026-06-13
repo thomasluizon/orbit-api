@@ -17,12 +17,12 @@ public class UserFact : Entity
     public static Result<UserFact> Create(Guid userId, string factText, string? category)
     {
         if (string.IsNullOrWhiteSpace(factText))
-            return Result.Failure<UserFact>("Fact text is required");
+            return Result.Failure<UserFact>(DomainErrors.FactTextRequired);
 
         var trimmedText = factText.Trim();
 
         if (trimmedText.Length > 500)
-            return Result.Failure<UserFact>("Fact text cannot exceed 500 characters");
+            return Result.Failure<UserFact>(DomainErrors.FactTextTooLong);
 
         var lowerText = trimmedText.ToLowerInvariant();
         if (lowerText.Contains("ignore") ||
@@ -30,7 +30,7 @@ public class UserFact : Entity
             lowerText.Contains("you must") ||
             lowerText.Contains("instruction:"))
         {
-            return Result.Failure<UserFact>("Fact text contains suspicious patterns");
+            return Result.Failure<UserFact>(DomainErrors.FactTextSuspicious);
         }
 
         return Result.Success(new UserFact

@@ -107,13 +107,13 @@ public partial class CreateHabitCommandHandler(
             Position: nextPosition));
 
         if (habitResult.IsFailure)
-            return Result.Failure<Guid>(habitResult.Error);
+            return habitResult.PropagateError<Guid>();
 
         var habit = habitResult.Value;
 
         var subResult = await CreateSubHabitsAsync(request, habit.Id, dueDate, opts, cancellationToken);
         if (subResult.IsFailure)
-            return Result.Failure<Guid>(subResult.Error);
+            return subResult.PropagateError<Guid>();
 
         await LinkTagsAndGoalsAsync(habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
 
@@ -149,7 +149,7 @@ public partial class CreateHabitCommandHandler(
                 Position: subPosition++));
 
             if (childResult.IsFailure)
-                return Result.Failure(childResult.Error);
+                return childResult.PropagateError();
 
             await repos.HabitRepository.AddAsync(childResult.Value, cancellationToken);
         }

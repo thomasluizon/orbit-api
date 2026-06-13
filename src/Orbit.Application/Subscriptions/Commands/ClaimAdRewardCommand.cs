@@ -18,12 +18,12 @@ public class ClaimAdRewardCommandHandler(
     {
         var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
         if (user is null)
-            return Result.Failure<AdRewardResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<AdRewardResponse>(ErrorMessages.UserNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(user.Id, cancellationToken);
         var result = user.GrantAdReward(userToday);
         if (result.IsFailure)
-            return Result.Failure<AdRewardResponse>(result.Error);
+            return result.PropagateError<AdRewardResponse>();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

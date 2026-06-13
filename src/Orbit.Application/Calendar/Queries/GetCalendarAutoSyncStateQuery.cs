@@ -27,7 +27,7 @@ public class GetCalendarAutoSyncStateQueryHandler(
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<CalendarAutoSyncStateResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<CalendarAutoSyncStateResponse>(ErrorMessages.UserNotFound);
 
         var status = user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle;
         var response = new CalendarAutoSyncStateResponse(

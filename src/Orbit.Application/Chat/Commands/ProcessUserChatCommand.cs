@@ -103,6 +103,63 @@ public partial class ProcessUserChatCommandHandler(
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         LogProcessingChatMessage(logger, request.Message);
 
+        var contextResult = await LoadChatContextAsync(request, cancellationToken);
+        if (contextResult.IsFailure)
+            return contextResult.PropagateError<ChatResponse>();
+
+        var context = contextResult.Value;
+        var aiStreamSink = BuildAiStreamSink(request.StreamSink);
+
+        var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, cancellationToken);
+        aiStopwatch.Stop();
+        LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
+
+        if (response.IsFailure)
+            return response.PropagateError<ChatResponse>();
+
+        var executionResults = new ToolExecutionAccumulator();
+        var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var (aiResponse, iterations) = await RunToolCallLoopAsync(response.Value, request, executionResults, aiStreamSink, cancellationToken);
+        actionsStopwatch.Stop();
+        LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
+
+        LogSavingChanges(logger);
+        var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await PersistExecutionResultsAsync(request.UserId, executionResults.ActionResults, cancellationToken);
+        saveStopwatch.Stop();
+        LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
+
+        var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
+
+        RunBackgroundPostResponseWork(
+            request.UserId,
+            request.Message,
+            aiMessage,
+            shouldExtractFacts: context.AiMemoryEnabled && context.User is not null && context.User.HasProAccess,
+            existingFacts: context.UserFacts);
+
+        totalStopwatch.Stop();
+        LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
+        LogContextLoadingTime(logger, context.ContextLoadMilliseconds);
+        LogAiServiceTime(logger, aiStopwatch.ElapsedMilliseconds);
+        LogToolExecutionTime(logger, actionsStopwatch.ElapsedMilliseconds, iterations);
+        LogSaveChangesTime(logger, saveStopwatch.ElapsedMilliseconds);
+
+        return Result.Success(new ChatResponse(
+            aiMessage,
+            executionResults.ActionResults,
+            executionResults.OperationResults,
+            executionResults.PendingOperations,
+            executionResults.PolicyDenials,
+            request.CorrelationId,
+            executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null));
+    }
+
+    private async Task<Result<ChatContext>> LoadChatContextAsync(
+        ProcessUserChatCommand request,
+        CancellationToken cancellationToken)
+    {
         LogFetchingContext(logger);
         var dbStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -114,7 +171,7 @@ public partial class ProcessUserChatCommandHandler(
         var promptHabits = BuildPromptHabitIndex(userHabits);
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
-        var aiMemoryEnabled = hasProAccess && (user?.AiMemoryEnabled ?? true);
+        var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
         var activeGoals = hasProAccess
             ? await data.GoalRepository.FindAsync(
                 g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
@@ -124,7 +181,7 @@ public partial class ProcessUserChatCommandHandler(
 
         var messageGate = await execution.PayGateService.CanSendAiMessage(request.UserId, cancellationToken);
         if (messageGate.IsFailure)
-            return messageGate.PropagateError<ChatResponse>();
+            return messageGate.PropagateError<ChatContext>();
 
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)
@@ -151,12 +208,41 @@ public partial class ProcessUserChatCommandHandler(
         dbStopwatch.Stop();
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
 
+        return Result.Success(new ChatContext(
+            activeHabits,
+            promptHabits,
+            user,
+            hasProAccess,
+            aiMemoryEnabled,
+            activeGoals,
+            userFacts,
+            userTags,
+            checklistTemplates,
+            enabledFeatureFlags,
+            userToday,
+            dbStopwatch.ElapsedMilliseconds));
+    }
+
+    private async Task<Result<AiResponse>> RequestInitialAiResponseAsync(
+        ProcessUserChatCommand request,
+        ChatContext context,
+        Func<AiStreamEvent, Task>? aiStreamSink,
+        CancellationToken cancellationToken)
+    {
         var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(
-            promptHabits, userFacts,
+            context.PromptHabits, context.UserFacts,
             HasImage: request.ImageData is not null,
-            UserTags: userTags, UserToday: userToday, ActiveGoals: activeGoals));
+            UserTags: context.UserTags, UserToday: context.UserToday, ActiveGoals: context.ActiveGoals));
         systemPrompt += Environment.NewLine + ai.CatalogService.BuildPromptSupplement(
-            BuildAgentContextSnapshot(user, request.ClientContext, enabledFeatureFlags, userTags, checklistTemplates, activeHabits, activeGoals, hasProAccess));
+            BuildAgentContextSnapshot(
+                context.User,
+                request.ClientContext,
+                context.EnabledFeatureFlags,
+                context.UserTags,
+                context.ChecklistTemplates,
+                context.ActiveHabits,
+                context.ActiveGoals,
+                context.HasProAccess));
 
         var tools = ai.ToolRegistry.GetAll();
         var toolDeclarations = tools.Select(t => (object)new
@@ -167,11 +253,8 @@ public partial class ProcessUserChatCommandHandler(
         }).ToList();
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
-        var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var aiStreamSink = BuildAiStreamSink(request.StreamSink);
-
-        var response = await ai.IntentService.SendWithToolsAsync(
+        return await ai.IntentService.SendWithToolsAsync(
             request.Message,
             systemPrompt,
             toolDeclarations,
@@ -180,18 +263,17 @@ public partial class ProcessUserChatCommandHandler(
             request.History,
             aiStreamSink,
             cancellationToken);
+    }
 
-        aiStopwatch.Stop();
-        LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
-
-        if (response.IsFailure)
-            return Result.Failure<ChatResponse>(response.Error);
-
-        var aiResponse = response.Value;
-
-        var executionResults = new ToolExecutionAccumulator();
-        var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        int iteration = 0;
+    private async Task<(AiResponse FinalResponse, int Iterations)> RunToolCallLoopAsync(
+        AiResponse initialResponse,
+        ProcessUserChatCommand request,
+        ToolExecutionAccumulator executionResults,
+        Func<AiStreamEvent, Task>? aiStreamSink,
+        CancellationToken cancellationToken)
+    {
+        var aiResponse = initialResponse;
+        var iteration = 0;
 
         while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
         {
@@ -213,52 +295,36 @@ public partial class ProcessUserChatCommandHandler(
             aiResponse = continueResponse;
         }
 
-        actionsStopwatch.Stop();
-        LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iteration, executionResults.ActionResults.Count);
-
-        LogSavingChanges(logger);
-        var saveStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
-        if (RequiresStreakRecalculation(executionResults.ActionResults))
-        {
-            await execution.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
-            await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        saveStopwatch.Stop();
-        LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
-
-        var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
-
-        RunBackgroundPostResponseWork(
-            request.UserId,
-            request.Message,
-            aiMessage,
-            shouldExtractFacts: aiMemoryEnabled && user is not null && user.HasProAccess,
-            existingFacts: userFacts);
-
-        totalStopwatch.Stop();
-        LogTotalRequestProcessingTime(logger, totalStopwatch.ElapsedMilliseconds);
-        LogContextLoadingTime(logger, dbStopwatch.ElapsedMilliseconds);
-        LogAiServiceTime(logger, aiStopwatch.ElapsedMilliseconds);
-        LogToolExecutionTime(logger, actionsStopwatch.ElapsedMilliseconds, iteration);
-        LogSaveChangesTime(logger, saveStopwatch.ElapsedMilliseconds);
-
-        return Result.Success(new ChatResponse(
-            aiMessage,
-            executionResults.ActionResults,
-            executionResults.OperationResults,
-            executionResults.PendingOperations,
-            executionResults.PolicyDenials,
-            request.CorrelationId,
-            executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null));
+        return (aiResponse, iteration);
     }
 
-    /// <summary>
-    /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
-    /// back to the AI. Returns the next AI response, or null if continuation failed.
-    /// </summary>
+    private async Task PersistExecutionResultsAsync(
+        Guid userId,
+        IReadOnlyList<ActionResult> actionResults,
+        CancellationToken cancellationToken)
+    {
+        await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
+        if (RequiresStreakRecalculation(actionResults))
+        {
+            await execution.UserStreakService.RecalculateAsync(userId, cancellationToken);
+            await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed record ChatContext(
+        List<Habit> ActiveHabits,
+        List<Habit> PromptHabits,
+        User? User,
+        bool HasProAccess,
+        bool AiMemoryEnabled,
+        IReadOnlyList<Goal> ActiveGoals,
+        IReadOnlyList<UserFact> UserFacts,
+        IReadOnlyList<Tag> UserTags,
+        IReadOnlyList<ChecklistTemplate> ChecklistTemplates,
+        IReadOnlyList<string> EnabledFeatureFlags,
+        DateOnly UserToday,
+        long ContextLoadMilliseconds);
+
     private static Func<AiStreamEvent, Task>? BuildAiStreamSink(Func<ChatStreamEvent, Task>? streamSink)
     {
         if (streamSink is null)
@@ -269,6 +335,10 @@ public partial class ProcessUserChatCommandHandler(
             : ChatStreamEvent.Reset());
     }
 
+    /// <summary>
+    /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
+    /// back to the AI. Returns the next AI response, or null if continuation failed.
+    /// </summary>
     private async Task<AiResponse?> ProcessToolCallsAsync(
         AiResponse aiResponse,
         ProcessUserChatCommand request,
@@ -287,10 +357,9 @@ public partial class ProcessUserChatCommandHandler(
 
         foreach (var call in orderedCalls)
         {
-            var (toolCallResult, actionResult, operationResult, policyDenial, pendingOperation) =
-                await ExecuteSingleToolCallAsync(call, request, cancellationToken);
-            toolResults.Add(toolCallResult);
-            executionResults.Add(actionResult, operationResult, policyDenial, pendingOperation);
+            var outcome = await ExecuteSingleToolCallAsync(call, request, cancellationToken);
+            toolResults.Add(outcome.ToolResult);
+            executionResults.Add(outcome.ActionResult, outcome.OperationResult, outcome.PolicyDenial, outcome.PendingOperation);
         }
 
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
@@ -307,12 +376,7 @@ public partial class ProcessUserChatCommandHandler(
     /// Executes a single tool call: resolves the tool, runs it, and produces both a result
     /// for the AI and an optional action result for the frontend.
     /// </summary>
-    private async Task<(
-        AiToolCallResult ToolResult,
-        ActionResult? ActionResult,
-        AgentOperationResult? OperationResult,
-        AgentPolicyDenial? PolicyDenial,
-        PendingAgentOperation? PendingOperation)> ExecuteSingleToolCallAsync(
+    private async Task<ToolCallOutcome> ExecuteSingleToolCallAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
@@ -321,55 +385,100 @@ public partial class ProcessUserChatCommandHandler(
         if (tool is null)
         {
             LogUnknownToolRequested(logger, call.Name);
-            return (
-                new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"),
-                new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"),
-                new AgentOperationResult(
-                    call.Name,
-                    call.Name,
-                    AgentRiskClass.Low,
-                    AgentConfirmationRequirement.None,
-                    AgentOperationStatus.UnsupportedByPolicy,
-                    PolicyReason: UnsupportedByPolicyReason),
-                new AgentPolicyDenial(
-                    call.Name,
-                    call.Name,
-                    AgentRiskClass.Low,
-                    AgentConfirmationRequirement.None,
-                    UnsupportedByPolicyReason),
-                null);
+            return UnknownToolOutcome(call);
         }
 
         var capability = ai.CatalogService.GetCapabilityByChatTool(call.Name);
-        var operationSummary = BuildOperationSummary(call);
-
         if (capability is null)
+            return UnsupportedByPolicyOutcome(call, tool);
+
+        var executionResponse = await DispatchToolCallAsync(call, request, cancellationToken);
+        var operationResult = executionResponse.Operation;
+        var toolResult = BuildToolCallResult(call, operationResult);
+        LogToolCallOutcome(call, operationResult);
+
+        if (operationResult.Status == AgentOperationStatus.Succeeded
+            && operationResult.Payload is NeedsClarificationPayload payload)
         {
-            return (
-                new AiToolCallResult(call.Name, call.Id, false, null, null, "Operation is unsupported by policy."),
-                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "Operation is unsupported by policy."),
-                new AgentOperationResult(
-                    call.Name,
-                    call.Name,
-                    AgentRiskClass.Low,
-                    AgentConfirmationRequirement.None,
-                    AgentOperationStatus.UnsupportedByPolicy,
-                    Summary: operationSummary,
-                    PolicyReason: UnsupportedByPolicyReason),
-                new AgentPolicyDenial(
-                    call.Name,
-                    call.Name,
-                    AgentRiskClass.Low,
-                    AgentConfirmationRequirement.None,
-                    UnsupportedByPolicyReason),
-                null);
+            return await StashClarificationAsync(call, request, toolResult, operationResult, executionResponse, payload, cancellationToken);
         }
 
+        return operationResult.Status switch
+        {
+            AgentOperationStatus.PendingConfirmation => new ToolCallOutcome(
+                new AiToolCallResult(call.Name, call.Id, false, null, null, "Confirmation required before this action can run."),
+                null,
+                operationResult,
+                executionResponse.PolicyDenial,
+                executionResponse.PendingOperation),
+            AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => new ToolCallOutcome(
+                toolResult,
+                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error),
+                operationResult,
+                executionResponse.PolicyDenial,
+                null),
+            _ => new ToolCallOutcome(
+                toolResult,
+                BuildActionResult(call, tool, ToToolResult(operationResult)),
+                operationResult,
+                executionResponse.PolicyDenial,
+                executionResponse.PendingOperation)
+        };
+    }
+
+    private static ToolCallOutcome UnknownToolOutcome(AiToolCall call)
+    {
+        return new ToolCallOutcome(
+            new AiToolCallResult(call.Name, call.Id, false, null, null, $"Unknown tool: {call.Name}"),
+            new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: $"Unknown tool: {call.Name}"),
+            new AgentOperationResult(
+                call.Name,
+                call.Name,
+                AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                AgentOperationStatus.UnsupportedByPolicy,
+                PolicyReason: UnsupportedByPolicyReason),
+            new AgentPolicyDenial(
+                call.Name,
+                call.Name,
+                AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                UnsupportedByPolicyReason),
+            null);
+    }
+
+    private static ToolCallOutcome UnsupportedByPolicyOutcome(AiToolCall call, IAiTool tool)
+    {
+        return new ToolCallOutcome(
+            new AiToolCallResult(call.Name, call.Id, false, null, null, "Operation is unsupported by policy."),
+            tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: "Operation is unsupported by policy."),
+            new AgentOperationResult(
+                call.Name,
+                call.Name,
+                AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                AgentOperationStatus.UnsupportedByPolicy,
+                Summary: BuildOperationSummary(call),
+                PolicyReason: UnsupportedByPolicyReason),
+            new AgentPolicyDenial(
+                call.Name,
+                call.Name,
+                AgentRiskClass.Low,
+                AgentConfirmationRequirement.None,
+                UnsupportedByPolicyReason),
+            null);
+    }
+
+    private async Task<AgentExecuteOperationResponse> DispatchToolCallAsync(
+        AiToolCall call,
+        ProcessUserChatCommand request,
+        CancellationToken cancellationToken)
+    {
         var dispatchArgs = call.Name == "send_support_request" && !string.IsNullOrWhiteSpace(request.CorrelationId)
             ? AppendSupportTrace(call.Args, request.CorrelationId)
             : call.Args;
 
-        var executionResponse = await execution.OperationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
+        return await execution.OperationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             request.UserId,
             call.Name,
             dispatchArgs,
@@ -379,90 +488,84 @@ public partial class ProcessUserChatCommandHandler(
             request.IsReadOnlyCredential,
             request.ConfirmationToken,
             request.CorrelationId), cancellationToken);
+    }
 
-        var operationResult = executionResponse.Operation;
-        var toolResult = BuildToolCallResult(call, operationResult);
+    private void LogToolCallOutcome(AiToolCall call, AgentOperationResult operationResult)
+    {
         var isClarification = operationResult.Payload is NeedsClarificationPayload;
 
         if (operationResult.Status == AgentOperationStatus.Succeeded && !isClarification)
+        {
             LogToolSucceeded(logger, call.Name, operationResult.TargetName);
+        }
         else if (operationResult.Status is AgentOperationStatus.Failed or AgentOperationStatus.Denied)
         {
             LogToolFailed(logger, call.Name, operationResult.PolicyReason);
             if (isClarification)
                 LogClarificationDroppedOnFailedTool(logger, call.Name, operationResult.PolicyReason);
         }
+    }
 
-        if (operationResult.Status == AgentOperationStatus.Succeeded
-            && operationResult.Payload is NeedsClarificationPayload payload)
+    private async Task<ToolCallOutcome> StashClarificationAsync(
+        AiToolCall call,
+        ProcessUserChatCommand request,
+        AiToolCallResult toolResult,
+        AgentOperationResult operationResult,
+        AgentExecuteOperationResponse executionResponse,
+        NeedsClarificationPayload payload,
+        CancellationToken cancellationToken)
+    {
+        var quickActionsJson = payload.QuickActions is null
+            ? "[]"
+            : JsonSerializer.Serialize(payload.QuickActions);
+
+        var partialArgsJson = call.Args.GetRawText();
+        if (partialArgsJson.Length > AppConstants.MaxClarificationArgsLength)
         {
-            var quickActionsJson = payload.QuickActions is null
-                ? "[]"
-                : JsonSerializer.Serialize(payload.QuickActions);
-
-            var partialArgsJson = call.Args.GetRawText();
-            if (partialArgsJson.Length > AppConstants.MaxClarificationArgsLength)
-            {
-                LogClarificationArgsTooLarge(logger, call.Name, partialArgsJson.Length);
-                return (
-                    toolResult,
-                    new ActionResult(
-                        ToolNameToPascalCase(call.Name),
-                        ActionStatus.Failed,
-                        Error: "Tool arguments exceeded the clarification stash limit."),
-                    operationResult,
-                    executionResponse.PolicyDenial,
-                    executionResponse.PendingOperation);
-            }
-
-            var stashedId = await execution.PendingClarificationStore.CreateAsync(
-                request.UserId,
-                call.Name,
-                partialArgsJson,
-                payload.MissingArgumentKey,
-                payload.Question,
-                quickActionsJson,
-                cancellationToken);
-            LogClarificationRequested(logger, call.Name, stashedId, payload.MissingArgumentKey);
-            var clarification = new ClarificationRequest(
-                payload.Question,
-                stashedId,
-                payload.MissingArgumentKey,
-                payload.QuickActions ?? Array.Empty<QuickAction>());
-            return (
+            LogClarificationArgsTooLarge(logger, call.Name, partialArgsJson.Length);
+            return new ToolCallOutcome(
                 toolResult,
                 new ActionResult(
                     ToolNameToPascalCase(call.Name),
-                    ActionStatus.NeedsClarification,
-                    EntityName: call.Name,
-                    ClarificationRequest: clarification),
+                    ActionStatus.Failed,
+                    Error: "Tool arguments exceeded the clarification stash limit."),
                 operationResult,
                 executionResponse.PolicyDenial,
                 executionResponse.PendingOperation);
         }
 
-        return operationResult.Status switch
-        {
-            AgentOperationStatus.PendingConfirmation => (
-                new AiToolCallResult(call.Name, call.Id, false, null, null, "Confirmation required before this action can run."),
-                null,
-                operationResult,
-                executionResponse.PolicyDenial,
-                executionResponse.PendingOperation),
-            AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => (
-                toolResult,
-                tool.IsReadOnly ? null : new ActionResult(ToolNameToPascalCase(call.Name), ActionStatus.Failed, Error: toolResult.Error),
-                operationResult,
-                executionResponse.PolicyDenial,
-                null),
-            _ => (
-                toolResult,
-                BuildActionResult(call, tool, ToToolResult(operationResult)),
-                operationResult,
-                executionResponse.PolicyDenial,
-                executionResponse.PendingOperation)
-        };
+        var stashedId = await execution.PendingClarificationStore.CreateAsync(
+            request.UserId,
+            call.Name,
+            partialArgsJson,
+            payload.MissingArgumentKey,
+            payload.Question,
+            quickActionsJson,
+            cancellationToken);
+        LogClarificationRequested(logger, call.Name, stashedId, payload.MissingArgumentKey);
+        var clarification = new ClarificationRequest(
+            payload.Question,
+            stashedId,
+            payload.MissingArgumentKey,
+            payload.QuickActions ?? Array.Empty<QuickAction>());
+        return new ToolCallOutcome(
+            toolResult,
+            new ActionResult(
+                ToolNameToPascalCase(call.Name),
+                ActionStatus.NeedsClarification,
+                EntityName: call.Name,
+                ClarificationRequest: clarification),
+            operationResult,
+            executionResponse.PolicyDenial,
+            executionResponse.PendingOperation);
     }
+
+    private sealed record ToolCallOutcome(
+        AiToolCallResult ToolResult,
+        ActionResult? ActionResult,
+        AgentOperationResult? OperationResult,
+        AgentPolicyDenial? PolicyDenial,
+        PendingAgentOperation? PendingOperation);
 
     /// <summary>
     /// Builds the frontend-facing ActionResult from a tool execution result.

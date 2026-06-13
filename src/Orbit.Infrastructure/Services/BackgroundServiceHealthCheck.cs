@@ -27,27 +27,27 @@ public class BackgroundServiceHealthCheck : IHealthCheck
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         var unhealthy = new List<string>();
-        var data = new Dictionary<string, object>();
+        var serviceTickStatuses = new Dictionary<string, object>();
 
         foreach (var (name, maxInterval) in ExpectedIntervals)
         {
             if (LastSuccessfulTicks.TryGetValue(name, out var lastTick))
             {
                 var elapsed = DateTime.UtcNow - lastTick;
-                data[name] = $"Last tick: {elapsed.TotalMinutes:F0}m ago";
+                serviceTickStatuses[name] = $"Last tick: {elapsed.TotalMinutes:F0}m ago";
                 if (elapsed > maxInterval)
                     unhealthy.Add(name);
             }
             else
             {
-                data[name] = "No tick recorded yet";
+                serviceTickStatuses[name] = "No tick recorded yet";
             }
         }
 
         if (unhealthy.Count > 0)
             return Task.FromResult(HealthCheckResult.Degraded(
-                $"Stale services: {string.Join(", ", unhealthy)}", data: data));
+                $"Stale services: {string.Join(", ", unhealthy)}", data: serviceTickStatuses));
 
-        return Task.FromResult(HealthCheckResult.Healthy("All background services running", data));
+        return Task.FromResult(HealthCheckResult.Healthy("All background services running", serviceTickStatuses));
     }
 }

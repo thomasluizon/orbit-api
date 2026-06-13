@@ -21,24 +21,17 @@ public class BulkDeleteUserFactsCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<int>();
 
-        var deleted = 0;
+        var factIds = request.FactIds.ToHashSet();
+        var facts = await userFactRepository.FindTrackedAsync(
+            f => factIds.Contains(f.Id) && f.UserId == request.UserId,
+            cancellationToken);
 
-        foreach (var factId in request.FactIds)
-        {
-            var fact = await userFactRepository.FindOneTrackedAsync(
-                f => f.Id == factId && f.UserId == request.UserId,
-                cancellationToken: cancellationToken);
-
-            if (fact is null)
-                continue;
-
+        foreach (var fact in facts)
             fact.SoftDelete();
-            deleted++;
-        }
 
-        if (deleted > 0)
+        if (facts.Count > 0)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(deleted);
+        return Result.Success(facts.Count);
     }
 }

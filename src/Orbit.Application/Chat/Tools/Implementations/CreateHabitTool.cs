@@ -294,16 +294,22 @@ public class CreateHabitTool(
 
     private async Task AssignTagsToHabitAsync(Habit habit, List<string> tagNames, Guid userId, CancellationToken ct)
     {
+        var capitalizedNames = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var name in tagNames)
         {
             var capitalized = Capitalize(name.Trim());
-            if (string.IsNullOrEmpty(capitalized) || !seen.Add(capitalized)) continue;
+            if (!string.IsNullOrEmpty(capitalized) && seen.Add(capitalized))
+                capitalizedNames.Add(capitalized);
+        }
 
-            var existing = await tagRepository.FindOneTrackedAsync(
-                t => t.UserId == userId && t.Name == capitalized, cancellationToken: ct);
+        var existingByName = (await tagRepository.FindTrackedAsync(
+                t => t.UserId == userId && capitalizedNames.Contains(t.Name), ct))
+            .ToDictionary(t => t.Name, StringComparer.Ordinal);
 
-            if (existing is not null)
+        foreach (var capitalized in capitalizedNames)
+        {
+            if (existingByName.TryGetValue(capitalized, out var existing))
             {
                 habit.AddTag(existing);
             }

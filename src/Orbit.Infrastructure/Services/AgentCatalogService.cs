@@ -198,6 +198,15 @@ public class AgentCatalogService : IAgentCatalogService
     {
         return
         [
+            .. EmailCodeAuthOperations(),
+            .. SessionLifecycleOperations()
+        ];
+    }
+
+    private static AgentOperation[] EmailCodeAuthOperations()
+    {
+        return
+        [
             new AgentOperation(
                 "send_auth_code",
                 "Send Auth Code",
@@ -257,7 +266,14 @@ public class AgentCatalogService : IAgentCatalogService
                         user_id = new { type = "string" }
                     },
                     required = new[] { "access_token", "refresh_token", "user_id" }
-                })),
+                }))
+        ];
+    }
+
+    private static AgentOperation[] SessionLifecycleOperations()
+    {
+        return
+        [
             new AgentOperation(
                 "exchange_google_auth",
                 "Exchange Google Auth",
@@ -364,6 +380,32 @@ public class AgentCatalogService : IAgentCatalogService
     {
         return
         [
+            .. ChatCapabilities(),
+            .. CatalogCapabilities(),
+            .. ConfigCapabilities(),
+            .. HabitCoreCapabilities(),
+            .. HabitBulkAndInsightCapabilities(),
+            .. GoalCapabilities(),
+            .. TagCapabilities(),
+            .. ProfileCapabilities(),
+            .. NotificationCapabilities(),
+            .. CalendarCapabilities(),
+            .. GamificationCapabilities(),
+            .. ChecklistTemplateCapabilities(),
+            .. UserFactCapabilities(),
+            .. ReferralCapabilities(),
+            .. SubscriptionCapabilities(),
+            .. ApiKeyCapabilities(),
+            .. SupportCapabilities(),
+            .. SyncCapabilities(),
+            .. AccountAndAuthCapabilities()
+        ];
+    }
+
+    private static AgentCapability[] ChatCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.ChatInteract,
                 "Chat Interaction",
@@ -384,8 +426,14 @@ public class AgentCatalogService : IAgentCatalogService
                     "AiController.VerifyPendingOperationStepUp",
                     "AiController.ExecutePendingOperation",
                     "AiController.ResolveClarification"
-                ]),
+                ])
+        ];
+    }
 
+    private static AgentCapability[] CatalogCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.CatalogCapabilitiesRead,
                 "Read Capability Catalog",
@@ -436,8 +484,14 @@ public class AgentCatalogService : IAgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
                 chatTools: ["describe_feature"],
-                mcpTools: ["describe_feature"]),
+                mcpTools: ["describe_feature"])
+        ];
+    }
 
+    private static AgentCapability[] ConfigCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.ConfigRead,
                 "Read App Config",
@@ -448,8 +502,14 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["ConfigController.GetConfig"]),
+                controllerActions: ["ConfigController.GetConfig"])
+        ];
+    }
 
+    private static AgentCapability[] HabitCoreCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.HabitsRead,
                 "Read Habits",
@@ -470,7 +530,6 @@ public class AgentCatalogService : IAgentCatalogService
                     "HabitsController.GetCalendarMonth",
                     "HabitsController.GetHabitById",
                     "HabitsController.GetHabitDetail",
-                    "HabitsController.GetAllLogs",
                     "HabitsController.GetLogs"
                 ]),
 
@@ -524,8 +583,14 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_habit"],
                 mcpTools: ["delete_habit"],
-                controllerActions: ["HabitsController.DeleteHabit"]),
+                controllerActions: ["HabitsController.DeleteHabit"])
+        ];
+    }
 
+    private static AgentCapability[] HabitBulkAndInsightCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.HabitsBulkWrite,
                 "Bulk Habit Updates",
@@ -598,8 +663,14 @@ public class AgentCatalogService : IAgentCatalogService
                 featureFlagKeys: ["ai_retrospective"],
                 chatTools: ["get_retrospective"],
                 mcpTools: ["get_retrospective"],
-                controllerActions: ["HabitsController.GetRetrospective"]),
+                controllerActions: ["HabitsController.GetRetrospective"])
+        ];
+    }
 
+    private static AgentCapability[] GoalCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.GoalsRead,
                 "Read Goals",
@@ -661,8 +732,14 @@ public class AgentCatalogService : IAgentCatalogService
                 featureFlagKeys: ["goal_tracking"],
                 chatTools: ["delete_goal"],
                 mcpTools: ["delete_goal"],
-                controllerActions: ["GoalsController.DeleteGoal"]),
+                controllerActions: ["GoalsController.DeleteGoal"])
+        ];
+    }
 
+    private static AgentCapability[] TagCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.TagsRead,
                 "Read Tags",
@@ -703,8 +780,14 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_tag"],
                 mcpTools: ["delete_tag"],
-                controllerActions: ["TagsController.DeleteTag"]),
+                controllerActions: ["TagsController.DeleteTag"])
+        ];
+    }
 
+    private static AgentCapability[] ProfileCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.ProfileReadBasic,
                 "Read Profile",
@@ -787,8 +870,14 @@ public class AgentCatalogService : IAgentCatalogService
                 featureFlagKeys: ["ai_summary"],
                 chatTools: ["set_ai_summary"],
                 mcpTools: ["set_ai_summary"],
-                controllerActions: ["ProfileController.SetAiSummary"]),
+                controllerActions: ["ProfileController.SetAiSummary"])
+        ];
+    }
 
+    private static AgentCapability[] NotificationCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.NotificationsRead,
                 "Read Notifications",
@@ -836,8 +925,14 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.FreshConfirmation,
                 chatTools: ["delete_notifications"],
                 mcpTools: ["delete_notification"],
-                controllerActions: ["NotificationController.Delete", "NotificationController.DeleteAll"]),
+                controllerActions: ["NotificationController.Delete", "NotificationController.DeleteAll"])
+        ];
+    }
 
+    private static AgentCapability[] CalendarCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.CalendarRead,
                 "Read Calendar",
@@ -877,8 +972,14 @@ public class AgentCatalogService : IAgentCatalogService
                     "CalendarController.SetAutoSync",
                     "CalendarController.DismissSuggestion",
                     "CalendarController.RunSyncNow"
-                ]),
+                ])
+        ];
+    }
 
+    private static AgentCapability[] GamificationCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.GamificationRead,
                 "Read Gamification",
@@ -897,8 +998,14 @@ public class AgentCatalogService : IAgentCatalogService
                     "GamificationController.GetProfile",
                     "GamificationController.GetAchievements",
                     "GamificationController.GetStreakInfo"
-                ]),
+                ])
+        ];
+    }
 
+    private static AgentCapability[] ChecklistTemplateCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.ChecklistTemplatesRead,
                 "Read Checklist Templates",
@@ -927,8 +1034,14 @@ public class AgentCatalogService : IAgentCatalogService
                 featureFlagKeys: ["checklist_templates"],
                 chatTools: ["create_checklist_template", "delete_checklist_template"],
                 mcpTools: ["create_checklist_template", "delete_checklist_template"],
-                controllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"]),
+                controllerActions: ["ChecklistTemplatesController.CreateTemplate", "ChecklistTemplatesController.DeleteTemplate"])
+        ];
+    }
 
+    private static AgentCapability[] UserFactCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.UserFactsRead,
                 "Read User Facts",
@@ -957,8 +1070,14 @@ public class AgentCatalogService : IAgentCatalogService
                 planRequirement: "Pro",
                 chatTools: ["delete_user_facts"],
                 mcpTools: ["delete_user_fact"],
-                controllerActions: ["UserFactsController.DeleteUserFact", "UserFactsController.BulkDeleteUserFacts"]),
+                controllerActions: ["UserFactsController.DeleteUserFact", "UserFactsController.BulkDeleteUserFacts"])
+        ];
+    }
 
+    private static AgentCapability[] ReferralCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.ReferralsRead,
                 "Read Referrals",
@@ -989,8 +1108,14 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["get_referral_code"],
                 mcpTools: ["get_referral_code"],
-                controllerActions: ["ReferralController.GetOrCreateCode"]),
+                controllerActions: ["ReferralController.GetOrCreateCode"])
+        ];
+    }
 
+    private static AgentCapability[] SubscriptionCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.SubscriptionsRead,
                 "Read Subscription State",
@@ -1030,8 +1155,14 @@ public class AgentCatalogService : IAgentCatalogService
                     "SubscriptionController.HandleWebhook",
                     "SubscriptionController.VerifyPlayPurchase",
                     "SubscriptionController.HandlePlayNotification"
-                ]),
+                ])
+        ];
+    }
 
+    private static AgentCapability[] ApiKeyCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.ApiKeysRead,
                 "Read API Keys",
@@ -1062,8 +1193,14 @@ public class AgentCatalogService : IAgentCatalogService
                 featureFlagKeys: ["api_keys"],
                 chatTools: ["manage_api_keys"],
                 mcpTools: ["manage_api_keys"],
-                controllerActions: ["ApiKeysController.CreateApiKey", "ApiKeysController.RevokeApiKey"]),
+                controllerActions: ["ApiKeysController.CreateApiKey", "ApiKeysController.RevokeApiKey"])
+        ];
+    }
 
+    private static AgentCapability[] SupportCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.SupportWrite,
                 "Send Support Request",
@@ -1076,8 +1213,14 @@ public class AgentCatalogService : IAgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["send_support_request"],
                 mcpTools: ["send_support_request"],
-                controllerActions: ["SupportController.SendSupport"]),
+                controllerActions: ["SupportController.SendSupport"])
+        ];
+    }
 
+    private static AgentCapability[] SyncCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.SyncRead,
                 "Read Sync Data",
@@ -1100,8 +1243,14 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
-                controllerActions: ["SyncController.ProcessBatch"]),
+                controllerActions: ["SyncController.ProcessBatch"])
+        ];
+    }
 
+    private static AgentCapability[] AccountAndAuthCapabilities()
+    {
+        return
+        [
             CreateCapability(
                 AgentCapabilityIds.AccountManage,
                 "Manage Account",
@@ -1160,6 +1309,18 @@ public class AgentCatalogService : IAgentCatalogService
     {
         return
         [
+            .. DailyUseSurfaces(),
+            .. PreferenceAndNotificationSurfaces(),
+            .. GoalApiAndOnboardingSurfaces(),
+            .. EngagementAndBillingSurfaces(),
+            .. SupportAccountAndSyncSurfaces()
+        ];
+    }
+
+    private static AppSurface[] DailyUseSurfaces()
+    {
+        return
+        [
             new AppSurface(
                 "today",
                 "Today",
@@ -1194,8 +1355,14 @@ public class AgentCatalogService : IAgentCatalogService
                 ["Send a prompt to the chat endpoint.", "The backend resolves tool calls.", "Review pending confirmations before destructive actions."],
                 ["Chat may use clientContext as UI hints only.", "Authorization is always backend-enforced."],
                 [AgentCapabilityIds.ChatInteract],
-                ["ChatController.ProcessChat", "ChatController.ProcessChatStream"]),
+                ["ChatController.ProcessChat", "ChatController.ProcessChatStream"])
+        ];
+    }
 
+    private static AppSurface[] PreferenceAndNotificationSurfaces()
+    {
+        return
+        [
             new AppSurface(
                 "profile-preferences",
                 "Profile And Preferences",
@@ -1221,8 +1388,14 @@ public class AgentCatalogService : IAgentCatalogService
                 ["Open Notifications.", "Mark items read or manage subscriptions.", "Delete individual items only after confirmation."],
                 ["Push subscription cryptographic material is never AI-readable.", "Deletion requires confirmation."],
                 [AgentCapabilityIds.NotificationsRead, AgentCapabilityIds.NotificationsWrite, AgentCapabilityIds.NotificationsDelete],
-                ["NotificationController.GetNotifications", "NotificationController.Subscribe"]),
+                ["NotificationController.GetNotifications", "NotificationController.Subscribe"])
+        ];
+    }
 
+    private static AppSurface[] GoalApiAndOnboardingSurfaces()
+    {
+        return
+        [
             new AppSurface(
                 "goals",
                 "Goals",
@@ -1248,8 +1421,14 @@ public class AgentCatalogService : IAgentCatalogService
                 ["Request a sign-in code or OAuth flow.", "Verify identity and exchange tokens.", "Complete onboarding and tour flows when the client is ready."],
                 ["Redirect URIs must pass the allowlist on every OAuth step.", "Direct auth operations are typed but require a direct client flow, not an agent mutation."],
                 [AgentCapabilityIds.AuthManage, AgentCapabilityIds.ProfilePreferencesWrite],
-                ["AuthController.SendCode", "OAuthController.Token"]),
+                ["AuthController.SendCode", "OAuthController.Token"])
+        ];
+    }
 
+    private static AppSurface[] EngagementAndBillingSurfaces()
+    {
+        return
+        [
             new AppSurface(
                 "gamification",
                 "Gamification",
@@ -1275,8 +1454,14 @@ public class AgentCatalogService : IAgentCatalogService
                 ["Read plan and billing state.", "Open checkout or portal only after explicit confirmation and step-up authorization.", "Claim ad rewards from the subscription surface when eligible."],
                 ["Billing mutations require step-up authorization.", "Internal Stripe identifiers are never exposed to AI."],
                 [AgentCapabilityIds.SubscriptionsRead, AgentCapabilityIds.SubscriptionsManage],
-                ["SubscriptionController.GetStatus", "SubscriptionController.CreateCheckout"]),
+                ["SubscriptionController.GetStatus", "SubscriptionController.CreateCheckout"])
+        ];
+    }
 
+    private static AppSurface[] SupportAccountAndSyncSurfaces()
+    {
+        return
+        [
             new AppSurface(
                 "support",
                 "Support",
@@ -1307,6 +1492,17 @@ public class AgentCatalogService : IAgentCatalogService
     }
 
     private static IReadOnlyList<UserDataCatalogEntry> BuildUserDataCatalog()
+    {
+        return
+        [
+            .. ProfileHabitAndGoalDataEntries(),
+            .. MemoryCalendarAndNotificationDataEntries(),
+            .. GamificationReferralAndBillingDataEntries(),
+            .. SupportSyncAndCredentialDataEntries()
+        ];
+    }
+
+    private static UserDataCatalogEntry[] ProfileHabitAndGoalDataEntries()
     {
         return
         [
@@ -1360,8 +1556,14 @@ public class AgentCatalogService : IAgentCatalogService
                     new UserDataFieldDescriptor("Goal.TargetValue", "Target numeric progress.", true, true),
                     new UserDataFieldDescriptor("Goal.Status", "Goal lifecycle state.", true, true),
                     new UserDataFieldDescriptor("GoalProgressLog.Note", "Optional progress note.", true, false)
-                ]),
+                ])
+        ];
+    }
 
+    private static UserDataCatalogEntry[] MemoryCalendarAndNotificationDataEntries()
+    {
+        return
+        [
             new UserDataCatalogEntry(
                 "user-facts",
                 "AI Memory Facts",
@@ -1409,8 +1611,14 @@ public class AgentCatalogService : IAgentCatalogService
                     new UserDataFieldDescriptor("Notification.Url", "Optional navigation URL.", true, true),
                     new UserDataFieldDescriptor("PushSubscription.Endpoint", "Push endpoint URL.", false, false),
                     new UserDataFieldDescriptor("PushSubscription.CryptoMaterial", "VAPID/FCM subscription keys.", false, false)
-                ]),
+                ])
+        ];
+    }
 
+    private static UserDataCatalogEntry[] GamificationReferralAndBillingDataEntries()
+    {
+        return
+        [
             new UserDataCatalogEntry(
                 "gamification",
                 "Gamification",
@@ -1459,8 +1667,14 @@ public class AgentCatalogService : IAgentCatalogService
                     new UserDataFieldDescriptor("BillingPortalStatus", "Whether billing management is available.", true, false),
                     new UserDataFieldDescriptor("StripeCustomerId", "Internal Stripe customer identifier.", false, false),
                     new UserDataFieldDescriptor("StripeSubscriptionId", "Internal Stripe subscription identifier.", false, false)
-                ]),
+                ])
+        ];
+    }
 
+    private static UserDataCatalogEntry[] SupportSyncAndCredentialDataEntries()
+    {
+        return
+        [
             new UserDataCatalogEntry(
                 "support",
                 "Support Requests",

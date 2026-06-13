@@ -19,7 +19,7 @@ public class CompleteTourCommandHandler(
             cancellationToken: cancellationToken);
 
         if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure(ErrorMessages.UserNotFound);
 
         user.CompleteTour();
 

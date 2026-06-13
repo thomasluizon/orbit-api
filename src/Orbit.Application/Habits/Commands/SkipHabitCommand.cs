@@ -26,21 +26,22 @@ public class SkipHabitCommandHandler(
 {
     public async Task<Result> Handle(SkipHabitCommand request, CancellationToken cancellationToken)
     {
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs).Include(h => h.Goals),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.HabitNotOwned, ErrorCodes.HabitNotOwned);
+            return Result.Failure(ErrorMessages.HabitNotOwned);
 
         if (habit.IsCompleted)
-            return Result.Failure("Cannot skip a completed habit.");
-
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+            return Result.Failure(ErrorMessages.CannotSkipCompletedHabit);
 
         if (habit.FrequencyUnit is null)
             return await HandleOneTimeSkip(habit, today, cancellationToken);
@@ -74,16 +75,16 @@ public class SkipHabitCommandHandler(
     private static Result? ValidateSkipTarget(Habit habit, DateOnly targetDate, DateOnly today)
     {
         if (targetDate > today)
-            return Result.Failure("Cannot skip a future date.");
+            return Result.Failure(ErrorMessages.CannotSkipFutureDate);
 
         if (!habit.IsFlexible && habit.DueDate > targetDate)
-            return Result.Failure("Cannot skip a habit that is not yet due.");
+            return Result.Failure(ErrorMessages.HabitNotYetDue);
 
         if (!habit.IsFlexible && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
         {
             var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
-                return Result.Failure("Habit is not scheduled on this date.");
+                return Result.Failure(ErrorMessages.NotScheduledOnDate);
         }
 
         return null;
@@ -95,11 +96,11 @@ public class SkipHabitCommandHandler(
         {
             var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
             if (remaining <= 0)
-                return Result.Failure("All instances for this period have already been completed or skipped.");
+                return Result.Failure(ErrorMessages.AllInstancesDone);
 
             var skipResult = habit.SkipFlexible(targetDate);
             if (skipResult.IsFailure)
-                return Result.Failure(skipResult.Error);
+                return skipResult.PropagateError();
 
             await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
         }
@@ -116,9 +117,10 @@ public class SkipHabitCommandHandler(
         if (habit.Goals.Count == 0) return;
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
+        var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
         var trackedGoals = await goalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
 
         var streakGoals = trackedGoals

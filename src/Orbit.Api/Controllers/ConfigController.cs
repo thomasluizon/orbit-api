@@ -17,6 +17,7 @@ public partial class ConfigController(
     public record FeatureFlagDto(string Key, bool Enabled, string? PlanRequirement);
 
     [HttpGet]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
     public async Task<IActionResult> GetConfig(CancellationToken cancellationToken)
     {
         var limits = await configService.GetAllAsync(cancellationToken);

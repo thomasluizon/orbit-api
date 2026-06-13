@@ -34,7 +34,7 @@ public class GetStreakInfoQueryHandler(
     {
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<StreakInfoResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<StreakInfoResponse>(ErrorMessages.UserNotFound);
 
         if (!user.HasProAccess)
             return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");

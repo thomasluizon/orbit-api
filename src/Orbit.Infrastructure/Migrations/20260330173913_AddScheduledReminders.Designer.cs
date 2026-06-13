@@ -9,11 +9,11 @@ using Orbit.Infrastructure.Persistence;
 
 #nullable disable
 
-namespace Orbit.Infrastructure.Persistence.Migrations
+namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260328201706_AuditFixes")]
-    partial class AuditFixes
+    [Migration("20260330173913_AddScheduledReminders")]
+    partial class AddScheduledReminders
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -250,6 +250,12 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasDefaultValueSql("'[15]'::jsonb");
 
+                    b.Property<string>("ScheduledReminders")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
                     b.Property<bool>("SlipAlertEnabled")
                         .HasColumnType("boolean");
 
@@ -416,6 +422,9 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                     b.Property<int>("MinutesBefore")
                         .HasColumnType("integer");
 
+                    b.Property<TimeOnly?>("ReminderTimeUtc")
+                        .HasColumnType("time without time zone");
+
                     b.Property<DateTime>("SentAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -484,6 +493,12 @@ namespace Orbit.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AdRewardBonusMessages")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AdRewardsClaimedToday")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("AiMemoryEnabled")
                         .HasColumnType("boolean");
 
@@ -532,6 +547,9 @@ namespace Orbit.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Language")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastAdRewardAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Level")
                         .HasColumnType("integer");

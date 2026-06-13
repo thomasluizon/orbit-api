@@ -32,7 +32,7 @@ public class GetCalendarAutoSyncStateQueryHandlerTests
         var result = await _handler.Handle(new GetCalendarAutoSyncStateQuery(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(ErrorMessages.UserNotFound);
+        result.Error.Should().Be(ErrorMessages.UserNotFound.Message);
         result.ErrorCode.Should().Be(ErrorCodes.UserNotFound);
     }
 

@@ -28,8 +28,10 @@ public class UserFactCommandHandlerTests
     {
         _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
             .Returns(50);
-        _factRepo.FindAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<UserFact>());
+        _factRepo.CountAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(0);
+        _factRepo.AnyAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
 
         var handler = new CreateUserFactCommandHandler(_factRepo, _appConfigService, _unitOfWork);
         var command = new CreateUserFactCommand(UserId, "Likes running", "Hobbies");
@@ -50,11 +52,8 @@ public class UserFactCommandHandlerTests
         _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
             .Returns(50);
 
-        var existingFacts = Enumerable.Range(0, 50)
-            .Select(i => UserFact.Create(UserId, $"Fact {i}", null).Value)
-            .ToList();
-        _factRepo.FindAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(existingFacts);
+        _factRepo.CountAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(50);
 
         var handler = new CreateUserFactCommandHandler(_factRepo, _appConfigService, _unitOfWork);
         var command = new CreateUserFactCommand(UserId, "One more fact", null);
@@ -71,9 +70,10 @@ public class UserFactCommandHandlerTests
         _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
             .Returns(50);
 
-        var existingFact = UserFact.Create(UserId, "Likes running", null).Value;
-        _factRepo.FindAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<UserFact> { existingFact });
+        _factRepo.CountAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(1);
+        _factRepo.AnyAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(true);
 
         var handler = new CreateUserFactCommandHandler(_factRepo, _appConfigService, _unitOfWork);
         var command = new CreateUserFactCommand(UserId, "Likes running", null);
@@ -149,11 +149,10 @@ public class UserFactCommandHandlerTests
         var fact1 = UserFact.Create(UserId, "Fact one", null).Value;
         var fact2 = UserFact.Create(UserId, "Fact two", null).Value;
 
-        _factRepo.FindOneTrackedAsync(
+        _factRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<Func<IQueryable<UserFact>, IQueryable<UserFact>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(fact1, fact2);
+            .Returns(new List<UserFact> { fact1, fact2 }.AsReadOnly());
 
         var handler = new BulkDeleteUserFactsCommandHandler(_factRepo, _payGate, _unitOfWork);
         var command = new BulkDeleteUserFactsCommand(UserId, new List<Guid> { fact1.Id, fact2.Id });

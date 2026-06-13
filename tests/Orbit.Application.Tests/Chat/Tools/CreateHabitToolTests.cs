@@ -99,11 +99,10 @@ public class CreateHabitToolTests
     public async Task WithExistingTags_ReusesExistingTags()
     {
         var existingTag = Tag.Create(UserId, "Health", "#ff0000").Value;
-        _tagRepo.FindOneTrackedAsync(
+        _tagRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(),
-            Arg.Any<Func<IQueryable<Tag>, IQueryable<Tag>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns(existingTag);
+        ).Returns(new List<Tag> { existingTag }.AsReadOnly());
 
         var result = await Execute("""{"title": "Run", "tag_names": ["Health"]}""");
 

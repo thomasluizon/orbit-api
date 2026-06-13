@@ -39,7 +39,7 @@ public partial class SupportController(IMediator mediator, ILogger<SupportContro
 
         return result.IsSuccess
             ? Ok(new { message = "Support request sent successfully" })
-            : BadRequest(new { error = result.Error });
+            : result.ToErrorResult();
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Support request sent by user {UserId} subject {Subject}")]

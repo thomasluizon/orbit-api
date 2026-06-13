@@ -36,12 +36,12 @@ public class CreateApiKeyCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<CreateApiKeyResponse>();
 
-        var activeKeys = await apiKeyRepository.FindAsync(
+        var activeKeyCount = await apiKeyRepository.CountAsync(
             k => k.UserId == request.UserId && !k.IsRevoked,
             cancellationToken);
 
-        if (activeKeys.Count >= MaxActiveKeys)
-            return Result.Failure<CreateApiKeyResponse>($"You can have at most {MaxActiveKeys} active API keys.");
+        if (activeKeyCount >= MaxActiveKeys)
+            return Result.Failure<CreateApiKeyResponse>(ErrorMessages.MaxApiKeys.Format(MaxActiveKeys));
 
         var createResult = ApiKey.Create(
             request.UserId,
@@ -50,7 +50,7 @@ public class CreateApiKeyCommandHandler(
             request.IsReadOnly,
             request.ExpiresAtUtc);
         if (createResult.IsFailure)
-            return Result.Failure<CreateApiKeyResponse>(createResult.Error);
+            return createResult.PropagateError<CreateApiKeyResponse>();
 
         var (apiKey, rawKey) = createResult.Value;
 

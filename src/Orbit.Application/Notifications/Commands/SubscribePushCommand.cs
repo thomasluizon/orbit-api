@@ -24,12 +24,12 @@ public class SubscribePushCommandHandler(
             if (!Uri.TryCreate(request.Endpoint, UriKind.Absolute, out var endpointUri)
                 || endpointUri.Scheme != Uri.UriSchemeHttps)
             {
-                return Result.Failure("Push subscription endpoint must be an absolute https:// URL.");
+                return Result.Failure(ErrorMessages.PushEndpointInvalid);
             }
         }
         else if (string.IsNullOrWhiteSpace(request.Endpoint))
         {
-            return Result.Failure("FCM push subscription token is required.");
+            return Result.Failure(ErrorMessages.FcmTokenRequired);
         }
 
         var existing = await pushSubscriptionRepository.FindOneTrackedAsync(
@@ -41,12 +41,12 @@ public class SubscribePushCommandHandler(
             if (existing.UserId == request.UserId)
                 return Result.Success();
 
-            return Result.Failure("Push subscription endpoint is already registered to a different user.");
+            return Result.Failure(ErrorMessages.PushEndpointOwnedByOtherUser);
         }
 
         var result = PushSubscription.Create(request.UserId, request.Endpoint, request.P256dh, request.Auth);
         if (result.IsFailure)
-            return Result.Failure(result.Error);
+            return result.PropagateError();
 
         await pushSubscriptionRepository.AddAsync(result.Value, cancellationToken);
 

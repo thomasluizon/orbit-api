@@ -29,7 +29,7 @@ public class ReorderHabitsCommandHandler(
         foreach (var update in request.Positions)
         {
             if (!habitMap.TryGetValue(update.HabitId, out var habit))
-                return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+                return Result.Failure(ErrorMessages.HabitNotFound);
 
             habit.SetPosition(update.Position);
         }

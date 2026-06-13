@@ -23,7 +23,8 @@ public record BulkLogItemResult(
     BulkItemStatus Status,
     Guid HabitId,
     Guid? LogId = null,
-    string? Error = null);
+    string? Error = null,
+    string? ErrorCode = null);
 
 /// <summary>
 /// Groups supporting services for bulk habit logging to reduce constructor parameter count (S107).
@@ -47,9 +48,10 @@ public partial class BulkLogHabitsCommandHandler(
         var results = new List<BulkLogItemResult>();
 
         var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
+        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
-            q => q.Include(h => h.Logs),
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)),
             cancellationToken);
         var habitMap = habits.ToDictionary(h => h.Id);
 
@@ -69,24 +71,25 @@ public partial class BulkLogHabitsCommandHandler(
                     Index: i,
                     Status: BulkItemStatus.Failed,
                     HabitId: item.HabitId,
-                    Error: "An error occurred processing this item"));
+                    Error: ErrorMessages.BulkLogItemFailed.Message,
+                    ErrorCode: ErrorMessages.BulkLogItemFailed.Code));
             }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        if (results.Any(r => r.Status == BulkItemStatus.Success && r.LogId is not null))
-            await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
 
         var loggedHabitIds = results
             .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
-            .Select(r => r.HabitId);
-        foreach (var habitId in loggedHabitIds)
+            .Select(r => r.HabitId)
+            .ToList();
+        if (loggedHabitIds.Count > 0)
         {
+            await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
             try
             {
-                await services.GamificationService.ProcessHabitLogged(request.UserId, habitId, cancellationToken);
+                await services.GamificationService.ProcessHabitsLogged(request.UserId, loggedHabitIds, cancellationToken);
             }
-            catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, habitId); }
+            catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, request.UserId); }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -102,15 +105,15 @@ public partial class BulkLogHabitsCommandHandler(
     {
         if (targetDate > today)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: "Cannot log a future date.");
+                Error: ErrorMessages.CannotLogFutureDate.Message, ErrorCode: ErrorMessages.CannotLogFutureDate.Code);
 
         if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: "Cannot log a date beyond the overdue window.");
+                Error: ErrorMessages.BeyondOverdueWindow.Message, ErrorCode: ErrorMessages.BeyondOverdueWindow.Code);
 
         if (!habitMap.TryGetValue(habitId, out var habit))
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: ErrorMessages.HabitNotFound);
+                Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
 
         if (habit.FrequencyUnit is not null && !habit.IsFlexible
             && !HabitScheduleService.IsHabitDueOnDate(habit, targetDate))
@@ -118,7 +121,7 @@ public partial class BulkLogHabitsCommandHandler(
             var isOverdue = targetDate == today && HabitScheduleService.HasMissedPastOccurrence(habit, today);
             if (!isOverdue)
                 return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                    Error: "Habit is not scheduled on this date.");
+                    Error: ErrorMessages.NotScheduledOnDate.Message, ErrorCode: ErrorMessages.NotScheduledOnDate.Code);
         }
 
         if (habit.Logs.Any(l => l.Date == targetDate))
@@ -128,7 +131,7 @@ public partial class BulkLogHabitsCommandHandler(
         var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
         if (logResult.IsFailure)
             return new BulkLogItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                Error: logResult.Error);
+                Error: logResult.Error, ErrorCode: logResult.ErrorCode);
 
         await habitLogRepository.AddAsync(logResult.Value, cancellationToken);
 
@@ -139,6 +142,6 @@ public partial class BulkLogHabitsCommandHandler(
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Error processing bulk item {HabitId}")]
     private static partial void LogBulkLogItemError(ILogger logger, Exception ex, Guid habitId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for habit {HabitId}")]
-    private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid habitId);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for bulk log by user {UserId}")]
+    private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid userId);
 }

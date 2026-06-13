@@ -85,7 +85,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             return $"Error: {result.Error}";
 
         var h = result.Value;
-        var info = $"Title: {h.Title}\nID: {h.Id}\n" +
+        var habitSummary = $"Title: {h.Title}\nID: {h.Id}\n" +
                    $"Status: {(h.IsCompleted ? "Completed" : "Active")}\n" +
                    (h.Description is not null ? $"Description: {h.Description}\n" : "") +
                    (h.FrequencyUnit is not null ? $"Frequency: {h.FrequencyQuantity}x per {h.FrequencyUnit}\n" : "Type: One-time task\n") +
@@ -98,7 +98,7 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
                    (h.ChecklistItems.Count > 0 ? $"Checklist: {h.ChecklistItems.Count(i => i.IsChecked)}/{h.ChecklistItems.Count} items\n" : "") +
                    $"Created: {h.CreatedAtUtc:yyyy-MM-dd}\n" +
                    (h.Children.Count > 0 ? $"Sub-habits: {string.Join(", ", h.Children.Select(c => c.Title))}\n" : "");
-        return info;
+        return habitSummary;
     }
 
     [McpServerTool(Name = "create_habit"), Description("Create a new habit or one-time task.")]

@@ -158,7 +158,7 @@ public class SyncControllerTests : IDisposable
     {
         var result = await _controller.ProcessBatch(new SyncController.SyncBatchRequest([]), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class SyncControllerTests : IDisposable
 
         var result = await _controller.ProcessBatch(new SyncController.SyncBatchRequest(mutations), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

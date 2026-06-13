@@ -55,7 +55,7 @@ public class LinkHabitsToGoalToolTests
         var result = await Execute($$$"""{"goal_id": "{{{goalId}}}", "habit_ids": ["{{{habitId}}}"]}""");
 
         result.Success.Should().BeFalse();
-        result.Error.Should().Be(ErrorMessages.GoalNotFound);
+        result.Error.Should().Be(ErrorMessages.GoalNotFound.Message);
     }
 
     [Fact]

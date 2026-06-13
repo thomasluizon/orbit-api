@@ -76,14 +76,14 @@ public partial class User : Entity
     public static Result<User> Create(string name, string email)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure<User>("Name is required");
+            return Result.Failure<User>(DomainErrors.NameRequired);
 
         if (string.IsNullOrWhiteSpace(email))
-            return Result.Failure<User>("Email is required");
+            return Result.Failure<User>(DomainErrors.EmailRequired);
 
         var trimmedEmail = email.Trim();
         if (!EmailRegex().IsMatch(trimmedEmail))
-            return Result.Failure<User>("Invalid email format");
+            return Result.Failure<User>(DomainErrors.InvalidEmailFormat);
 
         return Result.Success(new User
         {
@@ -103,11 +103,11 @@ public partial class User : Entity
     public Result SetName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
-            return Result.Failure("Name is required");
+            return Result.Failure(DomainErrors.NameRequired);
 
         var trimmedName = name.Trim();
         if (trimmedName.Length > DomainConstants.MaxUserNameLength)
-            return Result.Failure($"Name must be at most {DomainConstants.MaxUserNameLength} characters");
+            return Result.Failure(DomainErrors.NameTooLong.Format(DomainConstants.MaxUserNameLength));
 
         Name = trimmedName;
         return Result.Success();
@@ -123,7 +123,7 @@ public partial class User : Entity
         }
         catch (TimeZoneNotFoundException)
         {
-            return Result.Failure($"Invalid timezone: {ianaTimeZoneId}");
+            return Result.Failure(DomainErrors.InvalidTimezone.Format(ianaTimeZoneId));
         }
     }
 
@@ -136,7 +136,7 @@ public partial class User : Entity
     public Result SetThemePreference(string? preference)
     {
         if (preference is not null && preference is not ("dark" or "light"))
-            return Result.Failure("Invalid theme preference. Must be 'dark' or 'light'.");
+            return Result.Failure(DomainErrors.InvalidThemePreference);
         ThemePreference = preference;
         return Result.Success();
     }
@@ -145,7 +145,7 @@ public partial class User : Entity
     {
         string[] valid = ["purple", "blue", "green", "rose", "orange", "cyan"];
         if (colorScheme is not null && !valid.Contains(colorScheme))
-            return Result.Failure("Invalid color scheme.");
+            return Result.Failure(DomainErrors.InvalidColorScheme);
         ColorScheme = colorScheme;
         return Result.Success();
     }
@@ -218,13 +218,13 @@ public partial class User : Entity
     public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
     {
         if (HasProAccess)
-            return Result.Failure("Pro users do not see ads");
+            return Result.Failure(DomainErrors.ProUsersDoNotSeeAds);
 
         if (!LastAdRewardLocalDate.HasValue || LastAdRewardLocalDate.Value < userToday)
             AdRewardsClaimedToday = 0;
 
         if (AdRewardsClaimedToday >= dailyCap)
-            return Result.Failure("Daily ad reward limit reached");
+            return Result.Failure(DomainErrors.AdRewardLimitReached);
 
         AdRewardBonusMessages += bonusMessages;
         AdRewardsClaimedToday++;
@@ -245,10 +245,10 @@ public partial class User : Entity
     public Result EnableCalendarAutoSync()
     {
         if (!HasProAccess)
-            return Result.Failure("Upgrade to Pro to enable calendar auto-sync.", "calendar.autoSync.proRequired");
+            return Result.Failure(DomainErrors.CalendarAutoSyncProRequired);
 
         if (GoogleAccessToken is null)
-            return Result.Failure("Connect Google Calendar first.", "calendar.autoSync.notConnected");
+            return Result.Failure(DomainErrors.CalendarAutoSyncNotConnected);
 
         GoogleCalendarAutoSyncEnabled = true;
         GoogleCalendarAutoSyncStatus = Enums.GoogleCalendarAutoSyncStatus.Idle;
@@ -306,7 +306,7 @@ public partial class User : Entity
     public Result SetWeekStartDay(int day)
     {
         if (day is not (0 or 1))
-            return Result.Failure("Week start day must be 0 (Sunday) or 1 (Monday)");
+            return Result.Failure(DomainErrors.InvalidWeekStartDay);
 
         WeekStartDay = day;
         return Result.Success();
@@ -397,7 +397,7 @@ public partial class User : Entity
     public Result ConsumeStreakFreeze()
     {
         if (StreakFreezesAccumulated <= 0)
-            return Result.Failure("No streak freezes accumulated");
+            return Result.Failure(DomainErrors.NoStreakFreezesAccumulated);
         StreakFreezesAccumulated--;
         return Result.Success();
     }

@@ -23,7 +23,7 @@ public class AssignTagsCommandHandler(
         var maxTags = await appConfigService.GetAsync(AppConfigKeys.MaxTagsPerHabit, AppConstants.MaxTagsPerHabit, cancellationToken);
 
         if (request.TagIds.Count > maxTags)
-            return Result.Failure($"A habit can have at most {maxTags} tags.");
+            return Result.Failure(ErrorMessages.MaxTagsPerHabit.Format(maxTags));
 
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
@@ -31,7 +31,7 @@ public class AssignTagsCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound, ErrorCodes.HabitNotFound);
+            return Result.Failure(ErrorMessages.HabitNotFound);
 
         var tags = await tagRepository.FindTrackedAsync(
             t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,

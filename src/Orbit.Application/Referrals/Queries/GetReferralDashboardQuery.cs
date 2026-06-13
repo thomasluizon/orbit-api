@@ -27,14 +27,14 @@ public class GetReferralDashboardQueryHandler(
     {
         var codeResult = await mediator.Send(new GetOrCreateReferralCodeCommand(request.UserId), cancellationToken);
         if (!codeResult.IsSuccess)
-            return Result.Failure<ReferralDashboardResponse>(codeResult.Error);
+            return codeResult.PropagateError<ReferralDashboardResponse>();
 
         var code = codeResult.Value;
         var link = $"{frontendSettings.Value.BaseUrl}/r/{code}";
 
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<ReferralDashboardResponse>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<ReferralDashboardResponse>(ErrorMessages.UserNotFound);
 
         var referrals = await referralRepository.FindAsync(
             r => r.ReferrerId == request.UserId,

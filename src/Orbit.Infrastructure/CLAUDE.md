@@ -6,13 +6,11 @@ EF Core + PostgreSQL + service integrations (OpenAI, Firebase, Stripe, Resend, V
 
 ```
 Persistence/
-  OrbitDbContext.cs       - DbContext root
-  Configurations/         - IEntityTypeConfiguration<T> per entity (Fluent API)
-  Repositories/           - generic repo + per-aggregate repos
+  OrbitDbContext.cs       - DbContext root (entity config via Fluent API in OnModelCreating)
+  GenericRepository.cs    - generic repo (per-aggregate repos alongside, e.g. AccountResetRepository.cs)
   UnitOfWork.cs
 Migrations/               - EF migrations (alphabetical timestamped)
 Services/                 - implementations of Orbit.Domain.Interfaces.* (AI, push, email, JWT, ...)
-  AI/                     - OpenAI prompts + structured output handling
   Prompts/                - composable prompt sections (HabitCountSection, RoutinePatternsSection, ...)
 Configuration/            - strongly-typed options bound from appsettings (ResendSettings, VapidSettings, ...)
 AI/                       - top-level AI service entry points
@@ -20,8 +18,8 @@ AI/                       - top-level AI service entry points
 
 ## EF Core
 
-- **Configuration via Fluent API**, never data annotations on entities. Every entity needs a `IEntityTypeConfiguration<T>` in `Persistence/Configurations/`.
-- **DbContext is the only thing that knows about EF.** Repositories abstract it. Application code MUST NOT take a `DbContext` dependency.
+- **Configuration via Fluent API**, never data annotations on entities. Every entity is configured in `OrbitDbContext.OnModelCreating`.
+- **Infrastructure owns the EF plumbing** — the DbContext, migrations, fluent entity configuration, and provider wiring live here. Application composes EF queries (LINQ + `Microsoft.EntityFrameworkCore` operators) against repository `IQueryable`s; Domain entities stay EF-free.
 - **No `[Required]` / `[StringLength]` / `[Key]` attributes on domain entities** — domain stays EF-free.
 - **Migrations** are alphabetical-by-timestamp. Add via `dotnet ef migrations add <Name> --project src/Orbit.Infrastructure --startup-project src/Orbit.Api`. NEVER edit a migration that has been applied to any environment.
 - **Adding a `DbSet<>` requires a FluentConfig.** If you forget the config, EF infers — which is wrong, and the next migration will be ugly.
@@ -41,8 +39,8 @@ AI/                       - top-level AI service entry points
 
 ## Stripe
 
-- **API key set ONCE** in `Program.cs` at startup: `StripeConfiguration.ApiKey = ...`. NEVER set it per-request in a controller.
-- **Webhook signature verification** in `SubscriptionController.Webhook`. Reject if `WebhookSecret` is not configured.
+- **API key set ONCE** at startup in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs`: `StripeConfiguration.ApiKey = ...`. NEVER set it per-request in a controller.
+- **Webhook signature verification** in `SubscriptionController.HandleWebhook`. Reject if `WebhookSecret` is not configured.
 - Validate checkout intervals against a whitelist of allowed values.
 
 ## Push notifications
@@ -58,16 +56,16 @@ AI/                       - top-level AI service entry points
 ## Configuration
 
 - Strongly-typed options pattern. `ResendSettings`, `VapidSettings`, `JwtSettings`, etc.
-- Bound from `appsettings.json` + env vars in `Program.cs` via `services.Configure<X>(...)`.
+- Bound from `appsettings.json` + env vars in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` via `services.Configure<X>(...)`.
 - Secrets MUST come from env vars in production. Never commit `appsettings.Development.json`.
 
 ## Patterns to mirror
 
 | Want to add… | Look at… |
 |---|---|
-| New entity persistence | `Persistence/Configurations/HabitConfiguration.cs` |
-| New repository | `Persistence/Repositories/HabitRepository.cs` |
-| New migration | run the dotnet ef CLI; example in root CLAUDE.md |
+| New entity persistence | `Persistence/OrbitDbContext.cs` (`OnModelCreating`) |
+| New repository | `Persistence/GenericRepository.cs` + `Persistence/AccountResetRepository.cs` |
+| New migration | run the dotnet ef CLI; example in EF Core section above |
 | New AI prompt | `Services/Prompts/Sections/*` |
 | New external service | `Services/` + interface in `Orbit.Domain/Interfaces/` |
-| New config block | `Configuration/ResendSettings.cs` + binding in `Program.cs` |
+| New config block | `Configuration/ResendSettings.cs` + binding in `Orbit.Api/Extensions/ServiceCollectionExtensions.cs` |

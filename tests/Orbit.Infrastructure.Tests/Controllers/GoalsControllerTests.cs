@@ -76,7 +76,7 @@ public class GoalsControllerTests
 
         var result = await _controller.GetGoalById(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class GoalsControllerTests
         var request = new GoalsController.CreateGoalRequest("Test Goal", null, 100m, "pages");
         var result = await _controller.CreateGoal(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class GoalsControllerTests
         var request = new GoalsController.UpdateGoalRequest("Updated", null, 200m, "pages");
         var result = await _controller.UpdateGoal(Guid.NewGuid(), request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class GoalsControllerTests
         var request = new GoalsController.UpdateProgressRequest(50m);
         var result = await _controller.UpdateProgress(Guid.NewGuid(), request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public class GoalsControllerTests
         var request = new GoalsController.UpdateStatusRequest(GoalStatus.Active);
         var result = await _controller.UpdateStatus(Guid.NewGuid(), request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public class GoalsControllerTests
         var request = new GoalsController.ReorderGoalsRequest([]);
         var result = await _controller.ReorderGoals(request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class GoalsControllerTests
         var request = new GoalsController.LinkHabitsRequest([Guid.NewGuid()]);
         var result = await _controller.LinkHabits(Guid.NewGuid(), request, CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -333,7 +333,7 @@ public class GoalsControllerTests
 
         var result = await _controller.GetGoalDetail(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]
@@ -367,7 +367,7 @@ public class GoalsControllerTests
 
         var result = await _controller.GetGoalMetrics(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]
@@ -424,7 +424,7 @@ public class GoalsControllerTests
 
         var result = await _controller.DeleteGoal(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
     }
 
     [Fact]

@@ -24,7 +24,7 @@ public class ExportUserDataQueryHandler(
         var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
 
         if (user is null)
-            return Result.Failure<UserDataExport>(ErrorMessages.UserNotFound, ErrorCodes.UserNotFound);
+            return Result.Failure<UserDataExport>(ErrorMessages.UserNotFound);
 
         var habits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToHashSet();

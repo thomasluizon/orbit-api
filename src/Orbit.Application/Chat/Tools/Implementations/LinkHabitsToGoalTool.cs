@@ -57,7 +57,7 @@ public class LinkHabitsToGoalTool(
             ct);
 
         if (goal is null)
-            return new ToolResult(false, Error: ErrorMessages.GoalNotFound);
+            return new ToolResult(false, Error: ErrorMessages.GoalNotFound.Message);
 
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == userId,

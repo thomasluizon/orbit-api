@@ -54,11 +54,11 @@ public class AuthSessionService(
             cancellationToken: cancellationToken);
 
         if (session is null || !session.CanUse(nowUtc))
-            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession, ErrorCodes.InvalidSession);
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         var user = await userRepository.GetByIdAsync(session.UserId, cancellationToken);
         if (user is null)
-            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession, ErrorCodes.InvalidSession);
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         var newRefreshToken = GenerateRefreshToken();
         session.Rotate(
@@ -81,7 +81,7 @@ public class AuthSessionService(
             cancellationToken: cancellationToken);
 
         if (session is null)
-            return Result.Failure(ErrorMessages.InvalidSession, ErrorCodes.InvalidSession);
+            return Result.Failure(ErrorMessages.InvalidSession);
 
         session.Revoke(DateTime.UtcNow);
         await unitOfWork.SaveChangesAsync(cancellationToken);

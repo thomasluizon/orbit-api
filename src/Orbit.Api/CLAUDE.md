@@ -15,7 +15,7 @@ Controllers, middleware, OpenAPI/Scalar, DI config, `Program.cs`. This project s
 Default to `[Authorize]` at the controller class level. Override with `[AllowAnonymous]` on individual actions when truly public (e.g., `POST /api/auth/send-code`). The middleware pipeline rejects unauthenticated requests for `[Authorize]` endpoints with 401.
 
 Exempt by construction:
-- `GET /health` (HealthCheckController)
+- `GET /health` (mapped via `MapHealthChecks` in `Extensions/WebApplicationExtensions.cs` — no controller)
 - `POST /api/auth/send-code`, `verify-code`, `google` (AuthController)
 - Stripe webhook (verified by signature, not JWT)
 
@@ -27,7 +27,7 @@ FluentValidation runs via the MediatR validation pipeline. Controllers do NOT ca
 
 Dev-only. `BearerSecuritySchemeTransformer` adds the JWT bearer scheme. New endpoints show up automatically — annotate with `[ProducesResponseType(StatusCodes.Status200OK)]` etc. to document response shapes.
 
-## Middleware (already wired in Program.cs)
+## Middleware (already wired in `Extensions/WebApplicationExtensions.cs`)
 
 - `SecurityHeadersMiddleware` — nosniff, DENY, referrer-policy, XSS headers on every response.
 - `RequestCorrelationMiddleware` — injects correlation ID for log tracing.

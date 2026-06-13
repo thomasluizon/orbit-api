@@ -21,7 +21,7 @@ public sealed partial class AiRetrospectiveService(
         CancellationToken cancellationToken = default)
     {
         if (habits.Count == 0)
-            return Result.Failure<string>("No habits found for this period.");
+            return Result.Failure<string>(ErrorMessages.NoHabitsForPeriod);
 
         var prompt = BuildRetrospectivePrompt(habits, dateFrom, dateTo, period, language);
 
@@ -37,7 +37,7 @@ public sealed partial class AiRetrospectiveService(
                 cancellationToken);
 
             if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<string>("AI returned empty response");
+                return Result.Failure<string>(ErrorMessages.AiEmptyResponse);
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
 
@@ -48,7 +48,7 @@ public sealed partial class AiRetrospectiveService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogRetrospectiveFailed(logger, ex);
-            return Result.Failure<string>("AI retrospective temporarily unavailable");
+            return Result.Failure<string>(ErrorMessages.AiRetrospectiveUnavailable);
         }
     }
 

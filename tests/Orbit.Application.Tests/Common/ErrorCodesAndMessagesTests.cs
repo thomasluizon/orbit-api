@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 
 namespace Orbit.Application.Tests.Common;
 
@@ -31,7 +32,7 @@ public class ErrorCodesAndMessagesTests
 
         foreach (var field in fields)
         {
-            var value = (string)field.GetValue(null)!;
+            var value = ((AppError)field.GetValue(null)!).Message;
             value.Should().NotEndWith(" ",
                 $"ErrorMessage '{field.Name}' should not end with a space");
         }
@@ -59,7 +60,7 @@ public class ErrorCodesAndMessagesTests
 
         foreach (var field in fields)
         {
-            var value = (string)field.GetValue(null)!;
+            var value = ((AppError)field.GetValue(null)!).Message;
             value.Should().NotBeNullOrWhiteSpace(
                 $"ErrorMessage '{field.Name}' should not be empty");
         }
@@ -74,6 +75,34 @@ public class ErrorCodesAndMessagesTests
         var values = fields.Select(f => (string)f.GetValue(null)!).ToList();
         values.Should().OnlyHaveUniqueItems("each error code should be unique");
     }
+
+    [Fact]
+    public void ErrorMessages_EveryCodeIsAKnownErrorCodeOrDomainError()
+    {
+        var knownCodes = GetStringConstants(typeof(ErrorCodes))
+            .Concat(GetAppErrorCodes(typeof(DomainErrors)))
+            .ToHashSet();
+
+        var messageFields = typeof(ErrorMessages).GetFields(
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+        foreach (var field in messageFields)
+        {
+            var code = ((AppError)field.GetValue(null)!).Code;
+            knownCodes.Should().Contain(code,
+                $"ErrorMessage '{field.Name}' uses code '{code}', which must be declared in ErrorCodes or DomainErrors");
+        }
+    }
+
+    private static IEnumerable<string> GetStringConstants(Type type) =>
+        type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(string))
+            .Select(f => (string)f.GetValue(null)!);
+
+    private static IEnumerable<string> GetAppErrorCodes(Type type) =>
+        type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(AppError))
+            .Select(f => ((AppError)f.GetValue(null)!).Code);
 
     [Fact]
     public void AppConstants_SupportedLanguages_ContainsEnglishAndPortuguese()

@@ -83,7 +83,7 @@ public sealed partial class AiIntentService(
     {
         if (conversationContext?.Messages is not List<ChatMessage> messages ||
             conversationContext.Options is not ChatCompletionOptions options)
-            return Result.Failure<AiResponse>("No active conversation. Call SendWithToolsAsync first.");
+            return Result.Failure<AiResponse>(ErrorMessages.AiNoActiveConversation);
 
         foreach (var result in results)
         {
@@ -136,7 +136,7 @@ public sealed partial class AiIntentService(
             }
 
             if (string.IsNullOrWhiteSpace(round.Text))
-                return Result.Failure<AiResponse>("AI returned neither tool calls nor text.");
+                return Result.Failure<AiResponse>(ErrorMessages.AiNoOutput);
 
             LogAiReturnedTextResponse(logger, round.Text.Length);
             return Result.Success(new AiResponse { TextMessage = round.Text });
@@ -144,12 +144,12 @@ public sealed partial class AiIntentService(
         catch (JsonException ex)
         {
             LogAiDeserializationFailed(logger, ex);
-            return Result.Failure<AiResponse>("AI service temporarily unavailable");
+            return Result.Failure<AiResponse>(ErrorMessages.AiUnavailable);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogAiApiCallFailed(logger, ex);
-            return Result.Failure<AiResponse>("AI service temporarily unavailable");
+            return Result.Failure<AiResponse>(ErrorMessages.AiUnavailable);
         }
     }
 
