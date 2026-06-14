@@ -7,6 +7,7 @@ using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -29,7 +30,7 @@ public class GetRetrospectiveToolTests
     [Fact]
     public async Task Success_ReturnsPayload()
     {
-        var response = new RetrospectiveResponse("Last week you kept a 5-day streak.", FromCache: false);
+        var response = CreateResponse("week", "Last week you kept a 5-day streak.");
         _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
@@ -55,7 +56,7 @@ public class GetRetrospectiveToolTests
     public async Task MonthPeriod_DerivesThirtyDayRange()
     {
         _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new RetrospectiveResponse("ok", false)));
+            .Returns(Result.Success(CreateResponse("month", "ok")));
 
         await Execute("""{"period": "month"}""");
 
@@ -72,7 +73,7 @@ public class GetRetrospectiveToolTests
     public async Task NoPeriod_DefaultsToWeek_AnchoredOnMondayStart()
     {
         _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new RetrospectiveResponse("ok", false)));
+            .Returns(Result.Success(CreateResponse("week", "ok")));
 
         await Execute("{}");
 
@@ -89,7 +90,7 @@ public class GetRetrospectiveToolTests
     {
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(0);
         _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new RetrospectiveResponse("ok", false)));
+            .Returns(Result.Success(CreateResponse("week", "ok")));
 
         await Execute("""{"period": "week"}""");
 
@@ -100,6 +101,13 @@ public class GetRetrospectiveToolTests
                 q.DateTo == Today),
             Arg.Any<CancellationToken>());
     }
+
+    private static RetrospectiveResponse CreateResponse(string period, string highlights) =>
+        new(
+            period,
+            new RetrospectiveMetrics(0, 0, 0, 0, 0, 0, 0, 0, new int[7], [], []),
+            new RetrospectiveNarrative(highlights, "", "", ""),
+            FromCache: false);
 
     private async Task<ToolResult> Execute(string json)
     {

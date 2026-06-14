@@ -2,6 +2,7 @@ using System.Reflection;
 using FluentAssertions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -113,7 +114,8 @@ public class AiRetrospectiveServiceTests
 
         var result = InvokeBuildRetrospectivePrompt(habits, from, to, "weekly", "en");
 
-        result.Should().Contain("10 days");    }
+        result.Should().Contain("10 days");
+    }
 
     [Fact]
     public void BuildRetrospectivePrompt_CountsOnlyTopLevelHabits()
@@ -224,6 +226,81 @@ public class AiRetrospectiveServiceTests
         result.HabitSection.Should().Contain("2 slips");
     }
 
+    [Fact]
+    public void ParseNarrative_English_SplitsAllFourSections()
+    {
+        var text =
+            "**Highlights**\nYou nailed Exercise at 100%.\n\n" +
+            "**Missed Opportunities**\nReading slipped to 20%.\n\n" +
+            "**Trends**\nMornings are your strongest window.\n\n" +
+            "**Suggestion**\nSchedule Reading right after lunch.";
+
+        var result = InvokeParseNarrative(text, "en");
+
+        result.Highlights.Should().Be("You nailed Exercise at 100%.");
+        result.Missed.Should().Be("Reading slipped to 20%.");
+        result.Trends.Should().Be("Mornings are your strongest window.");
+        result.Suggestion.Should().Be("Schedule Reading right after lunch.");
+    }
+
+    [Fact]
+    public void ParseNarrative_NumberedHeadings_StripsNumberAndTrailingDescription()
+    {
+        var text =
+            "1. **Highlights** -- what went well\nGreat consistency.\n" +
+            "2. **Missed Opportunities** -- gaps\nSkipped weekends.\n" +
+            "3. **Trends** -- patterns\nImproving steadily.\n" +
+            "4. **Suggestion** -- next step\nKeep the streak alive.";
+
+        var result = InvokeParseNarrative(text, "en");
+
+        result.Highlights.Should().Be("Great consistency.");
+        result.Missed.Should().Be("Skipped weekends.");
+        result.Trends.Should().Be("Improving steadily.");
+        result.Suggestion.Should().Be("Keep the streak alive.");
+    }
+
+    [Fact]
+    public void ParseNarrative_Portuguese_SplitsAllFourSections()
+    {
+        var text =
+            "**Destaques**\nVoce mandou bem.\n\n" +
+            "**Oportunidades Perdidas**\nFaltou leitura.\n\n" +
+            "**Tendências**\nMelhorando.\n\n" +
+            "**Sugestão**\nContinue assim.";
+
+        var result = InvokeParseNarrative(text, "pt-br");
+
+        result.Highlights.Should().Be("Voce mandou bem.");
+        result.Missed.Should().Be("Faltou leitura.");
+        result.Trends.Should().Be("Melhorando.");
+        result.Suggestion.Should().Be("Continue assim.");
+    }
+
+    [Fact]
+    public void ParseNarrative_UnparseableText_FallsBackToHighlights()
+    {
+        var text = "Just a single block of prose with no headings at all.";
+
+        var result = InvokeParseNarrative(text, "en");
+
+        result.Highlights.Should().Be(text);
+        result.Missed.Should().BeEmpty();
+        result.Trends.Should().BeEmpty();
+        result.Suggestion.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ParseNarrative_PartialHeadings_FallsBackToHighlights()
+    {
+        var text = "**Highlights**\nGood week.\n**Trends**\nUp and to the right.";
+
+        var result = InvokeParseNarrative(text, "en");
+
+        result.Highlights.Should().Be(text);
+        result.Missed.Should().BeEmpty();
+    }
+
     private static Habit CreateDailyHabit(
         string title,
         bool isBadHabit = false,
@@ -263,5 +340,12 @@ public class AiRetrospectiveServiceTests
         var method = typeof(AiRetrospectiveService)
             .GetMethod("BuildHabitBreakdown", PrivateStatic)!;
         return ((string, int, int, int))method.Invoke(null, [habits, dateFrom, dateTo, totalDays])!;
+    }
+
+    private static RetrospectiveNarrative InvokeParseNarrative(string text, string language)
+    {
+        var method = typeof(AiRetrospectiveService)
+            .GetMethod("ParseNarrative", PrivateStatic)!;
+        return (RetrospectiveNarrative)method.Invoke(null, [text, language])!;
     }
 }

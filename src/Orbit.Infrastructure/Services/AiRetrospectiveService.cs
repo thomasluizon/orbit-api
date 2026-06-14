@@ -1,9 +1,11 @@
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Services;
@@ -12,7 +14,7 @@ public sealed partial class AiRetrospectiveService(
     AiCompletionClient aiClient,
     ILogger<AiRetrospectiveService> logger) : IRetrospectiveService
 {
-    public async Task<Result<string>> GenerateRetrospectiveAsync(
+    public async Task<Result<RetrospectiveNarrative>> GenerateRetrospectiveAsync(
         List<Habit> habits,
         DateOnly dateFrom,
         DateOnly dateTo,
@@ -21,7 +23,7 @@ public sealed partial class AiRetrospectiveService(
         CancellationToken cancellationToken = default)
     {
         if (habits.Count == 0)
-            return Result.Failure<string>(ErrorMessages.NoHabitsForPeriod);
+            return Result.Failure<RetrospectiveNarrative>(ErrorMessages.NoHabitsForPeriod);
 
         var prompt = BuildRetrospectivePrompt(habits, dateFrom, dateTo, period, language);
 
@@ -37,19 +39,102 @@ public sealed partial class AiRetrospectiveService(
                 cancellationToken);
 
             if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<string>(ErrorMessages.AiEmptyResponse);
+                return Result.Failure<RetrospectiveNarrative>(ErrorMessages.AiEmptyResponse);
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
+            var narrative = ParseNarrative(trimmed, language);
 
             if (logger.IsEnabled(LogLevel.Information))
                 LogRetrospectiveGenerated(logger, trimmed.Length);
-            return Result.Success(trimmed);
+            return Result.Success(narrative);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogRetrospectiveFailed(logger, ex);
-            return Result.Failure<string>(ErrorMessages.AiRetrospectiveUnavailable);
+            return Result.Failure<RetrospectiveNarrative>(ErrorMessages.AiRetrospectiveUnavailable);
         }
+    }
+
+    private static (string Highlights, string Missed, string Trends, string Suggestion) GetHeadings(string language)
+    {
+        return LocaleHelper.IsPortuguese(language)
+            ? ("Destaques", "Oportunidades Perdidas", "Tendências", "Sugestão")
+            : ("Highlights", "Missed Opportunities", "Trends", "Suggestion");
+    }
+
+    /// <summary>
+    /// Splits the AI document into its four sections by locating each known heading. When the four
+    /// headings are not all found in order, the whole text is returned as <c>Highlights</c> so the
+    /// caller always receives the model's output rather than an empty payload.
+    /// </summary>
+    private static RetrospectiveNarrative ParseNarrative(string text, string language)
+    {
+        var (highlights, missed, trends, suggestion) = GetHeadings(language);
+        var order = new[] { highlights, missed, trends, suggestion };
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var sections = new string[4];
+        var buffer = new StringBuilder();
+        var currentSection = -1;
+        var matchedSections = 0;
+
+        foreach (var line in lines)
+        {
+            var headingIndex = MatchHeadingIndex(line, order);
+            if (headingIndex >= 0)
+            {
+                FlushSection(sections, currentSection, buffer);
+                currentSection = headingIndex;
+                matchedSections++;
+                continue;
+            }
+
+            if (currentSection >= 0)
+                buffer.AppendLine(line);
+        }
+
+        FlushSection(sections, currentSection, buffer);
+
+        if (matchedSections < 4)
+            return new RetrospectiveNarrative(text.Trim(), string.Empty, string.Empty, string.Empty);
+
+        return new RetrospectiveNarrative(sections[0], sections[1], sections[2], sections[3]);
+    }
+
+    private static void FlushSection(string[] sections, int sectionIndex, StringBuilder buffer)
+    {
+        if (sectionIndex >= 0)
+            sections[sectionIndex] = buffer.ToString().Trim();
+        buffer.Clear();
+    }
+
+    private static int MatchHeadingIndex(string line, string[] headings)
+    {
+        var normalized = NormalizeHeadingLine(line);
+        if (normalized.Length == 0)
+            return -1;
+
+        for (var i = 0; i < headings.Length; i++)
+        {
+            if (normalized.Equals(headings[i], StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+        return -1;
+    }
+
+    private static string NormalizeHeadingLine(string line)
+    {
+        var trimmed = line.Trim().Trim('#', '*', ' ', '-', ':', '\t');
+
+        var dotIndex = trimmed.IndexOf('.');
+        if (dotIndex > 0 && dotIndex < trimmed.Length - 1 && int.TryParse(trimmed[..dotIndex], out _))
+            trimmed = trimmed[(dotIndex + 1)..];
+
+        var separatorIndex = trimmed.IndexOf("--", StringComparison.Ordinal);
+        if (separatorIndex >= 0)
+            trimmed = trimmed[..separatorIndex];
+
+        return trimmed.Trim('#', '*', ' ', '-', ':', '\t');
     }
 
     private static string BuildRetrospectivePrompt(
@@ -61,10 +146,7 @@ public sealed partial class AiRetrospectiveService(
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
-        var isPt = LocaleHelper.IsPortuguese(language);
-        var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = isPt
-            ? ("Destaques", "Oportunidades Perdidas", "Tend\u00eancias", "Sugest\u00e3o")
-            : ("Highlights", "Missed Opportunities", "Trends", "Suggestion");
+        var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = GetHeadings(language);
 
         var totalDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
         var (habitSection, totalCompletions, totalScheduled, badHabitSlips) =

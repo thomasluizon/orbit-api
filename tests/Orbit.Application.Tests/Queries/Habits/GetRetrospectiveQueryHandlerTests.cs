@@ -6,6 +6,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Queries.Habits;
@@ -15,78 +16,234 @@ public class GetRetrospectiveQueryHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IRetrospectiveService _retroService = Substitute.For<IRetrospectiveService>();
+    private readonly IUserStreakService _streakService = Substitute.For<IUserStreakService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetRetrospectiveQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly DateOnly DateFrom = new(2026, 3, 1);
-    private static readonly DateOnly DateTo = new(2026, 3, 31);
+    private static readonly DateOnly DateFrom = new(2026, 3, 2);
+    private static readonly DateOnly DateTo = new(2026, 3, 8);
+
+    private static readonly RetrospectiveNarrative SampleNarrative =
+        new("Highlights body", "Missed body", "Trends body", "Suggestion body");
 
     public GetRetrospectiveQueryHandlerTests()
     {
-        _handler = new GetRetrospectiveQueryHandler(_habitRepo, _payGate, _retroService, _cache);
+        _handler = new GetRetrospectiveQueryHandler(_habitRepo, _payGate, _retroService, _streakService, _cache);
+        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _streakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), false)
+            .Returns(new UserStreakState(4, 9, DateTo));
     }
 
-    private static Habit CreateTestHabit()
+    private static Habit CreateDailyHabit(string title = "Test Habit", string? emoji = null, bool isBadHabit = false)
     {
         return Habit.Create(new HabitCreateParams(
-            UserId, "Test Habit", FrequencyUnit.Day, 1,
-            DueDate: DateFrom)).Value;
+            UserId, title, FrequencyUnit.Day, 1,
+            Emoji: emoji, IsBadHabit: isBadHabit, DueDate: DateFrom)).Value;
     }
 
-    [Fact]
-    public async Task Handle_GeneratesNewRetrospective_WhenNotCached()
+    private static Habit CreateLoggedHabit(string title = "Test Habit", string? emoji = null)
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var habit = CreateDailyHabit(title, emoji);
+        habit.Log(DateFrom, advanceDueDate: false);
+        return habit;
+    }
 
-        var habit = CreateTestHabit();
+    private void StubHabits(params Habit[] habits)
+    {
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<Habit> { habit }.AsReadOnly());
+            .Returns(habits.ToList().AsReadOnly());
+    }
 
+    private void StubNarrative(RetrospectiveNarrative narrative)
+    {
         _retroService.GenerateRetrospectiveAsync(
             Arg.Any<List<Habit>>(),
-            DateFrom, DateTo, "weekly", "en",
+            DateFrom, DateTo, "week", "en",
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Retrospective content"));
+            .Returns(Result.Success(narrative));
+    }
 
-        var query = new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "weekly", "en");
+    private Task<Result<RetrospectiveResponse>> HandleWeek() =>
+        _handler.Handle(new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "week", "en"), CancellationToken.None);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+    [Fact]
+    public async Task Handle_GeneratesNewRetrospective_WhenNotCached()
+    {
+        StubHabits(CreateLoggedHabit());
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Retrospective.Should().Be("Retrospective content");
+        result.Value.Period.Should().Be("week");
+        result.Value.Narrative.Should().Be(SampleNarrative);
         result.Value.FromCache.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_EchoesStreakFromStreakService()
+    {
+        StubHabits(CreateLoggedHabit());
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        result.Value.Metrics.CurrentStreak.Should().Be(4);
+        result.Value.Metrics.BestStreak.Should().Be(9);
+    }
+
+    [Fact]
+    public async Task Handle_ComputesPeriodDaysInclusively()
+    {
+        StubHabits(CreateLoggedHabit());
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        result.Value.Metrics.PeriodDays.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task Handle_ComputesCompletionRateAndActiveDays()
+    {
+        var habit = CreateDailyHabit();
+        habit.Log(DateFrom, advanceDueDate: false);
+        habit.Log(DateFrom.AddDays(1), advanceDueDate: false);
+        habit.Log(DateFrom.AddDays(2), advanceDueDate: false);
+        StubHabits(habit);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var metrics = result.Value.Metrics;
+        metrics.TotalScheduled.Should().Be(7);
+        metrics.TotalCompletions.Should().Be(3);
+        metrics.CompletionRate.Should().Be(43);
+        metrics.ActiveDays.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_WeeklyConsistency_HasSevenMondayFirstValues()
+    {
+        var habit = CreateDailyHabit();
+        habit.Log(DateFrom, advanceDueDate: false);
+        habit.Log(DateFrom.AddDays(2), advanceDueDate: false);
+        StubHabits(habit);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var consistency = result.Value.Metrics.WeeklyConsistency;
+        consistency.Should().HaveCount(7);
+        consistency[0].Should().Be(100);
+        consistency[1].Should().Be(0);
+        consistency[2].Should().Be(100);
+        consistency[6].Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_TopHabits_OrderedByHighestRateFirst()
+    {
+        var strong = CreateDailyHabit("Strong");
+        var weak = CreateDailyHabit("Weak");
+        for (var i = 0; i < 7; i++)
+            strong.Log(DateFrom.AddDays(i), advanceDueDate: false);
+        weak.Log(DateFrom, advanceDueDate: false);
+        StubHabits(strong, weak);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var top = result.Value.Metrics.TopHabits;
+        top.Should().HaveCount(2);
+        top[0].Name.Should().Be("Strong");
+        top[0].CompletionRate.Should().Be(100);
+        top[0].Emoji.Should().BeNull();
+        top[1].Name.Should().Be("Weak");
+    }
+
+    [Fact]
+    public async Task Handle_NeedsAttention_OrderedByLowestRate_ExcludesPerfectHabits()
+    {
+        var perfect = CreateDailyHabit("Perfect");
+        var weak = CreateDailyHabit("Weak");
+        var middling = CreateDailyHabit("Middling");
+        for (var i = 0; i < 7; i++)
+            perfect.Log(DateFrom.AddDays(i), advanceDueDate: false);
+        weak.Log(DateFrom, advanceDueDate: false);
+        for (var i = 0; i < 4; i++)
+            middling.Log(DateFrom.AddDays(i), advanceDueDate: false);
+        StubHabits(perfect, weak, middling);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var needs = result.Value.Metrics.NeedsAttention;
+        needs.Should().HaveCount(2);
+        needs.Should().NotContain(s => s.Name == "Perfect");
+        needs[0].Name.Should().Be("Weak");
+        needs[1].Name.Should().Be("Middling");
+    }
+
+    [Fact]
+    public async Task Handle_BadHabitSlips_CountedSeparately_NotInHabitLists()
+    {
+        var bad = CreateDailyHabit("Smoking", isBadHabit: true);
+        bad.Log(DateFrom, advanceDueDate: false);
+        bad.Log(DateFrom.AddDays(1), advanceDueDate: false);
+        StubHabits(bad);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var metrics = result.Value.Metrics;
+        metrics.BadHabitSlips.Should().Be(2);
+        metrics.TotalScheduled.Should().Be(0);
+        metrics.TopHabits.Should().BeEmpty();
+        metrics.NeedsAttention.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_IncludesHabitEmoji()
+    {
+        StubHabits(CreateLoggedHabit("Run", "🏃"));
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        result.Value.Metrics.TopHabits.Should().ContainSingle()
+            .Which.Emoji.Should().Be("🏃");
     }
 
     [Fact]
     public async Task Handle_ReturnsCachedResult_WhenCached()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        StubHabits(CreateLoggedHabit());
+        StubNarrative(SampleNarrative);
 
-        var habit = CreateTestHabit();
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Habit> { habit }.AsReadOnly());
-
-        _retroService.GenerateRetrospectiveAsync(
-            Arg.Any<List<Habit>>(),
-            DateFrom, DateTo, "weekly", "en",
-            Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Retro content"));
-
-        var query = new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "weekly", "en");
-
-        await _handler.Handle(query, CancellationToken.None);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        await HandleWeek();
+        var result = await HandleWeek();
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FromCache.Should().BeTrue();
+        result.Value.Narrative.Should().Be(SampleNarrative);
+    }
+
+    [Fact]
+    public async Task Handle_CacheHit_DoesNotRegenerateNarrative()
+    {
+        StubHabits(CreateLoggedHabit());
+        StubNarrative(SampleNarrative);
+
+        await HandleWeek();
+        await HandleWeek();
+
+        await _retroService.Received(1).GenerateRetrospectiveAsync(
+            Arg.Any<List<Habit>>(), DateFrom, DateTo, "week", "en", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -95,9 +252,7 @@ public class GetRetrospectiveQueryHandlerTests
         _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>())
             .Returns(Result.Failure("PAY_GATE", "PAY_GATE"));
 
-        var query = new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "weekly", "en");
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await HandleWeek();
 
         result.IsFailure.Should().BeTrue();
     }
@@ -105,17 +260,9 @@ public class GetRetrospectiveQueryHandlerTests
     [Fact]
     public async Task Handle_NoHabits_ReturnsFailure()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        StubHabits();
 
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Habit>().AsReadOnly());
-
-        var query = new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "weekly", "en");
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await HandleWeek();
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("No habits found");
@@ -124,26 +271,28 @@ public class GetRetrospectiveQueryHandlerTests
     [Fact]
     public async Task Handle_RetrospectiveServiceFails_ReturnsFailure()
     {
-        _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-
-        var habit = CreateTestHabit();
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Habit> { habit }.AsReadOnly());
-
+        StubHabits(CreateLoggedHabit());
         _retroService.GenerateRetrospectiveAsync(
             Arg.Any<List<Habit>>(),
-            DateFrom, DateTo, "weekly", "en",
+            DateFrom, DateTo, "week", "en",
             Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<string>("AI service error"));
+            .Returns(Result.Failure<RetrospectiveNarrative>("AI service error"));
 
-        var query = new GetRetrospectiveQuery(UserId, DateFrom, DateTo, "weekly", "en");
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await HandleWeek();
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("AI service error");
+    }
+
+    [Fact]
+    public async Task Handle_HabitsButNoCompletions_ReturnsFailure()
+    {
+        StubHabits(CreateDailyHabit());
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("No habits found");
     }
 }
