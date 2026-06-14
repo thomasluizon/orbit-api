@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -75,7 +76,14 @@ public partial class CheckReferralCompletionCommandHandler(
 
         trackedReferral.MarkCompleted();
         trackedReferral.MarkRewarded();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Success();
+        }
 
         if (referrer is not null)
             await GrantCoupon(referrer, cancellationToken);

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -264,6 +265,28 @@ public class CheckReferralCompletionCommandHandlerTests
             ReferrerId, Arg.Any<CancellationToken>());
         await _referralReward.Received(1).CreateReferralCouponAsync(
             ReferredUserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentClaimConflict_ReturnsSuccessWithoutGrantingCoupon()
+    {
+        var referral = CreatePendingReferral();
+        var referredUser = CreateReferredUser();
+        var referrer = CreateReferrer();
+        SetupPendingReferral(referral);
+        SetupReferredAndReferrerUsers(referredUser, referrer);
+        SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(new DbUpdateConcurrencyException("simulated concurrent claim")));
+
+        var command = new CheckReferralCompletionCommand(ReferredUserId);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _referralReward.DidNotReceive().CreateReferralCouponAsync(
+            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
