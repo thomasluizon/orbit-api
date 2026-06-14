@@ -1,9 +1,12 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Auth.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -64,8 +67,8 @@ public class VerifyCodeCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid");
         result.ErrorCode.Should().Be("INVALID_VERIFICATION_CODE");
-        _cache.TryGetValue($"verify:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
-        entry!.Attempts.Should().Be(1);
+        _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        attempts.Should().Be(1);
     }
 
     [Fact]
@@ -96,20 +99,54 @@ public class VerifyCodeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_MaxAttemptsExceeded_RemovesCacheAndReturnsFailure()
+    public async Task Handle_MaxAttemptsExceeded_ReturnsFailure()
     {
-        var entry = new VerificationEntry("123456", 3, DateTime.UtcNow);
-        _cache.Set($"verify:{TestEmail}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+        SetupCacheWithCode("123456");
+        for (var attempt = 0; attempt < 3; attempt++)
+            await _handler.Handle(new VerifyCodeCommand(TestEmail, "999999"), CancellationToken.None);
 
-        var command = new VerifyCodeCommand(TestEmail, "123456");
-
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Too many attempts");
         result.ErrorCode.Should().Be("TOO_MANY_ATTEMPTS");
-        _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_ResendingCode_DoesNotResetAttemptBudget()
+    {
+        var sendCodeHandler = new SendCodeCommandHandler(_cache, _emailService);
+        await sendCodeHandler.Handle(new SendCodeCommand(TestEmail), CancellationToken.None);
+
+        for (var attempt = 0; attempt < 3; attempt++)
+            await _handler.Handle(new VerifyCodeCommand(TestEmail, "000000"), CancellationToken.None);
+
+        SetupCacheWithCode("654321");
+
+        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "654321"), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("TOO_MANY_ATTEMPTS");
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentFirstLogin_ResolvesToExistingUserWithout500()
+    {
+        SetupCacheWithCode("123456");
+        var racedUser = User.Create("Raced", TestEmail).Value;
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((User?)null, racedUser);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Email.Should().Be(TestEmail);
+        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -143,5 +180,10 @@ public class VerifyCodeCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 }

@@ -14,5 +14,11 @@ public class CreateChecklistTemplateCommandValidator : AbstractValidator<CreateC
             .Must(items => items.Count <= AppConstants.MaxChecklistItems)
             .When(x => x.Items is not null)
             .WithMessage($"A checklist template can have at most {AppConstants.MaxChecklistItems} items.");
+
+        RuleForEach(x => x.Items)
+            .NotEmpty()
+            .WithMessage("Checklist template items must not be empty.")
+            .MaximumLength(AppConstants.MaxChecklistItemTextLength)
+            .WithMessage($"Checklist template item text must not exceed {AppConstants.MaxChecklistItemTextLength} characters.");
     }
 }

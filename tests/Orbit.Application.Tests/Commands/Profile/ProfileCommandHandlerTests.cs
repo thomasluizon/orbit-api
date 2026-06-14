@@ -252,7 +252,7 @@ public class ProfileCommandHandlerTests
         var user = CreateTestUser();
         SetupUserFound(user);
 
-        var handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork, _userDateService);
         var command = new SetWeekStartDayCommand(UserId, 0);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -267,7 +267,7 @@ public class ProfileCommandHandlerTests
     {
         SetupUserNotFound();
 
-        var handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork);
+        var handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork, _userDateService);
         var command = new SetWeekStartDayCommand(UserId, 0);
 
         var result = await handler.Handle(command, CancellationToken.None);

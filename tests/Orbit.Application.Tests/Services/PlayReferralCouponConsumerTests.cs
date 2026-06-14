@@ -32,81 +32,88 @@ public class PlayReferralCouponConsumerTests
         new(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, offerId);
 
     [Fact]
-    public async Task NewPurchaseWithReferralOfferAndCoupon_ClearsAndCancelsCoupon()
+    public void NewPurchaseWithReferralOfferAndCoupon_ClearsCouponAndReturnsCouponId()
     {
         var user = UserWithCoupon();
 
-        await CreateConsumer().ConsumeOnNewPurchaseAsync(user, StateWithOffer("referral10"), "tok_new", CancellationToken.None);
+        var couponId = CreateConsumer().ConsumeOnNewPurchase(user, StateWithOffer("referral10"), "tok_new");
 
-        user.ReferralCouponId.Should().BeNull();
-        await _rewardService.Received(1).CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task OfferIdMatchIsCaseInsensitive()
-    {
-        var user = UserWithCoupon();
-
-        await CreateConsumer().ConsumeOnNewPurchaseAsync(user, StateWithOffer("REFERRAL10"), "tok_new", CancellationToken.None);
-
+        couponId.Should().Be("coupon_abc");
         user.ReferralCouponId.Should().BeNull();
     }
 
     [Fact]
-    public async Task PurchaseWithoutReferralOffer_RetainsCoupon()
+    public void OfferIdMatchIsCaseInsensitive()
     {
         var user = UserWithCoupon();
 
-        await CreateConsumer().ConsumeOnNewPurchaseAsync(user, StateWithOffer(null), "tok_new", CancellationToken.None);
+        var couponId = CreateConsumer().ConsumeOnNewPurchase(user, StateWithOffer("REFERRAL10"), "tok_new");
 
+        couponId.Should().Be("coupon_abc");
+        user.ReferralCouponId.Should().BeNull();
+    }
+
+    [Fact]
+    public void PurchaseWithoutReferralOffer_RetainsCouponAndReturnsNull()
+    {
+        var user = UserWithCoupon();
+
+        var couponId = CreateConsumer().ConsumeOnNewPurchase(user, StateWithOffer(null), "tok_new");
+
+        couponId.Should().BeNull();
         user.ReferralCouponId.Should().Be("coupon_abc");
-        await _rewardService.DidNotReceive().CancelCouponAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task AlreadyLinkedToken_DoesNotConsume()
+    public void AlreadyLinkedToken_DoesNotConsume()
     {
         var user = UserWithCoupon();
         user.LinkPlayPurchaseToken("tok_existing");
 
-        await CreateConsumer().ConsumeOnNewPurchaseAsync(user, StateWithOffer("referral10"), "tok_existing", CancellationToken.None);
+        var couponId = CreateConsumer().ConsumeOnNewPurchase(user, StateWithOffer("referral10"), "tok_existing");
 
+        couponId.Should().BeNull();
         user.ReferralCouponId.Should().Be("coupon_abc");
-        await _rewardService.DidNotReceive().CancelCouponAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ReferralOfferWithoutCoupon_DoesNothing()
+    public void ReferralOfferWithoutCoupon_ReturnsNull()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
 
-        await CreateConsumer().ConsumeOnNewPurchaseAsync(user, StateWithOffer("referral10"), "tok_new", CancellationToken.None);
+        var couponId = CreateConsumer().ConsumeOnNewPurchase(user, StateWithOffer("referral10"), "tok_new");
 
+        couponId.Should().BeNull();
         user.ReferralCouponId.Should().BeNull();
-        await _rewardService.DidNotReceive().CancelCouponAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task CancelCouponFailure_CouponStillClearedAndNoThrow()
+    public void ReferralOfferIdNotConfigured_ReturnsNull()
     {
         var user = UserWithCoupon();
+
+        var couponId = CreateConsumer(referralOfferId: "").ConsumeOnNewPurchase(user, StateWithOffer("referral10"), "tok_new");
+
+        couponId.Should().BeNull();
+        user.ReferralCouponId.Should().Be("coupon_abc");
+    }
+
+    [Fact]
+    public async Task CancelConsumedCouponAsync_CancelsAtBillingProvider()
+    {
+        await CreateConsumer().CancelConsumedCouponAsync(Guid.NewGuid(), "coupon_abc", CancellationToken.None);
+
+        await _rewardService.Received(1).CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CancelConsumedCouponAsync_BillingProviderFailure_DoesNotThrow()
+    {
         _rewardService.CancelCouponAsync("coupon_abc", Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("stripe down"));
 
-        var act = () => CreateConsumer().ConsumeOnNewPurchaseAsync(user, StateWithOffer("referral10"), "tok_new", CancellationToken.None);
+        var act = () => CreateConsumer().CancelConsumedCouponAsync(Guid.NewGuid(), "coupon_abc", CancellationToken.None);
 
         await act.Should().NotThrowAsync();
-        user.ReferralCouponId.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task ReferralOfferIdNotConfigured_DoesNothing()
-    {
-        var user = UserWithCoupon();
-
-        await CreateConsumer(referralOfferId: "").ConsumeOnNewPurchaseAsync(user, StateWithOffer("referral10"), "tok_new", CancellationToken.None);
-
-        user.ReferralCouponId.Should().Be("coupon_abc");
-        await _rewardService.DidNotReceive().CancelCouponAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

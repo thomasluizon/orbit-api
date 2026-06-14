@@ -13,6 +13,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["GoalDeadlineNotification"] = TimeSpan.FromMinutes(90),
         ["SlipAlertScheduler"] = TimeSpan.FromMinutes(15),
         ["HabitDueDateAdvancement"] = TimeSpan.FromMinutes(90),
+        ["StreakGoalSync"] = TimeSpan.FromMinutes(90),
         ["StreakFreezeAutoActivation"] = TimeSpan.FromMinutes(180),
         ["AccountDeletion"] = TimeSpan.FromHours(72),
         ["SyncCleanup"] = TimeSpan.FromHours(48),

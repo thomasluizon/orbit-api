@@ -90,4 +90,90 @@ public class UpdateHabitCommandValidatorTests
 
         result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
     }
+
+    [Fact]
+    public void Validate_DaysWithNonDayUnit_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = FrequencyUnit.Week,
+            FrequencyQuantity = 1,
+            Options = new UpdateHabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
+    }
+
+    [Fact]
+    public void Validate_DaysWithDayUnitQty1_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = FrequencyUnit.Day,
+            FrequencyQuantity = 1,
+            Options = new UpdateHabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
+    }
+
+    [Fact]
+    public void Validate_OneTimeTaskWithEndDate_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = null,
+            FrequencyQuantity = null,
+            IsGeneral = false,
+            Options = new UpdateHabitCommandOptions(EndDate: new DateOnly(2030, 1, 1))
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
+    }
+
+    [Fact]
+    public void Validate_RecurringTaskWithEndDate_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            IsGeneral = false,
+            Options = new UpdateHabitCommandOptions(EndDate: new DateOnly(2030, 1, 1))
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
+    }
+
+    [Fact]
+    public void Validate_ReminderTimes_Duplicates_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new UpdateHabitCommandOptions(ReminderTimes: new[] { 15, 15 })
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Options!.ReminderTimes);
+    }
+
+    [Fact]
+    public void Validate_ReminderTimes_OutOfRange_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new UpdateHabitCommandOptions(ReminderTimes: new[] { -5 })
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Options!.ReminderTimes);
+    }
 }

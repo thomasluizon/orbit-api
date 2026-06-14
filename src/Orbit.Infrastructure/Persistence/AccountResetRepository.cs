@@ -8,6 +8,7 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
     public async Task DeleteAllUserDataAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var habitIds = await context.Habits
+            .IgnoreQueryFilters()
             .Where(h => h.UserId == userId)
             .Select(h => h.Id)
             .ToListAsync(cancellationToken);
@@ -23,11 +24,13 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
                 .ExecuteDeleteAsync(cancellationToken);
 
             await context.HabitLogs
+                .IgnoreQueryFilters()
                 .Where(l => habitIds.Contains(l.HabitId))
                 .ExecuteDeleteAsync(cancellationToken);
         }
 
         var goalIds = await context.Goals
+            .IgnoreQueryFilters()
             .Where(g => g.UserId == userId)
             .Select(g => g.Id)
             .ToListAsync(cancellationToken);
@@ -35,11 +38,13 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
         if (goalIds.Count > 0)
         {
             await context.GoalProgressLogs
+                .IgnoreQueryFilters()
                 .Where(l => goalIds.Contains(l.GoalId))
                 .ExecuteDeleteAsync(cancellationToken);
         }
 
         await context.Notifications
+            .IgnoreQueryFilters()
             .Where(n => n.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
@@ -69,14 +74,46 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
             .ExecuteDeleteAsync(cancellationToken);
 
         await context.Tags
+            .IgnoreQueryFilters()
             .Where(t => t.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        await context.ChecklistTemplates
+            .IgnoreQueryFilters()
+            .Where(ct => ct.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.GoogleCalendarSyncSuggestions
+            .Where(s => s.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.AgentStepUpChallenges
+            .Where(c => c.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.PendingAgentOperations
+            .Where(o => o.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.AgentAuditLogs
+            .Where(a => a.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.PendingClarifications
+            .Where(pc => pc.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await context.Referrals
+            .Where(r => r.ReferrerId == userId || r.ReferredUserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         await context.Goals
+            .IgnoreQueryFilters()
             .Where(g => g.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await context.Habits
+            .IgnoreQueryFilters()
             .Where(h => h.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
     }

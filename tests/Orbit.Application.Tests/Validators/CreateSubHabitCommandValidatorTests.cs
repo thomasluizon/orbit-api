@@ -90,16 +90,31 @@ public class CreateSubHabitCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_DaysWithQty1_NoError()
+    public void Validate_DaysWithDayUnitQty1_NoError()
     {
         var command = ValidCommand() with
         {
+            FrequencyUnit = FrequencyUnit.Day,
             FrequencyQuantity = 1,
             Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday })
         };
 
         var result = _validator.TestValidate(command);
         result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
+    }
+
+    [Fact]
+    public void Validate_DaysWithNonDayUnit_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = FrequencyUnit.Week,
+            FrequencyQuantity = 1,
+            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
     }
 
     [Fact]

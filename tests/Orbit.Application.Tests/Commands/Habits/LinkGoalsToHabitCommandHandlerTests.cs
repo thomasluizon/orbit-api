@@ -74,7 +74,7 @@ public class LinkGoalsToHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_NoMatchingGoals_ClearsExistingGoals()
+    public async Task Handle_ForeignOrMissingGoalId_ReturnsFailureWithoutClearing()
     {
         var habit = CreateTestHabit();
         var existingGoal = CreateTestGoal("Existing");
@@ -92,7 +92,30 @@ public class LinkGoalsToHabitCommandHandlerTests
         var command = new LinkGoalsToHabitCommand(UserId, habit.Id, [Guid.NewGuid()]);
         var result = await _handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        habit.Goals.Should().BeEmpty();
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_PartiallyOwnedGoals_ReturnsFailure()
+    {
+        var habit = CreateTestHabit();
+        var ownedGoal = CreateTestGoal("Owned");
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habit);
+
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(new List<Goal> { ownedGoal });
+
+        var command = new LinkGoalsToHabitCommand(UserId, habit.Id, [ownedGoal.Id, Guid.NewGuid()]);
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
     }
 }

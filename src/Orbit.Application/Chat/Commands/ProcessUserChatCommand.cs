@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -83,7 +84,8 @@ public record ChatExecutionDependencies(
     IUnitOfWork UnitOfWork,
     IServiceScopeFactory ServiceScopeFactory,
     IAgentOperationExecutor OperationExecutor,
-    IPendingClarificationStore PendingClarificationStore);
+    IPendingClarificationStore PendingClarificationStore,
+    IStreakGoalReadSyncer StreakGoalReadSyncer);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,
@@ -172,12 +174,23 @@ public partial class ProcessUserChatCommandHandler(
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
         var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
-        var activeGoals = hasProAccess
-            ? await data.GoalRepository.FindAsync(
+        var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
+        IReadOnlyList<Goal> activeGoals = [];
+        if (hasProAccess)
+        {
+            var freshStreakValues = await execution.StreakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
+            var loadedGoals = await data.GoalRepository.FindAsync(
                 g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
                 q => q.Include(g => g.Habits),
-                cancellationToken)
-            : [];
+                cancellationToken);
+            foreach (var goal in loadedGoals)
+            {
+                if (freshStreakValues.TryGetValue(goal.Id, out var fresh))
+                    goal.SyncStreakProgress(fresh, allowCompletion: false);
+            }
+            activeGoals = loadedGoals;
+        }
 
         var messageGate = await execution.PayGateService.CanSendAiMessage(request.UserId, cancellationToken);
         if (messageGate.IsFailure)
@@ -202,8 +215,6 @@ public partial class ProcessUserChatCommandHandler(
         var enabledFeatureFlags = await data.FeatureFlagService.GetEnabledKeysForUserAsync(
             request.UserId,
             cancellationToken);
-
-        var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         dbStopwatch.Stop();
         LogContextLoaded(logger, dbStopwatch.ElapsedMilliseconds, activeHabits.Count, userFacts.Count);
@@ -918,9 +929,17 @@ public partial class ProcessUserChatCommandHandler(
     {
         try
         {
-            var userForIncrement = await bgUserRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: CancellationToken.None);
-            userForIncrement?.IncrementAiMessageCount();
-            await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
+            await ConcurrencyRetry.ExecuteAsync(
+                bgUserRepo,
+                bgUnitOfWork,
+                ct => bgUserRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct),
+                user =>
+                {
+                    user.IncrementAiMessageCount();
+                    return Task.FromResult(Result.Success());
+                },
+                ErrorMessages.UserNotFound,
+                CancellationToken.None);
         }
         catch (Exception ex)
         {

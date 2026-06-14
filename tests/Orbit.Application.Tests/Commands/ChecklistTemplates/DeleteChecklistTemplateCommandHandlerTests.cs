@@ -35,7 +35,9 @@ public class DeleteChecklistTemplateCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _repo.Received(1).Remove(template);
+        template.IsDeleted.Should().BeTrue();
+        template.DeletedAtUtc.Should().NotBeNull();
+        _repo.DidNotReceive().Remove(Arg.Any<ChecklistTemplate>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

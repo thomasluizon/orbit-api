@@ -20,12 +20,16 @@ public static class AppConstants
     public const int MaxBulkOperationSize = 100;
     public const int MaxGoalsPerHabit = 10;
     public const int MaxHabitsPerGoal = 20;
+    public const int MaxGoalDescriptionLength = 500;
+    public const int MaxGoalProgressNoteLength = 500;
     public const int ReferralDiscountPercent = 10;
     public const int DefaultMaxReferrals = 10;
     public const int ReferralCompletionThreshold = 3;
     public const int ReferralCompletionWindowDays = 7;
     public const int DefaultOverdueWindowDays = 7;
     public const int MaxScheduledReminders = DomainConstants.MaxScheduledReminders;
+    public const int MaxReminderTimes = DomainConstants.MaxReminderTimes;
+    public const int MaxReminderMinutesBefore = DomainConstants.MaxReminderMinutesBefore;
     public const int MaxPushSubscriptionsPerUser = 5;
     public const int MaxNotificationsReturned = 50;
     public const int MaxChecklistItems = 50;
@@ -33,6 +37,7 @@ public static class AppConstants
     public const int MaxUserNameLength = DomainConstants.MaxUserNameLength;
     public const int MaxLanguageLength = 10;
     public const int MaxVerificationAttempts = 3;
+    public const int VerificationAttemptWindowMinutes = 15;
     public const int MaxChatMessageLength = 4000;
     public const int MaxClarificationValueLength = 2048;
     public const int MaxClarificationArgsLength = 16384;
@@ -49,5 +54,7 @@ public static class AppConstants
     public const int MaxStreakFreezesAccumulated = 3;
     public const int StreakDaysPerFreeze = 7;
     public const int MaxStreakLookbackDays = 365;
+    public const int MaxSyncWindowDays = 30;
+    public const int SyncCleanupMarginDays = 1;
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

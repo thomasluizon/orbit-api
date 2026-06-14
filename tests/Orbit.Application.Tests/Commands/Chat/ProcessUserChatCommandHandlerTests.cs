@@ -7,6 +7,7 @@ using NSubstitute;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -31,6 +32,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IStreakGoalReadSyncer _streakGoalReadSyncer = Substitute.For<IStreakGoalReadSyncer>();
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
@@ -62,7 +64,7 @@ public class ProcessUserChatCommandHandlerTests
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore);
+            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore, _streakGoalReadSyncer);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -80,6 +82,8 @@ public class ProcessUserChatCommandHandlerTests
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
+        _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int>());
         _promptBuilder.Build(Arg.Any<PromptBuildRequest>()).Returns("system prompt");
 
         _habitRepo.FindAsync(
@@ -277,6 +281,40 @@ public class ProcessUserChatCommandHandlerTests
         _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveHabits.Count == 1 &&
             request.ActiveHabits[0].Id == activeHabit.Id));
+    }
+
+    [Fact]
+    public async Task Handle_ProUser_AppliesFreshStreakValueBeforeBuildingPromptContext()
+    {
+        var proUser = User.Create("Thomas", "thomas@test.com").Value;
+        proUser.StartTrial(DateTime.UtcNow.AddDays(5));
+        SetupUserAndPayGate(proUser);
+
+        var streakGoal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
+
+        _streakGoalReadSyncer
+            .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new List<Goal> { streakGoal }.AsReadOnly());
+
+        SetupAiResponse(new AiResponse { TextMessage = "Done", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "How am I doing?"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+            request.ActiveGoals != null &&
+            request.ActiveGoals.Count == 1 &&
+            request.ActiveGoals[0].CurrentValue == 4));
+        streakGoal.Status.Should().Be(GoalStatus.Active);
     }
 
     [Fact]

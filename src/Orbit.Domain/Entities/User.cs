@@ -164,6 +164,7 @@ public partial class User : Entity
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.Stripe;
+        PlayPurchaseToken = null;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
     }
@@ -379,19 +380,23 @@ public partial class User : Entity
         if (CurrentStreak < daysPerFreeze)
             return false;
 
+        var eligibleMilestone = CurrentStreak - (CurrentStreak % daysPerFreeze);
+
         if (StreakFreezesAccumulated >= maxAccumulated)
         {
-            LastFreezeAwardStreak = CurrentStreak - (CurrentStreak % daysPerFreeze);
+            LastFreezeAwardStreak = eligibleMilestone;
             return false;
         }
 
-        var eligibleMilestone = CurrentStreak - (CurrentStreak % daysPerFreeze);
         if (eligibleMilestone <= LastFreezeAwardStreak)
             return false;
 
-        StreakFreezesAccumulated++;
-        LastFreezeAwardStreak = LastFreezeAwardStreak + daysPerFreeze;
-        return true;
+        var milestonesCrossed = (eligibleMilestone - LastFreezeAwardStreak) / daysPerFreeze;
+        var awardable = Math.Min(milestonesCrossed, maxAccumulated - StreakFreezesAccumulated);
+
+        StreakFreezesAccumulated += awardable;
+        LastFreezeAwardStreak += awardable * daysPerFreeze;
+        return awardable > 0;
     }
 
     public Result ConsumeStreakFreeze()

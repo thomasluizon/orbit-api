@@ -101,11 +101,13 @@ public static class ErrorMessages
     public static readonly AppError MaxApiKeys = new(ErrorCodes.MaxApiKeys, "You can have at most {0} active API keys.");
     public static readonly AppError MaxHabitsPerGoal = new(ErrorCodes.MaxHabitsPerGoal, "A goal can have at most {0} linked habits.");
     public static readonly AppError InvalidGoalStatus = new(ErrorCodes.InvalidGoalStatus, "Invalid status.");
+    public static readonly AppError DeadlineInPast = new(ErrorCodes.DeadlineInPast, "Deadline cannot be in the past.");
     public static readonly AppError ImageTooLarge = new(ErrorCodes.ImageTooLarge, "File size exceeds maximum allowed size of {0}MB.");
     public static readonly AppError ImageEmpty = new(ErrorCodes.ImageEmpty, "File is empty.");
     public static readonly AppError ImageExtensionNotAllowed = new(ErrorCodes.ImageExtensionNotAllowed, "File extension '{0}' is not allowed. Allowed: {1}.");
     public static readonly AppError ImageFormatUnknown = new(ErrorCodes.ImageFormatUnknown, "Unable to determine file format from magic bytes.");
     public static readonly AppError ImageNotAnImage = new(ErrorCodes.ImageNotAnImage, "File is not a recognized image format. Detected: {0}");
+    public static readonly AppError ConcurrentUpdateConflict = new(ErrorCodes.ConcurrentUpdateConflict, "This was changed at the same time by another request. Please try again.");
     public static readonly AppError UnexpectedServerError = new(ErrorCodes.InternalServerError, "Unexpected server error");
     public static readonly AppError TooManyRequests = new(ErrorCodes.RateLimited, "Too many requests");
     public static readonly AppError SyncWindowExceeded = new(ErrorCodes.SyncWindowExceeded, "Sync window exceeded. Full re-sync required.");

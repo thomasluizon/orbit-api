@@ -313,6 +313,18 @@ public class UserTests
     }
 
     [Fact]
+    public void SetStripeSubscription_ClearsStalePlayPurchaseToken()
+    {
+        var user = CreateValidUser();
+        user.SetPlaySubscription("play_token_123", DateTime.UtcNow.AddDays(20), SubscriptionInterval.Monthly);
+
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(6), SubscriptionInterval.Monthly);
+
+        user.PlayPurchaseToken.Should().BeNull();
+        user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
+    }
+
+    [Fact]
     public void SetPlaySubscription_SetsPlanProSourceAndToken()
     {
         var user = CreateValidUser();
@@ -428,6 +440,24 @@ public class UserTests
         user.IncrementAiMessageCount();
 
         user.AiMessagesUsedThisMonth.Should().Be(1);
+    }
+
+    [Fact]
+    public void IncrementAiMessageCount_PastReset_ZeroesAdRewardBonus()
+    {
+        var user = CreateValidUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        typeof(User).GetProperty("AiMessagesResetAt")!.SetValue(user, DateTime.UtcNow.AddDays(30));
+        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), bonusMessages: 5);
+        user.IncrementAiMessageCount();
+        user.AdRewardBonusMessages.Should().Be(5);
+
+        typeof(User).GetProperty("AiMessagesResetAt")!.SetValue(user, DateTime.UtcNow.AddDays(-1));
+
+        user.IncrementAiMessageCount();
+
+        user.AiMessagesUsedThisMonth.Should().Be(1);
+        user.AdRewardBonusMessages.Should().Be(0);
     }
 
     [Fact]
@@ -730,5 +760,54 @@ public class UserTests
         user.UpdateStreak(new DateOnly(2026, 2, 3));
         user.CurrentStreak.Should().Be(3);
         user.LongestStreak.Should().Be(3);
+    }
+
+    [Fact]
+    public void AwardStreakFreezeIfEligible_SingleMilestone_AwardsOne()
+    {
+        var user = CreateValidUser();
+        user.SetStreakState(currentStreak: 7, longestStreak: 7, lastActiveDate: new DateOnly(2026, 1, 7));
+
+        var awarded = user.AwardStreakFreezeIfEligible(maxAccumulated: 3, daysPerFreeze: 7);
+
+        awarded.Should().BeTrue();
+        user.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
+    public void AwardStreakFreezeIfEligible_MultiMilestoneJump_AwardsOnePerMilestone()
+    {
+        var user = CreateValidUser();
+        user.SetStreakState(currentStreak: 21, longestStreak: 21, lastActiveDate: new DateOnly(2026, 1, 21));
+
+        var awarded = user.AwardStreakFreezeIfEligible(maxAccumulated: 3, daysPerFreeze: 7);
+
+        awarded.Should().BeTrue();
+        user.StreakFreezesAccumulated.Should().Be(3);
+    }
+
+    [Fact]
+    public void AwardStreakFreezeIfEligible_MultiMilestoneJump_RespectsMaxCap()
+    {
+        var user = CreateValidUser();
+        user.SetStreakState(currentStreak: 35, longestStreak: 35, lastActiveDate: new DateOnly(2026, 2, 4));
+
+        var awarded = user.AwardStreakFreezeIfEligible(maxAccumulated: 3, daysPerFreeze: 7);
+
+        awarded.Should().BeTrue();
+        user.StreakFreezesAccumulated.Should().Be(3);
+    }
+
+    [Fact]
+    public void AwardStreakFreezeIfEligible_AlreadyAwardedMilestone_DoesNotDoubleAward()
+    {
+        var user = CreateValidUser();
+        user.SetStreakState(currentStreak: 7, longestStreak: 7, lastActiveDate: new DateOnly(2026, 1, 7));
+        user.AwardStreakFreezeIfEligible(maxAccumulated: 3, daysPerFreeze: 7);
+
+        var awardedAgain = user.AwardStreakFreezeIfEligible(maxAccumulated: 3, daysPerFreeze: 7);
+
+        awardedAgain.Should().BeFalse();
+        user.StreakFreezesAccumulated.Should().Be(1);
     }
 }

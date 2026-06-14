@@ -14,21 +14,7 @@ namespace Orbit.Api.Controllers;
 [Route("api/[controller]")]
 public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncController> logger) : ControllerBase
 {
-    private static readonly TimeSpan MaxSyncWindow = TimeSpan.FromDays(30);
-
-    public record SyncChangesResponse(
-        SyncEntitySet Habits,
-        SyncEntitySet HabitLogs,
-        SyncEntitySet Goals,
-        SyncEntitySet GoalProgressLogs,
-        SyncEntitySet Tags,
-        SyncEntitySet Notifications,
-        SyncEntitySet ChecklistTemplates,
-        DateTime ServerTimestamp);
-
-    public record SyncEntitySet(
-        IReadOnlyList<object> Updated,
-        IReadOnlyList<SyncDeletedRef> Deleted);
+    private static readonly TimeSpan MaxSyncWindow = TimeSpan.FromDays(AppConstants.MaxSyncWindowDays);
 
     public record SyncDeletedRef(Guid Id, DateTime DeletedAtUtc);
 
@@ -137,91 +123,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         string? Error = null);
 
     /// <summary>
-    /// Returns entities modified since the given timestamp.
-    /// Uses IgnoreQueryFilters to include soft-deleted records.
-    /// Returns 410 Gone if since > 30 days old.
-    /// </summary>
-    [HttpGet("changes")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status410Gone)]
-    public async Task<IActionResult> GetChanges(
-        [FromQuery] DateTime since,
-        CancellationToken cancellationToken)
-    {
-        var userId = HttpContext.GetUserId();
-
-        if (DateTime.UtcNow - since > MaxSyncWindow)
-            return StatusCode(StatusCodes.Status410Gone, ErrorMessages.SyncWindowExceeded.ToErrorBody());
-
-        var sinceUtc = DateTime.SpecifyKind(since, DateTimeKind.Utc);
-
-        var habits = await dbContext.Habits
-            .IgnoreQueryFilters()
-            .Where(h => h.UserId == userId && h.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var habitIds = habits.Select(h => h.Id).ToList();
-
-        var habitLogs = await dbContext.HabitLogs
-            .Where(l => habitIds.Contains(l.HabitId) && l.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var goals = await dbContext.Goals
-            .IgnoreQueryFilters()
-            .Where(g => g.UserId == userId && g.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var goalIds = goals.Select(g => g.Id).ToList();
-
-        var goalProgressLogs = await dbContext.GoalProgressLogs
-            .Where(l => goalIds.Contains(l.GoalId) && l.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var tags = await dbContext.Tags
-            .IgnoreQueryFilters()
-            .Where(t => t.UserId == userId && t.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var notifications = await dbContext.Notifications
-            .Where(n => n.UserId == userId && n.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var checklistTemplates = await dbContext.ChecklistTemplates
-            .Where(ct => ct.UserId == userId && ct.UpdatedAtUtc > sinceUtc)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var response = new SyncChangesResponse(
-            Habits: BuildEntitySet(
-                habits.Where(h => !h.IsDeleted).Cast<object>().ToList(),
-                habits.Where(h => h.IsDeleted).Select(h => new SyncDeletedRef(h.Id, h.DeletedAtUtc!.Value)).ToList()),
-            HabitLogs: new SyncEntitySet(habitLogs.Select(MapHabitLog).Cast<object>().ToList(), []),
-            Goals: BuildEntitySet(
-                goals.Where(g => !g.IsDeleted).Cast<object>().ToList(),
-                goals.Where(g => g.IsDeleted).Select(g => new SyncDeletedRef(g.Id, g.DeletedAtUtc!.Value)).ToList()),
-            GoalProgressLogs: new SyncEntitySet(goalProgressLogs.Cast<object>().ToList(), []),
-            Tags: BuildEntitySet(
-                tags.Where(t => !t.IsDeleted).Cast<object>().ToList(),
-                tags.Where(t => t.IsDeleted).Select(t => new SyncDeletedRef(t.Id, t.DeletedAtUtc!.Value)).ToList()),
-            Notifications: new SyncEntitySet(notifications.Cast<object>().ToList(), []),
-            ChecklistTemplates: new SyncEntitySet(checklistTemplates.Cast<object>().ToList(), []),
-            ServerTimestamp: DateTime.UtcNow);
-
-        LogSyncChanges(logger, userId, since);
-        return Ok(response);
-    }
-
-    /// <summary>
-    /// Returns the version 2 redacted sync DTOs modified since the given timestamp.
-    /// Unlike the legacy endpoint, this response never serializes EF entities directly.
+    /// Returns the redacted sync DTOs modified since the given timestamp. The response projects to
+    /// dedicated DTOs and never serializes EF entities directly. Returns 410 Gone if since &gt; 30 days old.
     /// </summary>
     [HttpGet("v2/changes")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -248,6 +151,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var habitIds = habits.Select(h => h.Id).ToList();
 
         var habitLogs = await dbContext.HabitLogs
+            .IgnoreQueryFilters()
             .Where(l => habitIds.Contains(l.HabitId) && l.UpdatedAtUtc > sinceUtc)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -261,6 +165,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var goalIds = goals.Select(g => g.Id).ToList();
 
         var goalProgressLogs = await dbContext.GoalProgressLogs
+            .IgnoreQueryFilters()
             .Where(l => goalIds.Contains(l.GoalId) && l.UpdatedAtUtc > sinceUtc)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -272,11 +177,13 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             .ToListAsync(cancellationToken);
 
         var notifications = await dbContext.Notifications
+            .IgnoreQueryFilters()
             .Where(n => n.UserId == userId && n.UpdatedAtUtc > sinceUtc)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
         var checklistTemplates = await dbContext.ChecklistTemplates
+            .IgnoreQueryFilters()
             .Where(ct => ct.UserId == userId && ct.UpdatedAtUtc > sinceUtc)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -285,16 +192,24 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             Habits: new SyncEntitySetV2<SyncHabitDto>(
                 habits.Where(h => !h.IsDeleted).Select(MapHabit).ToList(),
                 habits.Where(h => h.IsDeleted).Select(h => new SyncDeletedRef(h.Id, h.DeletedAtUtc!.Value)).ToList()),
-            HabitLogs: new SyncEntitySetV2<SyncHabitLogDto>(habitLogs.Select(MapHabitLog).ToList(), []),
+            HabitLogs: new SyncEntitySetV2<SyncHabitLogDto>(
+                habitLogs.Where(l => !l.IsDeleted).Select(MapHabitLog).ToList(),
+                habitLogs.Where(l => l.IsDeleted).Select(l => new SyncDeletedRef(l.Id, l.DeletedAtUtc!.Value)).ToList()),
             Goals: new SyncEntitySetV2<SyncGoalDto>(
                 goals.Where(g => !g.IsDeleted).Select(MapGoal).ToList(),
                 goals.Where(g => g.IsDeleted).Select(g => new SyncDeletedRef(g.Id, g.DeletedAtUtc!.Value)).ToList()),
-            GoalProgressLogs: new SyncEntitySetV2<SyncGoalProgressLogDto>(goalProgressLogs.Select(MapGoalProgressLog).ToList(), []),
+            GoalProgressLogs: new SyncEntitySetV2<SyncGoalProgressLogDto>(
+                goalProgressLogs.Where(l => !l.IsDeleted).Select(MapGoalProgressLog).ToList(),
+                goalProgressLogs.Where(l => l.IsDeleted).Select(l => new SyncDeletedRef(l.Id, l.DeletedAtUtc!.Value)).ToList()),
             Tags: new SyncEntitySetV2<SyncTagDto>(
                 tags.Where(t => !t.IsDeleted).Select(MapTag).ToList(),
                 tags.Where(t => t.IsDeleted).Select(t => new SyncDeletedRef(t.Id, t.DeletedAtUtc!.Value)).ToList()),
-            Notifications: new SyncEntitySetV2<SyncNotificationDto>(notifications.Select(MapNotification).ToList(), []),
-            ChecklistTemplates: new SyncEntitySetV2<SyncChecklistTemplateDto>(checklistTemplates.Select(MapChecklistTemplate).ToList(), []),
+            Notifications: new SyncEntitySetV2<SyncNotificationDto>(
+                notifications.Where(n => !n.IsDeleted).Select(MapNotification).ToList(),
+                notifications.Where(n => n.IsDeleted).Select(n => new SyncDeletedRef(n.Id, n.DeletedAtUtc!.Value)).ToList()),
+            ChecklistTemplates: new SyncEntitySetV2<SyncChecklistTemplateDto>(
+                checklistTemplates.Where(ct => !ct.IsDeleted).Select(MapChecklistTemplate).ToList(),
+                checklistTemplates.Where(ct => ct.IsDeleted).Select(ct => new SyncDeletedRef(ct.Id, ct.DeletedAtUtc!.Value)).ToList()),
             ServerTimestamp: DateTime.UtcNow);
 
         LogSyncChanges(logger, userId, since);
@@ -447,11 +362,6 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             default:
                 throw new InvalidOperationException($"Unsupported action: {mutation.Action} for notification.");
         }
-    }
-
-    private static SyncEntitySet BuildEntitySet(IReadOnlyList<object> updated, IReadOnlyList<SyncDeletedRef> deleted)
-    {
-        return new SyncEntitySet(updated, deleted);
     }
 
     private static SyncHabitDto MapHabit(Habit habit)

@@ -46,8 +46,9 @@ public class GetDailySummaryQueryHandler(
         else
             effectiveLanguage = "en";
 
+        var nowAtUtc = DateTime.UtcNow;
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
-        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, userTimeZone);
+        var userNow = TimeZoneInfo.ConvertTimeFromUtc(nowAtUtc, userTimeZone);
         var userToday = DateOnly.FromDateTime(userNow);
         var currentLocalTime = request.DateFrom == userToday && request.DateTo == request.DateFrom
             ? TimeOnly.FromDateTime(userNow)
@@ -85,7 +86,8 @@ public class GetDailySummaryQueryHandler(
         if (summaryResult.IsFailure)
             return summaryResult.PropagateError<DailySummaryResponse>();
 
-        var endOfDay = new DateTimeOffset(request.DateFrom.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+        var localEndOfDay = DateTime.SpecifyKind(request.DateFrom.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Unspecified);
+        var endOfDay = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEndOfDay, userTimeZone), TimeSpan.Zero);
         var expiry = endOfDay > DateTimeOffset.UtcNow ? endOfDay : DateTimeOffset.UtcNow.AddMinutes(5);
 
         var cacheOptions = new MemoryCacheEntryOptions

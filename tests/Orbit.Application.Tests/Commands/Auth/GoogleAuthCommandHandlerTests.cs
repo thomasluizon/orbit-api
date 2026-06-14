@@ -1,10 +1,12 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using System.Net;
 using System.Text;
 using FluentAssertions;
-using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Auth.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -19,7 +21,6 @@ public class GoogleAuthCommandHandlerTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
-    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly FakeHttpMessageHandler _httpHandler = new();
     private readonly GoogleAuthCommandHandler _handler;
 
@@ -36,7 +37,7 @@ public class GoogleAuthCommandHandlerTests
         httpFactory.CreateClient("Supabase").Returns(httpClient);
 
         _handler = new GoogleAuthCommandHandler(
-            _userRepo, _unitOfWork, _authSessionService, httpFactory, _emailService, _mediator,
+            _userRepo, _unitOfWork, _authSessionService, httpFactory, _emailService,
             Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
             Substitute.For<ILogger<GoogleAuthCommandHandler>>());
 
@@ -127,6 +128,48 @@ public class GoogleAuthCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_MixedCaseGoogleEmail_LogsIntoExistingLowercaseAccount()
+    {
+        var existingUser = User.Create("Existing", "google@example.com").Value;
+        SetupGoogleTokenResponse("Google@Example.com", "Existing");
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var predicate = callInfo.Arg<Expression<Func<User, bool>>>().Compile();
+                return predicate(existingUser) ? existingUser : null;
+            });
+
+        var result = await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Email.Should().Be("google@example.com");
+        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentFirstLogin_ResolvesToExistingUserWithout500()
+    {
+        var racedUser = User.Create("Raced", TestEmail).Value;
+        SetupGoogleTokenResponse(TestEmail, "Raced");
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((User?)null, racedUser);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var result = await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Email.Should().Be(TestEmail);
+        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
     private void SetupGoogleTokenResponse(string email, string name)
     {
         var json = $$"""
@@ -147,6 +190,11 @@ public class GoogleAuthCommandHandlerTests
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 
     /// <summary>

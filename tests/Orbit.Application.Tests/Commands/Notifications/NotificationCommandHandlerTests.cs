@@ -1,7 +1,12 @@
+using System.Data.Common;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 
@@ -142,7 +147,9 @@ public class DeleteNotificationCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _notificationRepo.Received(1).Remove(notification);
+        notification.IsDeleted.Should().BeTrue();
+        notification.DeletedAtUtc.Should().NotBeNull();
+        _notificationRepo.DidNotReceive().Remove(Arg.Any<Notification>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -196,7 +203,8 @@ public class DeleteAllNotificationsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _notificationRepo.Received(1).RemoveRange(Arg.Any<IReadOnlyList<Notification>>());
+        notifications.Should().OnlyContain(n => n.IsDeleted);
+        _notificationRepo.DidNotReceive().RemoveRange(Arg.Any<IReadOnlyList<Notification>>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -335,5 +343,106 @@ public class SubscribePushCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         await _pushSubRepo.DidNotReceive().AddAsync(Arg.Any<PushSubscription>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FcmEndpoint_PersistsFcmTransport()
+    {
+        ArrangeNoExistingEndpoint();
+        ArrangeUserSubscriptions();
+
+        PushSubscription? added = null;
+        await _pushSubRepo.AddAsync(Arg.Do<PushSubscription>(s => added = s), Arg.Any<CancellationToken>());
+
+        var command = new SubscribePushCommand(UserId, "fcm-token-abc123", PushSubscription.FcmSentinel, "ignored");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        added.Should().NotBeNull();
+        added!.Transport.Should().Be(PushTransport.Fcm);
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentIdenticalSubscribe_UniqueViolationIsTreatedAsSuccess()
+    {
+        ArrangeNoExistingEndpoint();
+        ArrangeUserSubscriptions();
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var command = new SubscribePushCommand(UserId, "https://push.example.com/endpoint", "p256dh", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_AtCap_EvictsExactlyOneOldestAndNeverTheIncomingRow()
+    {
+        ArrangeNoExistingEndpoint();
+        var existing = Enumerable.Range(0, AppConstants.MaxPushSubscriptionsPerUser)
+            .Select(i => PushSubscription.Create(UserId, $"https://push.example.com/{i}", "key", "auth").Value)
+            .ToArray();
+        ArrangeUserSubscriptions(existing);
+
+        PushSubscription? added = null;
+        await _pushSubRepo.AddAsync(Arg.Do<PushSubscription>(s => added = s), Arg.Any<CancellationToken>());
+
+        List<PushSubscription>? removed = null;
+        _pushSubRepo.When(r => r.RemoveRange(Arg.Any<IEnumerable<PushSubscription>>()))
+            .Do(call => removed = call.Arg<IEnumerable<PushSubscription>>().ToList());
+
+        var command = new SubscribePushCommand(UserId, "https://push.example.com/new", "key", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        added.Should().NotBeNull();
+        removed.Should().NotBeNull();
+        removed!.Should().HaveCount(1);
+        removed.Should().NotContain(added!);
+        (existing.Length - removed.Count + 1).Should().Be(AppConstants.MaxPushSubscriptionsPerUser);
+    }
+
+    [Fact]
+    public async Task Handle_BelowCap_DoesNotEvict()
+    {
+        ArrangeNoExistingEndpoint();
+        var existing = Enumerable.Range(0, AppConstants.MaxPushSubscriptionsPerUser - 1)
+            .Select(i => PushSubscription.Create(UserId, $"https://push.example.com/{i}", "key", "auth").Value)
+            .ToArray();
+        ArrangeUserSubscriptions(existing);
+
+        var command = new SubscribePushCommand(UserId, "https://push.example.com/new", "key", "auth");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _pushSubRepo.DidNotReceive().RemoveRange(Arg.Any<IEnumerable<PushSubscription>>());
+    }
+
+    private void ArrangeNoExistingEndpoint()
+    {
+        _pushSubRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<Func<IQueryable<PushSubscription>, IQueryable<PushSubscription>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((PushSubscription?)null);
+    }
+
+    private void ArrangeUserSubscriptions(params PushSubscription[] existing)
+    {
+        _pushSubRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(existing.ToList().AsReadOnly());
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 }

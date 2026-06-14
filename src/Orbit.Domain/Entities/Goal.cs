@@ -29,7 +29,29 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public IReadOnlyCollection<Habit> Habits => _habits.AsReadOnly();
 
     public void AddHabit(Habit habit) { if (!_habits.Contains(habit)) _habits.Add(habit); }
-    public void RemoveHabit(Habit habit) => _habits.Remove(habit);
+
+    public void RemoveHabit(Habit habit)
+    {
+        _habits.Remove(habit);
+        if (Type == GoalType.Streak && _habits.Count == 0)
+            ResetStreakProgress();
+    }
+
+    /// <summary>
+    /// Clears a streak goal's synced progress back to zero. A streak goal with no linked habits
+    /// has nothing to count, so any retained CurrentValue is stale; callers reset it so reads never
+    /// report a streak the goal can no longer justify. Returns true when this cleared a non-zero value.
+    /// </summary>
+    public bool ResetStreakProgress()
+    {
+        if (Type != GoalType.Streak || (CurrentValue == 0 && StreakSyncedAtUtc is null))
+            return false;
+
+        CurrentValue = 0;
+        StreakSyncedAtUtc = null;
+        UpdatedAtUtc = DateTime.UtcNow;
+        return true;
+    }
 
     public void SoftDelete()
     {
@@ -89,77 +111,100 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         return Create(new CreateGoalParams(userId, title, targetValue, unit));
     }
 
-    public Result UpdateProgress(decimal newValue)
+    /// <summary>
+    /// Sets the goal's current value, auto-completing it when the target is reached.
+    /// The success value is true only when this call transitioned an Active goal to Completed,
+    /// so callers can fire completion side effects (gamification) exactly once.
+    /// </summary>
+    public Result<bool> UpdateProgress(decimal newValue)
     {
         if (Status != GoalStatus.Active)
-            return Result.Failure(DomainErrors.GoalNotActive);
+            return Result.Failure<bool>(DomainErrors.GoalNotActive);
 
         if (newValue < 0)
-            return Result.Failure(DomainErrors.ProgressValueNegative);
+            return Result.Failure<bool>(DomainErrors.ProgressValueNegative);
 
         CurrentValue = newValue;
-
-        if (CurrentValue >= TargetValue)
-        {
-            Status = GoalStatus.Completed;
-            CompletedAtUtc = DateTime.UtcNow;
-        }
+        var justCompleted = TryComplete();
 
         UpdatedAtUtc = DateTime.UtcNow;
-        return Result.Success();
+        return Result.Success(justCompleted);
     }
 
-    public Result SyncStreakProgress(int currentStreak)
+    /// <summary>
+    /// Syncs a streak goal's current value to the computed streak length. When
+    /// <paramref name="allowCompletion"/> is true (write paths and the hosted sweep) it auto-completes
+    /// the goal once the target is reached and the success value reports that Active to Completed
+    /// transition so callers can fire completion side effects exactly once. When false (read paths)
+    /// it refreshes the value for display only, never flipping Status, so a read can surface the live
+    /// streak without persisting a completion the read has no gamification to honour.
+    /// </summary>
+    public Result<bool> SyncStreakProgress(int currentStreak, bool allowCompletion = true)
     {
         if (Type != GoalType.Streak)
-            return Result.Failure(DomainErrors.NotStreakGoal);
+            return Result.Failure<bool>(DomainErrors.NotStreakGoal);
 
         if (Status != GoalStatus.Active)
-            return Result.Failure(DomainErrors.GoalNotActive);
+            return Result.Failure<bool>(DomainErrors.GoalNotActive);
 
         CurrentValue = currentStreak;
         StreakSyncedAtUtc = DateTime.UtcNow;
-
-        if (CurrentValue >= TargetValue)
-        {
-            Status = GoalStatus.Completed;
-            CompletedAtUtc = DateTime.UtcNow;
-        }
+        var justCompleted = allowCompletion && TryComplete();
 
         UpdatedAtUtc = DateTime.UtcNow;
-        return Result.Success();
+        return Result.Success(justCompleted);
     }
 
-    public Result Update(string title, string? description, decimal targetValue, string unit, DateOnly? deadline)
+    private bool TryComplete()
+    {
+        if (CurrentValue < TargetValue)
+            return false;
+
+        Status = GoalStatus.Completed;
+        CompletedAtUtc = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// Applies an edit to the goal's core fields and reports the status transition the new target
+    /// triggered, if any. The transition is returned rather than acted on so the caller can run the
+    /// completion pipeline (gamification, progress log) exactly once on <see cref="GoalEditTransition.Completed"/>
+    /// and reopen cleanly on <see cref="GoalEditTransition.Reopened"/>, matching the dedicated
+    /// progress and status commands.
+    /// </summary>
+    public Result<GoalEditTransition> Update(string title, string? description, decimal targetValue, string unit, DateOnly? deadline)
     {
         if (string.IsNullOrWhiteSpace(title))
-            return Result.Failure(DomainErrors.TitleRequired);
+            return Result.Failure<GoalEditTransition>(DomainErrors.TitleRequired);
 
         if (targetValue <= 0)
-            return Result.Failure(DomainErrors.TargetValueInvalid);
+            return Result.Failure<GoalEditTransition>(DomainErrors.TargetValueInvalid);
 
         if (string.IsNullOrWhiteSpace(unit))
-            return Result.Failure(DomainErrors.UnitRequired);
+            return Result.Failure<GoalEditTransition>(DomainErrors.UnitRequired);
 
         Title = title.Trim();
         Description = description?.Trim();
         TargetValue = targetValue;
         Unit = unit.Trim();
         Deadline = deadline;
+        UpdatedAtUtc = DateTime.UtcNow;
 
         if (Status == GoalStatus.Active && CurrentValue >= TargetValue)
         {
             Status = GoalStatus.Completed;
             CompletedAtUtc = DateTime.UtcNow;
+            return Result.Success(GoalEditTransition.Completed);
         }
-        else if (Status == GoalStatus.Completed && CurrentValue < TargetValue)
+
+        if (Status == GoalStatus.Completed && CurrentValue < TargetValue)
         {
             Status = GoalStatus.Active;
             CompletedAtUtc = null;
+            return Result.Success(GoalEditTransition.Reopened);
         }
 
-        UpdatedAtUtc = DateTime.UtcNow;
-        return Result.Success();
+        return Result.Success(GoalEditTransition.None);
     }
 
     public Result UpdatePosition(int position)

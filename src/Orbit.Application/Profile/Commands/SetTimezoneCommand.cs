@@ -28,7 +28,7 @@ public class SetTimezoneCommandHandler(
             return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        userDateService.InvalidateUserTimezone(request.UserId);
+        userDateService.InvalidateUserDatePreferences(request.UserId);
 
         return Result.Success();
     }

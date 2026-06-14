@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Common;
 using Orbit.Application.Notifications.Commands;
 using Orbit.Application.Notifications.Queries;
 using Orbit.Domain.Common;
@@ -68,7 +69,7 @@ public class NotificationControllerTests
     public async Task MarkAsRead_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<MarkNotificationReadCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Notification not found"));
+            .Returns(Result.Failure(ErrorMessages.NotificationNotFound));
 
         var result = await _controller.MarkAsRead(Guid.NewGuid(), CancellationToken.None);
 

@@ -122,8 +122,8 @@ public class HandlePlayNotificationCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.Plan.Should().Be(UserPlan.Free);
         user.PlayPurchaseToken.Should().BeNull();
-        await _referralConsumer.DidNotReceive().ConsumeOnNewPurchaseAsync(
-            Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _referralConsumer.DidNotReceive().ConsumeOnNewPurchase(
+            Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>());
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -136,15 +136,19 @@ public class HandlePlayNotificationCommandHandlerTests
             true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
         string? tokenWhenConsumerRan = "unset";
         _referralConsumer
-            .When(c => c.ConsumeOnNewPurchaseAsync(user, Arg.Any<PlaySubscriptionState>(), "tok_purchase", Arg.Any<CancellationToken>()))
-            .Do(_ => tokenWhenConsumerRan = user.PlayPurchaseToken);
+            .ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "tok_purchase")
+            .Returns(_ =>
+            {
+                tokenWhenConsumerRan = user.PlayPurchaseToken;
+                return null;
+            });
 
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_purchase", "orbit_pro")), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         tokenWhenConsumerRan.Should().BeNull();
-        await _referralConsumer.Received(1).ConsumeOnNewPurchaseAsync(
-            user, Arg.Any<PlaySubscriptionState>(), "tok_purchase", Arg.Any<CancellationToken>());
+        _referralConsumer.Received(1).ConsumeOnNewPurchase(
+            user, Arg.Any<PlaySubscriptionState>(), "tok_purchase");
     }
 
     [Fact]
@@ -261,5 +265,66 @@ public class HandlePlayNotificationCommandHandlerTests
         var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_StripeCoversLaterPeriod_LinksTokenWithoutDowngradingStripeEntitlement()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        var stripeExpiry = DateTime.UtcNow.AddMonths(6);
+        user.SetStripeSubscription("sub_123", stripeExpiry);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_play", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
+        user.PlanExpiresAt.Should().Be(stripeExpiry);
+        user.PlayPurchaseToken.Should().Be("tok_play");
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ReferralCoupon_CancelledOnlyAfterSaveSucceeds()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
+        _referralConsumer.ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "tok_purchase")
+            .Returns("coupon_abc");
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_purchase", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        Received.InOrder(() =>
+        {
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            _referralConsumer.CancelConsumedCouponAsync(user.Id, "coupon_abc", Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task Handle_ReferralCoupon_SaveFails_CouponNotCancelled()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null, "referral10"));
+        _referralConsumer.ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "tok_purchase")
+            .Returns("coupon_abc");
+        _processedRepo.AnyAsync(
+            Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(false);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("transient"));
+
+        var act = () => _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(4, "tok_purchase", "orbit_pro")), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        await _referralConsumer.DidNotReceive().CancelConsumedCouponAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

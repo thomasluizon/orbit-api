@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
@@ -38,6 +39,15 @@ public class BulkLogHabitsCommandHandlerTests
             .Returns(Today);
         _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var ct = call.ArgAt<CancellationToken>(1);
+                return operation(ct);
+            });
     }
 
     [Fact]
@@ -287,6 +297,24 @@ public class BulkLogHabitsCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
         result.Value.Results[0].Error.Should().Contain("not scheduled");
+    }
+
+    [Fact]
+    public async Task Handle_SaveFailsMidBatch_RunsInsideTransactionAndPropagates()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { habit });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db failure"));
+
+        var command = new BulkLogHabitsCommand(UserId, new List<BulkLogItem> { new(habit.Id) });
+
+        var act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        await _unitOfWork.Received(1).ExecuteInTransactionAsync(
+            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<CancellationToken>());
     }
 
     private void SetupHabitsForUser(List<Habit> habits)

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
@@ -14,6 +15,7 @@ public class UpdateGoalProgressCommandHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<GoalProgressLog> _progressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UpdateGoalProgressCommandHandler _handler;
 
@@ -22,7 +24,9 @@ public class UpdateGoalProgressCommandHandlerTests
 
     public UpdateGoalProgressCommandHandlerTests()
     {
-        _handler = new UpdateGoalProgressCommandHandler(_goalRepo, _progressLogRepo, _payGate, _unitOfWork);
+        _handler = new UpdateGoalProgressCommandHandler(
+            _goalRepo, _progressLogRepo, _payGate, _gamificationService, _unitOfWork,
+            Substitute.For<ILogger<UpdateGoalProgressCommandHandler>>());
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }
@@ -58,6 +62,30 @@ public class UpdateGoalProgressCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         goal.CurrentValue.Should().Be(100);
         goal.Status.Should().Be(Domain.Enums.GoalStatus.Completed);
+    }
+
+    [Fact]
+    public async Task Handle_ProgressCrossesTarget_FiresGamificationOnce()
+    {
+        var goal = Goal.Create(UserId, "Run 100km", 100, "km").Value;
+        SetupGoalFound(goal);
+
+        var result = await _handler.Handle(new UpdateGoalProgressCommand(UserId, GoalId, 100), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _gamificationService.Received(1).ProcessGoalCompleted(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ProgressBelowTarget_DoesNotFireGamification()
+    {
+        var goal = Goal.Create(UserId, "Run 100km", 100, "km").Value;
+        SetupGoalFound(goal);
+
+        var result = await _handler.Handle(new UpdateGoalProgressCommand(UserId, GoalId, 50), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _gamificationService.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -104,6 +132,22 @@ public class UpdateGoalProgressCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("negative");
+    }
+
+    [Fact]
+    public async Task Handle_DomainGuardRejects_DoesNotPersistProgressLog()
+    {
+        var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
+        goal.MarkCompleted();
+        SetupGoalFound(goal);
+
+        var command = new UpdateGoalProgressCommand(UserId, GoalId, 50, "note");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        await _progressLogRepo.DidNotReceive().AddAsync(Arg.Any<GoalProgressLog>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

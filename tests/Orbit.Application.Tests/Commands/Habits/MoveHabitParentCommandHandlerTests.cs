@@ -12,6 +12,7 @@ public class MoveHabitParentCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IAppConfigService _appConfigService = Substitute.For<IAppConfigService>();
     private readonly MoveHabitParentCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -19,7 +20,9 @@ public class MoveHabitParentCommandHandlerTests
 
     public MoveHabitParentCommandHandlerTests()
     {
-        _handler = new MoveHabitParentCommandHandler(_habitRepo, _unitOfWork);
+        _handler = new MoveHabitParentCommandHandler(_habitRepo, _unitOfWork, _appConfigService);
+        _appConfigService.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>())
+            .Returns(5);
     }
 
     private static Habit CreateTestHabit(string title = "Test Habit")
@@ -115,5 +118,74 @@ public class MoveHabitParentCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("Habit not found.");
+    }
+
+    [Fact]
+    public async Task Handle_MoveExceedsMaxDepth_ReturnsFailure()
+    {
+        var chain = BuildParentChain(5);
+        var deepestParent = chain[^1];
+        var movee = CreateTestHabit("Movee");
+        var allHabits = chain.Append(movee).ToList();
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(movee, deepestParent);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(allHabits.AsReadOnly());
+
+        var command = new MoveHabitParentCommand(UserId, movee.Id, deepestParent.Id);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("nesting depth");
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_MoveWithinMaxDepth_Succeeds()
+    {
+        var chain = BuildParentChain(5);
+        var validParent = chain[3];
+        var movee = CreateTestHabit("Movee");
+        var allHabits = chain.Append(movee).ToList();
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(movee, validParent);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(allHabits.AsReadOnly());
+
+        var command = new MoveHabitParentCommand(UserId, movee.Id, validParent.Id);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        movee.ParentHabitId.Should().Be(validParent.Id);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    private static List<Habit> BuildParentChain(int length)
+    {
+        var chain = new List<Habit>();
+        Guid? parentId = null;
+        for (var i = 0; i < length; i++)
+        {
+            var node = CreateTestHabit($"Level {i}");
+            if (parentId is not null)
+                node.SetParentHabitId(parentId);
+            chain.Add(node);
+            parentId = node.Id;
+        }
+        return chain;
     }
 }

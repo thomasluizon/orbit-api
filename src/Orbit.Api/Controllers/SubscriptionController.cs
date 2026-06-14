@@ -67,8 +67,6 @@ public partial class SubscriptionController(
     {
         var query = new GetBillingDetailsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        if (result.IsFailure && result.ErrorCode == ErrorCodes.NoActiveSubscription)
-            return NotFound(new { error = result.Error, errorCode = result.ErrorCode });
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 

@@ -113,7 +113,6 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WithTagIds_AssignsTagsToHabit()
     {
-        var tagId = Guid.NewGuid();
         var tag = Tag.Create(UserId, "Health", "#00ff00").Value;
 
         _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
@@ -121,13 +120,31 @@ public class CreateHabitCommandHandlerTests
 
         var command = new CreateHabitCommand(
             UserId, "Exercise", null, FrequencyUnit.Day, 1,
-            TagIds: new List<Guid> { tagId });
+            TagIds: new List<Guid> { tag.Id });
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _tagRepo.Received(1).FindTrackedAsync(
             Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ForeignTagId_ReturnsFailureWithoutCreating()
+    {
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Tag>());
+
+        var command = new CreateHabitCommand(
+            UserId, "Exercise", null, FrequencyUnit.Day, 1,
+            TagIds: new List<Guid> { Guid.NewGuid() });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.TagNotFound);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -190,7 +207,6 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_WithGoalIds_LinksGoalsToHabit()
     {
-        var goalId = Guid.NewGuid();
         var goal = Goal.Create(UserId, "Fitness Goal", 10, "workouts").Value;
 
         _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
@@ -198,13 +214,31 @@ public class CreateHabitCommandHandlerTests
 
         var command = new CreateHabitCommand(
             UserId, "Exercise", null, FrequencyUnit.Day, 1,
-            GoalIds: new List<Guid> { goalId });
+            GoalIds: new List<Guid> { goal.Id });
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _goalRepo.Received(1).FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ForeignGoalId_ReturnsFailureWithoutCreating()
+    {
+        _goalRepo.FindTrackedAsync(Arg.Any<Expression<Func<Goal, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Goal>());
+
+        var command = new CreateHabitCommand(
+            UserId, "Exercise", null, FrequencyUnit.Day, 1,
+            GoalIds: new List<Guid> { Guid.NewGuid() });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GoalNotFound);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -306,7 +340,7 @@ public class CreateHabitCommandHandlerTests
             Days: new[] { DayOfWeek.Saturday, DayOfWeek.Sunday });
 
         var command = new CreateHabitCommand(
-            UserId, "Weekend Habit", null, FrequencyUnit.Week, 1,
+            UserId, "Weekend Habit", null, FrequencyUnit.Day, 1,
             Options: options);
 
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -324,7 +358,7 @@ public class CreateHabitCommandHandlerTests
             Days: new[] { DayOfWeek.Friday, DayOfWeek.Saturday });
 
         var command = new CreateHabitCommand(
-            UserId, "Friday Habit", null, FrequencyUnit.Week, 1,
+            UserId, "Friday Habit", null, FrequencyUnit.Day, 1,
             Options: options);
 
         var result = await _handler.Handle(command, CancellationToken.None);

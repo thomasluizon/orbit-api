@@ -28,7 +28,7 @@ public class TestPushNotificationCommandHandler(
             await pushService.SendToUserAsync(request.UserId, "Orbit Test", "Push notifications are working!", "/", cancellationToken);
             return Result.Success(new TestPushNotificationResponse(subscriptionCount, "sent"));
         }
-        catch
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
             return Result.Success(new TestPushNotificationResponse(subscriptionCount, "failed", "Failed to send push notification"));
         }

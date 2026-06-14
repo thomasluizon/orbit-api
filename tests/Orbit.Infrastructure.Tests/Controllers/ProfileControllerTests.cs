@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Common;
@@ -46,7 +47,7 @@ public class ProfileControllerTests
     public async Task GetProfile_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<ProfileResponse>("User not found"));
+            .Returns(Result.Failure<ProfileResponse>(ErrorMessages.UserNotFound));
 
         var result = await _controller.GetProfile(CancellationToken.None);
 

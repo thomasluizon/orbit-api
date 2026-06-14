@@ -142,8 +142,9 @@ public class AgentPolicyEvaluatorTests : IDisposable
         var confirmation = _pendingOperationStore.Confirm(_userId, pendingOperation!.Id);
         confirmation.Should().NotBeNull();
 
-        var stepUpOperation = _pendingOperationStore.MarkStepUp(_userId, pendingOperation.Id);
-        stepUpOperation.Should().NotBeNull();
+        var storedOperation = _dbContext.PendingAgentOperations.Single(item => item.Id == pendingOperation.Id);
+        storedOperation.MarkStepUpSatisfied();
+        _dbContext.SaveChanges();
 
         var confirmedDecision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.ApiKeysManage,

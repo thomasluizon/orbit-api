@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 
@@ -12,7 +13,6 @@ public class GetGoalMetricsQueryHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetGoalMetricsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -21,7 +21,7 @@ public class GetGoalMetricsQueryHandlerTests
 
     public GetGoalMetricsQueryHandlerTests()
     {
-        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _payGate, _userDateService, _unitOfWork);
+        _handler = new GetGoalMetricsQueryHandler(_goalRepo, _payGate, _userDateService);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
@@ -30,6 +30,15 @@ public class GetGoalMetricsQueryHandlerTests
     private static Goal CreateTestGoal()
     {
         return Goal.Create(UserId, "Test Goal", 100, "pages").Value;
+    }
+
+    private void ArrangeGoal(Goal? goal)
+    {
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((goal is null ? new List<Goal>() : [goal]).AsReadOnly());
     }
 
     private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
@@ -43,12 +52,7 @@ public class GetGoalMetricsQueryHandlerTests
     public async Task Handle_GoalFound_ReturnsMetrics()
     {
         var goal = CreateTestGoal();
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var query = new GetGoalMetricsQuery(UserId, GoalId);
 
@@ -62,11 +66,7 @@ public class GetGoalMetricsQueryHandlerTests
     [Fact]
     public async Task Handle_GoalNotFound_ReturnsFailure()
     {
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Goal?)null);
+        ArrangeGoal(null);
 
         var query = new GetGoalMetricsQuery(UserId, GoalId);
 
@@ -81,12 +81,7 @@ public class GetGoalMetricsQueryHandlerTests
     public async Task Handle_CallsUserDateService()
     {
         var goal = CreateTestGoal();
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var query = new GetGoalMetricsQuery(UserId, GoalId);
 
@@ -110,19 +105,19 @@ public class GetGoalMetricsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithBadHabitLinkedStreakGoal_PersistsSyncedGoalBeforeCalculatingMetrics()
+    public async Task Handle_WithBadHabitLinkedStreakGoal_CalculatesMetricsFromFreshValueWithoutPersisting()
     {
         var goal = Goal.Create(new Goal.CreateGoalParams(
             UserId,
             "Avoid doom scrolling",
             7,
             "days",
-            Type: Orbit.Domain.Enums.GoalType.Streak)).Value;
+            Type: GoalType.Streak)).Value;
 
         var badHabit = Habit.Create(new HabitCreateParams(
             UserId,
             "Doom scrolling",
-            Orbit.Domain.Enums.FrequencyUnit.Day,
+            FrequencyUnit.Day,
             1,
             IsBadHabit: true,
             DueDate: Today)).Value;
@@ -130,18 +125,12 @@ public class GetGoalMetricsQueryHandlerTests
         SetCreatedAtUtc(badHabit, Today.AddDays(-1));
         badHabit.AddGoal(goal);
         goal.AddHabit(badHabit);
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var result = await _handler.Handle(new GetGoalMetricsQuery(UserId, GoalId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        goal.CurrentValue.Should().Be(2);
-        goal.StreakSyncedAtUtc.Should().NotBeNull();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        result.Value.ProgressPercentage.Should().Be(Math.Round(2m / 7m * 100, 1));
+        goal.Status.Should().Be(GoalStatus.Active);
     }
 }

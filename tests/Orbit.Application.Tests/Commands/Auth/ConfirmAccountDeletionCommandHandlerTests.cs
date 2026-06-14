@@ -54,8 +54,29 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid");
         user.IsDeactivated.Should().BeFalse();
-        _cache.TryGetValue($"delete:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
-        entry!.Attempts.Should().Be(1);
+        _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        attempts.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_AttemptBudgetSurvivesResend_LocksAfterMaxAcrossNewCodes()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        SetupUser(user);
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            SetupDeletionCode(TestEmail, "123456");
+            var wrong = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "999999"), CancellationToken.None);
+            wrong.Error.Should().Contain("Invalid");
+        }
+
+        SetupDeletionCode(TestEmail, "123456");
+        var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Too many attempts");
+        user.IsDeactivated.Should().BeFalse();
     }
 
     [Fact]
@@ -84,14 +105,14 @@ public class ConfirmAccountDeletionCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_MaxAttemptsReached_RemovesCacheAndReturnsFailure()
+    public async Task Handle_MaxAttemptsReached_ReturnsFailureWithoutDeactivating()
     {
         var user = User.Create("Test", TestEmail).Value;
         SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
 
-        var entry = new VerificationEntry("123456", 3, DateTime.UtcNow);
-        _cache.Set($"delete:{TestEmail}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10) });
+        _cache.Set($"delete-attempts:{TestEmail}", 3,
+            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
 
         var command = new ConfirmAccountDeletionCommand(UserId, "123456");
 
@@ -99,7 +120,8 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Too many attempts");
-        _cache.TryGetValue($"delete:{TestEmail}", out _).Should().BeFalse();
+        user.IsDeactivated.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     private void SetupUser(User user)

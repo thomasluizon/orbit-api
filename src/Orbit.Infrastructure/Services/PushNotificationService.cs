@@ -5,6 +5,7 @@ using Lib.Net.Http.WebPush.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
@@ -32,8 +33,8 @@ public partial class PushNotificationService(
 
         if (subscriptions.Count == 0) return;
 
-        var fcmSubs = subscriptions.Where(s => s.P256dh == "fcm").ToList();
-        var webPushSubs = subscriptions.Where(s => s.P256dh != "fcm").ToList();
+        var fcmSubs = subscriptions.Where(s => s.Transport == PushTransport.Fcm).ToList();
+        var webPushSubs = subscriptions.Where(s => s.Transport == PushTransport.WebPush).ToList();
 
         var staleSubscriptions = new List<Domain.Entities.PushSubscription>();
 

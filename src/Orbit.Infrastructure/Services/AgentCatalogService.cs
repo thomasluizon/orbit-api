@@ -1231,7 +1231,7 @@ public class AgentCatalogService : IAgentCatalogService
                 isMutation: false,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["SyncController.GetChanges", "SyncController.GetChangesV2"]),
+                controllerActions: ["SyncController.GetChangesV2"]),
 
             CreateCapability(
                 AgentCapabilityIds.SyncWrite,

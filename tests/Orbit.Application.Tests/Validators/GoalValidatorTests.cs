@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentValidation.TestHelper;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
 using Orbit.Application.Goals.Validators;
@@ -80,6 +81,22 @@ public class CreateGoalCommandValidatorTests
     {
         var result = _validator.TestValidate(ValidCommand() with { Unit = new string('u', 51) });
         result.ShouldHaveValidationErrorFor(x => x.Unit);
+    }
+
+    [Fact]
+    public void Validate_DescriptionOverMaxLength_HasError()
+    {
+        var description = new string('d', AppConstants.MaxGoalDescriptionLength + 1);
+        var result = _validator.TestValidate(ValidCommand() with { Description = description });
+        result.ShouldHaveValidationErrorFor(x => x.Description);
+    }
+
+    [Fact]
+    public void Validate_DescriptionExactlyMaxLength_NoError()
+    {
+        var description = new string('d', AppConstants.MaxGoalDescriptionLength);
+        var result = _validator.TestValidate(ValidCommand() with { Description = description });
+        result.ShouldNotHaveValidationErrorFor(x => x.Description);
     }
 }
 
@@ -301,6 +318,22 @@ public class UpdateGoalCommandValidatorTests
         var result = _validator.TestValidate(ValidCommand() with { Unit = new string('u', 51) });
         result.ShouldHaveValidationErrorFor(x => x.Unit);
     }
+
+    [Fact]
+    public void Validate_DescriptionOverMaxLength_HasError()
+    {
+        var description = new string('d', AppConstants.MaxGoalDescriptionLength + 1);
+        var result = _validator.TestValidate(ValidCommand() with { Description = description });
+        result.ShouldHaveValidationErrorFor(x => x.Description);
+    }
+
+    [Fact]
+    public void Validate_DescriptionExactlyMaxLength_NoError()
+    {
+        var description = new string('d', AppConstants.MaxGoalDescriptionLength);
+        var result = _validator.TestValidate(ValidCommand() with { Description = description });
+        result.ShouldNotHaveValidationErrorFor(x => x.Description);
+    }
 }
 
 public class UpdateGoalProgressCommandValidatorTests
@@ -345,6 +378,24 @@ public class UpdateGoalProgressCommandValidatorTests
         var command = new UpdateGoalProgressCommand(Guid.NewGuid(), Guid.NewGuid(), 0);
         var result = _validator.TestValidate(command);
         result.ShouldNotHaveValidationErrorFor(x => x.NewValue);
+    }
+
+    [Fact]
+    public void Validate_NoteOverMaxLength_HasError()
+    {
+        var note = new string('n', AppConstants.MaxGoalProgressNoteLength + 1);
+        var command = new UpdateGoalProgressCommand(Guid.NewGuid(), Guid.NewGuid(), 50, note);
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Note);
+    }
+
+    [Fact]
+    public void Validate_NoteExactlyMaxLength_NoError()
+    {
+        var note = new string('n', AppConstants.MaxGoalProgressNoteLength);
+        var command = new UpdateGoalProgressCommand(Guid.NewGuid(), Guid.NewGuid(), 50, note);
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveValidationErrorFor(x => x.Note);
     }
 }
 

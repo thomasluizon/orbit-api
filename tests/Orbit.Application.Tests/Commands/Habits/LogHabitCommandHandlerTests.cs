@@ -98,7 +98,8 @@ public class LogHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _habitLogRepo.Received(1).Remove(Arg.Any<HabitLog>());
+        _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
+        habit.Logs.Should().ContainSingle(l => l.Date == Today).Which.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

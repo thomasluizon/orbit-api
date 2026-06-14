@@ -528,18 +528,10 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     {
         var userId = GetUserId(user);
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var days = period.ToLowerInvariant() switch
-        {
-            "week" => 7,
-            "month" => 30,
-            "quarter" => 90,
-            "semester" => 180,
-            "year" => 365,
-            _ => 7
-        };
-        var dateFrom = today.AddDays(-days);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
 
-        var query = new GetRetrospectiveQuery(userId, dateFrom, today, period, language);
+        var query = new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language);
         var result = await mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)

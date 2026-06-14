@@ -35,16 +35,37 @@ public static class SharedHabitRules
     public static void AddDaysRules<T>(
         AbstractValidator<T> validator,
         System.Linq.Expressions.Expression<Func<T, IReadOnlyList<System.DayOfWeek>?>> daysExpr,
-        System.Linq.Expressions.Expression<Func<T, int?>> freqExpr)
+        System.Linq.Expressions.Expression<Func<T, int?>> freqQtyExpr,
+        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
+        System.Linq.Expressions.Expression<Func<T, bool>> isFlexibleExpr)
     {
+        var freqQtyFunc = freqQtyExpr.Compile();
+        var freqUnitFunc = freqUnitExpr.Compile();
+        var isFlexibleFunc = isFlexibleExpr.Compile();
+
         validator.RuleFor(daysExpr)
             .Must((command, days) =>
             {
                 if (days is null || days.Count == 0) return true;
-                var freq = freqExpr.Compile()(command);
-                return freq == 1;
+                if (isFlexibleFunc(command)) return true;
+                return freqQtyFunc(command) == 1 && freqUnitFunc(command) == Domain.Enums.FrequencyUnit.Day;
             })
-            .WithMessage("Days can only be specified when frequency quantity is 1");
+            .WithMessage("Days can only be specified for a daily habit (frequency unit Day, quantity 1)");
+    }
+
+    public static void AddOneTimeTaskEndDateRules<T>(
+        AbstractValidator<T> validator,
+        System.Linq.Expressions.Expression<Func<T, DateOnly?>> endDateExpr,
+        System.Linq.Expressions.Expression<Func<T, Domain.Enums.FrequencyUnit?>> freqUnitExpr,
+        System.Linq.Expressions.Expression<Func<T, bool>> isGeneralExpr)
+    {
+        var freqUnitFunc = freqUnitExpr.Compile();
+        var isGeneralFunc = isGeneralExpr.Compile();
+
+        validator.RuleFor(endDateExpr)
+            .Must((command, endDate) =>
+                !endDate.HasValue || freqUnitFunc(command) is not null || isGeneralFunc(command))
+            .WithMessage("A one-time task cannot have an end date");
     }
 
     public static void AddGeneralHabitRules<T>(
@@ -84,6 +105,18 @@ public static class SharedHabitRules
                 return grouped.All(g => g.Count() == 1);
             })
             .WithMessage("Scheduled reminders must not contain duplicate entries");
+    }
+
+    public static void AddReminderTimesRules<T>(IRuleBuilder<T, IReadOnlyList<int>?> rule)
+    {
+        rule.Must(times => times is null || times.Count <= AppConstants.MaxReminderTimes)
+            .WithMessage($"A habit can have at most {AppConstants.MaxReminderTimes} reminder times");
+
+        rule.Must(times => times is null || times.All(m => m is >= 0 and <= AppConstants.MaxReminderMinutesBefore))
+            .WithMessage($"Reminder times must be between 0 and {AppConstants.MaxReminderMinutesBefore} minutes before the due time");
+
+        rule.Must(times => times is null || times.Distinct().Count() == times.Count)
+            .WithMessage("Reminder times must not contain duplicate values");
     }
 
     public static void AddGoalIdsRules<T>(

@@ -65,14 +65,14 @@ public class AgentStepUpService(
             HashToken(code),
             DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.StepUpChallengeTtlMinutes)));
 
-        await dbContext.AgentStepUpChallenges.AddAsync(challenge, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
         await emailService.SendVerificationCodeAsync(
             user.Email,
             code,
             string.IsNullOrWhiteSpace(language) ? "en" : language,
             cancellationToken);
+
+        await dbContext.AgentStepUpChallenges.AddAsync(challenge, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new AgentStepUpChallenge(
             challenge.Id,

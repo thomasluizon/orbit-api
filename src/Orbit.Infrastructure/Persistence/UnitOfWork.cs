@@ -42,6 +42,19 @@ public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisp
         });
     }
 
+    public void DiscardChanges()
+    {
+        foreach (var entry in context.ChangeTracker.Entries().ToList())
+        {
+            entry.State = entry.State switch
+            {
+                EntityState.Added => EntityState.Detached,
+                EntityState.Modified or EntityState.Deleted => EntityState.Unchanged,
+                _ => entry.State
+            };
+        }
+    }
+
     public void Dispose()
     {
         context.Dispose();

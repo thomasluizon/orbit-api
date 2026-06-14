@@ -100,4 +100,54 @@ public class ResultActionResultExtensionsTests
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().Be("hello");
     }
+
+    [Theory]
+    [InlineData(ErrorCodes.GoalNotFound, 404)]
+    [InlineData(ErrorCodes.HabitNotFound, 404)]
+    [InlineData(ErrorCodes.TagNotFound, 404)]
+    [InlineData(ErrorCodes.NoActiveSubscription, 404)]
+    [InlineData(ErrorCodes.NoPermission, 403)]
+    [InlineData(ErrorCodes.HabitNotOwned, 403)]
+    [InlineData(Result.PayGateErrorCode, 403)]
+    [InlineData(ErrorCodes.DuplicateTagName, 409)]
+    [InlineData(ErrorCodes.DuplicateFact, 409)]
+    [InlineData(ErrorCodes.InternalServerError, 500)]
+    [InlineData(ErrorCodes.ValidationError, 400)]
+    [InlineData(ErrorCodes.DeadlineInPast, 400)]
+    public void ToErrorResult_MapsErrorCodeToStatus(string errorCode, int expectedStatus)
+    {
+        var result = Result.Failure("failure", errorCode);
+
+        var actionResult = result.ToErrorResult();
+
+        actionResult.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(expectedStatus);
+    }
+
+    [Fact]
+    public void ToErrorResult_UnmappedCode_FallsBackToProvidedStatus()
+    {
+        var result = Result.Failure("login failed", ErrorCodes.InvalidVerificationCode);
+
+        var actionResult = result.ToErrorResult(StatusCodes.Status401Unauthorized);
+
+        actionResult.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public void ToErrorResult_NoErrorCode_FallsBackToProvidedStatus()
+    {
+        var result = Result.Failure("something went wrong");
+
+        var actionResult = result.ToErrorResult(StatusCodes.Status500InternalServerError);
+
+        actionResult.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
+    }
+
+    [Fact]
+    public void ResolveErrorStatus_MappedCode_IgnoresFallback()
+    {
+        var result = Result.Failure("missing", ErrorCodes.GoalNotFound);
+
+        result.ResolveErrorStatus(StatusCodes.Status400BadRequest).Should().Be(404);
+    }
 }

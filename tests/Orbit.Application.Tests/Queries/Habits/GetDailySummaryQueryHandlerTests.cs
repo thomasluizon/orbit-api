@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Primitives;
 using NSubstitute;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Common;
@@ -302,5 +303,78 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_CacheExpiry_UsesUserTimezoneEndOfDay()
+    {
+        var capturingCache = new CapturingCache();
+        var handler = new GetDailySummaryQueryHandler(_habitRepo, _userRepo, _payGate, _summaryService, capturingCache);
+
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo");
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+
+        var futureDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10));
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            futureDate, futureDate, Arg.Any<DateOnly>(), "en",
+            Arg.Any<TimeOnly?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Summary"));
+
+        var query = new GetDailySummaryQuery(UserId, futureDate, futureDate, "en");
+
+        await handler.Handle(query, CancellationToken.None);
+
+        var saoPaulo = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+        var expectedExpiry = new DateTimeOffset(
+            TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(futureDate.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Unspecified),
+                saoPaulo),
+            TimeSpan.Zero);
+        var naiveUtcExpiry = new DateTimeOffset(futureDate.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+
+        capturingCache.LastAbsoluteExpiration.Should().Be(expectedExpiry);
+        capturingCache.LastAbsoluteExpiration.Should().BeAfter(naiveUtcExpiry);
+    }
+
+    private sealed class CapturingCache : IMemoryCache
+    {
+        public DateTimeOffset? LastAbsoluteExpiration { get; private set; }
+
+        public ICacheEntry CreateEntry(object key) => new CapturingEntry(this);
+
+        public bool TryGetValue(object key, out object? value)
+        {
+            value = null;
+            return false;
+        }
+
+        public void Remove(object key) { }
+
+        public void Dispose() { }
+
+        private sealed class CapturingEntry(CapturingCache owner) : ICacheEntry
+        {
+            public object Key { get; } = new();
+            public object? Value { get; set; }
+            public DateTimeOffset? AbsoluteExpiration { get; set; }
+            public TimeSpan? AbsoluteExpirationRelativeToNow { get; set; }
+            public TimeSpan? SlidingExpiration { get; set; }
+            public IList<IChangeToken> ExpirationTokens { get; } = [];
+            public IList<PostEvictionCallbackRegistration> PostEvictionCallbacks { get; } = [];
+            public CacheItemPriority Priority { get; set; }
+            public long? Size { get; set; }
+
+            public void Dispose() => owner.LastAbsoluteExpiration = AbsoluteExpiration;
+        }
     }
 }

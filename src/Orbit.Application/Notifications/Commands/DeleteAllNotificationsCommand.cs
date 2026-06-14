@@ -17,7 +17,9 @@ public class DeleteAllNotificationsCommandHandler(
             n => n.UserId == request.UserId,
             cancellationToken);
 
-        notificationRepository.RemoveRange(notifications);
+        foreach (var notification in notifications)
+            notification.SoftDelete();
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

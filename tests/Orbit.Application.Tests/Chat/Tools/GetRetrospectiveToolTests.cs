@@ -23,6 +23,7 @@ public class GetRetrospectiveToolTests
     {
         _tool = new GetRetrospectiveTool(_mediator, _userDateService);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
     }
 
     [Fact]
@@ -68,7 +69,7 @@ public class GetRetrospectiveToolTests
     }
 
     [Fact]
-    public async Task NoPeriod_DefaultsToWeek()
+    public async Task NoPeriod_DefaultsToWeek_AnchoredOnMondayStart()
     {
         _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new RetrospectiveResponse("ok", false)));
@@ -78,7 +79,24 @@ public class GetRetrospectiveToolTests
         await _mediator.Received(1).Send(
             Arg.Is<GetRetrospectiveQuery>(q =>
                 q.Period == "week" &&
-                q.DateFrom == Today.AddDays(-7) &&
+                q.DateFrom == new DateOnly(2026, 6, 1) &&
+                q.DateTo == Today),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WeekPeriod_SundayStartUser_AnchorsOnSunday()
+    {
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(0);
+        _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new RetrospectiveResponse("ok", false)));
+
+        await Execute("""{"period": "week"}""");
+
+        await _mediator.Received(1).Send(
+            Arg.Is<GetRetrospectiveQuery>(q =>
+                q.Period == "week" &&
+                q.DateFrom == new DateOnly(2026, 5, 31) &&
                 q.DateTo == Today),
             Arg.Any<CancellationToken>());
     }

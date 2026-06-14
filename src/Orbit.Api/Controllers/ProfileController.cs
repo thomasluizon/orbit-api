@@ -38,7 +38,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     {
         var query = new GetProfileQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPut("timezone")]
@@ -235,7 +235,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
-            return result.ToErrorResult(StatusCodes.Status404NotFound);
+            return result.ToErrorResult();
 
         var fileName = $"orbit-data-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);

@@ -9,21 +9,35 @@ public class UserDateService(
     IGenericRepository<User> userRepository,
     IMemoryCache cache) : IUserDateService
 {
+    private record UserDatePreferences(string? TimeZone, int WeekStartDay);
+
     private static string CacheKey(Guid userId) => $"user-tz:{userId}";
 
     public async Task<DateOnly> GetUserTodayAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        var cacheKey = CacheKey(userId);
-        if (!cache.TryGetValue(cacheKey, out string? tzId))
-        {
-            var user = await userRepository.GetByIdAsync(userId, cancellationToken);
-            tzId = user?.TimeZone;
-            cache.Set(cacheKey, tzId, TimeSpan.FromMinutes(15));
-        }
-
-        var timeZone = TimeZoneHelper.FindTimeZone(tzId);
+        var preferences = await GetPreferencesAsync(userId, cancellationToken);
+        var timeZone = TimeZoneHelper.FindTimeZone(preferences.TimeZone);
         return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
     }
 
-    public void InvalidateUserTimezone(Guid userId) => cache.Remove(CacheKey(userId));
+    public async Task<int> GetUserWeekStartDayAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var preferences = await GetPreferencesAsync(userId, cancellationToken);
+        return preferences.WeekStartDay;
+    }
+
+    private async Task<UserDatePreferences> GetPreferencesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var cacheKey = CacheKey(userId);
+        if (!cache.TryGetValue(cacheKey, out UserDatePreferences? preferences) || preferences is null)
+        {
+            var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+            preferences = new UserDatePreferences(user?.TimeZone, user?.WeekStartDay ?? 1);
+            cache.Set(cacheKey, preferences, TimeSpan.FromMinutes(15));
+        }
+
+        return preferences;
+    }
+
+    public void InvalidateUserDatePreferences(Guid userId) => cache.Remove(CacheKey(userId));
 }

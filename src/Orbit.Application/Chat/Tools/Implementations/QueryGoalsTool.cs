@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -8,7 +9,9 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class QueryGoalsTool(
-    IGenericRepository<Goal> goalRepository) : IAiTool
+    IGenericRepository<Goal> goalRepository,
+    IUserDateService userDateService,
+    IStreakGoalReadSyncer streakGoalReadSyncer) : IAiTool
 {
     public string Name => "query_goals";
     public bool IsReadOnly => true;
@@ -48,6 +51,9 @@ public class QueryGoalsTool(
             JsonArgumentParser.GetOptionalBool(args, "include_linked_habits") ?? true;
         var limit = Math.Clamp(JsonArgumentParser.GetOptionalInt(args, "limit") ?? 50, 1, 200);
 
+        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(userId, userToday, ct);
+
         var goals = await goalRepository.FindAsync(
             g => g.UserId == userId
                 && !g.IsDeleted
@@ -67,7 +73,7 @@ public class QueryGoalsTool(
         if (filtered.Count == 0)
             return new ToolResult(true, EntityName: "No goals found matching the given filters.");
 
-        return new ToolResult(true, EntityName: BuildOutput(filtered, includeDescriptions, includeLinkedHabits));
+        return new ToolResult(true, EntityName: BuildOutput(filtered, freshStreakValues, includeDescriptions, includeLinkedHabits));
     }
 
     private static GoalStatus? ParseStatus(JsonElement args)
@@ -93,6 +99,7 @@ public class QueryGoalsTool(
 
     private static string BuildOutput(
         List<Goal> goals,
+        IReadOnlyDictionary<Guid, int> freshStreakValues,
         bool includeDescriptions,
         bool includeLinkedHabits)
     {
@@ -102,11 +109,12 @@ public class QueryGoalsTool(
 
         foreach (var goal in goals)
         {
+            var currentValue = freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
             var labels = new List<string>
             {
                 $"Status: {goal.Status}",
                 $"Type: {goal.Type}",
-                $"Progress: {goal.CurrentValue}/{goal.TargetValue} {goal.Unit}"
+                $"Progress: {currentValue}/{goal.TargetValue} {goal.Unit}"
             };
 
             if (goal.Deadline.HasValue)

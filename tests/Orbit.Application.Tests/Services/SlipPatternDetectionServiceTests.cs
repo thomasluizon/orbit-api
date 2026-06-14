@@ -10,10 +10,10 @@ public class SlipPatternDetectionServiceTests
     private static readonly Guid HabitId = Guid.NewGuid();
     private static readonly TimeZoneInfo Utc = TimeZoneInfo.Utc;
 
-    private static HabitLog CreateLog(DateTime createdAtUtc)
+    private static HabitLog CreateLog(DateTime createdAtUtc, decimal value = 1)
     {
         var date = DateOnly.FromDateTime(createdAtUtc);
-        var log = HabitLog.Create(HabitId, date, 1);
+        var log = HabitLog.Create(HabitId, date, value);
 
         var prop = typeof(HabitLog).GetProperty("CreatedAtUtc", BindingFlags.Public | BindingFlags.Instance);
         prop!.GetSetMethod(true)!.Invoke(log, [createdAtUtc]);
@@ -97,5 +97,43 @@ public class SlipPatternDetectionServiceTests
         result.Should().NotBeNull();
         result!.DayOfWeek.Should().Be(DayOfWeek.Friday);
         result.OccurrenceCount.Should().Be(5);
+    }
+
+    [Fact]
+    public void DetectPattern_AllSkips_ReturnsNull()
+    {
+        var now = DateTime.UtcNow;
+        var daysUntilMonday = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        if (daysUntilMonday == 0) daysUntilMonday = 7;
+        var lastMonday = now.AddDays(-daysUntilMonday);
+
+        var logs = new List<HabitLog>();
+        for (int i = 0; i < 5; i++)
+            logs.Add(CreateLog(lastMonday.AddDays(-7 * i), value: 0));
+
+        var result = SlipPatternDetectionService.DetectPattern(logs, HabitId, Utc);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void DetectPattern_SkipsDoNotInflateOccurrenceCount()
+    {
+        var now = DateTime.UtcNow;
+        var daysUntilMonday = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+        if (daysUntilMonday == 0) daysUntilMonday = 7;
+        var lastMonday = now.AddDays(-daysUntilMonday);
+
+        var logs = new List<HabitLog>();
+        for (int i = 0; i < 3; i++)
+            logs.Add(CreateLog(lastMonday.AddDays(-7 * i), value: 1));
+        for (int i = 3; i < 6; i++)
+            logs.Add(CreateLog(lastMonday.AddDays(-7 * i), value: 0));
+
+        var result = SlipPatternDetectionService.DetectPattern(logs, HabitId, Utc);
+
+        result.Should().NotBeNull();
+        result!.DayOfWeek.Should().Be(DayOfWeek.Monday);
+        result.OccurrenceCount.Should().Be(3);
     }
 }

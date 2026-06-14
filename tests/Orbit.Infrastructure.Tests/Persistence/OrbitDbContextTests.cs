@@ -93,6 +93,22 @@ public class OrbitDbContextTests
         habit.FindProperty(nameof(Habit.ScheduledReminders))!.GetDefaultValueSql().Should().Be("'[]'::jsonb");
     }
 
+    [Fact]
+    public void Model_SentReminder_UniqueIndexIncludesReminderTimeUtcAndWhen()
+    {
+        using var context = CreateContext();
+
+        var sentReminder = context.Model.FindEntityType(typeof(SentReminder))!;
+        var uniqueIndex = sentReminder.GetIndexes().Single(i => i.IsUnique);
+
+        uniqueIndex.Properties.Select(p => p.Name).Should().Equal(
+            nameof(SentReminder.HabitId),
+            nameof(SentReminder.Date),
+            nameof(SentReminder.MinutesBefore),
+            nameof(SentReminder.ReminderTimeUtc),
+            nameof(SentReminder.When));
+    }
+
     private static OrbitDbContext CreateContext(IEncryptionService? encryptionService = null)
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()

@@ -17,6 +17,7 @@ public partial class SlipAlertSchedulerService(
     IConfiguration configuration) : BackgroundService
 {
     private const int DefaultMorningHour = 8;
+    private const int MaxTimeZoneSkewDays = 1;
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:SlipAlertIntervalMinutes", 5));
@@ -48,7 +49,7 @@ public partial class SlipAlertSchedulerService(
         }
     }
 
-    private async Task CheckAndSendAlerts(CancellationToken ct)
+    internal async Task CheckAndSendAlerts(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
@@ -56,10 +57,11 @@ public partial class SlipAlertSchedulerService(
         var messageService = scope.ServiceProvider.GetRequiredService<ISlipAlertMessageService>();
 
         var utcDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        var endDateFloor = utcDate.AddDays(-MaxTimeZoneSkewDays);
         var habits = await dbContext.Habits
             .AsNoTracking()
             .Where(h => !h.IsCompleted && h.IsBadHabit && h.SlipAlertEnabled
-                && (!h.EndDate.HasValue || h.EndDate.Value >= utcDate.AddDays(-1)))
+                && (!h.EndDate.HasValue || h.EndDate.Value >= endDateFloor))
             .ToListAsync(ct);
 
         if (habits.Count == 0) return;
@@ -71,69 +73,61 @@ public partial class SlipAlertSchedulerService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
-        var daysToMondayUtc = ((int)DateTime.UtcNow.DayOfWeek - 1 + 7) % 7;
-        var currentWeekStart = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-daysToMondayUtc));
-        var sentAlertHabitIds = (await dbContext.SentSlipAlerts
+        var sentAlertFloor = utcDate.AddDays(-(7 + MaxTimeZoneSkewDays));
+        var sentWeeksByHabit = (await dbContext.SentSlipAlerts
             .AsNoTracking()
-            .Where(a => habitIds.Contains(a.HabitId) && a.WeekStart == currentWeekStart)
-            .Select(a => a.HabitId)
-            .ToListAsync(ct)).ToHashSet();
+            .Where(a => habitIds.Contains(a.HabitId) && a.WeekStart >= sentAlertFloor)
+            .ToListAsync(ct))
+            .GroupBy(a => a.HabitId)
+            .ToDictionary(g => g.Key, g => g.Select(a => a.WeekStart).ToHashSet());
 
-        habits = habits.Where(h => !sentAlertHabitIds.Contains(h.Id)).ToList();
-        if (habits.Count == 0) return;
-
-        habitIds = habits.Select(h => h.Id).ToList();
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-60));
+        var logCutoff = utcDate.AddDays(-60);
         var allLogs = await dbContext.HabitLogs
             .AsNoTracking()
-            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= cutoff)
+            .Where(l => habitIds.Contains(l.HabitId) && l.Date >= logCutoff)
             .ToListAsync(ct);
         var logsByHabit = allLogs.GroupBy(l => l.HabitId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var anyChanges = false;
-
-        var context = new SlipAlertContext(users, logsByHabit, sentAlertHabitIds,
+        var context = new SlipAlertContext(users, logsByHabit, sentWeeksByHabit,
             pushService, messageService, dbContext);
 
         foreach (var habit in habits)
-        {
-            var alertSent = await ProcessHabitSlipAlertAsync(habit, context, ct);
-
-            if (alertSent) anyChanges = true;
-        }
-
-        if (anyChanges)
-            await dbContext.SaveChangesAsync(ct);
+            await ProcessHabitSlipAlertAsync(habit, context, ct);
     }
 
     private sealed record SlipAlertContext(
         Dictionary<Guid, User> Users,
         Dictionary<Guid, List<HabitLog>> LogsByHabit,
-        HashSet<Guid> SentAlertHabitIds,
+        Dictionary<Guid, HashSet<DateOnly>> SentWeeksByHabit,
         IPushNotificationService PushService,
         ISlipAlertMessageService MessageService,
         OrbitDbContext DbContext);
 
-    private async Task<bool> ProcessHabitSlipAlertAsync(
+    private async Task ProcessHabitSlipAlertAsync(
         Habit habit, SlipAlertContext ctx, CancellationToken ct)
     {
-        if (!ctx.Users.TryGetValue(habit.UserId, out var user)) return false;
+        if (!ctx.Users.TryGetValue(habit.UserId, out var user)) return;
 
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+        var userToday = DateOnly.FromDateTime(userNow);
         var userTimeNow = TimeOnly.FromDateTime(userNow);
+
+        if (habit.EndDate.HasValue && habit.EndDate.Value < userToday) return;
+
+        var weekStart = WeekMath.WeekStart(userToday, user.WeekStartDay);
+        var sentWeeks = ctx.SentWeeksByHabit.GetValueOrDefault(habit.Id) ?? [];
+        if (sentWeeks.Contains(weekStart)) return;
 
         var logs = ctx.LogsByHabit.GetValueOrDefault(habit.Id) ?? [];
         var pattern = SlipPatternDetectionService.DetectPattern(logs, habit.Id, tz);
-        if (pattern is null) return false;
+        if (pattern is null) return;
 
-        if (userNow.DayOfWeek != pattern.DayOfWeek) return false;
+        if (userNow.DayOfWeek != pattern.DayOfWeek) return;
 
         var alertTime = CalculateAlertTime(pattern.PeakHour);
-        if (!IsWithinSendWindow(userTimeNow, alertTime)) return false;
-
-        if (ctx.SentAlertHabitIds.Contains(habit.Id)) return false;
+        if (!IsWithinSendWindow(userTimeNow, alertTime)) return;
 
         var lang = user.Language ?? "en";
         var messageResult = await ctx.MessageService.GenerateMessageAsync(
@@ -143,19 +137,21 @@ public partial class SlipAlertSchedulerService(
         {
             if (logger.IsEnabled(LogLevel.Warning))
                 LogSlipAlertMessageFailed(logger, habit.Id);
-            return false;
+            return;
         }
 
         var (title, body) = messageResult.Value;
 
+        if (!await TryRecordSentAlertAsync(habit, weekStart, title, body, ctx.DbContext, ct))
+            return;
+
+        sentWeeks.Add(weekStart);
+        ctx.SentWeeksByHabit[habit.Id] = sentWeeks;
+
         await ctx.PushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
 
-        await RecordSentAlertAsync(habit, userNow, title, body, ctx.DbContext, ct);
-
-        ctx.SentAlertHabitIds.Add(habit.Id);
         if (logger.IsEnabled(LogLevel.Information))
             LogSentSlipAlert(logger, habit.Id, habit.UserId);
-        return true;
     }
 
     /// <summary>
@@ -171,24 +167,38 @@ public partial class SlipAlertSchedulerService(
         return new TimeOnly(alertHour, 0);
     }
 
-    private static bool IsWithinSendWindow(TimeOnly userTimeNow, TimeOnly alertTime)
+    private bool IsWithinSendWindow(TimeOnly userTimeNow, TimeOnly alertTime)
     {
-        var diffMinutes = (userTimeNow - alertTime).TotalMinutes;
-        return diffMinutes >= 0 && diffMinutes < 5;
+        var diff = userTimeNow.ToTimeSpan() - alertTime.ToTimeSpan();
+        return diff >= TimeSpan.Zero && diff < _interval;
     }
 
-    private static async Task RecordSentAlertAsync(
-        Habit habit, DateTime userNow, string title, string body,
+    private async Task<bool> TryRecordSentAlertAsync(
+        Habit habit, DateOnly weekStart, string title, string body,
         OrbitDbContext dbContext, CancellationToken ct)
     {
-        var userToday = DateOnly.FromDateTime(userNow);
-        var daysToMonday = ((int)userToday.DayOfWeek - 1 + 7) % 7;
-        var weekStart = userToday.AddDays(-daysToMonday);
-        var sentAlert = SentSlipAlert.Create(habit.Id, weekStart);
-        await dbContext.SentSlipAlerts.AddAsync(sentAlert, ct);
+        await dbContext.SentSlipAlerts.AddAsync(SentSlipAlert.Create(habit.Id, weekStart), ct);
+        await dbContext.Notifications.AddAsync(
+            Notification.Create(habit.UserId, title, body, "/", habit.Id), ct);
 
-        var notification = Notification.Create(habit.UserId, title, body, "/", habit.Id);
-        await dbContext.Notifications.AddAsync(notification, ct);
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        {
+            DetachPendingEntries(dbContext);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSlipAlertAlreadySent(logger, habit.Id);
+            return false;
+        }
+    }
+
+    private static void DetachPendingEntries(OrbitDbContext dbContext)
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries().ToList())
+            entry.State = EntityState.Detached;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "SlipAlertSchedulerService started")]
@@ -206,4 +216,6 @@ public partial class SlipAlertSchedulerService(
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Sent slip alert for habit {HabitId} to user {UserId}")]
     private static partial void LogSentSlipAlert(ILogger logger, Guid habitId, Guid userId);
 
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Slip alert already recorded for habit {HabitId}; skipping push")]
+    private static partial void LogSlipAlertAlreadySent(ILogger logger, Guid habitId);
 }

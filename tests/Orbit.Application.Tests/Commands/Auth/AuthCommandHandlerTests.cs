@@ -87,16 +87,16 @@ public class AuthCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid");
-        _cache.TryGetValue($"verify:{TestEmail}", out VerificationEntry? entry).Should().BeTrue();
-        entry!.Attempts.Should().Be(1);
+        _cache.TryGetValue($"verify-attempts:{TestEmail}", out int attempts).Should().BeTrue();
+        attempts.Should().Be(1);
     }
 
     [Fact]
     public async Task VerifyCode_MaxAttempts_ReturnsFailure()
     {
-        var entry = new VerificationEntry("123456", 3, DateTime.UtcNow);
-        _cache.Set($"verify:{TestEmail}", entry,
-            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+        _cache.Set($"verify-attempts:{TestEmail}", 3,
+            new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15) });
+        SetupCacheWithCode("123456");
 
         var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
         var command = new VerifyCodeCommand(TestEmail, "123456");
@@ -105,7 +105,6 @@ public class AuthCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Too many attempts");
-        _cache.TryGetValue($"verify:{TestEmail}", out _).Should().BeFalse();
     }
 
     [Fact]

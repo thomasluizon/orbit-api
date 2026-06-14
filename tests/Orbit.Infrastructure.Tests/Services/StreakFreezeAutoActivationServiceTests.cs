@@ -1,10 +1,16 @@
+using System.Data.Common;
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -237,6 +243,120 @@ public class StreakFreezeAutoActivationServiceTests
         var task = (Task<Dictionary<Guid, HashSet<DateOnly>>>)method.Invoke(
             null, [context, userIds, since, CancellationToken.None])!;
         return await task;
+    }
+
+    [Fact]
+    public async Task ActivateMissedDayFreezes_OneUserConflict_DoesNotDiscardAnotherUsersFreeze()
+    {
+        var conflictUser = CreateEligibleProUser();
+        var healthyUser = CreateEligibleProUser();
+
+        var interceptor = new ThrowUniqueViolationForUserInterceptor(conflictUser.Id);
+        await using var dbContext = CreateInterceptingContext(interceptor);
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.AddRange(conflictUser, healthyUser);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        var conflictFreezes = await dbContext.StreakFreezes.AsNoTracking()
+            .CountAsync(f => f.UserId == conflictUser.Id);
+        var healthyFreezes = await dbContext.StreakFreezes.AsNoTracking()
+            .CountAsync(f => f.UserId == healthyUser.Id);
+
+        conflictFreezes.Should().Be(0);
+        healthyFreezes.Should().Be(1);
+
+        await pushService.DidNotReceive().SendToUserAsync(
+            conflictUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await pushService.Received(1).SendToUserAsync(
+            healthyUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ActivateMissedDayFreezes_PushFiresOnlyAfterFreezePersisted()
+    {
+        var user = CreateEligibleProUser();
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        var freezeExistedAtPushTime = false;
+        pushService
+            .SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                freezeExistedAtPushTime = dbContext.StreakFreezes
+                    .AsNoTracking().Any(f => f.UserId == user.Id);
+                return Task.CompletedTask;
+            });
+
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        freezeExistedAtPushTime.Should().BeTrue();
+        (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id))
+            .Should().Be(1);
+        user.StreakFreezesAccumulated.Should().Be(0);
+    }
+
+    private static User CreateEligibleProUser()
+    {
+        var user = User.Create($"User-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@test.com").Value;
+        var twoDaysAgo = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2);
+        user.SetStreakState(currentStreak: 10, longestStreak: 10, lastActiveDate: twoDaysAgo);
+        user.AwardStreakFreezeIfEligible();
+        return user;
+    }
+
+    private static OrbitDbContext CreateInMemoryDbContext() =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"StreakFreezeAutoActivationServiceTests_{Guid.NewGuid()}")
+            .Options);
+
+    private static OrbitDbContext CreateInterceptingContext(ISaveChangesInterceptor interceptor) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"StreakFreezeAutoActivationServiceTests_{Guid.NewGuid()}")
+            .AddInterceptors(interceptor)
+            .Options);
+
+    private static StreakFreezeAutoActivationService CreateService(
+        OrbitDbContext dbContext, IPushNotificationService pushService)
+    {
+        var serviceProvider = new ServiceCollection()
+            .AddSingleton(dbContext)
+            .AddSingleton(pushService)
+            .BuildServiceProvider();
+        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        return new StreakFreezeAutoActivationService(
+            scopeFactory, NullLogger<StreakFreezeAutoActivationService>.Instance,
+            new ConfigurationBuilder().Build());
+    }
+
+    private sealed class ThrowUniqueViolationForUserInterceptor(Guid conflictUserId) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var hasConflictingFreeze = eventData.Context?.ChangeTracker
+                .Entries<StreakFreeze>()
+                .Any(e => e.State == EntityState.Added && e.Entity.UserId == conflictUserId) == true;
+
+            if (hasConflictingFreeze)
+                throw new DbUpdateException("duplicate", new FakeUniqueViolationException());
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 
     private static int GetConfiguredIntervalMinutesDefault()

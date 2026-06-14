@@ -14,6 +14,11 @@ public record GoogleTokenRefreshOutcome(
     GoogleTokenRefreshResult Result,
     string? ErrorCode);
 
+public static class GoogleTokenErrorCodes
+{
+    public const string NoRefreshToken = "no_refresh_token";
+}
+
 public interface IGoogleTokenService
 {
     Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default);

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
@@ -21,7 +22,6 @@ public partial class GoogleAuthCommandHandler(
     IAuthSessionService authSessionService,
     IHttpClientFactory httpClientFactory,
     IEmailService emailService,
-    IMediator mediator,
     IServiceScopeFactory scopeFactory,
     ILogger<GoogleAuthCommandHandler> logger) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
@@ -96,8 +96,10 @@ public partial class GoogleAuthCommandHandler(
     }
 
     private async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
-        string email, string name, string language, CancellationToken cancellationToken)
+        string rawEmail, string name, string language, CancellationToken cancellationToken)
     {
+        var email = rawEmail.Trim().ToLowerInvariant();
+
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Email == email,
             cancellationToken: cancellationToken);
@@ -112,7 +114,21 @@ public partial class GoogleAuthCommandHandler(
         user = createResult.Value;
         user.SetLanguage(language);
         await userRepository.AddAsync(user, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            var raced = await userRepository.FindOneTrackedAsync(
+                u => u.Email == email,
+                cancellationToken: cancellationToken);
+            if (raced is null)
+                throw;
+
+            return Result.Success((raced, false));
+        }
 
         SendWelcomeEmailInBackground(user.Email, user.Name, language);
 
@@ -170,18 +186,6 @@ public partial class GoogleAuthCommandHandler(
                 LogReferralProcessingFailed(logger, ex, userId);
             }
         }, CancellationToken.None);
-    }
-
-    private async Task ProcessReferralSafeAsync(Guid userId, string referralCode, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await mediator.Send(new ProcessReferralCodeCommand(userId, referralCode), cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogReferralProcessingFailed(logger, ex, userId);
-        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Welcome email failed for user {Email}")]

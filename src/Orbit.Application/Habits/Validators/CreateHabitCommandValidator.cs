@@ -28,7 +28,16 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithMessage("Frequency quantity is required when frequency unit is set")
             .When(x => x.FrequencyUnit is not null);
 
-        SharedHabitRules.AddDaysRules(this, x => x.Options != null ? x.Options.Days : null, x => x.FrequencyQuantity);
+        SharedHabitRules.AddDaysRules(this,
+            x => x.Options != null ? x.Options.Days : null,
+            x => x.FrequencyQuantity,
+            x => x.FrequencyUnit,
+            x => x.Options != null && x.Options.IsFlexible);
+
+        SharedHabitRules.AddOneTimeTaskEndDateRules(this,
+            x => x.Options != null ? x.Options.EndDate : null,
+            x => x.FrequencyUnit,
+            x => x.IsGeneral);
 
         RuleFor(x => x.SubHabits)
             .Must(subs => subs is null || subs.Count <= AppConstants.MaxSubHabits)
@@ -52,6 +61,8 @@ public class CreateHabitCommandValidator : AbstractValidator<CreateHabitCommand>
             .WithMessage("General habits cannot be bad habits");
 
         SharedHabitRules.AddScheduledReminderRules(RuleFor(x => x.Options != null ? x.Options.ScheduledReminders : null));
+
+        SharedHabitRules.AddReminderTimesRules(RuleFor(x => x.Options != null ? x.Options.ReminderTimes : null));
 
         SharedHabitRules.AddGoalIdsRules(this, x => x.GoalIds);
     }

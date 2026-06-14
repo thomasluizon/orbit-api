@@ -444,6 +444,119 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Success_PersistsRealUtcInstantForOffsetEvent()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var realUtc = new DateTime(2026, 4, 11, 2, 30, 0, DateTimeKind.Utc);
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Late event", null, "2026-04-10", "23:30", "23:45", false, null, [], realUtc)
+            });
+
+        GoogleCalendarSyncSuggestion? captured = null;
+        await _suggestionRepo.AddAsync(
+            Arg.Do<GoogleCalendarSyncSuggestion>(s => captured = s), Arg.Any<CancellationToken>());
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.NewSuggestions.Should().Be(1);
+        captured.Should().NotBeNull();
+        captured!.StartDateUtc.Should().Be(realUtc);
+        captured.StartDateUtc.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
+    public async Task Handle_Success_FallsBackToStartDateWhenNoUtcInstant()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_allday", "All day", null, "2026-04-12", null, null, false, null, [])
+            });
+
+        GoogleCalendarSyncSuggestion? captured = null;
+        await _suggestionRepo.AddAsync(
+            Arg.Do<GoogleCalendarSyncSuggestion>(s => captured = s), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        captured.Should().NotBeNull();
+        captured!.StartDateUtc.Should().Be(new DateTime(2026, 4, 12, 0, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task Handle_NoRefreshToken_RoutesToReconnectRequired()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome(
+                user.GoogleAccessToken, GoogleTokenRefreshResult.TransientFailure, GoogleTokenErrorCodes.NoRefreshToken));
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Status.Should().Be(GoogleCalendarAutoSyncStatus.ReconnectRequired);
+        user.GoogleCalendarAutoSyncStatus.Should().Be(GoogleCalendarAutoSyncStatus.ReconnectRequired);
+        user.GoogleAccessToken.Should().BeNull();
+        await _notificationRepo.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Url == "/calendar-sync"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FetchReconnectRequired_RoutesToReconnectRequired()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<CalendarEventItem>>>(_ => throw new CalendarProviderException(
+                CalendarFetchErrorKind.ReconnectRequired, "invalid_grant", "boom", new Exception()));
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Status.Should().Be(GoogleCalendarAutoSyncStatus.ReconnectRequired);
+        user.GoogleCalendarAutoSyncStatus.Should().Be(GoogleCalendarAutoSyncStatus.ReconnectRequired);
+        user.GoogleAccessToken.Should().BeNull();
+        await _notificationRepo.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Url == "/calendar-sync"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FetchTransientError_MarksTransientAndDoesNotDisconnect()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns<Task<List<CalendarEventItem>>>(_ => throw new CalendarProviderException(
+                CalendarFetchErrorKind.Transient, "rate_limit", "boom", new Exception()));
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Status.Should().Be(GoogleCalendarAutoSyncStatus.TransientError);
+        user.GoogleCalendarAutoSyncStatus.Should().Be(GoogleCalendarAutoSyncStatus.TransientError);
+        user.GoogleCalendarAutoSyncEnabled.Should().BeTrue();
+        await _notificationRepo.DidNotReceive().AddAsync(Arg.Any<Notification>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_OpportunisticSkipsDedupe()
     {
         var user = CreateEnabledProUser();

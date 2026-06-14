@@ -98,6 +98,7 @@ public record GetHabitScheduleQuery(
 /// </summary>
 internal record ScheduleMapContext(
     ILookup<Guid?, Habit> ChildLookup,
+    int WeekStartDay,
     bool IncludeAllChildren = false,
     bool IncludeOverdue = false,
     DateOnly? DateFrom = null,
@@ -141,6 +142,8 @@ public class GetHabitScheduleQueryHandler(
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> HandleGeneralHabits(
         GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
+
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
             q => q.Include(h => h.Tags)
@@ -164,6 +167,7 @@ public class GetHabitScheduleQueryHandler(
 
         var ctx = new ScheduleMapContext(
             lookup,
+            weekStartDay,
             IncludeAllChildren: true,
             IncludeOverdue: request.IncludeOverdue,
             Search: request.Search);
@@ -181,6 +185,7 @@ public class GetHabitScheduleQueryHandler(
         GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
 
         var overdueLookbackDays = request.IncludeOverdue ? 31 : AppConstants.DefaultOverdueWindowDays;
@@ -204,12 +209,12 @@ public class GetHabitScheduleQueryHandler(
         topLevel = ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
-            return await BuildNonDateResponse(topLevel, request, lookup, today, logFrom, logTo, cancellationToken);
+            return await BuildNonDateResponse(topLevel, request, lookup, today, weekStartDay, logFrom, logTo, cancellationToken);
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
 
-        var filtered = FilterScheduledHabits(topLevel, dateFrom, dateTo, request.IncludeOverdue, lookup);
+        var filtered = FilterScheduledHabits(topLevel, dateFrom, dateTo, request.IncludeOverdue, lookup, weekStartDay);
 
         var totalCount = filtered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
@@ -233,6 +238,7 @@ public class GetHabitScheduleQueryHandler(
 
         var ctx = new ScheduleMapContext(
             pagedLookup,
+            weekStartDay,
             IncludeOverdue: request.IncludeOverdue,
             DateFrom: dateFrom,
             DateTo: dateTo,
@@ -250,7 +256,7 @@ public class GetHabitScheduleQueryHandler(
             .ToList();
 
         if (request.IncludeGeneral)
-            await AppendGeneralHabits(pagedItems, request, logFrom, logTo, today, cancellationToken);
+            await AppendGeneralHabits(pagedItems, request, logFrom, logTo, today, weekStartDay, cancellationToken);
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,
@@ -352,6 +358,7 @@ public class GetHabitScheduleQueryHandler(
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
         DateOnly today,
+        int weekStartDay,
         DateOnly logFrom,
         DateOnly logTo,
         CancellationToken cancellationToken)
@@ -376,6 +383,7 @@ public class GetHabitScheduleQueryHandler(
 
         var ctx = new ScheduleMapContext(
             pagedLookup,
+            weekStartDay,
             IncludeAllChildren: true,
             IncludeOverdue: request.IncludeOverdue,
             ReferenceDate: today,
@@ -398,7 +406,8 @@ public class GetHabitScheduleQueryHandler(
         DateOnly dateFrom,
         DateOnly dateTo,
         bool includeOverdue,
-        ILookup<Guid?, Habit> lookup)
+        ILookup<Guid?, Habit> lookup,
+        int weekStartDay)
     {
         var filtered = new List<(Habit habit, List<DateOnly> scheduledDates, bool isOverdue)>();
 
@@ -408,7 +417,7 @@ public class GetHabitScheduleQueryHandler(
 
             if (habit.IsFlexible
                 && !hasCompletedLogInRange
-                && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
+                && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs, weekStartDay))
                 continue;
 
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
@@ -442,6 +451,7 @@ public class GetHabitScheduleQueryHandler(
         DateOnly logFrom,
         DateOnly logTo,
         DateOnly today,
+        int weekStartDay,
         CancellationToken cancellationToken)
     {
         var generalHabits = await habitRepository.FindAsync(
@@ -459,6 +469,7 @@ public class GetHabitScheduleQueryHandler(
 
         var ctx = new ScheduleMapContext(
             generalLookup,
+            weekStartDay,
             IncludeAllChildren: true,
             IncludeOverdue: request.IncludeOverdue,
             UserToday: today,
@@ -576,7 +587,7 @@ public class GetHabitScheduleQueryHandler(
         bool isOverdue,
         ScheduleMapContext ctx)
     {
-        var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(h, ctx.ReferenceDate);
+        var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(h, ctx.ReferenceDate, ctx.WeekStartDay);
 
         var instances = ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue
             ? HabitScheduleService.GetInstances(h, ctx.DateFrom.Value, ctx.DateTo.Value, ctx.UserToday.Value)
@@ -603,15 +614,15 @@ public class GetHabitScheduleQueryHandler(
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
-        Habit h, DateOnly? referenceDate)
+        Habit h, DateOnly? referenceDate, int weekStartDay)
     {
         if (!h.IsFlexible || !referenceDate.HasValue)
             return (null, null);
 
         var totalTarget = h.FrequencyQuantity ?? 1;
-        var skipped = HabitScheduleService.GetSkippedInWindow(h, referenceDate.Value, h.Logs);
+        var skipped = HabitScheduleService.GetSkippedInWindow(h, referenceDate.Value, h.Logs, weekStartDay);
         var target = Math.Max(0, totalTarget - skipped);
-        var completed = HabitScheduleService.GetCompletedInWindow(h, referenceDate.Value, h.Logs);
+        var completed = HabitScheduleService.GetCompletedInWindow(h, referenceDate.Value, h.Logs, weekStartDay);
         return (target, completed);
     }
 
@@ -707,7 +718,7 @@ public class GetHabitScheduleQueryHandler(
 
     private static HabitScheduleChildItem MapSingleChild(Habit c, ScheduleMapContext ctx)
     {
-        var (ft, fc) = CalculateFlexibleProgress(c, ctx.ReferenceDate);
+        var (ft, fc) = CalculateFlexibleProgress(c, ctx.ReferenceDate, ctx.WeekStartDay);
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue
             && HabitScheduleService.HasCompletedLogInRange(c, ctx.DateFrom.Value, ctx.DateTo.Value);
         var scheduledDates = ctx.DateFrom.HasValue && ctx.DateTo.HasValue

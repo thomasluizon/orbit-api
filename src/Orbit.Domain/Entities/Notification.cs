@@ -2,7 +2,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class Notification : Entity, ITimestamped
+public class Notification : Entity, ITimestamped, ISoftDeletable
 {
     public Guid UserId { get; private set; }
     public string Title { get; private set; } = null!;
@@ -12,6 +12,8 @@ public class Notification : Entity, ITimestamped
     public bool IsRead { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
 
     private Notification() { }
 
@@ -33,6 +35,13 @@ public class Notification : Entity, ITimestamped
     public void MarkAsRead()
     {
         IsRead = true;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTime.UtcNow;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 }

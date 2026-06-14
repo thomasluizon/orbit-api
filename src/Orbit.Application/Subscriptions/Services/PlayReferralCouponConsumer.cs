@@ -13,34 +13,38 @@ public partial class PlayReferralCouponConsumer(
 {
     private readonly GooglePlaySettings _settings = playSettings.Value;
 
-    public async Task ConsumeOnNewPurchaseAsync(User user, PlaySubscriptionState state, string purchaseToken, CancellationToken cancellationToken)
+    public string? ConsumeOnNewPurchase(User user, PlaySubscriptionState state, string purchaseToken)
     {
         if (string.IsNullOrWhiteSpace(_settings.ReferralOfferId))
-            return;
+            return null;
 
         if (string.Equals(user.PlayPurchaseToken, purchaseToken, StringComparison.Ordinal))
-            return;
+            return null;
 
         if (!string.Equals(state.OfferId, _settings.ReferralOfferId, StringComparison.OrdinalIgnoreCase))
-            return;
+            return null;
 
         var couponId = user.ReferralCouponId;
         if (string.IsNullOrEmpty(couponId))
         {
             LogReferralOfferWithoutCoupon(logger, user.Id);
-            return;
+            return null;
         }
 
         user.SetReferralCoupon(null);
         LogConsumedReferralCoupon(logger, couponId, user.Id);
+        return couponId;
+    }
 
+    public async Task CancelConsumedCouponAsync(Guid userId, string couponId, CancellationToken cancellationToken)
+    {
         try
         {
             await referralRewardService.CancelCouponAsync(couponId, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogCancelCouponFailed(logger, ex, couponId, user.Id);
+            LogCancelCouponFailed(logger, ex, couponId, userId);
         }
     }
 

@@ -80,6 +80,25 @@ public class TestPushNotificationCommandHandlerTests
         result.Value.Status.Should().Be("failed");
         result.Value.Error.Should().Contain("Failed to send");
     }
+
+    [Fact]
+    public async Task Handle_Cancelled_PropagatesCancellation()
+    {
+        _pushSubRepo.CountAsync(
+            Arg.Any<Expression<Func<PushSubscription, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(1);
+
+        _pushService.SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new OperationCanceledException());
+
+        var command = new TestPushNotificationCommand(UserId);
+
+        var act = () => _handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
 }
 
 public class UnsubscribePushCommandHandlerTests

@@ -11,13 +11,14 @@ public class SetWeekStartDayCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly SetWeekStartDayCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public SetWeekStartDayCommandHandlerTests()
     {
-        _handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork);
+        _handler = new SetWeekStartDayCommandHandler(_userRepo, _unitOfWork, _userDateService);
     }
 
     private void SetupUserFound(User user)
@@ -51,6 +52,7 @@ public class SetWeekStartDayCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.WeekStartDay.Should().Be(0);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        _userDateService.Received(1).InvalidateUserDatePreferences(UserId);
     }
 
     [Fact]

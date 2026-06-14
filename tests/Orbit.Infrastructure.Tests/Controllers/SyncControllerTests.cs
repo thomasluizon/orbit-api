@@ -52,16 +52,16 @@ public class SyncControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task GetChanges_SinceIsTooOld_ReturnsGone()
+    public async Task GetChangesV2_SinceIsTooOld_ReturnsGone()
     {
-        var result = await _controller.GetChanges(DateTime.UtcNow.AddDays(-31), CancellationToken.None);
+        var result = await _controller.GetChangesV2(DateTime.UtcNow.AddDays(-31), CancellationToken.None);
 
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(StatusCodes.Status410Gone);
     }
 
     [Fact]
-    public async Task GetChanges_ReturnsUpdatedAndDeletedEntitiesForCurrentUser()
+    public async Task GetChangesV2_ReturnsUpdatedAndDeletedEntitiesForCurrentUser()
     {
         var since = DateTime.UtcNow.AddMinutes(-5);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -70,18 +70,26 @@ public class SyncControllerTests : IDisposable
         var deletedHabit = Habit.Create(new HabitCreateParams(UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: today)).Value;
         deletedHabit.SoftDelete();
         var habitLog = activeHabit.Log(today, advanceDueDate: false).Value;
+        var deletedHabitLog = activeHabit.Log(today.AddDays(-1), advanceDueDate: false).Value;
+        activeHabit.Unlog(today.AddDays(-1));
 
         var activeGoal = Goal.Create(UserId, "Read books", 12, "books").Value;
         var deletedGoal = Goal.Create(UserId, "Save money", 500, "dollars").Value;
         deletedGoal.SoftDelete();
         var goalProgressLog = GoalProgressLog.Create(activeGoal.Id, 0, 4, "Started");
+        var deletedGoalProgressLog = GoalProgressLog.Create(activeGoal.Id, 4, 6, "Reverted");
+        deletedGoalProgressLog.SoftDelete();
 
         var activeTag = Tag.Create(UserId, "Health", "#00ff00").Value;
         var deletedTag = Tag.Create(UserId, "Career", "#ff0000").Value;
         deletedTag.SoftDelete();
 
         var notification = Notification.Create(UserId, "Reminder", "Drink water");
+        var deletedNotification = Notification.Create(UserId, "Old", "Dismissed");
+        deletedNotification.SoftDelete();
         var checklistTemplate = ChecklistTemplate.Create(UserId, "Morning", ["Water", "Stretch"]).Value;
+        var deletedChecklistTemplate = ChecklistTemplate.Create(UserId, "Evening", ["Floss"]).Value;
+        deletedChecklistTemplate.SoftDelete();
 
         var otherUserHabit = Habit.Create(new HabitCreateParams(Guid.NewGuid(), "Other", FrequencyUnit.Day, 1, DueDate: today)).Value;
         var otherUserNotification = Notification.Create(Guid.NewGuid(), "Other Reminder", "Ignore me");
@@ -90,32 +98,40 @@ public class SyncControllerTests : IDisposable
             activeHabit,
             deletedHabit,
             habitLog,
+            deletedHabitLog,
             activeGoal,
             deletedGoal,
             goalProgressLog,
+            deletedGoalProgressLog,
             activeTag,
             deletedTag,
             notification,
+            deletedNotification,
             checklistTemplate,
+            deletedChecklistTemplate,
             otherUserHabit,
             otherUserNotification);
         await _dbContext.SaveChangesAsync();
 
-        var result = await _controller.GetChanges(since, CancellationToken.None);
+        var result = await _controller.GetChangesV2(since, CancellationToken.None);
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var response = okResult.Value.Should().BeOfType<SyncController.SyncChangesResponse>().Subject;
+        var response = okResult.Value.Should().BeOfType<SyncController.SyncChangesV2Response>().Subject;
 
         response.Habits.Updated.Should().HaveCount(1);
         response.Habits.Deleted.Should().ContainSingle(r => r.Id == deletedHabit.Id);
-        response.HabitLogs.Updated.Should().HaveCount(1);
+        response.HabitLogs.Updated.Should().ContainSingle(l => l.Id == habitLog.Id);
+        response.HabitLogs.Deleted.Should().ContainSingle(r => r.Id == deletedHabitLog.Id);
         response.Goals.Updated.Should().HaveCount(1);
         response.Goals.Deleted.Should().ContainSingle(r => r.Id == deletedGoal.Id);
-        response.GoalProgressLogs.Updated.Should().HaveCount(1);
+        response.GoalProgressLogs.Updated.Should().ContainSingle(l => l.Id == goalProgressLog.Id);
+        response.GoalProgressLogs.Deleted.Should().ContainSingle(r => r.Id == deletedGoalProgressLog.Id);
         response.Tags.Updated.Should().HaveCount(1);
         response.Tags.Deleted.Should().ContainSingle(r => r.Id == deletedTag.Id);
-        response.Notifications.Updated.Should().ContainSingle();
-        response.ChecklistTemplates.Updated.Should().ContainSingle();
+        response.Notifications.Updated.Should().ContainSingle(n => n.Id == notification.Id);
+        response.Notifications.Deleted.Should().ContainSingle(r => r.Id == deletedNotification.Id);
+        response.ChecklistTemplates.Updated.Should().ContainSingle(c => c.Id == checklistTemplate.Id);
+        response.ChecklistTemplates.Deleted.Should().ContainSingle(r => r.Id == deletedChecklistTemplate.Id);
         response.ServerTimestamp.Should().BeOnOrAfter(since);
     }
 

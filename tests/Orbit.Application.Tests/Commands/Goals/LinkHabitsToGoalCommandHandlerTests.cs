@@ -156,4 +156,32 @@ public class LinkHabitsToGoalCommandHandlerTests
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_ForeignOrMissingHabitId_ReturnsFailureWithoutClearing()
+    {
+        var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
+        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1)).Value;
+        goal.AddHabit(existingHabit);
+
+        _goalRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goal);
+
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>());
+
+        var command = new LinkHabitsToGoalCommand(UserId, GoalId, new List<Guid> { Guid.NewGuid() });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
+        goal.Habits.Should().ContainSingle();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }

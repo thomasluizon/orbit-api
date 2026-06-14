@@ -31,12 +31,18 @@ public class ReorderGoalsCommandHandler(
 
         var goalMap = goals.ToDictionary(g => g.Id);
 
-        foreach (var update in request.Positions)
+        var orderedGoalIds = request.Positions
+            .OrderBy(p => p.Position)
+            .Select(p => p.GoalId)
+            .ToList();
+
+        var normalizedPosition = 0;
+        foreach (var goalId in orderedGoalIds)
         {
-            if (!goalMap.TryGetValue(update.GoalId, out var goal))
+            if (!goalMap.TryGetValue(goalId, out var goal))
                 return Result.Failure(ErrorMessages.GoalNotFound);
 
-            goal.UpdatePosition(update.Position);
+            goal.UpdatePosition(normalizedPosition++);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

@@ -167,7 +167,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (IsCompleted)
             return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
 
-        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date))
+        if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
             return Result.Failure<HabitLog>(DomainErrors.AlreadyLoggedForDate);
 
         var log = HabitLog.Create(Id, date, 1, note);
@@ -262,23 +262,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     }
 
     /// <summary>
-    /// Advances DueDate past the current flexible window.
-    /// Day=next day, Week=next Monday, Month=next 1st, Year=next Jan 1.
-    /// </summary>
-    public void AdvanceDueDatePastWindow(DateOnly today)
-    {
-        var windowEnd = FrequencyUnit switch
-        {
-            Enums.FrequencyUnit.Day => today,
-            Enums.FrequencyUnit.Week => today.AddDays(6 - ((int)today.DayOfWeek + 6) % 7),            Enums.FrequencyUnit.Month => new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)),
-            Enums.FrequencyUnit.Year => new DateOnly(today.Year, 12, 31),
-            _ => today
-        };
-        DueDate = windowEnd.AddDays(1);
-        UpdatedAtUtc = DateTime.UtcNow;
-    }
-
-    /// <summary>
     /// Postpones a one-time task to the given date.
     /// </summary>
     public void PostponeTo(DateOnly date)
@@ -303,11 +286,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public Result<HabitLog> Unlog(DateOnly date)
     {
-        var log = _logs.Find(l => l.Date == date && l.Value > 0);
+        var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
         if (log is null)
             return Result.Failure<HabitLog>(DomainErrors.LogNotFoundForDate);
 
-        _logs.Remove(log);
+        log.SoftDelete();
 
         if (FrequencyUnit is null)
         {
@@ -316,6 +299,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         else if (!IsFlexible)
         {
             DueDate = date;
+            if (IsCompleted)
+                IsCompleted = false;
         }
 
         UpdatedAtUtc = DateTime.UtcNow;
@@ -348,13 +333,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (scheduleValidation is not null)
             return scheduleValidation;
 
-        var effectiveDueEndTime = p.DueEndTime ?? DueEndTime;
-        var effectiveDueTime = p.DueTime ?? DueTime;
-        if (effectiveDueEndTime.HasValue && effectiveDueTime.HasValue && effectiveDueEndTime.Value <= effectiveDueTime.Value)
-            return DomainErrors.EndTimeBeforeStartTime;
-
-        if (p.EndDate.HasValue && p.EndDate.Value < (p.DueDate ?? DueDate))
-            return DomainErrors.EndDateBeforeStartDate;
+        var dateValidation = ValidateDateOptions(
+            p.DueTime ?? DueTime, p.DueEndTime ?? DueEndTime,
+            p.ClearEndDate == true ? null : (p.EndDate ?? EndDate),
+            p.FrequencyUnit, effectiveIsGeneral, p.DueDate ?? DueDate);
+        if (dateValidation is not null)
+            return dateValidation;
 
         var emojiValidation = ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
@@ -407,6 +391,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             EndDate = null;
         else if (p.EndDate.HasValue)
             EndDate = p.EndDate.Value;
+
+        if ((p.ClearEndDate == true || p.EndDate.HasValue) && FrequencyUnit is not null)
+            RecomputeCompletionForEndDate();
+    }
+
+    private void RecomputeCompletionForEndDate()
+    {
+        if (EndDate.HasValue && DueDate > EndDate.Value)
+            IsCompleted = true;
+        else if (IsCompleted)
+            IsCompleted = false;
     }
 
     public void UpdateChecklist(IReadOnlyList<ChecklistItem> items)
@@ -473,7 +468,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (isFlexible && days?.Count > 0)
             return DomainErrors.FlexibleHasDays;
 
-        if (!isFlexible && days?.Count > 0 && frequencyQuantity != 1)
+        if (!isFlexible && days?.Count > 0 && (frequencyQuantity != 1 || frequencyUnit != Enums.FrequencyUnit.Day))
             return DomainErrors.DaysRequireQuantityOne;
 
         return null;

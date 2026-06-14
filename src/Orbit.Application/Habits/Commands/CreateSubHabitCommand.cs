@@ -94,6 +94,11 @@ public class CreateSubHabitCommandHandler(
             var tags = await tagRepository.FindTrackedAsync(
                 t => request.TagIds.Contains(t.Id) && t.UserId == request.UserId,
                 cancellationToken);
+
+            var tagsResolved = OwnershipValidation.AllResolved(request.TagIds, tags, t => t.Id, ErrorMessages.TagNotFound);
+            if (tagsResolved.IsFailure)
+                return tagsResolved.PropagateError<Guid>();
+
             foreach (var tag in tags)
                 child.AddTag(tag);
         }

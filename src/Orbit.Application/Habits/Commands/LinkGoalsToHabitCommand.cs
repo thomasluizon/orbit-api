@@ -36,6 +36,10 @@ public class LinkGoalsToHabitCommandHandler(
             g => request.GoalIds.Contains(g.Id) && g.UserId == request.UserId,
             cancellationToken);
 
+        var goalsResolved = OwnershipValidation.AllResolved(request.GoalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);
+        if (goalsResolved.IsFailure)
+            return goalsResolved;
+
         foreach (var existing in habit.Goals.ToList())
             habit.RemoveGoal(existing);
 

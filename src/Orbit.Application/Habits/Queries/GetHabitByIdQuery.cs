@@ -9,6 +9,27 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Habits.Queries;
 
+public record HabitChildResponse(
+    Guid Id,
+    string Title,
+    string? Description,
+    Domain.Enums.FrequencyUnit? FrequencyUnit,
+    int? FrequencyQuantity,
+    bool IsBadHabit,
+    bool IsCompleted,
+    bool IsGeneral,
+    bool IsFlexible,
+    IReadOnlyList<DayOfWeek> Days,
+    DateOnly DueDate,
+    TimeOnly? DueTime,
+    TimeOnly? DueEndTime,
+    DateOnly? EndDate,
+    int? Position,
+    IReadOnlyList<ChecklistItem> ChecklistItems,
+    bool IsOverdue,
+    IReadOnlyList<HabitChildResponse> Children,
+    string? Emoji = null);
+
 public record HabitDetailResponse(
     Guid Id,
     string Title,

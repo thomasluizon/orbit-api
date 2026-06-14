@@ -111,15 +111,55 @@ public class AgentStepUpServiceTests : IDisposable
         verifyResult.Error.Should().Be("Invalid step-up code.");
     }
 
+    [Fact]
+    public async Task IssueChallenge_WhenDeliveryFails_DoesNotPersistChallenge_AllowsReissue()
+    {
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.ApiKeysManage)!;
+        var pendingOperation = _pendingOperationStore.Create(
+            _userId,
+            capability,
+            "create_api_key",
+            "{\"name\":\"Claude\"}",
+            "Create API key",
+            "create_api_key:{\"name\":\"Claude\"}",
+            AgentExecutionSurface.Chat);
+
+        _emailService.ThrowOnNextSend = true;
+
+        var firstAttempt = async () => await _stepUpService.IssueChallengeAsync(
+            _userId, pendingOperation.Id, "en", CancellationToken.None);
+
+        await firstAttempt.Should().ThrowAsync<InvalidOperationException>();
+        (await _dbContext.AgentStepUpChallenges.CountAsync(c => c.PendingOperationId == pendingOperation.Id))
+            .Should().Be(0);
+
+        var secondAttempt = await _stepUpService.IssueChallengeAsync(
+            _userId, pendingOperation.Id, "en", CancellationToken.None);
+
+        secondAttempt.IsSuccess.Should().BeTrue();
+        _emailService.LastVerificationCode.Should().NotBeNull();
+        (await _dbContext.AgentStepUpChallenges.CountAsync(c => c.PendingOperationId == pendingOperation.Id))
+            .Should().Be(1);
+    }
+
     private sealed class TestEmailService : IEmailService
     {
         public string? LastVerificationCode { get; private set; }
+        public bool ThrowOnNextSend { get; set; }
+        public int VerificationSendCount { get; private set; }
 
         public Task SendWelcomeEmailAsync(string toEmail, string userName, string language = "en", CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
         public Task SendVerificationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
         {
+            VerificationSendCount++;
+            if (ThrowOnNextSend)
+            {
+                ThrowOnNextSend = false;
+                throw new InvalidOperationException("Email delivery failed");
+            }
+
             LastVerificationCode = code;
             return Task.CompletedTask;
         }

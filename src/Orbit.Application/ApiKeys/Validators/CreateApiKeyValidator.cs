@@ -1,5 +1,6 @@
 using FluentValidation;
 using Orbit.Application.ApiKeys.Commands;
+using Orbit.Domain.Models;
 
 namespace Orbit.Application.ApiKeys.Validators;
 
@@ -18,7 +19,9 @@ public class CreateApiKeyValidator : AbstractValidator<CreateApiKeyCommand>
 
         RuleForEach(x => x.Scopes)
             .NotEmpty()
-            .WithMessage("API key scopes must be non-empty strings.");
+            .WithMessage("API key scopes must be non-empty strings.")
+            .Must(scope => string.IsNullOrWhiteSpace(scope) || AgentScopes.All.Contains(scope.Trim()))
+            .WithMessage("API key scope '{PropertyValue}' is not a recognized scope.");
 
         RuleFor(x => x.ExpiresAtUtc)
             .Must(expiresAtUtc => !expiresAtUtc.HasValue || expiresAtUtc.Value > DateTime.UtcNow)

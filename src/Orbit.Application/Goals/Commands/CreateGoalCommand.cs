@@ -21,6 +21,7 @@ public record CreateGoalCommand(
 public partial class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
+    IUserDateService userDateService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     ILogger<CreateGoalCommandHandler> logger) : IRequestHandler<CreateGoalCommand, Result<Guid>>
@@ -30,6 +31,13 @@ public partial class CreateGoalCommandHandler(
         var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
+
+        if (request.Deadline is { } deadline)
+        {
+            var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+            if (deadline < today)
+                return Result.Failure<Guid>(ErrorMessages.DeadlineInPast);
+        }
 
         var goalResult = Goal.Create(new Goal.CreateGoalParams(
             request.UserId,

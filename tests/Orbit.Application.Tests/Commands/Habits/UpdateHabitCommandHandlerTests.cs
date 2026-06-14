@@ -170,4 +170,52 @@ public class UpdateHabitCommandHandlerTests
 
         _cache.TryGetValue(cacheKey, out _).Should().BeFalse();
     }
+
+    [Fact]
+    public async Task Handle_ForeignGoalId_ReturnsFailureWithoutSaving()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal>());
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            GoalIds: new List<Guid> { Guid.NewGuid() });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GoalNotFound);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_EmptyGoalIds_ClearsLinksAndSaves()
+    {
+        var habit = CreateTestHabit();
+        var existingGoal = Goal.Create(UserId, "Existing", 10, "km").Value;
+        habit.AddGoal(existingGoal);
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            GoalIds: new List<Guid>());
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Goals.Should().BeEmpty();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }

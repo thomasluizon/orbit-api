@@ -9,6 +9,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Subscriptions.Commands;
@@ -88,10 +89,19 @@ public partial class HandlePlayNotificationCommandHandler(
         }
 
         var grantsPro = state.GrantsOrbitPro(_settings);
+        string? consumedCouponId = null;
         if (grantsPro)
         {
-            await referralCouponConsumer.ConsumeOnNewPurchaseAsync(user, state, notification.PurchaseToken, cancellationToken);
-            user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
+            consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, notification.PurchaseToken);
+            if (StripeCoversLaterPeriod(user, state))
+            {
+                user.LinkPlayPurchaseToken(notification.PurchaseToken);
+                LogStripeCoversLaterPeriod(logger, user.Id);
+            }
+            else
+            {
+                user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
+            }
         }
         else
         {
@@ -115,9 +125,18 @@ public partial class HandlePlayNotificationCommandHandler(
             throw;
         }
 
+        if (!string.IsNullOrEmpty(consumedCouponId))
+            await referralCouponConsumer.CancelConsumedCouponAsync(user.Id, consumedCouponId, cancellationToken);
+
         LogNotificationProcessed(logger, notification.NotificationType, user.Id, grantsPro);
         return Result.Success();
     }
+
+    private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>
+        user.SubscriptionSource == SubscriptionSource.Stripe
+        && user.IsPro
+        && user.PlanExpiresAt.HasValue
+        && user.PlanExpiresAt.Value > state.ExpiresAt;
 
     private static DecodedPlayNotification? DecodeNotification(string pushBody)
     {
@@ -147,6 +166,9 @@ public partial class HandlePlayNotificationCommandHandler(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Play RTDN account mismatch for user {UserId}; skipping")]
     private static partial void LogAccountMismatch(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Active Stripe subscription covers a later period; linking Play token without downgrade for user {UserId}")]
+    private static partial void LogStripeCoversLaterPeriod(ILogger logger, Guid userId);
 
     private sealed class PubSubEnvelope
     {

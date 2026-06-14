@@ -34,6 +34,8 @@ public class GetGoalReviewQueryHandler(
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return Result.Success(new GoalReviewResponse(cached, FromCache: true));
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+
         var goals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
             q => q.Include(g => g.ProgressLogs)
@@ -45,7 +47,8 @@ public class GetGoalReviewQueryHandler(
         if (goalList.Count == 0)
             return Result.Failure<GoalReviewResponse>(ErrorMessages.NoActiveGoals);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        foreach (var goal in goalList)
+            GoalStreakSyncService.ApplyReadValue(goal, userToday);
 
         var goalsContext = BuildGoalsContext(goalList, userToday);
 
