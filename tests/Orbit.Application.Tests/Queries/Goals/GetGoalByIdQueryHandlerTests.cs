@@ -24,7 +24,7 @@ public class GetGoalByIdQueryHandlerTests
         _handler = new GetGoalByIdQueryHandler(_goalRepo, _payGate, _userDateService);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
-        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
     }
 
     private static Goal CreateTestGoal(string title = "Test Goal", decimal target = 100)

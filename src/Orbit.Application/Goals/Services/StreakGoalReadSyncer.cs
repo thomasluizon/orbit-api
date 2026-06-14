@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -21,9 +22,11 @@ public class StreakGoalReadSyncer(IGenericRepository<Goal> goalRepository) : ISt
     public async Task<IReadOnlyDictionary<Guid, int>> ComputeFreshValuesAsync(
         Guid userId, DateOnly userToday, CancellationToken cancellationToken)
     {
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
         var activeStreakGoals = await goalRepository.FindAsync(
             g => g.UserId == userId && g.Type == GoalType.Streak && g.Status == GoalStatus.Active,
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
 
         var freshValues = new Dictionary<Guid, int>();

@@ -22,17 +22,19 @@ public class GetGoalMetricsQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalMetrics>();
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
         var goals = await goalRepository.FindAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
         var goal = goals.FirstOrDefault();
 
         if (goal is null)
             return Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         GoalStreakSyncService.ApplyReadValue(goal, userToday);
 
         var metrics = GoalMetricsCalculator.Calculate(goal, userToday);

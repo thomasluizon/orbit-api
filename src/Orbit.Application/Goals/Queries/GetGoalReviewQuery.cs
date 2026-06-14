@@ -35,11 +35,12 @@ public class GetGoalReviewQueryHandler(
             return Result.Success(new GoalReviewResponse(cached, FromCache: true));
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
         var goals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
 
         var goalList = goals.ToList();

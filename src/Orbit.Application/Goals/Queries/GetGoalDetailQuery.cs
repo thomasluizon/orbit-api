@@ -28,17 +28,19 @@ public class GetGoalDetailQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalDetailWithMetricsResponse>();
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
         var goals = await goalRepository.FindAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
         var goal = goals.FirstOrDefault();
 
         if (goal is null)
             return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         GoalStreakSyncService.ApplyReadValue(goal, userToday);
 
         var progressPercentage = goal.TargetValue > 0
