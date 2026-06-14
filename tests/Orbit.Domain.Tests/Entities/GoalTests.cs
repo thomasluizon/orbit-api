@@ -240,6 +240,28 @@ public class GoalTests
     }
 
     [Fact]
+    public void UpdateProgress_ReachesTarget_ReturnsJustCompletedTrue()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+
+        var result = goal.UpdateProgress(100);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UpdateProgress_BelowTarget_ReturnsJustCompletedFalse()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+
+        var result = goal.UpdateProgress(50);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
+    }
+
+    [Fact]
     public void UpdateProgress_NegativeValue_ReturnsFailure()
     {
         var goal = CreateValidGoal();
@@ -283,6 +305,74 @@ public class GoalTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Cannot update progress on a non-active goal");
+    }
+
+    private static Goal CreateStreakGoal(decimal targetValue = 7)
+    {
+        return Goal.Create(new Goal.CreateGoalParams(
+            ValidUserId, "7-day streak", targetValue, "days", Type: GoalType.Streak)).Value;
+    }
+
+    [Fact]
+    public void SyncStreakProgress_ReachesTarget_AutoCompletes()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+
+        var result = goal.SyncStreakProgress(7);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
+        goal.CurrentValue.Should().Be(7);
+        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.CompletedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SyncStreakProgress_ExceedsTarget_AutoCompletes()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+
+        var result = goal.SyncStreakProgress(10);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeTrue();
+        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.CompletedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SyncStreakProgress_BelowTarget_StaysActiveAndReportsNotCompleted()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+
+        var result = goal.SyncStreakProgress(3);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().BeFalse();
+        goal.CurrentValue.Should().Be(3);
+        goal.Status.Should().Be(GoalStatus.Active);
+        goal.CompletedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void SyncStreakProgress_NonStreakGoal_ReturnsFailure()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+
+        var result = goal.SyncStreakProgress(5);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SyncStreakProgress_AlreadyCompleted_ReturnsFailure()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+        goal.SyncStreakProgress(7);
+
+        var result = goal.SyncStreakProgress(8);
+
+        result.IsFailure.Should().BeTrue();
     }
 
     [Fact]
@@ -384,22 +474,48 @@ public class GoalTests
         var goal = CreateValidGoal(targetValue: 100);
         goal.UpdateProgress(80);
 
-        goal.Update("Title", null, 50, "pages", null);
+        var result = goal.Update("Title", null, 50, "pages", null);
 
         goal.Status.Should().Be(GoalStatus.Completed);
         goal.CompletedAtUtc.Should().NotBeNull();
+        result.Value.Should().Be(GoalEditTransition.Completed);
     }
 
     [Fact]
     public void Update_RaiseTargetAboveCurrent_ReactivatesCompleted()
     {
         var goal = CreateValidGoal(targetValue: 100);
-        goal.UpdateProgress(100);        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.UpdateProgress(100);
+        goal.Status.Should().Be(GoalStatus.Completed);
 
-        goal.Update("Title", null, 200, "pages", null);
+        var result = goal.Update("Title", null, 200, "pages", null);
 
         goal.Status.Should().Be(GoalStatus.Active);
         goal.CompletedAtUtc.Should().BeNull();
+        result.Value.Should().Be(GoalEditTransition.Reopened);
+    }
+
+    [Fact]
+    public void Update_NoStatusChange_ReturnsNoneTransition()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+        goal.UpdateProgress(40);
+
+        var result = goal.Update("Title", null, 120, "pages", null);
+
+        goal.Status.Should().Be(GoalStatus.Active);
+        result.Value.Should().Be(GoalEditTransition.None);
+    }
+
+    [Fact]
+    public void Update_ActiveBelowTarget_ReturnsNoneTransition()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+
+        var result = goal.Update("Title", null, 100, "pages", null);
+
+        result.Value.Should().Be(GoalEditTransition.None);
+        goal.Status.Should().Be(GoalStatus.Active);
     }
 
     [Fact]
@@ -624,5 +740,81 @@ public class GoalTests
         goal.RemoveHabit(habit);
 
         goal.Habits.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RemoveHabit_LastHabitOnStreakGoal_ResetsCurrentValueToZero()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Meditate", FrequencyUnit.Day, 1)).Value;
+        goal.AddHabit(habit);
+        goal.SyncStreakProgress(5);
+        goal.CurrentValue.Should().Be(5);
+
+        goal.RemoveHabit(habit);
+
+        goal.Habits.Should().BeEmpty();
+        goal.CurrentValue.Should().Be(0);
+        goal.StreakSyncedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void RemoveHabit_NotLastHabitOnStreakGoal_KeepsCurrentValue()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+        var habit1 = Habit.Create(new HabitCreateParams(ValidUserId, "Meditate", FrequencyUnit.Day, 1)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(ValidUserId, "Stretch", FrequencyUnit.Day, 1)).Value;
+        goal.AddHabit(habit1);
+        goal.AddHabit(habit2);
+        goal.SyncStreakProgress(5);
+
+        goal.RemoveHabit(habit1);
+
+        goal.Habits.Should().ContainSingle();
+        goal.CurrentValue.Should().Be(5);
+    }
+
+    [Fact]
+    public void RemoveHabit_LastHabitOnStandardGoal_DoesNotResetCurrentValue()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1)).Value;
+        goal.AddHabit(habit);
+        goal.UpdateProgress(40);
+
+        goal.RemoveHabit(habit);
+
+        goal.CurrentValue.Should().Be(40);
+    }
+
+    [Fact]
+    public void ResetStreakProgress_StreakGoalWithProgress_ClearsValueAndReturnsTrue()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+        goal.SyncStreakProgress(4);
+
+        var changed = goal.ResetStreakProgress();
+
+        changed.Should().BeTrue();
+        goal.CurrentValue.Should().Be(0);
+        goal.StreakSyncedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResetStreakProgress_StreakGoalAlreadyZero_ReturnsFalse()
+    {
+        var goal = CreateStreakGoal(targetValue: 7);
+
+        goal.ResetStreakProgress().Should().BeFalse();
+    }
+
+    [Fact]
+    public void ResetStreakProgress_StandardGoal_ReturnsFalseAndKeepsValue()
+    {
+        var goal = CreateValidGoal(targetValue: 100);
+        goal.UpdateProgress(30);
+
+        goal.ResetStreakProgress().Should().BeFalse();
+        goal.CurrentValue.Should().Be(30);
     }
 }

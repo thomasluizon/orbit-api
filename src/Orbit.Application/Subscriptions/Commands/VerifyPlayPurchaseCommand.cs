@@ -64,22 +64,34 @@ public partial class VerifyPlayPurchaseCommandHandler(
             }
         }
 
-        await referralCouponConsumer.ConsumeOnNewPurchaseAsync(user, state, request.PurchaseToken, cancellationToken);
+        var consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, request.PurchaseToken);
 
         if (StripeCoversLaterPeriod(user, state))
         {
             user.LinkPlayPurchaseToken(request.PurchaseToken);
             var linkResult = await SavePlayTokenAsync(request, user, cancellationToken);
             if (linkResult.IsSuccess)
+            {
+                await CancelConsumedCouponAsync(request.UserId, consumedCouponId, cancellationToken);
                 LogStripeCoversLaterPeriod(logger, request.UserId);
+            }
             return linkResult;
         }
 
         user.SetPlaySubscription(request.PurchaseToken, state.ExpiresAt, state.Interval);
         var verifyResult = await SavePlayTokenAsync(request, user, cancellationToken);
         if (verifyResult.IsSuccess)
+        {
+            await CancelConsumedCouponAsync(request.UserId, consumedCouponId, cancellationToken);
             LogPlayPurchaseVerified(logger, request.UserId, state.ExpiresAt);
+        }
         return verifyResult;
+    }
+
+    private async Task CancelConsumedCouponAsync(Guid userId, string? couponId, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(couponId))
+            await referralCouponConsumer.CancelConsumedCouponAsync(userId, couponId, cancellationToken);
     }
 
     private async Task<Result<PlayVerifyResponse>> SavePlayTokenAsync(

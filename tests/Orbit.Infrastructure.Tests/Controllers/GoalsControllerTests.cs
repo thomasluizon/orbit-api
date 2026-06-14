@@ -72,7 +72,7 @@ public class GoalsControllerTests
     public async Task GetGoalById_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetGoalByIdQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<GoalDetailDto>("Goal not found"));
+            .Returns(Result.Failure<GoalDetailDto>(ErrorMessages.GoalNotFound));
 
         var result = await _controller.GetGoalById(Guid.NewGuid(), CancellationToken.None);
 
@@ -329,7 +329,7 @@ public class GoalsControllerTests
     public async Task GetGoalDetail_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetGoalDetailQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<GoalDetailWithMetricsResponse>("Goal not found"));
+            .Returns(Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound));
 
         var result = await _controller.GetGoalDetail(Guid.NewGuid(), CancellationToken.None);
 
@@ -360,14 +360,14 @@ public class GoalsControllerTests
     }
 
     [Fact]
-    public async Task GetGoalMetrics_Failure_ReturnsBadRequest()
+    public async Task GetGoalMetrics_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetGoalMetricsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<GoalMetrics>("Error"));
+            .Returns(Result.Failure<GoalMetrics>(ErrorMessages.GoalNotFound));
 
         var result = await _controller.GetGoalMetrics(Guid.NewGuid(), CancellationToken.None);
 
-        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
 
     [Fact]

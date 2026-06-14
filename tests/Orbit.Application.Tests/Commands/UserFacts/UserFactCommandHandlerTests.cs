@@ -11,7 +11,6 @@ namespace Orbit.Application.Tests.Commands.UserFacts;
 public class UserFactCommandHandlerTests
 {
     private readonly IGenericRepository<UserFact> _factRepo = Substitute.For<IGenericRepository<UserFact>>();
-    private readonly IAppConfigService _appConfigService = Substitute.For<IAppConfigService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
@@ -21,106 +20,6 @@ public class UserFactCommandHandlerTests
     {
         _payGate.CanManageUserFacts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
-    }
-
-    [Fact]
-    public async Task CreateFact_Valid_CreatesAndSaves()
-    {
-        _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
-            .Returns(50);
-        _factRepo.CountAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(0);
-        _factRepo.AnyAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(false);
-
-        var handler = new CreateUserFactCommandHandler(_factRepo, _appConfigService, _unitOfWork);
-        var command = new CreateUserFactCommand(UserId, "Likes running", "Hobbies");
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Should().NotBeEmpty();
-        await _factRepo.Received(1).AddAsync(
-            Arg.Is<UserFact>(f => f.FactText == "Likes running"),
-            Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task CreateFact_ExceedsMax50_ReturnsFailure()
-    {
-        _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
-            .Returns(50);
-
-        _factRepo.CountAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(50);
-
-        var handler = new CreateUserFactCommandHandler(_factRepo, _appConfigService, _unitOfWork);
-        var command = new CreateUserFactCommand(UserId, "One more fact", null);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("maximum");
-    }
-
-    [Fact]
-    public async Task CreateFact_Duplicate_ReturnsFailure()
-    {
-        _appConfigService.GetAsync("MaxUserFacts", 50, Arg.Any<CancellationToken>())
-            .Returns(50);
-
-        _factRepo.CountAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(1);
-        _factRepo.AnyAsync(Arg.Any<Expression<Func<UserFact, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(true);
-
-        var handler = new CreateUserFactCommandHandler(_factRepo, _appConfigService, _unitOfWork);
-        var command = new CreateUserFactCommand(UserId, "Likes running", null);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("similar fact already exists");
-    }
-
-    [Fact]
-    public async Task UpdateFact_Valid_UpdatesAndSaves()
-    {
-        var fact = UserFact.Create(UserId, "Old text", "Category").Value;
-        _factRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<Func<IQueryable<UserFact>, IQueryable<UserFact>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(fact);
-
-        var handler = new UpdateUserFactCommandHandler(_factRepo, _unitOfWork);
-        var command = new UpdateUserFactCommand(UserId, fact.Id, "New text", "Updated");
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        fact.FactText.Should().Be("New text");
-        fact.Category.Should().Be("Updated");
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task UpdateFact_NotFound_ReturnsFailure()
-    {
-        _factRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<UserFact, bool>>>(),
-            Arg.Any<Func<IQueryable<UserFact>, IQueryable<UserFact>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((UserFact?)null);
-
-        var handler = new UpdateUserFactCommandHandler(_factRepo, _unitOfWork);
-        var command = new UpdateUserFactCommand(UserId, Guid.NewGuid(), "Text", null);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("Fact not found.");
     }
 
     [Fact]

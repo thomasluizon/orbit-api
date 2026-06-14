@@ -55,44 +55,47 @@ public partial class BulkLogHabitsCommandHandler(
             cancellationToken);
         var habitMap = habits.ToDictionary(h => h.Id);
 
-        for (int i = 0; i < request.Items.Count; i++)
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            var item = request.Items[i];
-            var targetDate = item.Date ?? today;
-
-            try
+            for (int i = 0; i < request.Items.Count; i++)
             {
-                results.Add(await ProcessLogItem(i, item.HabitId, targetDate, today, habitMap, cancellationToken));
+                var item = request.Items[i];
+                var targetDate = item.Date ?? today;
+
+                try
+                {
+                    results.Add(await ProcessLogItem(i, item.HabitId, targetDate, today, habitMap, ct));
+                }
+                catch (Exception ex)
+                {
+                    LogBulkLogItemError(logger, ex, item.HabitId);
+                    results.Add(new BulkLogItemResult(
+                        Index: i,
+                        Status: BulkItemStatus.Failed,
+                        HabitId: item.HabitId,
+                        Error: ErrorMessages.BulkLogItemFailed.Message,
+                        ErrorCode: ErrorMessages.BulkLogItemFailed.Code));
+                }
             }
-            catch (Exception ex)
+
+            await unitOfWork.SaveChangesAsync(ct);
+
+            var loggedHabitIds = results
+                .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
+                .Select(r => r.HabitId)
+                .ToList();
+            if (loggedHabitIds.Count > 0)
             {
-                LogBulkLogItemError(logger, ex, item.HabitId);
-                results.Add(new BulkLogItemResult(
-                    Index: i,
-                    Status: BulkItemStatus.Failed,
-                    HabitId: item.HabitId,
-                    Error: ErrorMessages.BulkLogItemFailed.Message,
-                    ErrorCode: ErrorMessages.BulkLogItemFailed.Code));
+                await services.UserStreakService.RecalculateAsync(request.UserId, ct);
+                try
+                {
+                    await services.GamificationService.ProcessHabitsLogged(request.UserId, loggedHabitIds, ct);
+                }
+                catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, request.UserId); }
+
+                await unitOfWork.SaveChangesAsync(ct);
             }
-        }
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        var loggedHabitIds = results
-            .Where(r => r.Status == BulkItemStatus.Success && r.LogId is not null)
-            .Select(r => r.HabitId)
-            .ToList();
-        if (loggedHabitIds.Count > 0)
-        {
-            await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
-            try
-            {
-                await services.GamificationService.ProcessHabitsLogged(request.UserId, loggedHabitIds, cancellationToken);
-            }
-            catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, request.UserId); }
-        }
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        }, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 

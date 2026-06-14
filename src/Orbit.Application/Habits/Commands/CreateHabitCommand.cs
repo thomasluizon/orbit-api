@@ -115,7 +115,9 @@ public partial class CreateHabitCommandHandler(
         if (subResult.IsFailure)
             return subResult.PropagateError<Guid>();
 
-        await LinkTagsAndGoalsAsync(habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
+        var linkResult = await LinkTagsAndGoalsAsync(habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
+        if (linkResult.IsFailure)
+            return linkResult.PropagateError<Guid>();
 
         await repos.HabitRepository.AddAsync(habit, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -157,7 +159,7 @@ public partial class CreateHabitCommandHandler(
         return Result.Success();
     }
 
-    private async Task LinkTagsAndGoalsAsync(
+    private async Task<Result> LinkTagsAndGoalsAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid>? tagIds,
         IReadOnlyList<Guid>? goalIds, CancellationToken cancellationToken)
     {
@@ -166,6 +168,11 @@ public partial class CreateHabitCommandHandler(
             var tags = await repos.TagRepository.FindTrackedAsync(
                 t => tagIds.Contains(t.Id) && t.UserId == userId,
                 cancellationToken);
+
+            var tagsResolved = OwnershipValidation.AllResolved(tagIds, tags, t => t.Id, ErrorMessages.TagNotFound);
+            if (tagsResolved.IsFailure)
+                return tagsResolved;
+
             foreach (var tag in tags)
                 habit.AddTag(tag);
         }
@@ -175,9 +182,16 @@ public partial class CreateHabitCommandHandler(
             var goals = await repos.GoalRepository.FindTrackedAsync(
                 g => goalIds.Contains(g.Id) && g.UserId == userId,
                 cancellationToken);
+
+            var goalsResolved = OwnershipValidation.AllResolved(goalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);
+            if (goalsResolved.IsFailure)
+                return goalsResolved;
+
             foreach (var goal in goals)
                 habit.AddGoal(goal);
         }
+
+        return Result.Success();
     }
 
     private async Task ProcessGamificationSafeAsync(Guid userId, CancellationToken cancellationToken)

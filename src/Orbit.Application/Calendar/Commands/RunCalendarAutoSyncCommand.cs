@@ -72,7 +72,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
 
         var refresh = await deps.GoogleTokenService.TryRefreshAsync(user, cancellationToken);
-        if (refresh.Result == GoogleTokenRefreshResult.RefreshTokenInvalid)
+        if (refresh.Result == GoogleTokenRefreshResult.RefreshTokenInvalid
+            || refresh.ErrorCode == GoogleTokenErrorCodes.NoRefreshToken)
         {
             await HandleReconnectRequired(user, refresh.ErrorCode ?? "invalid_grant", cancellationToken);
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.ReconnectRequired));
@@ -104,6 +105,12 @@ public partial class RunCalendarAutoSyncCommandHandler(
         {
             fetched = await deps.EventFetcher.FetchAsync(accessToken, updatedMin: null, ct);
             fetched = NormalizeFetchedEvents(user.Id, fetched);
+        }
+        catch (CalendarProviderException ex) when (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
+        {
+            LogGoogleApiError(logger, ex, user.Id);
+            await HandleReconnectRequired(user, ex.RawErrorCode ?? "reconnect_required", ct);
+            return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.ReconnectRequired));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -267,9 +274,13 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     private static DateTime ParseStartDateUtc(CalendarEventItem ev)
     {
-        if (DateTime.TryParse(ev.StartDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
-            return DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
-        return DateTime.UtcNow;
+        if (ev.StartUtc is { } startUtc)
+            return DateTime.SpecifyKind(startUtc, DateTimeKind.Utc);
+
+        if (DateOnly.TryParse(ev.StartDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+            return date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        return DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc);
     }
 
     private static string BuildLegacyMatchKey(string title, string? startDate, string? startTime)

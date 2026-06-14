@@ -38,7 +38,7 @@ public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
     IUserDateService userDateService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
+    IStreakGoalReadSyncer streakGoalReadSyncer) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
     public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
@@ -47,7 +47,7 @@ public class GetGoalsQueryHandler(
             return gateCheck.PropagateError<PaginatedResponse<GoalDto>>();
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        await SyncStaleStreakGoalsAsync(request.UserId, userToday, cancellationToken);
+        var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
 
         var allGoals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId,
@@ -70,52 +70,23 @@ public class GetGoalsQueryHandler(
         var items = ordered
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(g => MapToDto(g, userToday))
+            .Select(g => MapToDto(g, userToday, ResolveCurrentValue(g, freshStreakValues)))
             .ToList();
 
         return Result.Success(new PaginatedResponse<GoalDto>(items, request.Page, request.PageSize, totalCount, totalPages));
     }
 
-    private async Task SyncStaleStreakGoalsAsync(Guid userId, DateOnly userToday, CancellationToken cancellationToken)
-    {
-        var activeStreakGoals = await goalRepository.FindAsync(
-            g => g.UserId == userId && g.Type == GoalType.Streak && g.Status == GoalStatus.Active,
-            q => q.Include(g => g.Habits),
-            cancellationToken);
+    private static decimal ResolveCurrentValue(Goal goal, IReadOnlyDictionary<Guid, int> freshStreakValues) =>
+        freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
 
-        var staleGoalIds = activeStreakGoals
-            .Where(goal => GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
-            .Select(goal => goal.Id)
-            .ToList();
-
-        if (staleGoalIds.Count == 0)
-            return;
-
-        var staleTrackedGoals = await goalRepository.FindTrackedAsync(
-            g => staleGoalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
-            cancellationToken);
-
-        var syncedAnyGoals = false;
-        foreach (var goal in staleTrackedGoals)
-        {
-            syncedAnyGoals |= GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday);
-        }
-
-        if (syncedAnyGoals)
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-    }
-
-    private static GoalDto MapToDto(Goal g, DateOnly userToday) => new(
-        g.Id, g.Title, g.Description, g.TargetValue, g.CurrentValue,
+    private static GoalDto MapToDto(Goal g, DateOnly userToday, decimal currentValue) => new(
+        g.Id, g.Title, g.Description, g.TargetValue, currentValue,
         g.Unit, g.Status, g.Type, g.Deadline, g.Position, g.CreatedAtUtc, g.CompletedAtUtc,
-        g.TargetValue > 0 ? Math.Min(100, Math.Round(g.CurrentValue / g.TargetValue * 100, 1)) : 0,
+        g.TargetValue > 0 ? Math.Min(100, Math.Round(currentValue / g.TargetValue * 100, 1)) : 0,
         g.Habits.Select(h => new LinkedHabitDto(h.Id, h.Title)).ToList(),
-        ComputeSimpleTrackingStatus(g, userToday));
+        ComputeSimpleTrackingStatus(g, userToday, currentValue));
 
-    private static string? ComputeSimpleTrackingStatus(Goal goal, DateOnly userToday)
+    private static string? ComputeSimpleTrackingStatus(Goal goal, DateOnly userToday, decimal currentValue)
     {
         if (goal.Status == GoalStatus.Completed) return "completed";
         if (goal.Status == GoalStatus.Abandoned) return null;
@@ -125,7 +96,7 @@ public class GetGoalsQueryHandler(
         if (daysToDeadline < 0) return "behind";
 
         var progress = goal.TargetValue > 0
-            ? goal.CurrentValue / goal.TargetValue * 100
+            ? currentValue / goal.TargetValue * 100
             : 0;
         if (daysToDeadline <= 7 && progress < 50) return "at_risk";
 

@@ -38,7 +38,7 @@ public partial class NotificationController(
     {
         var command = new MarkNotificationReadCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-        return result.ToPayGateAwareResult(() => NoContent(), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpPut("read-all")]

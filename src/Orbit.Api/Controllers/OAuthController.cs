@@ -3,12 +3,14 @@ using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Extensions;
 using Orbit.Api.OAuth;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -195,29 +197,25 @@ public partial class OAuthController(
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
-        var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
-        if (string.IsNullOrEmpty(email))
+        var rawEmail = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
+        if (string.IsNullOrEmpty(rawEmail))
             return BadRequest(ErrorMessages.GoogleEmailUnavailable.ToErrorBody());
+
+        var email = rawEmail.Trim().ToLowerInvariant();
 
         var tokenAud = root.TryGetProperty("aud", out var audProp) ? audProp.GetString() : null;
         var expectedClientId = googleSettings.Value.ClientId;
         if (!string.IsNullOrEmpty(expectedClientId) && tokenAud != expectedClientId)
             return BadRequest(ErrorMessages.GoogleTokenAudienceMismatch.ToErrorBody());
 
-        var user = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
-        if (user is null)
-        {
-            var name = root.TryGetProperty("name", out var nameProp) && nameProp.GetString() is string n
-                ? n : email.Split('@')[0];
+        var name = root.TryGetProperty("name", out var nameProp) && nameProp.GetString() is string n
+            ? n : email.Split('@')[0];
 
-            var createResult = Domain.Entities.User.Create(name, email);
-            if (createResult.IsFailure)
-                return createResult.ToErrorResult();
+        var userResult = await FindOrCreateGoogleUserAsync(email, name, ct);
+        if (userResult.IsFailure)
+            return userResult.ToErrorResult();
 
-            user = createResult.Value;
-            await userRepository.AddAsync(user, ct);
-            await unitOfWork.SaveChangesAsync(ct);
-        }
+        var user = userResult.Value;
 
         if (user.IsDeactivated)
         {
@@ -232,6 +230,35 @@ public partial class OAuthController(
         var redirectUrl = $"{request.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(request.State)}";
 
         return Ok(new { redirectUrl });
+    }
+
+    private async Task<Result<Domain.Entities.User>> FindOrCreateGoogleUserAsync(string email, string name, CancellationToken ct)
+    {
+        var existing = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
+        if (existing is not null)
+            return Result.Success(existing);
+
+        var createResult = Domain.Entities.User.Create(name, email);
+        if (createResult.IsFailure)
+            return createResult;
+
+        var user = createResult.Value;
+        await userRepository.AddAsync(user, ct);
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            var raced = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
+            if (raced is null)
+                throw;
+
+            return Result.Success(raced);
+        }
+
+        return Result.Success(user);
     }
 
     [HttpPost("/oauth/token")]

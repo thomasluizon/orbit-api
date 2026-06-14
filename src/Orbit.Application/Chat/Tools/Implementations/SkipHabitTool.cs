@@ -57,7 +57,8 @@ public class SkipHabitTool(
         if (targetDate is null)
             return new ToolResult(false, Error: "Invalid date format. Use YYYY-MM-DD.");
 
-        return await SkipRecurringHabit(habit, targetDate.Value, today, ct);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
+        return await SkipRecurringHabit(habit, targetDate.Value, today, weekStartDay, ct);
     }
 
     private static DateOnly? ParseTargetDate(JsonElement args, DateOnly today)
@@ -71,7 +72,7 @@ public class SkipHabitTool(
             : null;
     }
 
-    private async Task<ToolResult> SkipRecurringHabit(Habit habit, DateOnly targetDate, DateOnly today, CancellationToken ct)
+    private async Task<ToolResult> SkipRecurringHabit(Habit habit, DateOnly targetDate, DateOnly today, int weekStartDay, CancellationToken ct)
     {
         if (targetDate > today)
             return new ToolResult(false, Error: "Cannot skip a future date.");
@@ -84,7 +85,7 @@ public class SkipHabitTool(
 
         if (habit.IsFlexible)
         {
-            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
             if (remaining <= 0)
                 return new ToolResult(false, Error: "All instances for this period have already been completed or skipped.");
 

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Domain.Tests.Entities;
 
@@ -73,5 +74,27 @@ public class PushSubscriptionTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Auth key is required");
+    }
+
+    [Fact]
+    public void ClassifyTransport_FcmSentinel_IsFcm()
+    {
+        PushSubscription.ClassifyTransport(PushSubscription.FcmSentinel).Should().Be(PushTransport.Fcm);
+    }
+
+    [Fact]
+    public void ClassifyTransport_WebPushKey_IsWebPush()
+    {
+        PushSubscription.ClassifyTransport("BNcR..p256dh-key").Should().Be(PushTransport.WebPush);
+    }
+
+    [Fact]
+    public void Transport_ReflectsStoredP256dh()
+    {
+        var fcm = PushSubscription.Create(ValidUserId, "device-token", PushSubscription.FcmSentinel, "auth").Value;
+        var webPush = PushSubscription.Create(ValidUserId, "https://push.example.com/sub/123", "p256dh-key", "auth").Value;
+
+        fcm.Transport.Should().Be(PushTransport.Fcm);
+        webPush.Transport.Should().Be(PushTransport.WebPush);
     }
 }

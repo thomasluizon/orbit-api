@@ -2,7 +2,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class HabitLog : Entity, ITimestamped
+public class HabitLog : Entity, ITimestamped, ISoftDeletable
 {
     public Guid HabitId { get; private set; }
     public DateOnly Date { get; private set; }
@@ -10,6 +10,8 @@ public class HabitLog : Entity, ITimestamped
     public string? Note { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
 
     private HabitLog() { }
 
@@ -24,5 +26,12 @@ public class HabitLog : Entity, ITimestamped
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow
         };
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 }

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Common;
 using Orbit.Application.UserFacts.Commands;
 using Orbit.Application.UserFacts.Queries;
 using Orbit.Domain.Common;
@@ -68,7 +69,7 @@ public class UserFactsControllerTests
     public async Task DeleteUserFact_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<DeleteUserFactCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("Fact not found"));
+            .Returns(Result.Failure(ErrorMessages.FactNotFound));
 
         var result = await _controller.DeleteUserFact(Guid.NewGuid(), CancellationToken.None);
 

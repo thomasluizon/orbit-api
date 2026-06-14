@@ -37,12 +37,12 @@ public class DistributedRateLimitServiceTests : IDisposable
     {
         DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);
 
-        for (var attempt = 0; attempt < 6; attempt++)
+        for (var attempt = 0; attempt < 11; attempt++)
             finalDecision = await _service.TryAcquireAsync("auth", "ip:127.0.0.1");
 
         finalDecision.Allowed.Should().BeFalse();
-        finalDecision.PermitLimit.Should().Be(5);
-        finalDecision.CurrentCount.Should().Be(5);
+        finalDecision.PermitLimit.Should().Be(10);
+        finalDecision.CurrentCount.Should().Be(10);
     }
 
     [Fact]
@@ -76,12 +76,12 @@ public class DistributedRateLimitServiceTests : IDisposable
 
         DistributedRateLimitDecision decision = new(true, 0, 0, DateTime.UtcNow);
 
-        for (var attempt = 0; attempt < 6; attempt++)
+        for (var attempt = 0; attempt < 11; attempt++)
             decision = await service.TryAcquireAsync("auth", "ip:203.0.113.10");
 
         decision.Allowed.Should().BeFalse();
-        decision.PermitLimit.Should().Be(5);
-        decision.CurrentCount.Should().Be(5);
+        decision.PermitLimit.Should().Be(10);
+        decision.CurrentCount.Should().Be(10);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider

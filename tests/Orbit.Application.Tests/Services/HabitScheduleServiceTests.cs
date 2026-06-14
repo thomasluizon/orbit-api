@@ -1,7 +1,10 @@
+using System.Linq.Expressions;
 using FluentAssertions;
+using NSubstitute;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Services;
 
@@ -257,35 +260,58 @@ public class HabitScheduleServiceTests
     }
 
     [Fact]
-    public void GetWindowStart_Weekly_ReturnsISOMonday()
+    public void GetWindowStart_Weekly_MondayStart_ReturnsMonday()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
         var wednesday = new DateOnly(2025, 1, 8);
 
-        var windowStart = HabitScheduleService.GetWindowStart(habit, wednesday);
+        var windowStart = HabitScheduleService.GetWindowStart(habit, wednesday, weekStartDay: 1);
 
         windowStart.Should().Be(new DateOnly(2025, 1, 6));
         windowStart.DayOfWeek.Should().Be(DayOfWeek.Monday);
     }
 
     [Fact]
-    public void GetWindowStart_Weekly_MondayReturnsSameDay()
+    public void GetWindowStart_Weekly_SundayStart_ReturnsSunday()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
+        var wednesday = new DateOnly(2025, 1, 8);
+
+        var windowStart = HabitScheduleService.GetWindowStart(habit, wednesday, weekStartDay: 0);
+
+        windowStart.Should().Be(new DateOnly(2025, 1, 5));
+        windowStart.DayOfWeek.Should().Be(DayOfWeek.Sunday);
+    }
+
+    [Fact]
+    public void GetWindowStart_Weekly_MondayStart_MondayReturnsSameDay()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
         var monday = new DateOnly(2025, 1, 6);
 
-        var windowStart = HabitScheduleService.GetWindowStart(habit, monday);
+        var windowStart = HabitScheduleService.GetWindowStart(habit, monday, weekStartDay: 1);
 
         windowStart.Should().Be(monday);
     }
 
     [Fact]
-    public void GetWindowStart_Weekly_SundayReturnsPreviousMonday()
+    public void GetWindowStart_Weekly_SundayStart_SundayReturnsSameDay()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
+        var sunday = new DateOnly(2025, 1, 5);
+
+        var windowStart = HabitScheduleService.GetWindowStart(habit, sunday, weekStartDay: 0);
+
+        windowStart.Should().Be(sunday);
+    }
+
+    [Fact]
+    public void GetWindowStart_Weekly_MondayStart_SundayReturnsPreviousMonday()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
         var sunday = new DateOnly(2025, 1, 12);
 
-        var windowStart = HabitScheduleService.GetWindowStart(habit, sunday);
+        var windowStart = HabitScheduleService.GetWindowStart(habit, sunday, weekStartDay: 1);
 
         windowStart.Should().Be(new DateOnly(2025, 1, 6));
     }
@@ -296,7 +322,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Month, 5, isFlexible: true);
         var midMonth = new DateOnly(2025, 3, 15);
 
-        var windowStart = HabitScheduleService.GetWindowStart(habit, midMonth);
+        var windowStart = HabitScheduleService.GetWindowStart(habit, midMonth, weekStartDay: 1);
 
         windowStart.Should().Be(new DateOnly(2025, 3, 1));
     }
@@ -307,7 +333,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Year, 10, isFlexible: true);
         var midYear = new DateOnly(2025, 7, 15);
 
-        var windowStart = HabitScheduleService.GetWindowStart(habit, midYear);
+        var windowStart = HabitScheduleService.GetWindowStart(habit, midYear, weekStartDay: 1);
 
         windowStart.Should().Be(new DateOnly(2025, 1, 1));
     }
@@ -318,20 +344,33 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Day, 2, isFlexible: true);
         var date = new DateOnly(2025, 3, 15);
 
-        var windowStart = HabitScheduleService.GetWindowStart(habit, date);
+        var windowStart = HabitScheduleService.GetWindowStart(habit, date, weekStartDay: 1);
 
         windowStart.Should().Be(date);
     }
 
     [Fact]
-    public void GetWindowEnd_Weekly_ReturnsSunday()
+    public void GetWindowEnd_Weekly_MondayStart_ReturnsSunday()
     {
         var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
         var wednesday = new DateOnly(2025, 1, 8);
 
-        var windowEnd = HabitScheduleService.GetWindowEnd(habit, wednesday);
+        var windowEnd = HabitScheduleService.GetWindowEnd(habit, wednesday, weekStartDay: 1);
 
-        windowEnd.Should().Be(new DateOnly(2025, 1, 12));        windowEnd.DayOfWeek.Should().Be(DayOfWeek.Sunday);
+        windowEnd.Should().Be(new DateOnly(2025, 1, 12));
+        windowEnd.DayOfWeek.Should().Be(DayOfWeek.Sunday);
+    }
+
+    [Fact]
+    public void GetWindowEnd_Weekly_SundayStart_ReturnsSaturday()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 3, isFlexible: true);
+        var wednesday = new DateOnly(2025, 1, 8);
+
+        var windowEnd = HabitScheduleService.GetWindowEnd(habit, wednesday, weekStartDay: 0);
+
+        windowEnd.Should().Be(new DateOnly(2025, 1, 11));
+        windowEnd.DayOfWeek.Should().Be(DayOfWeek.Saturday);
     }
 
     [Fact]
@@ -340,10 +379,10 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Month, 5, isFlexible: true);
 
         var feb = new DateOnly(2025, 2, 15);
-        HabitScheduleService.GetWindowEnd(habit, feb).Should().Be(new DateOnly(2025, 2, 28));
+        HabitScheduleService.GetWindowEnd(habit, feb, weekStartDay: 1).Should().Be(new DateOnly(2025, 2, 28));
 
         var febLeap = new DateOnly(2024, 2, 15);
-        HabitScheduleService.GetWindowEnd(habit, febLeap).Should().Be(new DateOnly(2024, 2, 29));
+        HabitScheduleService.GetWindowEnd(habit, febLeap, weekStartDay: 1).Should().Be(new DateOnly(2024, 2, 29));
     }
 
     [Fact]
@@ -352,7 +391,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Year, 10, isFlexible: true);
         var midYear = new DateOnly(2025, 7, 15);
 
-        var windowEnd = HabitScheduleService.GetWindowEnd(habit, midYear);
+        var windowEnd = HabitScheduleService.GetWindowEnd(habit, midYear, weekStartDay: 1);
 
         windowEnd.Should().Be(new DateOnly(2025, 12, 31));
     }
@@ -363,7 +402,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Day, 2, isFlexible: true);
         var date = new DateOnly(2025, 3, 15);
 
-        var windowEnd = HabitScheduleService.GetWindowEnd(habit, date);
+        var windowEnd = HabitScheduleService.GetWindowEnd(habit, date, weekStartDay: 1);
 
         windowEnd.Should().Be(date);
     }
@@ -376,9 +415,22 @@ public class HabitScheduleServiceTests
 
         habit.Log(monday);
         habit.Log(new DateOnly(2025, 1, 8));
-        var completed = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 9), habit.Logs);
+        var completed = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 9), habit.Logs, weekStartDay: 1);
 
         completed.Should().Be(2);
+    }
+
+    [Fact]
+    public void GetCompletedInWindow_SundayStart_SplitsLogsAcrossWeekBoundary()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: new DateOnly(2025, 1, 5), isFlexible: true);
+
+        habit.Log(new DateOnly(2025, 1, 11));        habit.Log(new DateOnly(2025, 1, 12));
+        var sundayWeek = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 11), habit.Logs, weekStartDay: 0);
+        var mondayWeek = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 11), habit.Logs, weekStartDay: 1);
+
+        sundayWeek.Should().Be(1);
+        mondayWeek.Should().Be(2);
     }
 
     [Fact]
@@ -390,7 +442,7 @@ public class HabitScheduleServiceTests
         habit.Log(monday);
         habit.Log(new DateOnly(2025, 1, 13));
 
-        var completed = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 15), habit.Logs);
+        var completed = HabitScheduleService.GetCompletedInWindow(habit, new DateOnly(2025, 1, 15), habit.Logs, weekStartDay: 1);
 
         completed.Should().Be(1);
     }
@@ -404,7 +456,7 @@ public class HabitScheduleServiceTests
         habit.Log(monday);
         habit.Log(monday);
 
-        var completed = HabitScheduleService.GetCompletedInWindow(habit, monday, habit.Logs);
+        var completed = HabitScheduleService.GetCompletedInWindow(habit, monday, habit.Logs, weekStartDay: 1);
 
         completed.Should().Be(2);
     }
@@ -416,7 +468,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
         habit.Log(monday);
 
-        var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs);
+        var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs, weekStartDay: 1);
 
         remaining.Should().Be(2);    }
 
@@ -428,7 +480,7 @@ public class HabitScheduleServiceTests
         habit.Log(monday);
         habit.Log(monday);
         habit.Log(monday);
-        var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs);
+        var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs, weekStartDay: 1);
 
         remaining.Should().Be(0);
     }
@@ -440,7 +492,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
         habit.Log(monday);
 
-        var result = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, new DateOnly(2025, 1, 8), habit.Logs);
+        var result = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, new DateOnly(2025, 1, 8), habit.Logs, weekStartDay: 1);
 
         result.Should().BeTrue();
     }
@@ -453,9 +505,23 @@ public class HabitScheduleServiceTests
         habit.Log(monday);
         habit.Log(new DateOnly(2025, 1, 7));
 
-        var result = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, new DateOnly(2025, 1, 8), habit.Logs);
+        var result = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, new DateOnly(2025, 1, 8), habit.Logs, weekStartDay: 1);
 
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsFlexibleHabitDueOnDate_SundayStart_NewWeekRequiresCompletionsAgain()
+    {
+        var habit = CreateHabit(FrequencyUnit.Week, 1, dueDate: new DateOnly(2025, 1, 5), isFlexible: true);
+        habit.Log(new DateOnly(2025, 1, 11));
+        var sunday = new DateOnly(2025, 1, 12);
+
+        var sundayStart = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, sunday, habit.Logs, weekStartDay: 0);
+        var mondayStart = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, sunday, habit.Logs, weekStartDay: 1);
+
+        sundayStart.Should().BeTrue();
+        mondayStart.Should().BeFalse();
     }
 
     [Fact]
@@ -463,7 +529,7 @@ public class HabitScheduleServiceTests
     {
         var habit = CreateHabit(FrequencyUnit.Week, 1);
 
-        var result = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, Anchor, habit.Logs);
+        var result = HabitScheduleService.IsFlexibleHabitDueOnDate(habit, Anchor, habit.Logs, weekStartDay: 1);
 
         result.Should().BeFalse();
     }
@@ -741,7 +807,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
         habit.Log(monday);        habit.SkipFlexible(monday.AddDays(1));
-        var skipped = HabitScheduleService.GetSkippedInWindow(habit, monday, habit.Logs);
+        var skipped = HabitScheduleService.GetSkippedInWindow(habit, monday, habit.Logs, weekStartDay: 1);
 
         skipped.Should().Be(1);
     }
@@ -753,7 +819,7 @@ public class HabitScheduleServiceTests
         var habit = CreateHabit(FrequencyUnit.Week, 3, dueDate: monday, isFlexible: true);
 
         habit.SkipFlexible(monday);
-        var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs);
+        var remaining = HabitScheduleService.GetRemainingCompletions(habit, monday, habit.Logs, weekStartDay: 1);
 
         remaining.Should().Be(2);    }
 
@@ -864,5 +930,42 @@ public class HabitScheduleServiceTests
             UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Anchor)).Value;
 
         HabitScheduleService.IsOverdueOnDate(habit, Anchor.AddDays(5)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AdvanceStaleBadHabitDueDates_StaleDailyBadHabit_LandsOnTodayAndStaysDue()
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: today.AddDays(-1))).Value;
+        var (repo, unitOfWork) = SetupRepositoryReturning(habit);
+
+        await HabitScheduleService.AdvanceStaleBadHabitDueDates(repo, unitOfWork, UserId, today, CancellationToken.None);
+
+        habit.DueDate.Should().Be(today);
+        HabitScheduleService.IsHabitDueOnDate(habit, today).Should().BeTrue();
+        await unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AdvanceStaleBadHabitDueDates_AlreadyDueToday_DoesNotOvershoot()
+    {
+        var today = new DateOnly(2026, 4, 3);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Bad", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: today)).Value;
+        var (repo, unitOfWork) = SetupRepositoryReturning(habit);
+
+        await HabitScheduleService.AdvanceStaleBadHabitDueDates(repo, unitOfWork, UserId, today, CancellationToken.None);
+
+        habit.DueDate.Should().Be(today);
+        HabitScheduleService.IsHabitDueOnDate(habit, today).Should().BeTrue();
+    }
+
+    private static (IGenericRepository<Habit> Repo, IUnitOfWork UnitOfWork) SetupRepositoryReturning(params Habit[] habits)
+    {
+        var repo = Substitute.For<IGenericRepository<Habit>>();
+        repo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(habits.ToList().AsReadOnly());
+        return (repo, Substitute.For<IUnitOfWork>());
     }
 }

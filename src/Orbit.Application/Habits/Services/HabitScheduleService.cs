@@ -239,37 +239,42 @@ public static class HabitScheduleService
 
     /// <summary>
     /// Checks if the flexible habit still needs completions within the window containing target.
+    /// Weekly windows anchor on the owner's <paramref name="weekStartDay"/> (0 = Sunday, 1 = Monday).
     /// </summary>
-    public static bool IsFlexibleHabitDueOnDate(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    public static bool IsFlexibleHabitDueOnDate(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
         if (!habit.IsFlexible || habit.FrequencyUnit is null) return false;
         if (target < habit.DueDate) return false;
-        return GetRemainingCompletions(habit, target, logs) > 0;
+        return GetRemainingCompletions(habit, target, logs, weekStartDay) > 0;
     }
 
     /// <summary>
-    /// Returns the start of the window containing the target date.
+    /// Returns the start of the window containing the target date. Weekly windows anchor on the
+    /// owner's <paramref name="weekStartDay"/> (0 = Sunday, 1 = Monday) so the server window matches
+    /// the client's WeekStartDay-driven calendars.
     /// </summary>
-    public static DateOnly GetWindowStart(Habit habit, DateOnly target)
+    public static DateOnly GetWindowStart(Habit habit, DateOnly target, int weekStartDay)
     {
         return habit.FrequencyUnit switch
         {
             FrequencyUnit.Day => target,
-            FrequencyUnit.Week => target.AddDays(-(((int)target.DayOfWeek + 6) % 7)),            FrequencyUnit.Month => new DateOnly(target.Year, target.Month, 1),
+            FrequencyUnit.Week => WeekMath.WeekStart(target, weekStartDay),
+            FrequencyUnit.Month => new DateOnly(target.Year, target.Month, 1),
             FrequencyUnit.Year => new DateOnly(target.Year, 1, 1),
             _ => target
         };
     }
 
     /// <summary>
-    /// Returns the end of the window containing the target date.
+    /// Returns the end of the window containing the target date. Weekly windows anchor on the
+    /// owner's <paramref name="weekStartDay"/> (0 = Sunday, 1 = Monday).
     /// </summary>
-    public static DateOnly GetWindowEnd(Habit habit, DateOnly target)
+    public static DateOnly GetWindowEnd(Habit habit, DateOnly target, int weekStartDay)
     {
         return habit.FrequencyUnit switch
         {
             FrequencyUnit.Day => target,
-            FrequencyUnit.Week => GetWindowStart(habit, target).AddDays(6),
+            FrequencyUnit.Week => GetWindowStart(habit, target, weekStartDay).AddDays(6),
             FrequencyUnit.Month => new DateOnly(target.Year, target.Month, DateTime.DaysInMonth(target.Year, target.Month)),
             FrequencyUnit.Year => new DateOnly(target.Year, 12, 31),
             _ => target
@@ -280,20 +285,20 @@ public static class HabitScheduleService
     /// Count of completion logs (Value > 0) within the window containing target.
     /// Skip logs (Value == 0) are excluded.
     /// </summary>
-    public static int GetCompletedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    public static int GetCompletedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
-        var start = GetWindowStart(habit, target);
-        var end = GetWindowEnd(habit, target);
+        var start = GetWindowStart(habit, target, weekStartDay);
+        var end = GetWindowEnd(habit, target, weekStartDay);
         return logs.Count(l => l.Date >= start && l.Date <= end && l.Value > 0);
     }
 
     /// <summary>
     /// Count of skip logs (Value == 0) within the window containing target.
     /// </summary>
-    public static int GetSkippedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    public static int GetSkippedInWindow(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
-        var start = GetWindowStart(habit, target);
-        var end = GetWindowEnd(habit, target);
+        var start = GetWindowStart(habit, target, weekStartDay);
+        var end = GetWindowEnd(habit, target, weekStartDay);
         return logs.Count(l => l.Date >= start && l.Date <= end && l.Value == 0);
     }
 
@@ -301,12 +306,12 @@ public static class HabitScheduleService
     /// How many more completions are needed in the window containing target.
     /// Skips reduce the target count for the period.
     /// </summary>
-    public static int GetRemainingCompletions(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs)
+    public static int GetRemainingCompletions(Habit habit, DateOnly target, IReadOnlyCollection<HabitLog> logs, int weekStartDay)
     {
         var targetCount = habit.FrequencyQuantity ?? 1;
-        var skipped = GetSkippedInWindow(habit, target, logs);
+        var skipped = GetSkippedInWindow(habit, target, logs, weekStartDay);
         var adjustedTarget = Math.Max(0, targetCount - skipped);
-        var completed = GetCompletedInWindow(habit, target, logs);
+        var completed = GetCompletedInWindow(habit, target, logs, weekStartDay);
         return Math.Max(0, adjustedTarget - completed);
     }
 
@@ -412,7 +417,7 @@ public static class HabitScheduleService
         if (staleBadHabits.Count > 0)
         {
             foreach (var habit in staleBadHabits)
-                habit.AdvanceDueDate(today);
+                habit.CatchUpDueDate(today);
             await unitOfWork.SaveChangesAsync(ct);
         }
     }

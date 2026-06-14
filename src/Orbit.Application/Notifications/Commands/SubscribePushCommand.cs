@@ -2,6 +2,7 @@ using MediatR;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Notifications.Commands;
@@ -18,18 +19,16 @@ public class SubscribePushCommandHandler(
 {
     public async Task<Result> Handle(SubscribePushCommand request, CancellationToken cancellationToken)
     {
-        var isFcm = string.Equals(request.P256dh, "fcm", StringComparison.Ordinal);
-        if (!isFcm)
+        var transport = PushSubscription.ClassifyTransport(request.P256dh);
+        if (transport == PushTransport.Fcm)
         {
-            if (!Uri.TryCreate(request.Endpoint, UriKind.Absolute, out var endpointUri)
-                || endpointUri.Scheme != Uri.UriSchemeHttps)
-            {
-                return Result.Failure(ErrorMessages.PushEndpointInvalid);
-            }
+            if (string.IsNullOrWhiteSpace(request.Endpoint))
+                return Result.Failure(ErrorMessages.FcmTokenRequired);
         }
-        else if (string.IsNullOrWhiteSpace(request.Endpoint))
+        else if (!Uri.TryCreate(request.Endpoint, UriKind.Absolute, out var endpointUri)
+            || endpointUri.Scheme != Uri.UriSchemeHttps)
         {
-            return Result.Failure(ErrorMessages.FcmTokenRequired);
+            return Result.Failure(ErrorMessages.PushEndpointInvalid);
         }
 
         var existing = await pushSubscriptionRepository.FindOneTrackedAsync(
@@ -48,22 +47,40 @@ public class SubscribePushCommandHandler(
         if (result.IsFailure)
             return result.PropagateError();
 
-        await pushSubscriptionRepository.AddAsync(result.Value, cancellationToken);
+        var subscription = result.Value;
+        await pushSubscriptionRepository.AddAsync(subscription, cancellationToken);
 
-        var userSubs = await pushSubscriptionRepository.FindTrackedAsync(
-            s => s.UserId == request.UserId,
-            cancellationToken);
+        EvictOldestBeyondCap(await GetPersistedUserSubscriptions(request.UserId, cancellationToken), subscription);
 
-        var orderedSubs = userSubs.OrderByDescending(s => s.CreatedAtUtc).ToList();
-
-        if (orderedSubs.Count >= AppConstants.MaxPushSubscriptionsPerUser)
+        try
         {
-            var toRemove = orderedSubs.Skip(AppConstants.MaxPushSubscriptionsPerUser - 1);
-            pushSubscriptionRepository.RemoveRange(toRemove);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            return Result.Success();
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
         return Result.Success();
+    }
+
+    private async Task<IReadOnlyList<PushSubscription>> GetPersistedUserSubscriptions(Guid userId, CancellationToken cancellationToken)
+    {
+        var userSubs = await pushSubscriptionRepository.FindTrackedAsync(
+            s => s.UserId == userId,
+            cancellationToken);
+
+        return userSubs.OrderBy(s => s.CreatedAtUtc).ToList();
+    }
+
+    private void EvictOldestBeyondCap(IReadOnlyList<PushSubscription> persistedOldestFirst, PushSubscription incoming)
+    {
+        var evictable = persistedOldestFirst.Where(s => s.Id != incoming.Id).ToList();
+
+        var removeCount = evictable.Count + 1 - AppConstants.MaxPushSubscriptionsPerUser;
+        if (removeCount <= 0)
+            return;
+
+        pushSubscriptionRepository.RemoveRange(evictable.Take(removeCount));
     }
 }

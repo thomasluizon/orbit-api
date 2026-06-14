@@ -10,7 +10,8 @@ public record SetWeekStartDayCommand(Guid UserId, int WeekStartDay) : IRequest<R
 
 public class SetWeekStartDayCommandHandler(
     IGenericRepository<User> userRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<SetWeekStartDayCommand, Result>
+    IUnitOfWork unitOfWork,
+    IUserDateService userDateService) : IRequestHandler<SetWeekStartDayCommand, Result>
 {
     public async Task<Result> Handle(SetWeekStartDayCommand request, CancellationToken cancellationToken)
     {
@@ -27,6 +28,7 @@ public class SetWeekStartDayCommandHandler(
             return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        userDateService.InvalidateUserDatePreferences(request.UserId);
 
         return Result.Success();
     }

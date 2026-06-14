@@ -18,6 +18,7 @@ public partial class HandleWebhookCommandHandler(
     IUnitOfWork unitOfWork,
     IOptions<StripeSettings> stripeSettings,
     SubscriptionService subscriptionService,
+    IGenericRepository<ProcessedStripeEvent> processedEventRepository,
     ILogger<HandleWebhookCommandHandler> logger) : IRequestHandler<HandleWebhookCommand, Result>
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
@@ -49,6 +50,14 @@ public partial class HandleWebhookCommandHandler(
 
         LogStripeEventType(logger, stripeEvent.Type, stripeEvent.Id);
 
+        if (await processedEventRepository.AnyAsync(e => e.EventId == stripeEvent.Id, cancellationToken))
+        {
+            LogDuplicateEvent(logger, stripeEvent.Id);
+            return Result.Success();
+        }
+
+        await processedEventRepository.AddAsync(ProcessedStripeEvent.Create(stripeEvent.Id), cancellationToken);
+
         try
         {
             switch (stripeEvent.Type)
@@ -69,6 +78,11 @@ public partial class HandleWebhookCommandHandler(
                     await HandleSubscriptionUpdated(stripeEvent, cancellationToken);
                     break;
             }
+        }
+        catch (Exception ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        {
+            LogDuplicateEvent(logger, stripeEvent.Id);
+            return Result.Success();
         }
         catch (StripeException ex)
         {
@@ -107,10 +121,11 @@ public partial class HandleWebhookCommandHandler(
             return;
 
         var subscription = await subscriptionService.GetAsync(subscriptionId, cancellationToken: ct);
-        var periodEnd = GetPeriodEnd(subscription);
+        var interval = GetSubscriptionInterval(subscription);
+        var periodEnd = GetPeriodEnd(subscription, interval);
 
         user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
-        user.SetStripeSubscription(subscriptionId, periodEnd, GetSubscriptionInterval(subscription));
+        user.SetStripeSubscription(subscriptionId, periodEnd, interval);
 
         if (!string.IsNullOrEmpty(user.ReferralCouponId))
         {
@@ -138,8 +153,9 @@ public partial class HandleWebhookCommandHandler(
             return;
 
         var subscription = await subscriptionService.GetAsync(invoiceSubId, cancellationToken: ct);
-        var periodEnd = GetPeriodEnd(subscription);
-        user.SetStripeSubscription(invoiceSubId, periodEnd, GetSubscriptionInterval(subscription));
+        var interval = GetSubscriptionInterval(subscription);
+        var periodEnd = GetPeriodEnd(subscription, interval);
+        user.SetStripeSubscription(invoiceSubId, periodEnd, interval);
         await unitOfWork.SaveChangesAsync(ct);
         LogSubscriptionRenewed(logger, user.Id, periodEnd);
     }
@@ -179,8 +195,9 @@ public partial class HandleWebhookCommandHandler(
 
         if (subscription.Status == "active")
         {
-            var periodEnd = GetPeriodEnd(subscription);
-            user.SetStripeSubscription(subscription.Id, periodEnd, GetSubscriptionInterval(subscription));
+            var interval = GetSubscriptionInterval(subscription);
+            var periodEnd = GetPeriodEnd(subscription, interval);
+            user.SetStripeSubscription(subscription.Id, periodEnd, interval);
         }
         else if (subscription.Status is "canceled" or "unpaid")
         {
@@ -190,11 +207,16 @@ public partial class HandleWebhookCommandHandler(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    private static DateTime GetPeriodEnd(Subscription subscription)
+    private static DateTime GetPeriodEnd(Subscription subscription, SubscriptionInterval interval)
     {
-        return subscription.Items?.Data?.Count > 0
-            ? subscription.Items.Data[0].CurrentPeriodEnd
-            : DateTime.UtcNow.AddMonths(1);
+        var item = subscription.Items?.Data?.FirstOrDefault();
+        if (item is not null && item.CurrentPeriodEnd > DateTime.UnixEpoch)
+            return item.CurrentPeriodEnd;
+
+        var nowAtUtc = DateTime.UtcNow;
+        return interval == SubscriptionInterval.Yearly
+            ? nowAtUtc.AddYears(1)
+            : nowAtUtc.AddMonths(1);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Stripe webhook received, body length: {Length}")]
@@ -241,6 +263,9 @@ public partial class HandleWebhookCommandHandler(
 
     [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "Could not extract userId from checkout session metadata")]
     private static partial void LogCheckoutUserIdExtractionFailed(ILogger logger);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "Discarding already-processed Stripe event {EventId}")]
+    private static partial void LogDuplicateEvent(ILogger logger, string eventId);
 
     private static SubscriptionInterval GetSubscriptionInterval(Subscription subscription)
     {

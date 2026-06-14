@@ -9,7 +9,7 @@ public class SetWeekStartDayCommandValidator : AbstractValidator<SetWeekStartDay
     {
         RuleFor(x => x.UserId).NotEmpty();
         RuleFor(x => x.WeekStartDay)
-            .InclusiveBetween(0, 6)
-            .WithMessage("WeekStartDay must be between 0 (Sunday) and 6 (Saturday).");
+            .InclusiveBetween(0, 1)
+            .WithMessage("WeekStartDay must be 0 (Sunday) or 1 (Monday).");
     }
 }

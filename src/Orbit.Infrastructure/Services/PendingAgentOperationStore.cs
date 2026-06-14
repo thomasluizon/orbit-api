@@ -72,19 +72,6 @@ public class PendingAgentOperationStore(
         return new PendingAgentOperationConfirmation(entity.Id, confirmationToken, entity.ExpiresAtUtc);
     }
 
-    public PendingAgentOperation? MarkStepUp(Guid userId, Guid pendingOperationId)
-    {
-        var entity = dbContext.PendingAgentOperations
-            .FirstOrDefault(item => item.Id == pendingOperationId && item.UserId == userId);
-
-        if (entity is null || entity.IsExpired(DateTime.UtcNow) || entity.ConsumedAtUtc.HasValue)
-            return null;
-
-        entity.MarkStepUpSatisfied();
-        dbContext.SaveChanges();
-        return Map(entity);
-    }
-
     public PendingAgentOperationExecution? GetExecution(Guid userId, Guid pendingOperationId)
     {
         var entity = dbContext.PendingAgentOperations

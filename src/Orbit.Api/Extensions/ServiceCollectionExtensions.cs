@@ -17,6 +17,7 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
@@ -71,6 +72,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
+        builder.Services.AddScoped<IStreakGoalReadSyncer, StreakGoalReadSyncer>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
@@ -302,7 +304,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IUnitOfWork>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<IAgentOperationExecutor>(),
-                sp.GetRequiredService<IPendingClarificationStore>()));
+                sp.GetRequiredService<IPendingClarificationStore>(),
+                sp.GetRequiredService<IStreakGoalReadSyncer>()));
     }
 
     public static WebApplicationBuilder AddOrbitInfrastructure(this WebApplicationBuilder builder)
@@ -443,6 +446,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
+        builder.Services.AddHostedService<StreakGoalSyncService>();
         builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
         builder.Services.AddHostedService<DataEncryptionMigrationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
@@ -526,6 +530,7 @@ public static class ServiceCollectionExtensions
             });
 
         builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+        builder.Services.AddExceptionHandler<ConcurrencyExceptionHandler>();
         builder.Services.AddExceptionHandler<UnhandledExceptionHandler>();
         builder.Services.AddProblemDetails(options =>
         {

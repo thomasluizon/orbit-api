@@ -134,7 +134,7 @@ public class HabitsControllerTests
     public async Task GetHabitById_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetHabitByIdQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<HabitDetailResponse>("Habit not found"));
+            .Returns(Result.Failure<HabitDetailResponse>(ErrorMessages.HabitNotFound));
         var result = await _controller.GetHabitById(Guid.NewGuid(), CancellationToken.None);
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
@@ -152,7 +152,7 @@ public class HabitsControllerTests
     public async Task GetHabitDetail_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<GetHabitFullDetailQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<HabitFullDetailResponse>("Habit not found"));
+            .Returns(Result.Failure<HabitFullDetailResponse>(ErrorMessages.HabitNotFound));
         var result = await _controller.GetHabitDetail(Guid.NewGuid(), CancellationToken.None);
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
     }
@@ -260,13 +260,13 @@ public class HabitsControllerTests
     }
 
     [Fact]
-    public async Task DeleteHabit_Failure_ReturnsBadRequestWithErrorCode()
+    public async Task DeleteHabit_NotFound_ReturnsNotFoundWithErrorCode()
     {
         _mediator.Send(Arg.Any<DeleteHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure(ErrorMessages.HabitNotFound));
         var result = await _controller.DeleteHabit(Guid.NewGuid(), CancellationToken.None);
         var objectResult = result.Should().BeAssignableTo<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(400);
+        objectResult.StatusCode.Should().Be(404);
         objectResult.Value.Should().BeEquivalentTo(new
         {
             error = ErrorMessages.HabitNotFound.Message,

@@ -82,4 +82,30 @@ public class CreateChecklistTemplateValidatorTests
         var result = _validator.TestValidate(ValidCommand() with { Items = null! });
         result.ShouldNotHaveValidationErrorFor(x => x.Items);
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t")]
+    public void Validate_WhitespaceItem_HasError(string item)
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Items = ["Valid item", item] });
+        result.ShouldHaveValidationErrorFor("Items[1]");
+    }
+
+    [Fact]
+    public void Validate_ItemOverMaxLength_HasError()
+    {
+        var longItem = new string('a', AppConstants.MaxChecklistItemTextLength + 1);
+        var result = _validator.TestValidate(ValidCommand() with { Items = [longItem] });
+        result.ShouldHaveValidationErrorFor("Items[0]");
+    }
+
+    [Fact]
+    public void Validate_ItemExactlyMaxLength_NoError()
+    {
+        var item = new string('a', AppConstants.MaxChecklistItemTextLength);
+        var result = _validator.TestValidate(ValidCommand() with { Items = [item] });
+        result.ShouldNotHaveValidationErrorFor("Items[0]");
+    }
 }

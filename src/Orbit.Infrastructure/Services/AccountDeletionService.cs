@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -67,6 +68,8 @@ public partial class AccountDeletionService(
                 var userToDelete = await deleteContext.Users.FindAsync([userId], ct);
                 if (userToDelete is not null)
                 {
+                    var resetRepository = deleteScope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
+                    await resetRepository.DeleteAllUserDataAsync(userId, ct);
                     deleteContext.Users.Remove(userToDelete);
                     await deleteContext.SaveChangesAsync(ct);
                 }
@@ -81,7 +84,7 @@ public partial class AccountDeletionService(
         }
     }
 
-    private async Task CleanupStaleSentRecords(CancellationToken ct)
+    internal async Task CleanupStaleSentRecords(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
@@ -96,8 +99,12 @@ public partial class AccountDeletionService(
             .Where(a => a.WeekStart < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        if ((deletedReminders > 0 || deletedSlipAlerts > 0) && logger.IsEnabled(LogLevel.Information))
-            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts);
+        var deletedStreakFreezeAlerts = await dbContext.SentStreakFreezeAlerts
+            .Where(a => a.FrozenDate < cutoff)
+            .ExecuteDeleteAsync(ct);
+
+        if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedStreakFreezeAlerts > 0) && logger.IsEnabled(LogLevel.Information))
+            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedStreakFreezeAlerts);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "AccountDeletionService started")]
@@ -118,7 +125,7 @@ public partial class AccountDeletionService(
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to delete account {UserId}")]
     private static partial void LogAccountDeletionFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders and {SlipAlerts} stale SentSlipAlerts older than 90 days")]
-    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts);
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders, {SlipAlerts} stale SentSlipAlerts, and {StreakFreezeAlerts} stale SentStreakFreezeAlerts older than 90 days")]
+    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int streakFreezeAlerts);
 
 }

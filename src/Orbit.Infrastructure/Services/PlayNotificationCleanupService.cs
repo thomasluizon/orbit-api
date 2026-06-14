@@ -7,15 +7,17 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Daily background service that purges processed Play RTDN dedup records older than the
-/// Pub/Sub redelivery window, keeping the idempotency table bounded.
+/// Daily background service that purges processed billing dedup records (Play RTDN messages and
+/// Stripe webhook events) older than their provider redelivery windows, keeping the idempotency
+/// tables bounded.
 /// </summary>
 public partial class PlayNotificationCleanupService(
     IServiceScopeFactory scopeFactory,
     ILogger<PlayNotificationCleanupService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
-    private static readonly TimeSpan RetentionPeriod = TimeSpan.FromDays(30);
+    private static readonly TimeSpan PlayRetentionPeriod = TimeSpan.FromDays(30);
+    private static readonly TimeSpan StripeRetentionPeriod = TimeSpan.FromDays(90);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -49,13 +51,21 @@ public partial class PlayNotificationCleanupService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var cutoff = DateTime.UtcNow - RetentionPeriod;
-        var purged = await dbContext.ProcessedPlayNotifications
-            .Where(n => n.ProcessedAtUtc < cutoff)
+        var playCutoff = DateTime.UtcNow - PlayRetentionPeriod;
+        var purgedNotifications = await dbContext.ProcessedPlayNotifications
+            .Where(n => n.ProcessedAtUtc < playCutoff)
             .ExecuteDeleteAsync(ct);
 
-        if (purged > 0)
-            LogNotificationsPurged(logger, purged);
+        if (purgedNotifications > 0)
+            LogNotificationsPurged(logger, purgedNotifications);
+
+        var stripeCutoff = DateTime.UtcNow - StripeRetentionPeriod;
+        var purgedEvents = await dbContext.ProcessedStripeEvents
+            .Where(e => e.ProcessedAtUtc < stripeCutoff)
+            .ExecuteDeleteAsync(ct);
+
+        if (purgedEvents > 0)
+            LogStripeEventsPurged(logger, purgedEvents);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "PlayNotificationCleanupService started")]
@@ -69,4 +79,7 @@ public partial class PlayNotificationCleanupService(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Purged {Count} processed Play notifications older than 30 days")]
     private static partial void LogNotificationsPurged(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Purged {Count} processed Stripe events older than 90 days")]
+    private static partial void LogStripeEventsPurged(ILogger logger, int count);
 }

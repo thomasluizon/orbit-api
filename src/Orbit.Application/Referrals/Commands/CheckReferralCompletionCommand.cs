@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -41,7 +42,7 @@ public partial class CheckReferralCompletionCommandHandler(
             r => r.Id == referral.Id,
             cancellationToken: cancellationToken);
 
-        if (trackedReferral is null)
+        if (trackedReferral is null || trackedReferral.Status != ReferralStatus.Pending)
             return Result.Success();
 
         var referredUser = await repos.UserRepository.FindOneTrackedAsync(
@@ -69,19 +70,25 @@ public partial class CheckReferralCompletionCommandHandler(
         if (logCount < AppConstants.ReferralCompletionThreshold)
             return Result.Success();
 
-        trackedReferral.MarkCompleted();
-
         var referrer = await repos.UserRepository.FindOneTrackedAsync(
             u => u.Id == trackedReferral.ReferrerId,
             cancellationToken: cancellationToken);
+
+        trackedReferral.MarkCompleted();
+        trackedReferral.MarkRewarded();
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Success();
+        }
 
         if (referrer is not null)
             await GrantCoupon(referrer, cancellationToken);
 
         await GrantCoupon(referredUser, cancellationToken);
-
-        trackedReferral.MarkRewarded();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         if (referrer is not null)
             await SendNotification(referrer, isReferrer: true, cancellationToken);

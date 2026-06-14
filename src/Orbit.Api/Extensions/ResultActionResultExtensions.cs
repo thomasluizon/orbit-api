@@ -1,10 +1,42 @@
 using Microsoft.AspNetCore.Mvc;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 
 namespace Orbit.Api.Extensions;
 
 public static class ResultActionResultExtensions
 {
+    private static readonly Dictionary<string, int> StatusByErrorCode = new()
+    {
+        [Result.PayGateErrorCode] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.NoPermission] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.HabitNotOwned] = StatusCodes.Status403Forbidden,
+
+        [ErrorCodes.UserNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.HabitNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.ParentHabitNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.TargetParentNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.TagNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.FactNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.GoalNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.ApiKeyNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.NotificationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.SubscriptionNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.NoActiveSubscription] = StatusCodes.Status404NotFound,
+        [ErrorCodes.TemplateNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.SuggestionNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.ClarificationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.PendingOperationNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.StepUpChallengeNotFound] = StatusCodes.Status404NotFound,
+
+        [ErrorCodes.DuplicateTagName] = StatusCodes.Status409Conflict,
+        [ErrorCodes.DuplicateFact] = StatusCodes.Status409Conflict,
+        [ErrorCodes.AlreadyReferred] = StatusCodes.Status409Conflict,
+        [ErrorCodes.ConcurrentUpdateConflict] = StatusCodes.Status409Conflict,
+
+        [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
+    };
+
     public static IActionResult ToPayGateAwareResult(
         this Result result,
         Func<IActionResult> onSuccess,
@@ -29,7 +61,10 @@ public static class ResultActionResultExtensions
     }
 
     /// <summary>
-    /// Serializes a failed result as the uniform error payload, honoring pay-gate 403s.
+    /// Serializes a failed result as the uniform error payload. The HTTP status is
+    /// resolved from the error code via the authoritative map (404 for not-found,
+    /// 403 for forbidden/pay-gate, 409 for conflicts, 500 for server faults); codes
+    /// without an intrinsic status fall back to <paramref name="failureStatusCode"/>.
     /// Every failure carries both the English fallback message and its stable errorCode.
     /// </summary>
     public static IActionResult ToErrorResult(
@@ -38,11 +73,21 @@ public static class ResultActionResultExtensions
     {
         return new ObjectResult(new { error = result.Error, errorCode = result.ErrorCode })
         {
-            StatusCode = result.ErrorCode == Result.PayGateErrorCode
-                ? StatusCodes.Status403Forbidden
-                : failureStatusCode
+            StatusCode = result.ResolveErrorStatus(failureStatusCode)
         };
     }
+
+    /// <summary>
+    /// The HTTP status a failed result maps to, using the authoritative error-code map.
+    /// Codes without an intrinsic status fall back to <paramref name="failureStatusCode"/>.
+    /// Use when emitting a failure outside the <see cref="IActionResult"/> path (e.g. an SSE event).
+    /// </summary>
+    public static int ResolveErrorStatus(
+        this Result result,
+        int failureStatusCode = StatusCodes.Status400BadRequest) =>
+        result.ErrorCode is not null && StatusByErrorCode.TryGetValue(result.ErrorCode, out var status)
+            ? status
+            : failureStatusCode;
 
     /// <summary>Uniform error body for controller-authored failures that bypass Result.</summary>
     public static object ToErrorBody(this AppError error) =>

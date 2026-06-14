@@ -26,12 +26,18 @@ public class ReorderHabitsCommandHandler(
 
         var habitMap = habits.ToDictionary(h => h.Id);
 
-        foreach (var update in request.Positions)
+        var orderedHabitIds = request.Positions
+            .OrderBy(p => p.Position)
+            .Select(p => p.HabitId)
+            .ToList();
+
+        var normalizedPosition = 0;
+        foreach (var habitId in orderedHabitIds)
         {
-            if (!habitMap.TryGetValue(update.HabitId, out var habit))
+            if (!habitMap.TryGetValue(habitId, out var habit))
                 return Result.Failure(ErrorMessages.HabitNotFound);
 
-            habit.SetPosition(update.Position);
+            habit.SetPosition(normalizedPosition++);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

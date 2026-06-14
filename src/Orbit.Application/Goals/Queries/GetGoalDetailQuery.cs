@@ -20,8 +20,7 @@ public record GetGoalDetailQuery(
 public class GetGoalDetailQueryHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IUserDateService userDateService,
-    IUnitOfWork unitOfWork) : IRequestHandler<GetGoalDetailQuery, Result<GoalDetailWithMetricsResponse>>
+    IUserDateService userDateService) : IRequestHandler<GetGoalDetailQuery, Result<GoalDetailWithMetricsResponse>>
 {
     public async Task<Result<GoalDetailWithMetricsResponse>> Handle(GetGoalDetailQuery request, CancellationToken cancellationToken)
     {
@@ -29,21 +28,20 @@ public class GetGoalDetailQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalDetailWithMetricsResponse>();
 
-        var goal = await goalRepository.FindOneTrackedAsync(
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
+        var goals = await goalRepository.FindAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            includes: q => q.Include(g => g.ProgressLogs)
-                            .Include(g => g.Habits).ThenInclude(h => h.Logs),
-            cancellationToken: cancellationToken);
+            q => q.Include(g => g.ProgressLogs)
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
+            cancellationToken);
+        var goal = goals.FirstOrDefault();
 
         if (goal is null)
             return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-
-        if (GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday))
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        GoalStreakSyncService.ApplyReadValue(goal, userToday);
 
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))

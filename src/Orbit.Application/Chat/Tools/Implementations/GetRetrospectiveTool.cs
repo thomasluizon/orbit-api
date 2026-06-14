@@ -35,8 +35,8 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
         var language = JsonArgumentParser.GetOptionalString(args, "language") ?? "en";
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var dateFrom = today.AddDays(-PeriodToDays(period));
-        var dateTo = today;
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
+        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
 
         var result = await mediator.Send(
             new GetRetrospectiveQuery(userId, dateFrom, dateTo, period, language), ct);
@@ -45,14 +45,4 @@ public class GetRetrospectiveTool(IMediator mediator, IUserDateService userDateS
             ? new ToolResult(true, Payload: result.Value)
             : ToolResult.FromFailure(result);
     }
-
-    private static int PeriodToDays(string period) => period switch
-    {
-        "week" => 7,
-        "month" => 30,
-        "quarter" => 90,
-        "semester" => 180,
-        "year" => 365,
-        _ => 7
-    };
 }

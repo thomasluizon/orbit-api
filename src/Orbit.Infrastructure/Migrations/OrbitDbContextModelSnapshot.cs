@@ -422,6 +422,12 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Items")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -442,6 +448,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "IsDeleted");
 
                     b.ToTable("ChecklistTemplates");
                 });
@@ -577,6 +585,12 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
@@ -595,8 +609,14 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("GoalId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Note")
                         .HasColumnType("text");
@@ -613,6 +633,8 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("GoalId");
+
+                    b.HasIndex("GoalId", "IsDeleted");
 
                     b.ToTable("GoalProgressLogs");
                 });
@@ -795,8 +817,14 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("HabitId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Note")
                         .HasColumnType("text");
@@ -813,7 +841,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex(new[] { "HabitId", "Date" }, "IX_HabitLogs_HabitId_Date_Completed")
                         .IsUnique()
-                        .HasFilter("\"Value\" > 0");
+                        .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"");
 
                     b.ToTable("HabitLogs");
                 });
@@ -831,8 +859,14 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("HabitId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
@@ -857,6 +891,8 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("UserId", "CreatedAtUtc")
                         .IsDescending(false, true);
+
+                    b.HasIndex("UserId", "IsDeleted");
 
                     b.HasIndex("UserId", "IsRead");
 
@@ -1016,6 +1052,28 @@ namespace Orbit.Infrastructure.Migrations
                     b.ToTable("ProcessedPlayNotifications");
                 });
 
+            modelBuilder.Entity("Orbit.Domain.Entities.ProcessedStripeEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedStripeEvents");
+                });
+
             modelBuilder.Entity("Orbit.Domain.Entities.PushSubscription", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1074,6 +1132,12 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ReferredUserId")
@@ -1105,10 +1169,15 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<DateTime>("SentAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("When")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("HabitId", "Date", "MinutesBefore")
+                    b.HasIndex("HabitId", "Date", "MinutesBefore", "ReminderTimeUtc", "When")
                         .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("HabitId", "Date", "MinutesBefore", "ReminderTimeUtc", "When"), false);
 
                     b.ToTable("SentReminders");
                 });
@@ -1374,6 +1443,12 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<int>("WeekStartDay")
                         .HasColumnType("integer");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id");
 

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -20,15 +21,16 @@ public class GoalReviewTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
+        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
         var goals = await goalRepository.FindAsync(
             g => g.UserId == userId && g.Status == GoalStatus.Active,
-            q => q.Include(g => g.ProgressLogs).Include(g => g.Habits).ThenInclude(h => h.Logs),
+            q => q.Include(g => g.ProgressLogs).Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             ct);
 
         if (goals.Count == 0)
             return new ToolResult(true, EntityName: "No active goals found.");
-
-        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
 
         var sb = new StringBuilder();
         foreach (var goal in goals)

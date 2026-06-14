@@ -16,18 +16,20 @@ public class ClaimAdRewardCommandHandler(
 {
     public async Task<Result<AdRewardResponse>> Handle(ClaimAdRewardCommand request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: cancellationToken);
-        if (user is null)
-            return Result.Failure<AdRewardResponse>(ErrorMessages.UserNotFound);
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        var userToday = await userDateService.GetUserTodayAsync(user.Id, cancellationToken);
-        var result = user.GrantAdReward(userToday);
-        if (result.IsFailure)
-            return result.PropagateError<AdRewardResponse>();
+        var saved = await ConcurrencyRetry.ExecuteAsync(
+            userRepository,
+            unitOfWork,
+            ct => userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: ct),
+            user => Task.FromResult(user.GrantAdReward(userToday)),
+            ErrorMessages.UserNotFound,
+            cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (saved.IsFailure)
+            return saved.PropagateError<AdRewardResponse>();
 
         var newLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
-        return Result.Success(new AdRewardResponse(5, user.AdRewardBonusMessages, newLimit));
+        return Result.Success(new AdRewardResponse(5, saved.Value.AdRewardBonusMessages, newLimit));
     }
 }

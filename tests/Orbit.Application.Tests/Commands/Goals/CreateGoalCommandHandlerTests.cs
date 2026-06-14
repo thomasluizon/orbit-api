@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -13,20 +14,24 @@ public class CreateGoalCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly CreateGoalCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 6, 13);
 
     public CreateGoalCommandHandlerTests()
     {
         _handler = new CreateGoalCommandHandler(
-            _goalRepo, _payGate, _gamificationService, _unitOfWork,
+            _goalRepo, _payGate, _userDateService, _gamificationService, _unitOfWork,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Today);
     }
 
     [Fact]
@@ -141,5 +146,30 @@ public class CreateGoalCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Target value");
+    }
+
+    [Fact]
+    public async Task Handle_DeadlineInPast_ReturnsFailureAndDoesNotCreate()
+    {
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", Today.AddDays(-1));
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.DeadlineInPast);
+        await _goalRepo.DidNotReceive().AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_DeadlineToday_CreatesGoal()
+    {
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", Today);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _goalRepo.Received(1).AddAsync(
+            Arg.Is<Goal>(g => g.Deadline == Today),
+            Arg.Any<CancellationToken>());
     }
 }

@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -37,7 +38,8 @@ public record GetGoalByIdQuery(
 
 public class GetGoalByIdQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate) : IRequestHandler<GetGoalByIdQuery, Result<GoalDetailDto>>
+    IPayGateService payGate,
+    IUserDateService userDateService) : IRequestHandler<GetGoalByIdQuery, Result<GoalDetailDto>>
 {
     public async Task<Result<GoalDetailDto>> Handle(GetGoalByIdQuery request, CancellationToken cancellationToken)
     {
@@ -45,13 +47,20 @@ public class GetGoalByIdQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalDetailDto>();
 
-        var goal = await goalRepository.FindOneTrackedAsync(
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
+        var goals = await goalRepository.FindAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            includes: q => q.Include(g => g.ProgressLogs).Include(g => g.Habits),
-            cancellationToken: cancellationToken);
+            q => q.Include(g => g.ProgressLogs)
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
+            cancellationToken);
+        var goal = goals.FirstOrDefault();
 
         if (goal is null)
             return Result.Failure<GoalDetailDto>(ErrorMessages.GoalNotFound);
+
+        GoalStreakSyncService.ApplyReadValue(goal, userToday);
 
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))

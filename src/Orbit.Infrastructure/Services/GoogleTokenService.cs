@@ -32,7 +32,7 @@ public partial class GoogleTokenService(
             return new GoogleTokenRefreshOutcome(
                 user.GoogleAccessToken,
                 GoogleTokenRefreshResult.TransientFailure,
-                "no_refresh_token");
+                GoogleTokenErrorCodes.NoRefreshToken);
         }
 
         try

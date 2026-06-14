@@ -15,7 +15,6 @@ public class SetWeekStartDayCommandValidatorTests
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
-    [InlineData(6)]
     public void Validate_ValidDay_NoErrors(int day)
     {
         var command = ValidCommand() with { WeekStartDay = day };
@@ -35,10 +34,16 @@ public class SetWeekStartDayCommandValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.WeekStartDay);
     }
 
-    [Fact]
-    public void Validate_DayAboveSix_HasError()
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void Validate_DayOutsideSundayMonday_HasError(int day)
     {
-        var command = ValidCommand() with { WeekStartDay = 7 };
+        var command = ValidCommand() with { WeekStartDay = day };
 
         var result = _validator.TestValidate(command);
 

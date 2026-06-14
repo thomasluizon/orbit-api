@@ -234,22 +234,15 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         [FromQuery] string language = "en",
         CancellationToken cancellationToken = default)
     {
-        var today = await userDateService.GetUserTodayAsync(HttpContext.GetUserId(), cancellationToken);
-        var days = period.ToLowerInvariant() switch
-        {
-            "week" => 7,
-            "month" => 30,
-            "quarter" => 90,
-            "semester" => 180,
-            "year" => 365,
-            _ => 7
-        };
-        var dateFrom = today.AddDays(-days);
+        var userId = HttpContext.GetUserId();
+        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
 
         var query = new GetRetrospectiveQuery(
-            HttpContext.GetUserId(),
+            userId,
             dateFrom,
-            today,
+            dateTo,
             period,
             language);
 
@@ -265,7 +258,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitByIdQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("{id:guid}/detail")]
@@ -276,7 +269,7 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     {
         var query = new GetHabitFullDetailQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost]

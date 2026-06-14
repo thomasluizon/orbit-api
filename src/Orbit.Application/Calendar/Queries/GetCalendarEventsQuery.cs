@@ -17,7 +17,8 @@ public record CalendarEventItem(
     string? EndTime,
     bool IsRecurring,
     string? RecurrenceRule,
-    List<int> Reminders);
+    List<int> Reminders,
+    DateTime? StartUtc = null);
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>;
 

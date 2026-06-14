@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -236,6 +237,83 @@ public class CheckReferralCompletionCommandHandlerTests
         await _habitLogRepo.DidNotReceive().CountAsync(
             Arg.Any<Expression<Func<HabitLog, bool>>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_RunTwice_DoesNotDoubleGrantCoupon()
+    {
+        var referral = CreatePendingReferral();
+        var referredUser = CreateReferredUser();
+        var referrer = CreateReferrer();
+        SetupPendingReferral(referral);
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(referredUser, referrer, referredUser, referrer);
+        SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
+
+        var command = new CheckReferralCompletionCommand(ReferredUserId);
+
+        var first = await _handler.Handle(command, CancellationToken.None);
+        var second = await _handler.Handle(command, CancellationToken.None);
+
+        first.IsSuccess.Should().BeTrue();
+        second.IsSuccess.Should().BeTrue();
+        referral.Status.Should().Be(ReferralStatus.Rewarded);
+        await _referralReward.Received(1).CreateReferralCouponAsync(
+            ReferrerId, Arg.Any<CancellationToken>());
+        await _referralReward.Received(1).CreateReferralCouponAsync(
+            ReferredUserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentClaimConflict_ReturnsSuccessWithoutGrantingCoupon()
+    {
+        var referral = CreatePendingReferral();
+        var referredUser = CreateReferredUser();
+        var referrer = CreateReferrer();
+        SetupPendingReferral(referral);
+        SetupReferredAndReferrerUsers(referredUser, referrer);
+        SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(new DbUpdateConcurrencyException("simulated concurrent claim")));
+
+        var command = new CheckReferralCompletionCommand(ReferredUserId);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _referralReward.DidNotReceive().CreateReferralCouponAsync(
+            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_RewardFlagPersistedBeforeCouponGranted()
+    {
+        var referral = CreatePendingReferral();
+        var referredUser = CreateReferredUser();
+        var referrer = CreateReferrer();
+        SetupPendingReferral(referral);
+        SetupReferredAndReferrerUsers(referredUser, referrer);
+        SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
+
+        var rewardedWhenCouponCreated = false;
+        _referralReward
+            .CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                rewardedWhenCouponCreated = referral.Status == ReferralStatus.Rewarded;
+                return "promo_test123";
+            });
+
+        var command = new CheckReferralCompletionCommand(ReferredUserId);
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        rewardedWhenCouponCreated.Should().BeTrue();
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

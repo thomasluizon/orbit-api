@@ -54,10 +54,11 @@ public class OrbitDbContext : DbContext
     public DbSet<ContentBlock> ContentBlocks => Set<ContentBlock>();
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
+    public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var usePostgresArrayColumns = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+        var isPostgres = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
         EncryptionValueConverter? encConverter = null;
         NullableEncryptionValueConverter? nullableEncConverter = null;
@@ -68,7 +69,10 @@ public class OrbitDbContext : DbContext
             nullableEncConverter = new NullableEncryptionValueConverter(_encryptionService);
         }
         ConfigureUserEntity(modelBuilder, nullableEncConverter);
-        ConfigureHabitEntity(modelBuilder, usePostgresArrayColumns, encConverter, nullableEncConverter);
+        ConfigureHabitEntity(modelBuilder, isPostgres, encConverter, nullableEncConverter);
+
+        if (isPostgres)
+            ConfigureConcurrencyTokens(modelBuilder);
         ConfigureHabitLogEntity(modelBuilder, nullableEncConverter);
         ConfigureUserFactEntity(modelBuilder, encConverter);
         ConfigureGoogleCalendarSyncSuggestionEntity(modelBuilder, encConverter, nullableEncConverter);
@@ -78,6 +82,7 @@ public class OrbitDbContext : DbContext
         ConfigureSentSlipAlertEntity(modelBuilder);
         ConfigureSentStreakFreezeAlertEntity(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
+        ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -95,6 +100,28 @@ public class OrbitDbContext : DbContext
         ConfigureChecklistTemplateEntity(modelBuilder);
         ConfigureAppFeatureFlagEntity(modelBuilder);
         ConfigureContentBlockEntity(modelBuilder);
+    }
+
+    /// <summary>
+    /// Maps the Postgres <c>xmin</c> system column as an optimistic-concurrency token on the
+    /// entities with a read-modify-write path that loses updates under concurrency: <see cref="User"/>
+    /// (ad-reward grant + AI message counter), <see cref="Goal"/> (progress accumulation), and
+    /// <see cref="Referral"/> (one-time reward-grant claim). A conflicting concurrent write makes
+    /// SaveChanges throw <c>DbUpdateConcurrencyException</c>, which command handlers retry against
+    /// fresh state or treat as an already-claimed no-op. Uses the system column, so it adds no schema.
+    /// Postgres-only because <c>xmin</c> does not exist on the in-memory/SQLite test providers.
+    /// </summary>
+    private static void ConfigureConcurrencyTokens(ModelBuilder modelBuilder)
+    {
+        MapXminToken(modelBuilder.Entity<User>());
+        MapXminToken(modelBuilder.Entity<Goal>());
+        MapXminToken(modelBuilder.Entity<Referral>());
+    }
+
+    private static void MapXminToken<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity)
+        where T : class
+    {
+        entity.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
     }
 
     private static void ConfigureTagEntity(ModelBuilder modelBuilder)
@@ -127,7 +154,9 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<SentReminder>(entity =>
         {
-            entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore }).IsUnique();
+            entity.HasIndex(r => new { r.HabitId, r.Date, r.MinutesBefore, r.ReminderTimeUtc, r.When })
+                .IsUnique()
+                .AreNullsDistinct(false);
         });
     }
 
@@ -157,6 +186,15 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private static void ConfigureProcessedStripeEventEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProcessedStripeEvent>(entity =>
+        {
+            entity.HasIndex(e => e.EventId).IsUnique();
+            entity.Property(e => e.EventId).IsRequired().HasMaxLength(255);
+        });
+    }
+
     private static void ConfigureNotificationEntity(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Notification>(entity =>
@@ -164,6 +202,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(n => new { n.UserId, n.IsRead });
             entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
+            entity.HasIndex(n => new { n.UserId, n.IsDeleted });
+            entity.HasQueryFilter(n => !n.IsDeleted);
         });
     }
 
@@ -324,6 +364,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<ChecklistTemplate>(entity =>
         {
             entity.HasIndex(ct => ct.UserId);
+            entity.HasIndex(ct => new { ct.UserId, ct.IsDeleted });
+            entity.HasQueryFilter(ct => !ct.IsDeleted);
             entity.HasOne<User>().WithMany().HasForeignKey(ct => ct.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(ct => ct.Name).HasMaxLength(100);
             entity.Property(ct => ct.Items)
@@ -522,8 +564,10 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date");
 
             entity.HasIndex(l => new { l.HabitId, l.Date }, "IX_HabitLogs_HabitId_Date_Completed")
-                .HasFilter("\"Value\" > 0")
+                .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"")
                 .IsUnique();
+
+            entity.HasQueryFilter(l => !l.IsDeleted);
 
             if (nullableEncConverter is null)
                 return;
@@ -581,6 +625,8 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<GoalProgressLog>(entity =>
         {
             entity.HasIndex(l => l.GoalId);
+            entity.HasIndex(l => new { l.GoalId, l.IsDeleted });
+            entity.HasQueryFilter(l => !l.IsDeleted);
 
             if (nullableEncConverter is null)
                 return;

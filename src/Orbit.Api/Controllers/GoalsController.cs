@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Queries;
-using Orbit.Domain.Common;
 using Orbit.Domain.Enums;
 
 #pragma warning disable CA1873
@@ -48,9 +47,7 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var query = new GetGoalByIdQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        if (result.ErrorCode == Result.PayGateErrorCode)
-            return result.ToPayGateAwareResult(v => Ok(v));
-        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost]
@@ -146,22 +143,18 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
     {
         var query = new GetGoalDetailQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        if (result.ErrorCode == Result.PayGateErrorCode)
-            return result.ToPayGateAwareResult(v => Ok(v));
-        return result.ToPayGateAwareResult(v => Ok(v), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpGet("{id:guid}/metrics")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetGoalMetrics(Guid id, CancellationToken cancellationToken)
     {
         var query = new GetGoalMetricsQuery(HttpContext.GetUserId(), id);
         var result = await mediator.Send(query, cancellationToken);
-        if (result.ErrorCode == Result.PayGateErrorCode)
-            return result.ToPayGateAwareResult(v => Ok(v));
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 

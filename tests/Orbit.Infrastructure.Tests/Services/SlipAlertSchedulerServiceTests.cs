@@ -1,19 +1,33 @@
 using System.Reflection;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
-/// Tests the pure helper methods of SlipAlertSchedulerService:
-/// CalculateAlertTime, IsWithinSendWindow, and week-start calculation logic.
-/// The main loop and DB-dependent logic are integration concerns.
+/// Tests the helper methods of SlipAlertSchedulerService (CalculateAlertTime,
+/// IsWithinSendWindow, WeekStartDay-aware dedup) plus DB-backed regressions for the
+/// skip-exclusion and per-week dedup paths.
 /// </summary>
 public class SlipAlertSchedulerServiceTests
 {
     private static readonly BindingFlags PrivateStatic =
         BindingFlags.NonPublic | BindingFlags.Static;
+
+    private static readonly BindingFlags PrivateInstance =
+        BindingFlags.NonPublic | BindingFlags.Instance;
+
+    private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DateTime.UtcNow);
 
     [Theory]
     [InlineData(10, 8)]    [InlineData(12, 10)]    [InlineData(20, 18)]    [InlineData(23, 21)]    [InlineData(9, 8)]    [InlineData(8, 8)]    [InlineData(5, 8)]    public void CalculateAlertTime_WithPeakHour_ReturnsClamped(int peakHour, int expectedHour)
@@ -143,15 +157,107 @@ public class SlipAlertSchedulerServiceTests
     }
 
     [Theory]
-    [InlineData(2025, 4, 7, 2025, 4, 7)]    [InlineData(2025, 4, 8, 2025, 4, 7)]    [InlineData(2025, 4, 9, 2025, 4, 7)]    [InlineData(2025, 4, 10, 2025, 4, 7)]    [InlineData(2025, 4, 11, 2025, 4, 7)]    [InlineData(2025, 4, 12, 2025, 4, 7)]    [InlineData(2025, 4, 13, 2025, 4, 7)]    public void WeekStartCalculation_ReturnsMonday(
-        int year, int month, int day,
+    [InlineData(2025, 4, 9, 1, 2025, 4, 7)]
+    [InlineData(2025, 4, 9, 0, 2025, 4, 6)]
+    [InlineData(2025, 4, 13, 1, 2025, 4, 7)]
+    [InlineData(2025, 4, 13, 0, 2025, 4, 13)]
+    public void WeekStart_HonorsUserWeekStartDay(
+        int year, int month, int day, int weekStartDay,
         int expectedYear, int expectedMonth, int expectedDay)
     {
-        var userToday = new DateOnly(year, month, day);
-        var daysToMonday = ((int)userToday.DayOfWeek - 1 + 7) % 7;
-        var weekStart = userToday.AddDays(-daysToMonday);
+        var weekStart = WeekMath.WeekStart(new DateOnly(year, month, day), weekStartDay);
 
         weekStart.Should().Be(new DateOnly(expectedYear, expectedMonth, expectedDay));
+    }
+
+    [Fact]
+    public void IsWithinSendWindow_DerivesWidthFromInterval_TenMinuteInterval()
+    {
+        InvokeIsWithinSendWindow(new TimeOnly(10, 7), new TimeOnly(10, 0), intervalMinutes: 10)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsWithinSendWindow_DerivesWidthFromInterval_AtIntervalEdge_Excluded()
+    {
+        InvokeIsWithinSendWindow(new TimeOnly(10, 10), new TimeOnly(10, 0), intervalMinutes: 10)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsWithinSendWindow_DerivesWidthFromInterval_OneMinuteInterval_NarrowsWindow()
+    {
+        InvokeIsWithinSendWindow(new TimeOnly(10, 3), new TimeOnly(10, 0), intervalMinutes: 1)
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CheckAndSendAlerts_SkipsOnly_SendsNothing()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var messageService = Substitute.For<ISlipAlertMessageService>();
+
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Doom scrolling", FrequencyUnit.Day, 1,
+            IsBadHabit: true, IsFlexible: true, SlipAlertEnabled: true,
+            DueDate: UtcToday)).Value;
+
+        var todayWeekday = DateTime.UtcNow;
+        for (var i = 0; i < 5; i++)
+        {
+            var skip = habit.SkipFlexible(UtcToday.AddDays(-7 * i)).Value;
+            SetLogCreatedAtUtc(skip, todayWeekday.AddDays(-7 * i));
+        }
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        dbContext.HabitLogs.AddRange(habit.Logs);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, messageService);
+        await service.CheckAndSendAlerts(CancellationToken.None);
+
+        await pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        (await dbContext.SentSlipAlerts.CountAsync()).Should().Be(0);
+        await messageService.DidNotReceive().GenerateMessageAsync(
+            Arg.Any<string>(), Arg.Any<DayOfWeek>(), Arg.Any<int?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckAndSendAlerts_AlreadySentThisWeek_SundayStartUser_DoesNotResendOrDuplicate()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var messageService = Substitute.For<ISlipAlertMessageService>();
+
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetWeekStartDay(0);
+        var habit = CreateSlipAlertBadHabit(user.Id);
+
+        var todayWeekday = DateTime.UtcNow;
+        for (var i = 0; i < 4; i++)
+        {
+            var log = habit.Log(UtcToday.AddDays(-7 * i)).Value;
+            SetLogCreatedAtUtc(log, todayWeekday.AddDays(-7 * i));
+        }
+
+        var sundayWeekStart = WeekMath.WeekStart(UtcToday, weekStartDay: 0);
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        dbContext.HabitLogs.AddRange(habit.Logs);
+        dbContext.SentSlipAlerts.Add(SentSlipAlert.Create(habit.Id, sundayWeekStart));
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService, messageService);
+        await service.CheckAndSendAlerts(CancellationToken.None);
+
+        await pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        (await dbContext.SentSlipAlerts.CountAsync(a => a.HabitId == habit.Id)).Should().Be(1);
     }
 
     [Fact]
@@ -184,10 +290,56 @@ public class SlipAlertSchedulerServiceTests
         return (TimeOnly)method.Invoke(null, [peakHour])!;
     }
 
-    private static bool InvokeIsWithinSendWindow(TimeOnly userTimeNow, TimeOnly alertTime)
+    private static bool InvokeIsWithinSendWindow(
+        TimeOnly userTimeNow, TimeOnly alertTime, int intervalMinutes = 5)
     {
+        var service = CreateBareService(intervalMinutes);
         var method = typeof(SlipAlertSchedulerService)
-            .GetMethod("IsWithinSendWindow", PrivateStatic)!;
-        return (bool)method.Invoke(null, [userTimeNow, alertTime])!;
+            .GetMethod("IsWithinSendWindow", PrivateInstance)!;
+        return (bool)method.Invoke(service, [userTimeNow, alertTime])!;
     }
+
+    private static SlipAlertSchedulerService CreateBareService(int intervalMinutes = 5)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["BackgroundServices:SlipAlertIntervalMinutes"] = intervalMinutes.ToString()
+            })
+            .Build();
+        return new SlipAlertSchedulerService(
+            Substitute.For<IServiceScopeFactory>(),
+            NullLogger<SlipAlertSchedulerService>.Instance,
+            configuration);
+    }
+
+    private static OrbitDbContext CreateInMemoryDbContext() =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"SlipAlertSchedulerServiceTests_{Guid.NewGuid()}")
+            .Options);
+
+    private static SlipAlertSchedulerService CreateService(
+        OrbitDbContext dbContext,
+        IPushNotificationService pushService,
+        ISlipAlertMessageService messageService)
+    {
+        var serviceProvider = new ServiceCollection()
+            .AddSingleton(dbContext)
+            .AddSingleton(pushService)
+            .AddSingleton(messageService)
+            .BuildServiceProvider();
+        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        return new SlipAlertSchedulerService(
+            scopeFactory, NullLogger<SlipAlertSchedulerService>.Instance,
+            new ConfigurationBuilder().Build());
+    }
+
+    private static Habit CreateSlipAlertBadHabit(Guid userId) =>
+        Habit.Create(new HabitCreateParams(
+            userId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true,
+            SlipAlertEnabled: true, DueDate: UtcToday)).Value;
+
+    private static void SetLogCreatedAtUtc(HabitLog log, DateTime createdAtUtc) =>
+        typeof(HabitLog).GetProperty(nameof(HabitLog.CreatedAtUtc))!
+            .SetValue(log, createdAtUtc);
 }

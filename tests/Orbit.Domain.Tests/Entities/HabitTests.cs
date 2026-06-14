@@ -103,6 +103,27 @@ public class HabitTests
     }
 
     [Fact]
+    public void Create_DaysWithWeeklyFrequency_ReturnsFailure()
+    {
+        var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
+
+        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Week, 1, Days: days));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("Days can only be set when frequency quantity is 1");
+    }
+
+    [Fact]
+    public void Create_DaysWithDailyFrequency_Succeeds()
+    {
+        var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
+
+        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, Days: days));
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public void Create_NullDueDate_DefaultsToToday()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -212,7 +233,7 @@ public class HabitTests
         var monday = new DateOnly(2025, 1, 6);
         var days = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday, DayOfWeek.Friday };
         var habit = CreateValidHabit(
-            frequencyUnit: FrequencyUnit.Week,
+            frequencyUnit: FrequencyUnit.Day,
             frequencyQuantity: 1,
             dueDate: monday,
             days: days);
@@ -224,7 +245,7 @@ public class HabitTests
     }
 
     [Fact]
-    public void Unlog_ExistingLog_RemovesAndReturns()
+    public void Unlog_ExistingLog_SoftDeletesAndReturns()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var habit = CreateValidHabit(dueDate: today);
@@ -233,7 +254,24 @@ public class HabitTests
         var result = habit.Unlog(today);
 
         result.IsSuccess.Should().BeTrue();
-        habit.Logs.Should().BeEmpty();
+        result.Value.IsDeleted.Should().BeTrue();
+        result.Value.DeletedAtUtc.Should().NotBeNull();
+        habit.Logs.Should().NotContain(l => !l.IsDeleted);
+    }
+
+    [Fact]
+    public void Log_AfterUnlog_SameDate_Succeeds()
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var habit = CreateValidHabit(dueDate: today);
+        habit.Log(today);
+        habit.Unlog(today);
+
+        var result = habit.Log(today);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsDeleted.Should().BeFalse();
+        habit.Logs.Count(l => l.Date == today && !l.IsDeleted).Should().Be(1);
     }
 
     [Fact]
@@ -496,6 +534,74 @@ public class HabitTests
         var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null, EndDate: new DateOnly(2026, 1, 1)));
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("End date must be on or after the start date");
+    }
+
+    [Fact]
+    public void Update_OneTimeTaskWithEndDate_ReturnsFailure()
+    {
+        var habit = CreateOneTimeHabit(dueDate: new DateOnly(2026, 1, 1));
+        var result = habit.Update(new HabitUpdateParams("Task", null, FrequencyUnit: null, FrequencyQuantity: null,
+            null, false, new DateOnly(2026, 1, 1), EndDate: new DateOnly(2026, 6, 30)));
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("One-time tasks cannot have an end date");
+    }
+
+    [Fact]
+    public void Update_ShrinkEndDateBelowDueDate_RejectedByValidation()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 6, 10), EndDate: new DateOnly(2026, 12, 31))).Value;
+
+        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false,
+            new DateOnly(2026, 6, 10), EndDate: new DateOnly(2026, 6, 5)));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("End date must be on or after the start date");
+    }
+
+    [Fact]
+    public void Update_ExtendEndDatePastDueDate_Reopens()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 1, 29), EndDate: new DateOnly(2026, 1, 31))).Value;
+        habit.AdvanceDueDate(new DateOnly(2026, 1, 31));
+        habit.IsCompleted.Should().BeTrue();
+
+        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false,
+            null, EndDate: new DateOnly(2026, 12, 31)));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Update_ClearEndDate_ReopensAutoCompletedHabit()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 1, 29), EndDate: new DateOnly(2026, 1, 31))).Value;
+        habit.AdvanceDueDate(new DateOnly(2026, 1, 31));
+        habit.IsCompleted.Should().BeTrue();
+
+        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false,
+            null, ClearEndDate: true));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Unlog_RecurringAutoCompletedByEndDate_Reopens()
+    {
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1,
+            DueDate: new DateOnly(2026, 1, 31), EndDate: new DateOnly(2026, 1, 31))).Value;
+        habit.Log(new DateOnly(2026, 1, 31));
+        habit.IsCompleted.Should().BeTrue();
+
+        var result = habit.Unlog(new DateOnly(2026, 1, 31));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.DueDate.Should().Be(new DateOnly(2026, 1, 31));
     }
 
     [Fact]
@@ -1126,55 +1232,6 @@ public class HabitTests
     }
 
     [Fact]
-    public void AdvanceDueDatePastWindow_Weekly_GoesToNextMonday()
-    {
-        var wednesday = new DateOnly(2025, 1, 8);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flex", FrequencyUnit.Week, 3, DueDate: wednesday, IsFlexible: true)).Value;
-
-        habit.AdvanceDueDatePastWindow(wednesday);
-
-        habit.DueDate.Should().Be(new DateOnly(2025, 1, 13));
-        habit.DueDate.DayOfWeek.Should().Be(DayOfWeek.Monday);
-    }
-
-    [Fact]
-    public void AdvanceDueDatePastWindow_Monthly_GoesToFirstOfNextMonth()
-    {
-        var midMonth = new DateOnly(2025, 3, 15);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flex", FrequencyUnit.Month, 5, DueDate: midMonth, IsFlexible: true)).Value;
-
-        habit.AdvanceDueDatePastWindow(midMonth);
-
-        habit.DueDate.Should().Be(new DateOnly(2025, 4, 1));
-    }
-
-    [Fact]
-    public void AdvanceDueDatePastWindow_Yearly_GoesToJan1NextYear()
-    {
-        var midYear = new DateOnly(2025, 7, 15);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flex", FrequencyUnit.Year, 10, DueDate: midYear, IsFlexible: true)).Value;
-
-        habit.AdvanceDueDatePastWindow(midYear);
-
-        habit.DueDate.Should().Be(new DateOnly(2026, 1, 1));
-    }
-
-    [Fact]
-    public void AdvanceDueDatePastWindow_Daily_GoesToNextDay()
-    {
-        var today = new DateOnly(2025, 3, 15);
-        var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Flex", FrequencyUnit.Day, 2, DueDate: today, IsFlexible: true)).Value;
-
-        habit.AdvanceDueDatePastWindow(today);
-
-        habit.DueDate.Should().Be(new DateOnly(2025, 3, 16));
-    }
-
-    [Fact]
     public void PostponeTo_UpdatesDueDate()
     {
         var habit = CreateOneTimeHabit(dueDate: new DateOnly(2025, 3, 1));
@@ -1318,7 +1375,7 @@ public class HabitTests
     }
 
     [Fact]
-    public void Unlog_FlexibleHabit_RemovesLogButDoesNotResetDueDate()
+    public void Unlog_FlexibleHabit_SoftDeletesLogButDoesNotResetDueDate()
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var habit = Habit.Create(new HabitCreateParams(
@@ -1329,6 +1386,8 @@ public class HabitTests
         var result = habit.Unlog(today);
 
         result.IsSuccess.Should().BeTrue();
-        habit.Logs.Should().BeEmpty();
-        habit.DueDate.Should().Be(originalDueDate);    }
+        result.Value.IsDeleted.Should().BeTrue();
+        habit.Logs.Should().NotContain(l => !l.IsDeleted);
+        habit.DueDate.Should().Be(originalDueDate);
+    }
 }

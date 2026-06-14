@@ -152,8 +152,8 @@ public class VerifyPlayPurchaseCommandHandlerTests
         result.ErrorCode.Should().Be(ErrorCodes.PlayPurchaseAccountMismatch);
         user.IsPro.Should().BeFalse();
         await _playBilling.DidNotReceive().AcknowledgeAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _referralConsumer.DidNotReceive().ConsumeOnNewPurchaseAsync(
-            Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _referralConsumer.DidNotReceive().ConsumeOnNewPurchase(
+            Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -165,14 +165,18 @@ public class VerifyPlayPurchaseCommandHandlerTests
         StubVerify(ActiveState());
         string? tokenWhenConsumerRan = "unset";
         _referralConsumer
-            .When(c => c.ConsumeOnNewPurchaseAsync(user, Arg.Any<PlaySubscriptionState>(), "play_token_123", Arg.Any<CancellationToken>()))
-            .Do(_ => tokenWhenConsumerRan = user.PlayPurchaseToken);
+            .ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "play_token_123")
+            .Returns(_ =>
+            {
+                tokenWhenConsumerRan = user.PlayPurchaseToken;
+                return null;
+            });
 
         await _handler.Handle(Command(), CancellationToken.None);
 
         tokenWhenConsumerRan.Should().BeNull();
-        await _referralConsumer.Received(1).ConsumeOnNewPurchaseAsync(
-            user, Arg.Any<PlaySubscriptionState>(), "play_token_123", Arg.Any<CancellationToken>());
+        _referralConsumer.Received(1).ConsumeOnNewPurchase(
+            user, Arg.Any<PlaySubscriptionState>(), "play_token_123");
     }
 
     [Fact]
@@ -185,8 +189,8 @@ public class VerifyPlayPurchaseCommandHandlerTests
 
         await _handler.Handle(Command(), CancellationToken.None);
 
-        await _referralConsumer.Received(1).ConsumeOnNewPurchaseAsync(
-            user, Arg.Any<PlaySubscriptionState>(), "play_token_123", Arg.Any<CancellationToken>());
+        _referralConsumer.Received(1).ConsumeOnNewPurchase(
+            user, Arg.Any<PlaySubscriptionState>(), "play_token_123");
     }
 
     [Fact]
@@ -251,5 +255,44 @@ public class VerifyPlayPurchaseCommandHandlerTests
         user.PlayPurchaseToken.Should().Be("play_token_123");
         await _playBilling.Received().AcknowledgeAsync("orbit_pro", "play_token_123", Arg.Any<CancellationToken>());
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ReferralCoupon_CancelledOnlyAfterSaveSucceeds()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(ActiveState());
+        _referralConsumer.ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "play_token_123")
+            .Returns("coupon_abc");
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        Received.InOrder(() =>
+        {
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+            _referralConsumer.CancelConsumedCouponAsync(UserId, "coupon_abc", Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task Handle_ReferralCoupon_SaveFails_CouponNotCancelled()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(ActiveState());
+        _referralConsumer.ConsumeOnNewPurchase(user, Arg.Any<PlaySubscriptionState>(), "play_token_123")
+            .Returns("coupon_abc");
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("transient"));
+        _userRepo.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var act = () => _handler.Handle(Command(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+        await _referralConsumer.DidNotReceive().CancelConsumedCouponAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

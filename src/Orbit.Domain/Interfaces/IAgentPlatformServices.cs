@@ -35,7 +35,6 @@ public interface IPendingAgentOperationStore
         AgentExecutionSurface surface);
 
     PendingAgentOperationConfirmation? Confirm(Guid userId, Guid pendingOperationId);
-    PendingAgentOperation? MarkStepUp(Guid userId, Guid pendingOperationId);
     PendingAgentOperationExecution? GetExecution(Guid userId, Guid pendingOperationId);
     bool TryConsumeFreshConfirmation(
         Guid userId,

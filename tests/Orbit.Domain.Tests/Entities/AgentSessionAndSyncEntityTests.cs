@@ -194,6 +194,7 @@ public class AgentSessionAndSyncEntityTests
         capabilityIds.Should().OnlyHaveUniqueItems();
         scopes.Should().OnlyContain(value => !string.IsNullOrWhiteSpace(value));
         scopes.Should().OnlyHaveUniqueItems();
+        AgentScopes.All.Should().BeEquivalentTo(scopes);
     }
 
     private static JsonElement Parse(string json)

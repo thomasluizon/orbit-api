@@ -91,7 +91,11 @@ public class UpdateHabitCommandHandler(
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
         if (request.GoalIds is not null)
-            await SyncGoalLinksAsync(habit, request.UserId, request.GoalIds, cancellationToken);
+        {
+            var goalLinkResult = await SyncGoalLinksAsync(habit, request.UserId, request.GoalIds, cancellationToken);
+            if (goalLinkResult.IsFailure)
+                return goalLinkResult;
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -110,19 +114,29 @@ public class UpdateHabitCommandHandler(
             sentReminderRepository.Remove(r);
     }
 
-    private async Task SyncGoalLinksAsync(
+    private async Task<Result> SyncGoalLinksAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid> goalIds, CancellationToken cancellationToken)
     {
-        foreach (var existingGoal in habit.Goals.ToList())
-            habit.RemoveGoal(existingGoal);
-
         if (goalIds.Count == 0)
-            return;
+        {
+            foreach (var existingGoal in habit.Goals.ToList())
+                habit.RemoveGoal(existingGoal);
+            return Result.Success();
+        }
 
         var goals = await goalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id) && g.UserId == userId,
             cancellationToken);
+
+        var goalsResolved = OwnershipValidation.AllResolved(goalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);
+        if (goalsResolved.IsFailure)
+            return goalsResolved;
+
+        foreach (var existingGoal in habit.Goals.ToList())
+            habit.RemoveGoal(existingGoal);
         foreach (var goal in goals)
             habit.AddGoal(goal);
+
+        return Result.Success();
     }
 }

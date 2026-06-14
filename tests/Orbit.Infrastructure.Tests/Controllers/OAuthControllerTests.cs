@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
@@ -6,11 +7,13 @@ using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Api.Controllers;
 using Orbit.Api.OAuth;
 using Orbit.Application.Auth.Commands;
@@ -451,6 +454,58 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GoogleAuth_MixedCaseEmail_LogsIntoExistingLowercaseAccount()
+    {
+        var existingUser = User.Create("Thomas", "test@example.com").Value;
+        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
+            """{"email":"Test@Example.com","aud":"test-google-client-id","name":"Thomas"}""");
+        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
+
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var predicate = callInfo.Arg<System.Linq.Expressions.Expression<Func<User, bool>>>().Compile();
+                return predicate(existingUser) ? existingUser : null;
+            });
+
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "state-abc", "challenge-xyz",
+            "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.GoogleAuth(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GoogleAuth_ConcurrentFirstLogin_ResolvesToExistingUserWithout500()
+    {
+        var racedUser = User.Create("Raced", "new@example.com").Value;
+        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
+            """{"email":"new@example.com","aud":"test-google-client-id","name":"Raced"}""");
+        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
+
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            .Returns((User?)null, racedUser);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "state-abc", "challenge-xyz",
+            "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.GoogleAuth(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Token_UnsupportedGrantType_ReturnsBadRequest()
     {
         var result = await _controller.Token(
@@ -505,6 +560,11 @@ public class OAuthControllerTests : IDisposable
         json.Should().Contain("access_token");
         json.Should().Contain("Bearer");
         await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 
     private sealed class MockHttpMessageHandler(HttpStatusCode statusCode, string content) : HttpMessageHandler

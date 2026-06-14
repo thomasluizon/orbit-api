@@ -20,7 +20,7 @@ public class DeleteNotificationCommandHandler(
 
         if (notification is not null)
         {
-            notificationRepository.Remove(notification);
+            notification.SoftDelete();
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 

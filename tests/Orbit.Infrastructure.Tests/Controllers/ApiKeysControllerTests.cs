@@ -8,6 +8,7 @@ using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Application.ApiKeys.Queries;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
@@ -106,7 +107,7 @@ public class ApiKeysControllerTests
     public async Task RevokeApiKey_NotFound_ReturnsNotFound()
     {
         _mediator.Send(Arg.Any<RevokeApiKeyCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Failure("API key not found"));
+            .Returns(Result.Failure(ErrorMessages.ApiKeyNotFound));
 
         var result = await _controller.RevokeApiKey(Guid.NewGuid(), CancellationToken.None);
 

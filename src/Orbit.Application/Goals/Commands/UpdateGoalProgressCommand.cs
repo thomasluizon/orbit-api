@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -12,11 +13,13 @@ public record UpdateGoalProgressCommand(
     decimal NewValue,
     string? Note = null) : IRequest<Result>;
 
-public class UpdateGoalProgressCommandHandler(
+public partial class UpdateGoalProgressCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<UpdateGoalProgressCommand, Result>
+    IGamificationService gamificationService,
+    IUnitOfWork unitOfWork,
+    ILogger<UpdateGoalProgressCommandHandler> logger) : IRequestHandler<UpdateGoalProgressCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalProgressCommand request, CancellationToken cancellationToken)
     {
@@ -24,21 +27,49 @@ public class UpdateGoalProgressCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck;
 
-        var goal = await goalRepository.FindOneTrackedAsync(
-            g => g.Id == request.GoalId && g.UserId == request.UserId,
-            cancellationToken: cancellationToken);
+        var justCompleted = false;
 
-        if (goal is null)
-            return Result.Failure(ErrorMessages.GoalNotFound);
+        var saved = await ConcurrencyRetry.ExecuteAsync(
+            goalRepository,
+            unitOfWork,
+            ct => goalRepository.FindOneTrackedAsync(
+                g => g.Id == request.GoalId && g.UserId == request.UserId, cancellationToken: ct),
+            async goal =>
+            {
+                var previousValue = goal.CurrentValue;
+                var result = goal.UpdateProgress(request.NewValue);
+                if (result.IsFailure)
+                    return result;
 
-        var previousValue = goal.CurrentValue;
-        var progressLog = GoalProgressLog.Create(goal.Id, previousValue, request.NewValue, request.Note);
-        await progressLogRepository.AddAsync(progressLog, cancellationToken);
+                justCompleted = result.Value;
+                var progressLog = GoalProgressLog.Create(goal.Id, previousValue, request.NewValue, request.Note);
+                await progressLogRepository.AddAsync(progressLog, cancellationToken);
+                return Result.Success();
+            },
+            ErrorMessages.GoalNotFound,
+            cancellationToken);
 
-        var result = goal.UpdateProgress(request.NewValue);
-        if (result.IsFailure) return result;
+        if (saved.IsFailure)
+            return saved;
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (justCompleted)
+            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+
         return Result.Success();
     }
+
+    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogGamificationGoalCompletionFailed(logger, ex, userId);
+        }
+    }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal completion by user {UserId}")]
+    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

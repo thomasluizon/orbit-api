@@ -2,13 +2,15 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class ChecklistTemplate : Entity, ITimestamped
+public class ChecklistTemplate : Entity, ITimestamped, ISoftDeletable
 {
     public Guid UserId { get; private set; }
     public string Name { get; private set; } = null!;
     public IReadOnlyList<string> Items { get; private set; } = [];
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
 
     private ChecklistTemplate() { }
 
@@ -51,5 +53,12 @@ public class ChecklistTemplate : Entity, ITimestamped
         Items = items.Select(i => i.Trim()).Where(i => !string.IsNullOrEmpty(i)).ToList();
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 }

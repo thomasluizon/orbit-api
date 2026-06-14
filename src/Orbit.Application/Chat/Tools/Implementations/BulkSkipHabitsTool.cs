@@ -53,6 +53,7 @@ public class BulkSkipHabitsTool(
             return new ToolResult(false, Error: "No valid habit IDs provided.");
 
         var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
         var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
         var skippedNames = new List<string>();
 
@@ -64,7 +65,7 @@ public class BulkSkipHabitsTool(
         foreach (var habitId in habitIds)
         {
             var habit = habits.FirstOrDefault(h => h.Id == habitId);
-            if (habit is not null && await TrySkipHabit(habit, targetDate, today, ct))
+            if (habit is not null && await TrySkipHabit(habit, targetDate, today, weekStartDay, ct))
                 skippedNames.Add(habit.Title);
         }
 
@@ -74,7 +75,7 @@ public class BulkSkipHabitsTool(
         return new ToolResult(true, EntityName: string.Join(", ", skippedNames));
     }
 
-    private async Task<bool> TrySkipHabit(Habit habit, DateOnly targetDate, DateOnly today, CancellationToken ct)
+    private async Task<bool> TrySkipHabit(Habit habit, DateOnly targetDate, DateOnly today, int weekStartDay, CancellationToken ct)
     {
         if (habit.IsCompleted)
             return false;
@@ -90,7 +91,7 @@ public class BulkSkipHabitsTool(
 
         if (habit.IsFlexible)
         {
-            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
             if (remaining <= 0)
                 return false;
 

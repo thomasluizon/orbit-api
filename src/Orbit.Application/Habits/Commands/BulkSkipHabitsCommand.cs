@@ -34,6 +34,7 @@ public class BulkSkipHabitsCommandHandler(
     public async Task<Result<BulkSkipResult>> Handle(BulkSkipHabitsCommand request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
         var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
@@ -44,27 +45,30 @@ public class BulkSkipHabitsCommandHandler(
             cancellationToken);
         var habitMap = habits.ToDictionary(h => h.Id);
 
-        for (int i = 0; i < request.Items.Count; i++)
+        await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
-            var item = request.Items[i];
-            var targetDate = item.Date ?? today;
-
-            try
+            for (int i = 0; i < request.Items.Count; i++)
             {
-                results.Add(await ProcessSkipItem(i, item.HabitId, targetDate, today, habitMap, cancellationToken));
-            }
-            catch (Exception)
-            {
-                results.Add(new BulkSkipItemResult(
-                    Index: i,
-                    Status: BulkItemStatus.Failed,
-                    HabitId: item.HabitId,
-                    Error: ErrorMessages.MutationFailed.Message,
-                    ErrorCode: ErrorMessages.MutationFailed.Code));
-            }
-        }
+                var item = request.Items[i];
+                var targetDate = item.Date ?? today;
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+                try
+                {
+                    results.Add(await ProcessSkipItem(i, item.HabitId, targetDate, today, weekStartDay, habitMap, ct));
+                }
+                catch (Exception)
+                {
+                    results.Add(new BulkSkipItemResult(
+                        Index: i,
+                        Status: BulkItemStatus.Failed,
+                        HabitId: item.HabitId,
+                        Error: ErrorMessages.MutationFailed.Message,
+                        ErrorCode: ErrorMessages.MutationFailed.Code));
+                }
+            }
+
+            await unitOfWork.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
@@ -72,7 +76,7 @@ public class BulkSkipHabitsCommandHandler(
     }
 
     private async Task<BulkSkipItemResult> ProcessSkipItem(
-        int index, Guid habitId, DateOnly targetDate, DateOnly today,
+        int index, Guid habitId, DateOnly targetDate, DateOnly today, int weekStartDay,
         Dictionary<Guid, Habit> habitMap, CancellationToken cancellationToken)
     {
         if (targetDate > today)
@@ -107,7 +111,7 @@ public class BulkSkipHabitsCommandHandler(
 
         if (habit.IsFlexible)
         {
-            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs);
+            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
             if (remaining <= 0)
                 return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                     Error: ErrorMessages.AllInstancesDone.Message, ErrorCode: ErrorMessages.AllInstancesDone.Code);

@@ -11,10 +11,17 @@ public sealed record UserDataExport(
     DateTime ExportedAtUtc,
     ExportedAccount Account,
     ExportedSettings Settings,
+    ExportedSubscription Subscription,
     IReadOnlyList<ExportedHabit> Habits,
     IReadOnlyList<ExportedGoal> Goals,
     IReadOnlyList<ExportedTag> Tags,
-    IReadOnlyList<ExportedUserFact> Facts);
+    IReadOnlyList<ExportedUserFact> Facts,
+    IReadOnlyList<ExportedNotification> Notifications,
+    IReadOnlyList<ExportedChecklistTemplate> ChecklistTemplates,
+    IReadOnlyList<ExportedAchievement> Achievements,
+    IReadOnlyList<ExportedStreakFreeze> StreakFreezes,
+    IReadOnlyList<ExportedReferral> Referrals,
+    IReadOnlyList<ExportedApiKey> ApiKeys);
 
 public sealed record ExportedAccount(
     string Name,
@@ -83,3 +90,54 @@ public sealed record ExportedUserFact(
     string FactText,
     string? Category,
     DateTime ExtractedAtUtc);
+
+public sealed record ExportedSubscription(
+    string Plan,
+    bool IsLifetimePro,
+    string? Source,
+    string? Interval,
+    DateTime? PlanExpiresAtUtc,
+    DateTime? TrialEndsAtUtc);
+
+public sealed record ExportedNotification(
+    Guid Id,
+    string Title,
+    string Body,
+    string? Url,
+    bool IsRead,
+    DateTime CreatedAtUtc);
+
+public sealed record ExportedChecklistTemplate(
+    Guid Id,
+    string Name,
+    IReadOnlyList<string> Items,
+    DateTime CreatedAtUtc);
+
+public sealed record ExportedAchievement(
+    string AchievementId,
+    DateTime EarnedAtUtc);
+
+public sealed record ExportedStreakFreeze(
+    DateOnly UsedOnDate,
+    DateTime CreatedAtUtc);
+
+public sealed record ExportedReferral(
+    string Status,
+    DateTime CreatedAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime? RewardGrantedAtUtc);
+
+/// <summary>
+/// API key metadata only. The bcrypt secret hash (<c>KeyHash</c>) is intentionally never exported;
+/// <c>KeyPrefix</c> is the non-secret display prefix already shown to the owner in the UI.
+/// </summary>
+public sealed record ExportedApiKey(
+    Guid Id,
+    string Name,
+    string KeyPrefix,
+    IReadOnlyList<string> Scopes,
+    bool IsReadOnly,
+    DateTime CreatedAtUtc,
+    DateTime? ExpiresAtUtc,
+    DateTime? LastUsedAtUtc,
+    bool IsRevoked);

@@ -52,6 +52,21 @@ public class AuthSessionServiceTests
     }
 
     [Fact]
+    public async Task CreateSessionAsync_WithConfiguredExpiry_SetsSessionExpiryFromRefreshExpiryDays()
+    {
+        UserSession? captured = null;
+        await _userSessionRepository.AddAsync(
+            Arg.Do<UserSession>(session => captured = session),
+            Arg.Any<CancellationToken>());
+
+        await _sut.CreateSessionAsync(Guid.NewGuid(), "thomas@test.com", CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        captured!.ExpiresAtUtc.Should().NotBeNull();
+        captured.ExpiresAtUtc!.Value.Should().BeCloseTo(DateTime.UtcNow.AddDays(90), TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
     public async Task RefreshSessionAsync_RotatesExistingSession()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;

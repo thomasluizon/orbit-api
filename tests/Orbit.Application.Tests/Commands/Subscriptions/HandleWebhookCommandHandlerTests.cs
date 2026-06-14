@@ -1,10 +1,13 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Entities;
@@ -21,6 +24,7 @@ public class HandleWebhookCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SubscriptionService _subscriptionService = Substitute.For<SubscriptionService>();
+    private readonly IGenericRepository<ProcessedStripeEvent> _processedRepo = Substitute.For<IGenericRepository<ProcessedStripeEvent>>();
     private readonly HandleWebhookCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -35,7 +39,7 @@ public class HandleWebhookCommandHandlerTests
         });
 
         _handler = new HandleWebhookCommandHandler(
-            _userRepo, _unitOfWork, settings, _subscriptionService,
+            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
     }
 
@@ -44,7 +48,7 @@ public class HandleWebhookCommandHandlerTests
     {
         var settings = Options.Create(new StripeSettings { WebhookSecret = "" });
         var handler = new HandleWebhookCommandHandler(
-            _userRepo, _unitOfWork, settings, _subscriptionService,
+            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
 
         var command = new HandleWebhookCommand("{}", "sig_test");
@@ -60,7 +64,7 @@ public class HandleWebhookCommandHandlerTests
     {
         var settings = Options.Create(new StripeSettings { WebhookSecret = null! });
         var handler = new HandleWebhookCommandHandler(
-            _userRepo, _unitOfWork, settings, _subscriptionService,
+            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
 
         var command = new HandleWebhookCommand("{}", "sig_test");
@@ -355,6 +359,103 @@ public class HandleWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Handle_DuplicateEventId_SkipsProcessingWithoutSaving()
+    {
+        _processedRepo.AnyAsync(
+            Arg.Any<Expression<Func<ProcessedStripeEvent, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        var command = new HandleWebhookCommand(json, signature);
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _userRepo.DidNotReceive().FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentDuplicate_SaveConflict_ReturnsSuccess()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var subscription = CreateMockSubscription("sub_test");
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(subscription);
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        var command = new HandleWebhookCommand(json, signature);
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_CheckoutSessionCompleted_ClearsStalePlayPurchaseToken()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("stale_play_token", DateTime.UtcNow.AddMonths(1));
+
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var subscription = CreateMockSubscription("sub_test");
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(subscription);
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        user.PlayPurchaseToken.Should().BeNull();
+        user.SubscriptionSource.Should().Be(Orbit.Domain.Enums.SubscriptionSource.Stripe);
+    }
+
+    [Fact]
+    public async Task Handle_CheckoutSessionCompleted_YearlySubMissingPeriodEnd_FallsBackToOneYearNotOneMonth()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var subscription = CreateYearlySubscriptionWithoutPeriodEnd("sub_year");
+        _subscriptionService.GetAsync("sub_year", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(subscription);
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_year", "cus_test"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        user.SubscriptionInterval.Should().Be(Orbit.Domain.Enums.SubscriptionInterval.Yearly);
+        user.PlanExpiresAt.Should().NotBeNull();
+        user.PlanExpiresAt!.Value.Should().BeCloseTo(DateTime.UtcNow.AddYears(1), TimeSpan.FromMinutes(1));
+    }
+
     private static Subscription CreateMockSubscription(string subscriptionId)
     {
         return new Subscription
@@ -373,6 +474,32 @@ public class HandleWebhookCommandHandlerTests
                             Recurring = new PriceRecurring
                             {
                                 Interval = "month",
+                                IntervalCount = 1
+                            }
+                        }
+                    }
+                ]
+            }
+        };
+    }
+
+    private static Subscription CreateYearlySubscriptionWithoutPeriodEnd(string subscriptionId)
+    {
+        return new Subscription
+        {
+            Id = subscriptionId,
+            Status = "active",
+            Items = new StripeList<SubscriptionItem>
+            {
+                Data =
+                [
+                    new SubscriptionItem
+                    {
+                        Price = new Price
+                        {
+                            Recurring = new PriceRecurring
+                            {
+                                Interval = "year",
                                 IntervalCount = 1
                             }
                         }
@@ -479,5 +606,10 @@ public class HandleWebhookCommandHandlerTests
         var signature = $"t={timestamp},v1={hex}";
 
         return (eventJson, signature);
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 }

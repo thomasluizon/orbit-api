@@ -158,10 +158,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 
     private static ChatStreamEvent ToErrorEvent(Result<ChatResponse> result)
     {
-        var status = result.ErrorCode == Result.PayGateErrorCode
-            ? StatusCodes.Status403Forbidden
-            : StatusCodes.Status400BadRequest;
-        return ChatStreamEvent.Failure(status, result.Error, result.ErrorCode);
+        return ChatStreamEvent.Failure(result.ResolveErrorStatus(), result.Error, result.ErrorCode);
     }
 
     private async Task WriteEventAsync(ChatStreamEvent streamEvent, CancellationToken cancellationToken)

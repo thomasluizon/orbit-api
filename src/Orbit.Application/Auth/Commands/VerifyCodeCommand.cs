@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
@@ -56,20 +57,17 @@ public partial class VerifyCodeCommandHandler(
     {
         var cacheKey = $"verify:{email}";
 
+        if (CountFailedAttempts(email) >= AppConstants.MaxVerificationAttempts)
+            return Result.Failure(ErrorMessages.TooManyCodeAttempts);
+
         if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
             return Result.Failure(ErrorMessages.VerificationCodeExpired);
-
-        if (entry.Attempts >= AppConstants.MaxVerificationAttempts)
-        {
-            cache.Remove(cacheKey);
-            return Result.Failure(ErrorMessages.TooManyCodeAttempts);
-        }
 
         if (!CryptographicOperations.FixedTimeEquals(
             System.Text.Encoding.UTF8.GetBytes(entry.Code),
             System.Text.Encoding.UTF8.GetBytes(code)))
         {
-            RecordFailedAttempt(cacheKey, entry);
+            RecordFailedAttempt(email);
             return Result.Failure(ErrorMessages.InvalidVerificationCode);
         }
 
@@ -77,18 +75,20 @@ public partial class VerifyCodeCommandHandler(
         return Result.Success();
     }
 
-    private void RecordFailedAttempt(string cacheKey, VerificationEntry entry)
+    private int CountFailedAttempts(string email) =>
+        cache.TryGetValue(FailedAttemptCacheKey(email), out int attempts) ? attempts : 0;
+
+    private void RecordFailedAttempt(string email)
     {
-        var updated = new VerificationEntry(entry.Code, entry.Attempts + 1, entry.CreatedAt);
-        var remaining = TimeSpan.FromMinutes(5) - (DateTime.UtcNow - entry.CreatedAt);
-        if (remaining > TimeSpan.Zero)
+        var cacheKey = FailedAttemptCacheKey(email);
+        var attempts = CountFailedAttempts(email) + 1;
+        cache.Set(cacheKey, attempts, new MemoryCacheEntryOptions
         {
-            cache.Set(cacheKey, updated, new MemoryCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = remaining
-            });
-        }
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(AppConstants.VerificationAttemptWindowMinutes)
+        });
     }
+
+    private static string FailedAttemptCacheKey(string email) => $"verify-attempts:{email}";
 
     private async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
         string email, string language, CancellationToken cancellationToken)
@@ -108,7 +108,21 @@ public partial class VerifyCodeCommandHandler(
         user = createResult.Value;
         user.SetLanguage(language);
         await userRepository.AddAsync(user, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
+        {
+            var raced = await userRepository.FindOneTrackedAsync(
+                u => u.Email == email,
+                cancellationToken: cancellationToken);
+            if (raced is null)
+                throw;
+
+            return Result.Success((raced, false));
+        }
 
         return Result.Success((user, true));
     }

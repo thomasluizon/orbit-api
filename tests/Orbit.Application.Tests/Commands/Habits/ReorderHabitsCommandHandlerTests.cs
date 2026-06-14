@@ -115,4 +115,60 @@ public class ReorderHabitsCommandHandlerTests
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_DuplicatePositions_NormalizesToContiguousSequence()
+    {
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1)).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1)).Value;
+
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit1, habit2, habit3 });
+
+        var positions = new List<HabitPositionUpdate>
+        {
+            new(habit1.Id, 5),
+            new(habit2.Id, 5),
+            new(habit3.Id, 5)
+        };
+        var command = new ReorderHabitsCommand(UserId, positions);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        new[] { habit1.Position, habit2.Position, habit3.Position }
+            .OrderBy(p => p)
+            .Should().Equal(0, 1, 2);
+    }
+
+    [Fact]
+    public async Task Handle_GappedPositions_NormalizesPreservingOrder()
+    {
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1)).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1)).Value;
+
+        _habitRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit1, habit2, habit3 });
+
+        var positions = new List<HabitPositionUpdate>
+        {
+            new(habit1.Id, 10),
+            new(habit2.Id, 50),
+            new(habit3.Id, 30)
+        };
+        var command = new ReorderHabitsCommand(UserId, positions);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit1.Position.Should().Be(0);
+        habit3.Position.Should().Be(1);
+        habit2.Position.Should().Be(2);
+    }
 }

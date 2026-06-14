@@ -56,6 +56,7 @@ public partial class GoogleCalendarEventFetcher(ILogger<GoogleCalendarEventFetch
             var startDate = ev.Start?.Date ?? ev.Start?.DateTimeDateTimeOffset?.ToString("yyyy-MM-dd");
             var startTime = ev.Start?.DateTimeDateTimeOffset?.ToString("HH:mm");
             var endTime = ev.End?.DateTimeDateTimeOffset?.ToString("HH:mm");
+            var startUtc = ResolveStartUtc(ev.Start);
             var isRecurring = ev.RecurringEventId is not null
                 || (ev.Recurrence is not null && ev.Recurrence.Count > 0);
 
@@ -65,7 +66,7 @@ public partial class GoogleCalendarEventFetcher(ILogger<GoogleCalendarEventFetch
             items.Add(new CalendarEventItem(
                 masterId, evTitle, ev.Description,
                 startDate, startTime, endTime,
-                isRecurring, rrule, reminders));
+                isRecurring, rrule, reminders, startUtc));
         }
 
         return items;
@@ -150,6 +151,23 @@ public partial class GoogleCalendarEventFetcher(ILogger<GoogleCalendarEventFetch
             reminders.Add(0);
 
         return reminders;
+    }
+
+    private static DateTime? ResolveStartUtc(Google.Apis.Calendar.v3.Data.EventDateTime? start)
+    {
+        if (start is null)
+            return null;
+
+        if (start.DateTimeDateTimeOffset is { } dto)
+            return dto.UtcDateTime;
+
+        if (!string.IsNullOrWhiteSpace(start.Date)
+            && DateOnly.TryParse(start.Date, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var date))
+        {
+            return date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        }
+
+        return null;
     }
 
     private static CalendarFetchErrorKind ClassifyGoogleError(Google.GoogleApiException ex)

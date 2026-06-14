@@ -75,7 +75,7 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
-    public async Task CreateCheckout_UsesForwardedGeoHeaders()
+    public async Task CreateCheckout_UsesCdnCountryButIgnoresSpoofableForwardedIp()
     {
         _controller.HttpContext.Request.Headers["X-Forwarded-For"] = "203.0.113.10, 10.0.0.1";
         _controller.HttpContext.Request.Headers["CF-IPCountry"] = "br";
@@ -88,7 +88,7 @@ public class SubscriptionControllerTests
         await _mediator.Received(1).Send(
             Arg.Is<CreateCheckoutCommand>(command =>
                 command.CountryCode == "BR" &&
-                command.IpAddress == "203.0.113.10"),
+                command.IpAddress == "127.0.0.1"),
             Arg.Any<CancellationToken>());
     }
 
@@ -109,7 +109,7 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
-    public async Task CreateCheckout_UsesForwardedCountryAndIp()
+    public async Task CreateCheckout_ResolvesIpFromRemoteAddressNotForwardedHeader()
     {
         _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(default(CheckoutResponse)!));
@@ -122,7 +122,7 @@ public class SubscriptionControllerTests
         await _controller.CreateCheckout(request, CancellationToken.None);
 
         await _mediator.Received(1).Send(
-            Arg.Is<CreateCheckoutCommand>(c => c.CountryCode == "BR" && c.IpAddress == "201.10.20.30"),
+            Arg.Is<CreateCheckoutCommand>(c => c.CountryCode == "BR" && c.IpAddress == "127.0.0.1"),
             Arg.Any<CancellationToken>());
     }
 
@@ -280,7 +280,7 @@ public class SubscriptionControllerTests
     }
 
     [Fact]
-    public async Task GetPlans_UsesForwardedCountryAndIp()
+    public async Task GetPlans_UsesCdnCountryButIgnoresSpoofableForwardedIp()
     {
         _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(default(PlansResponse)!));
@@ -291,7 +291,7 @@ public class SubscriptionControllerTests
         await _controller.GetPlans(CancellationToken.None);
 
         await _mediator.Received(1).Send(
-            Arg.Is<GetPlansQuery>(q => q.CountryCode == "BR" && q.IpAddress == "177.55.44.33"),
+            Arg.Is<GetPlansQuery>(q => q.CountryCode == "BR" && q.IpAddress == "127.0.0.1"),
             Arg.Any<CancellationToken>());
     }
 

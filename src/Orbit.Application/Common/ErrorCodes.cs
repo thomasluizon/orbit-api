@@ -37,6 +37,7 @@ public static class ErrorCodes
     public const string InvalidSession = "INVALID_SESSION";
     public const string SessionCreationFailed = "SESSION_CREATION_FAILED";
     public const string ValidationError = "VALIDATION_ERROR";
+    public const string ConcurrentUpdateConflict = "CONCURRENT_UPDATE_CONFLICT";
     public const string InternalServerError = "INTERNAL_SERVER_ERROR";
     public const string RateLimited = "RATE_LIMITED";
     public const string SubjectRequired = "SUBJECT_REQUIRED";
@@ -95,6 +96,7 @@ public static class ErrorCodes
     public const string MaxApiKeys = "MAX_API_KEYS";
     public const string MaxHabitsPerGoal = "MAX_HABITS_PER_GOAL";
     public const string InvalidGoalStatus = "INVALID_GOAL_STATUS";
+    public const string DeadlineInPast = "DEADLINE_IN_PAST";
     public const string ImageTooLarge = "IMAGE_TOO_LARGE";
     public const string ImageEmpty = "IMAGE_EMPTY";
     public const string ImageExtensionNotAllowed = "IMAGE_EXTENSION_NOT_ALLOWED";

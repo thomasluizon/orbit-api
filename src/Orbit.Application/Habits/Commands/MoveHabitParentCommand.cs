@@ -14,7 +14,8 @@ public record MoveHabitParentCommand(
 
 public class MoveHabitParentCommandHandler(
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<MoveHabitParentCommand, Result>
+    IUnitOfWork unitOfWork,
+    IAppConfigService appConfigService) : IRequestHandler<MoveHabitParentCommand, Result>
 {
     public async Task<Result> Handle(MoveHabitParentCommand request, CancellationToken cancellationToken)
     {
@@ -43,26 +44,62 @@ public class MoveHabitParentCommandHandler(
         if (parent is null)
             return Result.Failure(ErrorMessages.TargetParentNotFound);
 
-        if (await WouldCreateCycle(request.HabitId, request.ParentId.Value, request.UserId, cancellationToken))
+        var allHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
+        var habitsById = allHabits.ToDictionary(h => h.Id);
+
+        if (WouldCreateCycle(request.HabitId, request.ParentId.Value, habitsById))
             return Result.Failure(ErrorMessages.CircularReference);
+
+        var maxDepth = await appConfigService.GetAsync(AppConfigKeys.MaxHabitDepth, AppConstants.MaxHabitDepth, cancellationToken);
+        var parentDepth = GetDepth(parent.Id, habitsById);
+        var subtreeHeight = GetSubtreeHeight(request.HabitId, habitsById);
+        if (parentDepth + 1 + subtreeHeight > maxDepth - 1)
+            return Result.Failure(ErrorMessages.MaxDepthReached.Format(maxDepth));
 
         habit.SetParentHabitId(request.ParentId);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
 
-    private async Task<bool> WouldCreateCycle(Guid habitId, Guid targetParentId, Guid userId, CancellationToken cancellationToken)
+    private static bool WouldCreateCycle(Guid habitId, Guid targetParentId, IReadOnlyDictionary<Guid, Habit> habitsById)
     {
-        var allHabits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
-        var habitDict = allHabits.ToDictionary(h => h.Id);
-
         var currentId = targetParentId;
-        while (habitDict.TryGetValue(currentId, out var current))
+        while (habitsById.TryGetValue(currentId, out var current))
         {
             if (current.ParentHabitId is null) return false;
             if (current.ParentHabitId == habitId) return true;
             currentId = current.ParentHabitId.Value;
         }
         return false;
+    }
+
+    private static int GetDepth(Guid habitId, IReadOnlyDictionary<Guid, Habit> habitsById)
+    {
+        var depth = 0;
+        var currentId = habitsById.TryGetValue(habitId, out var habit) ? habit.ParentHabitId : null;
+        while (currentId is not null && habitsById.TryGetValue(currentId.Value, out var parent))
+        {
+            depth++;
+            currentId = parent.ParentHabitId;
+        }
+        return depth;
+    }
+
+    private static int GetSubtreeHeight(Guid habitId, IReadOnlyDictionary<Guid, Habit> habitsById)
+    {
+        var childrenByParent = habitsById.Values
+            .Where(h => h.ParentHabitId is not null)
+            .GroupBy(h => h.ParentHabitId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(h => h.Id).ToList());
+
+        return MeasureHeight(habitId, childrenByParent);
+    }
+
+    private static int MeasureHeight(Guid habitId, IReadOnlyDictionary<Guid, List<Guid>> childrenByParent)
+    {
+        if (!childrenByParent.TryGetValue(habitId, out var children) || children.Count == 0)
+            return 0;
+
+        return 1 + children.Max(childId => MeasureHeight(childId, childrenByParent));
     }
 }

@@ -133,4 +133,54 @@ public class ReorderGoalsCommandHandlerTests
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_DuplicatePositions_NormalizesToContiguousSequence()
+    {
+        var goal1 = Goal.Create(new Goal.CreateGoalParams(UserId, "G1", 10, "units", Position: 0)).Value;
+        var goal2 = Goal.Create(new Goal.CreateGoalParams(UserId, "G2", 20, "units", Position: 1)).Value;
+        var goal3 = Goal.Create(new Goal.CreateGoalParams(UserId, "G3", 30, "units", Position: 2)).Value;
+
+        SetupGoalsForUser(goal1, goal2, goal3);
+
+        var positions = new List<GoalPositionUpdate>
+        {
+            new(goal1.Id, 5),
+            new(goal2.Id, 5),
+            new(goal3.Id, 5)
+        };
+        var command = new ReorderGoalsCommand(UserId, positions);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        new[] { goal1.Position, goal2.Position, goal3.Position }
+            .OrderBy(p => p)
+            .Should().Equal(0, 1, 2);
+    }
+
+    [Fact]
+    public async Task Handle_GappedPositions_NormalizesPreservingOrder()
+    {
+        var goal1 = Goal.Create(new Goal.CreateGoalParams(UserId, "G1", 10, "units", Position: 0)).Value;
+        var goal2 = Goal.Create(new Goal.CreateGoalParams(UserId, "G2", 20, "units", Position: 1)).Value;
+        var goal3 = Goal.Create(new Goal.CreateGoalParams(UserId, "G3", 30, "units", Position: 2)).Value;
+
+        SetupGoalsForUser(goal1, goal2, goal3);
+
+        var positions = new List<GoalPositionUpdate>
+        {
+            new(goal1.Id, 10),
+            new(goal2.Id, 50),
+            new(goal3.Id, 30)
+        };
+        var command = new ReorderGoalsCommand(UserId, positions);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal1.Position.Should().Be(0);
+        goal3.Position.Should().Be(1);
+        goal2.Position.Should().Be(2);
+    }
 }

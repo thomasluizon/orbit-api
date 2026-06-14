@@ -89,8 +89,8 @@ public class DuplicateHabitCommandHandlerTests
     public async Task Handle_DuplicatesAllProperties()
     {
         var original = Habit.Create(new HabitCreateParams(
-            UserId, "Complex Habit", FrequencyUnit.Week, 1,
-            Description: "Weekly check",
+            UserId, "Complex Habit", FrequencyUnit.Day, 1,
+            Description: "Daily check",
             Days: new List<DayOfWeek> { DayOfWeek.Monday, DayOfWeek.Friday },
             DueDate: new DateOnly(2026, 3, 20),
             DueTime: new TimeOnly(9, 0),
@@ -108,9 +108,9 @@ public class DuplicateHabitCommandHandlerTests
         await _habitRepo.Received(1).AddAsync(
             Arg.Is<Habit>(h =>
                 h.Title == "Complex Habit" &&
-                h.FrequencyUnit == FrequencyUnit.Week &&
+                h.FrequencyUnit == FrequencyUnit.Day &&
                 h.FrequencyQuantity == 1 &&
-                h.Description == "Weekly check"),
+                h.Description == "Daily check"),
             Arg.Any<CancellationToken>());
     }
 

@@ -23,7 +23,7 @@ public class DeleteChecklistTemplateCommandHandler(
         if (template is null)
             return Result.Failure(ErrorMessages.TemplateNotFound);
 
-        repository.Remove(template);
+        template.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

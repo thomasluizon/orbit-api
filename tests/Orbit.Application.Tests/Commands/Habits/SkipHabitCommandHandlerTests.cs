@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -17,6 +18,7 @@ public class SkipHabitCommandHandlerTests
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly SkipHabitCommandHandler _handler;
@@ -27,7 +29,8 @@ public class SkipHabitCommandHandlerTests
     public SkipHabitCommandHandlerTests()
     {
         _handler = new SkipHabitCommandHandler(
-            _habitRepo, _habitLogRepo, _goalRepo, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _habitLogRepo, _goalRepo, _userDateService, _gamificationService, _unitOfWork, _cache,
+            Substitute.For<ILogger<SkipHabitCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);

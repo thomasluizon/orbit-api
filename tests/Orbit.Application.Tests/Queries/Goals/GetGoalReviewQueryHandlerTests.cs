@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Goals.Queries;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -24,13 +25,21 @@ public class GetGoalReviewQueryHandlerTests
 
     public GetGoalReviewQueryHandlerTests()
     {
-        _handler = new GetGoalReviewQueryHandler(_goalRepo, _payGate, _reviewService, _userDateService, _cache);
+        _handler = new GetGoalReviewQueryHandler(
+            _goalRepo, _payGate, _reviewService, _userDateService, _cache);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
     private static Goal CreateTestGoal()
     {
         return Goal.Create(UserId, "Active Goal", 100, "pages").Value;
+    }
+
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     [Fact]
@@ -56,6 +65,38 @@ public class GetGoalReviewQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Review.Should().Be("Review content");
         result.Value.FromCache.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_RefreshesStreakGoalValue_BeforeBuildingContext()
+    {
+        _payGate.CanAccessGoals(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+
+        var streakGoal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
+        SetCreatedAtUtc(badHabit, Today.AddDays(-3));
+        badHabit.AddGoal(streakGoal);
+        streakGoal.AddHabit(badHabit);
+
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new List<Goal> { streakGoal }.AsReadOnly());
+
+        string? capturedContext = null;
+        _reviewService.GenerateReviewAsync(
+            Arg.Do<string>(ctx => capturedContext = ctx), "en", Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Review content"));
+
+        var result = await _handler.Handle(new GetGoalReviewQuery(UserId, "en"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedContext.Should().NotBeNull();
+        capturedContext.Should().Contain("4/7 days");
+        streakGoal.Status.Should().Be(GoalStatus.Active);
     }
 
     [Fact]

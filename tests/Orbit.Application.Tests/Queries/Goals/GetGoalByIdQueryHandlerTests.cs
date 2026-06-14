@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Goals.Queries;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
 
@@ -11,16 +12,19 @@ public class GetGoalByIdQueryHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetGoalByIdQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid GoalId = Guid.NewGuid();
+    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
     public GetGoalByIdQueryHandlerTests()
     {
-        _handler = new GetGoalByIdQueryHandler(_goalRepo, _payGate);
+        _handler = new GetGoalByIdQueryHandler(_goalRepo, _payGate, _userDateService);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
     }
 
     private static Goal CreateTestGoal(string title = "Test Goal", decimal target = 100)
@@ -28,16 +32,27 @@ public class GetGoalByIdQueryHandlerTests
         return Goal.Create(new Goal.CreateGoalParams(UserId, title, target, "units", "A test goal")).Value;
     }
 
+    private void ArrangeGoal(Goal? goal)
+    {
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((goal is null ? new List<Goal>() : [goal]).AsReadOnly());
+    }
+
+    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
+    {
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+    }
+
     [Fact]
     public async Task Handle_GoalFound_ReturnsSuccess()
     {
         var goal = CreateTestGoal("My Goal");
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var query = new GetGoalByIdQuery(UserId, GoalId);
 
@@ -54,11 +69,7 @@ public class GetGoalByIdQueryHandlerTests
     [Fact]
     public async Task Handle_GoalNotFound_ReturnsFailure()
     {
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Goal?)null);
+        ArrangeGoal(null);
 
         var query = new GetGoalByIdQuery(UserId, GoalId);
 
@@ -72,11 +83,7 @@ public class GetGoalByIdQueryHandlerTests
     [Fact]
     public async Task Handle_WrongUser_ReturnsGoalNotFound()
     {
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Goal?)null);
+        ArrangeGoal(null);
 
         var wrongUserId = Guid.NewGuid();
         var query = new GetGoalByIdQuery(wrongUserId, GoalId);
@@ -92,12 +99,7 @@ public class GetGoalByIdQueryHandlerTests
     {
         var goal = CreateTestGoal("Progress", target: 200);
         goal.UpdateProgress(100);
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var query = new GetGoalByIdQuery(UserId, GoalId);
 
@@ -112,12 +114,7 @@ public class GetGoalByIdQueryHandlerTests
     {
         var goal = CreateTestGoal("Overcomplete", target: 50);
         goal.UpdateProgress(100);
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var query = new GetGoalByIdQuery(UserId, GoalId);
 
@@ -131,12 +128,7 @@ public class GetGoalByIdQueryHandlerTests
     public async Task Handle_GoalFound_MapsLinkedHabits()
     {
         var goal = CreateTestGoal("With Habits");
-
-        _goalRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goal);
+        ArrangeGoal(goal);
 
         var query = new GetGoalByIdQuery(UserId, GoalId);
 
@@ -159,5 +151,26 @@ public class GetGoalByIdQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
+    }
+
+    [Fact]
+    public async Task Handle_WithBadHabitLinkedStreakGoal_ReturnsFreshCurrentValueWithoutPersistingCompletion()
+    {
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
+
+        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+        badHabit.AddGoal(goal);
+        goal.AddHabit(badHabit);
+        ArrangeGoal(goal);
+
+        var result = await _handler.Handle(new GetGoalByIdQuery(UserId, GoalId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentValue.Should().Be(2);
+        goal.Status.Should().Be(GoalStatus.Active);
     }
 }

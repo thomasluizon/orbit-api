@@ -57,13 +57,6 @@ public static class HttpContextExtensions
 
     private const string OrbitTimeZoneHeaderName = "X-Orbit-Time-Zone";
 
-    private static readonly string[] IpHeaderNames =
-    [
-        "CF-Connecting-IP",
-        "X-Forwarded-For",
-        "X-Real-IP"
-    ];
-
     public static string? GetClientCountryCode(this HttpContext context)
     {
         foreach (var headerName in CountryHeaderNames)
@@ -86,18 +79,14 @@ public static class HttpContextExtensions
         return null;
     }
 
+    /// <summary>
+    /// The trustworthy client IP from <see cref="ConnectionInfo.RemoteIpAddress"/>, which the
+    /// configured ForwardedHeaders middleware populates from <c>X-Forwarded-For</c> only when the
+    /// immediate peer is a known proxy/network. Raw forwarding headers are never read here, so a
+    /// client cannot spoof them to bypass IP-partitioned rate limits.
+    /// </summary>
     public static string? GetClientIpAddress(this HttpContext context)
     {
-        foreach (var headerName in IpHeaderNames)
-        {
-            var headerValue = context.Request.Headers[headerName].ToString();
-            var firstIpAddress = headerValue.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .FirstOrDefault();
-
-            if (TryNormalizeIpAddress(firstIpAddress, out var normalizedIpAddress))
-                return normalizedIpAddress;
-        }
-
         return NormalizeIpAddress(context.Connection.RemoteIpAddress);
     }
 
@@ -153,17 +142,6 @@ public static class HttpContextExtensions
         return TimeZoneHelper.IsBrazilTimeZone(timeZone)
             ? "BR"
             : null;
-    }
-
-    private static bool TryNormalizeIpAddress(string? ipAddress, out string? normalizedIpAddress)
-    {
-        normalizedIpAddress = null;
-
-        if (string.IsNullOrWhiteSpace(ipAddress) || !IPAddress.TryParse(ipAddress.Trim(), out var parsedIpAddress))
-            return false;
-
-        normalizedIpAddress = NormalizeIpAddress(parsedIpAddress);
-        return normalizedIpAddress is not null;
     }
 
     private static string? NormalizeIpAddress(IPAddress? ipAddress)

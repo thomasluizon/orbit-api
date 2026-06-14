@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Orbit.Api.Extensions;
@@ -23,9 +24,11 @@ public sealed partial class DistributedRateLimitFilter(
     IDistributedRateLimitService distributedRateLimitService,
     ILogger<DistributedRateLimitFilter> logger) : IAsyncActionFilter
 {
+    private const string FailOpenPolicy = "support";
+
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var partitionKey = ResolvePartitionKey(context.HttpContext);
+        var partitionKey = ResolvePartitionKey(policyName, context.HttpContext, context.ActionArguments.Values);
         DistributedRateLimitDecision decision;
 
         try
@@ -45,6 +48,13 @@ public sealed partial class DistributedRateLimitFilter(
                 context.HttpContext.Request.Path,
                 context.HttpContext.GetRequestId(),
                 exception);
+
+            if (string.Equals(policyName, FailOpenPolicy, StringComparison.OrdinalIgnoreCase))
+            {
+                await next();
+                return;
+            }
+
             throw;
         }
 
@@ -84,12 +94,53 @@ public sealed partial class DistributedRateLimitFilter(
         await next();
     }
 
-    private static string ResolvePartitionKey(HttpContext context)
+    private static string ResolvePartitionKey(string policyName, HttpContext context, IEnumerable<object?> actionArguments)
     {
         if (context.User.Identity?.IsAuthenticated == true)
             return $"user:{context.GetUserId()}";
 
+        if (TryResolveAuthEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
+            return emailPartitionKey;
+
         return $"ip:{context.GetClientIpAddress() ?? "unknown"}";
+    }
+
+    /// <summary>
+    /// For unauthenticated requests under the <c>auth</c> policy, partitions by the request's
+    /// normalized email so OTP flows can't be throttled by a shared proxy IP or bypassed by
+    /// rotating forwarded-IP headers. Returns false when the policy isn't <c>auth</c> or no
+    /// email-bearing argument is present, so the caller can fall back to IP-based partitioning.
+    /// </summary>
+    public static bool TryResolveAuthEmailPartitionKey(
+        string policyName,
+        IEnumerable<object?> actionArguments,
+        out string partitionKey)
+    {
+        partitionKey = string.Empty;
+
+        if (!string.Equals(policyName, "auth", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        foreach (var argument in actionArguments)
+        {
+            if (argument is null)
+                continue;
+
+            var emailProperty = argument.GetType().GetProperty(
+                "Email",
+                BindingFlags.Public | BindingFlags.Instance);
+
+            if (emailProperty?.PropertyType != typeof(string))
+                continue;
+
+            if (emailProperty.GetValue(argument) is not string rawEmail || string.IsNullOrWhiteSpace(rawEmail))
+                continue;
+
+            partitionKey = $"auth:email:{rawEmail.Trim().ToLowerInvariant()}";
+            return true;
+        }
+
+        return false;
     }
 
     [LoggerMessage(

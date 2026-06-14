@@ -14,8 +14,8 @@ public static class SlipPatternDetectionService
         Guid habitId,
         TimeZoneInfo userTimeZone)
     {
-        var cutoff = DateTime.UtcNow.AddDays(-LookbackDays);
-        var recentLogs = logs.Where(l => l.CreatedAtUtc >= cutoff).ToList();
+        var createdAtUtcCutoff = DateTime.UtcNow.AddDays(-LookbackDays);
+        var recentLogs = logs.Where(l => l.Value > 0 && l.CreatedAtUtc >= createdAtUtcCutoff).ToList();
 
         if (recentLogs.Count < MinTotalLogs)
             return null;

@@ -24,6 +24,8 @@ public partial class StreakFreezeAutoActivationService(
     ILogger<StreakFreezeAutoActivationService> logger,
     IConfiguration configuration) : BackgroundService
 {
+    private const int MaxTimeZoneSkewDays = 1;
+
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:StreakFreezeIntervalMinutes", 60));
 
@@ -54,7 +56,7 @@ public partial class StreakFreezeAutoActivationService(
         }
     }
 
-    private async Task ActivateMissedDayFreezes(CancellationToken ct)
+    internal async Task ActivateMissedDayFreezes(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
@@ -72,7 +74,8 @@ public partial class StreakFreezeAutoActivationService(
 
         var candidateIds = candidates.Select(u => u.Id).ToList();
 
-        var monthFloor = utcYesterday.AddDays(-1).AddMonths(-1);
+        var earliestMissed = utcYesterday.AddDays(-MaxTimeZoneSkewDays);
+        var monthFloor = new DateOnly(earliestMissed.Year, earliestMissed.Month, 1);
         var freezesByUser = (await dbContext.StreakFreezes
             .Where(f => candidateIds.Contains(f.UserId) && f.UsedOnDate >= monthFloor)
             .ToListAsync(ct))
@@ -87,14 +90,8 @@ public partial class StreakFreezeAutoActivationService(
 
         var completionsByUser = await LoadRecentCompletionsAsync(dbContext, candidateIds, monthFloor, ct);
 
-        var anyChanges = false;
         foreach (var user in candidates)
-        {
-            anyChanges |= await ProcessUserAsync(user, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
-        }
-
-        if (anyChanges)
-            await dbContext.SaveChangesAsync(ct);
+            await ProcessUserAsync(user, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
     }
 
     private static async Task<Dictionary<Guid, HashSet<DateOnly>>> LoadRecentCompletionsAsync(
@@ -128,7 +125,7 @@ public partial class StreakFreezeAutoActivationService(
         return completions;
     }
 
-    private async Task<bool> ProcessUserAsync(
+    private async Task ProcessUserAsync(
         User user,
         Dictionary<Guid, List<StreakFreeze>> freezesByUser,
         Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
@@ -137,45 +134,73 @@ public partial class StreakFreezeAutoActivationService(
         OrbitDbContext dbContext,
         CancellationToken ct)
     {
-        if (!user.HasProAccess) return false;
+        if (!user.HasProAccess) return;
 
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
         var missedDate = userToday.AddDays(-1);
 
-        if (user.LastActiveDate is null || user.LastActiveDate >= missedDate) return false;
+        if (user.LastActiveDate is null || user.LastActiveDate >= missedDate) return;
 
         var existingFreezes = freezesByUser.GetValueOrDefault(user.Id) ?? [];
-        if (existingFreezes.Any(f => f.UsedOnDate == missedDate)) return false;
+        if (existingFreezes.Any(f => f.UsedOnDate == missedDate)) return;
 
         var guardedDates = guardedByUser.GetValueOrDefault(user.Id) ?? [];
-        if (guardedDates.Contains(missedDate)) return false;
+        if (guardedDates.Contains(missedDate)) return;
 
         var completions = completionsByUser.GetValueOrDefault(user.Id) ?? [];
-        if (completions.Contains(missedDate)) return false;
+        if (completions.Contains(missedDate)) return;
 
         var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
         var monthEnd = monthStart.AddMonths(1);
         var freezesThisMonth = existingFreezes.Count(f => f.UsedOnDate >= monthStart && f.UsedOnDate < monthEnd);
-        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth) return false;
+        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth) return;
 
         var consume = user.ConsumeStreakFreeze();
-        if (consume.IsFailure) return false;
+        if (consume.IsFailure) return;
 
-        var freeze = StreakFreeze.Create(user.Id, missedDate);
-        dbContext.StreakFreezes.Add(freeze);
-        existingFreezes.Add(freeze);
-        freezesByUser[user.Id] = existingFreezes;
-
+        dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
         dbContext.SentStreakFreezeAlerts.Add(SentStreakFreezeAlert.Create(user.Id, missedDate));
 
         var (title, body) = BuildNotification(user.CurrentStreak, user.Language ?? "en");
         dbContext.Notifications.Add(Notification.Create(user.Id, title, body, StreakUrl));
+
+        if (!await TrySaveUserFreezeAsync(user.Id, dbContext, ct))
+            return;
+
         await pushService.SendToUserAsync(user.Id, title, body, StreakUrl, ct);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogFreezeActivated(logger, user.Id, missedDate);
-        return true;
+    }
+
+    private async Task<bool> TrySaveUserFreezeAsync(Guid userId, OrbitDbContext dbContext, CancellationToken ct)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        {
+            DiscardPendingChanges(dbContext);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFreezeAlreadyActivated(logger, userId);
+            return false;
+        }
+    }
+
+    private static void DiscardPendingChanges(OrbitDbContext dbContext)
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries().ToList())
+        {
+            entry.State = entry.State switch
+            {
+                EntityState.Added => EntityState.Detached,
+                EntityState.Modified or EntityState.Deleted => EntityState.Unchanged,
+                _ => entry.State
+            };
+        }
     }
 
     private const string StreakUrl = "/streak";
@@ -199,4 +224,7 @@ public partial class StreakFreezeAutoActivationService(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Auto-activated streak freeze for user {UserId} on {FrozenDate}")]
     private static partial void LogFreezeActivated(ILogger logger, Guid userId, DateOnly frozenDate);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Streak freeze already activated for user {UserId}; skipping")]
+    private static partial void LogFreezeAlreadyActivated(ILogger logger, Guid userId);
 }

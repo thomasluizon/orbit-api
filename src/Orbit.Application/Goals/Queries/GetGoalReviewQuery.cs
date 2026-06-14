@@ -34,10 +34,13 @@ public class GetGoalReviewQueryHandler(
         if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
             return Result.Success(new GoalReviewResponse(cached, FromCache: true));
 
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
+
         var goals = await goalRepository.FindAsync(
             g => g.UserId == request.UserId && g.Status == GoalStatus.Active,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
 
         var goalList = goals.ToList();
@@ -45,7 +48,8 @@ public class GetGoalReviewQueryHandler(
         if (goalList.Count == 0)
             return Result.Failure<GoalReviewResponse>(ErrorMessages.NoActiveGoals);
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        foreach (var goal in goalList)
+            GoalStreakSyncService.ApplyReadValue(goal, userToday);
 
         var goalsContext = BuildGoalsContext(goalList, userToday);
 

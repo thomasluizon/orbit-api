@@ -322,6 +322,47 @@ public static class AgentScopes
     public const string ManageAccount = "manage_account";
     public const string ManageAuth = "manage_auth";
 
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ChatInteract,
+        CatalogRead,
+        ReadConfig,
+        ReadHabits,
+        WriteHabits,
+        DeleteHabits,
+        ReadGoals,
+        WriteGoals,
+        DeleteGoals,
+        ReadTags,
+        WriteTags,
+        DeleteTags,
+        ReadProfileBasic,
+        ReadProfileSensitive,
+        WriteProfilePreferences,
+        WriteAiSettings,
+        ReadNotifications,
+        WriteNotifications,
+        DeleteNotifications,
+        ReadCalendar,
+        ManageCalendarSync,
+        ReadGamification,
+        ReadChecklistTemplates,
+        WriteChecklistTemplates,
+        ReadUserFacts,
+        DeleteUserFacts,
+        ReadReferrals,
+        WriteReferrals,
+        ReadSubscriptions,
+        ManageSubscriptions,
+        ReadApiKeys,
+        ManageApiKeys,
+        WriteSupport,
+        ReadSync,
+        WriteSync,
+        ManageAccount,
+        ManageAuth
+    };
+
     public static readonly IReadOnlyList<string> ClaudeDefaultScopes =
     [
         ChatInteract,

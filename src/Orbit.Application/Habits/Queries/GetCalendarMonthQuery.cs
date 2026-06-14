@@ -23,6 +23,7 @@ public record GetCalendarMonthQuery(
 /// </summary>
 internal record CalendarMapContext(
     ILookup<Guid?, Habit> ChildLookup,
+    int WeekStartDay,
     DateOnly? DateFrom = null,
     DateOnly? DateTo = null,
     DateOnly? ReferenceDate = null,
@@ -36,6 +37,7 @@ public class GetCalendarMonthQueryHandler(
     public async Task<Result<CalendarMonthResponse>> Handle(GetCalendarMonthQuery request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
 
         await HabitScheduleService.AdvanceStaleBadHabitDueDates(habitRepository, unitOfWork, request.UserId, today, cancellationToken);
 
@@ -46,7 +48,7 @@ public class GetCalendarMonthQueryHandler(
             .ThenBy(h => h.CreatedAtUtc)
             .ToList();
 
-        var ctx = new CalendarMapContext(lookup, request.DateFrom, request.DateTo, request.DateFrom, today);
+        var ctx = new CalendarMapContext(lookup, weekStartDay, request.DateFrom, request.DateTo, request.DateFrom, today);
         var habitItems = BuildScheduleItems(topLevel, request.DateFrom, request.DateTo, lookup, ctx);
         var logsDict = BuildLogsDict(allHabits, request.DateFrom, request.DateTo);
 
@@ -74,7 +76,7 @@ public class GetCalendarMonthQueryHandler(
         var habitItems = new List<HabitScheduleItem>();
         foreach (var habit in topLevel)
         {
-            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs))
+            if (habit.IsFlexible && !HabitScheduleService.IsFlexibleHabitDueOnDate(habit, dateFrom, habit.Logs, ctx.WeekStartDay))
                 continue;
 
             var scheduledDates = HabitScheduleService.GetScheduledDates(habit, dateFrom, dateTo);
@@ -156,7 +158,7 @@ public class GetCalendarMonthQueryHandler(
         var isLoggedInRange = ctx.DateFrom.HasValue && ctx.DateTo.HasValue &&
             habit.Logs.Any(l => l.Date >= ctx.DateFrom.Value && l.Date <= ctx.DateTo.Value && l.Value > 0);
 
-        var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(habit, ctx.ReferenceDate);
+        var (flexibleTarget, flexibleCompleted) = CalculateFlexibleProgress(habit, ctx.ReferenceDate, ctx.WeekStartDay);
 
         return new HabitScheduleItem(
             habit.Id, habit.Title, habit.Description,
@@ -175,15 +177,15 @@ public class GetCalendarMonthQueryHandler(
     }
 
     private static (int? Target, int? Completed) CalculateFlexibleProgress(
-        Habit habit, DateOnly? referenceDate)
+        Habit habit, DateOnly? referenceDate, int weekStartDay)
     {
         if (!habit.IsFlexible || !referenceDate.HasValue)
             return (null, null);
 
         var totalTarget = habit.FrequencyQuantity ?? 1;
-        var skipped = HabitScheduleService.GetSkippedInWindow(habit, referenceDate.Value, habit.Logs);
+        var skipped = HabitScheduleService.GetSkippedInWindow(habit, referenceDate.Value, habit.Logs, weekStartDay);
         var target = Math.Max(0, totalTarget - skipped);
-        var completed = HabitScheduleService.GetCompletedInWindow(habit, referenceDate.Value, habit.Logs);
+        var completed = HabitScheduleService.GetCompletedInWindow(habit, referenceDate.Value, habit.Logs, weekStartDay);
         return (target, completed);
     }
 
@@ -208,7 +210,7 @@ public class GetCalendarMonthQueryHandler(
         if (child.IsFlexible && ctx.DateFrom.HasValue)
         {
             flexTarget = child.FrequencyQuantity;
-            flexCompleted = HabitScheduleService.GetCompletedInWindow(child, ctx.DateFrom.Value, child.Logs);
+            flexCompleted = HabitScheduleService.GetCompletedInWindow(child, ctx.DateFrom.Value, child.Logs, ctx.WeekStartDay);
         }
 
         var instances = (ctx.DateFrom.HasValue && ctx.DateTo.HasValue && ctx.UserToday.HasValue)

@@ -102,6 +102,34 @@ public class CreateSubHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ForeignTagId_ReturnsFailureWithoutCreating()
+    {
+        var parent = CreateParentHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(parent);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Tag>());
+
+        var command = new CreateSubHabitCommand(
+            UserId, parent.Id, "Child Task", null,
+            TagIds: new List<Guid> { Guid.NewGuid() });
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.TagNotFound);
+        await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ExceedsMaxDepth_ReturnsFailure()
     {
         _appConfigService.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>())

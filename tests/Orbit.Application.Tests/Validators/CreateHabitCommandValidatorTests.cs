@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentValidation.TestHelper;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Enums;
@@ -119,6 +120,80 @@ public class CreateHabitCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_DaysWithNonDayUnit_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = FrequencyUnit.Week,
+            FrequencyQuantity = 1,
+            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
+    }
+
+    [Fact]
+    public void Validate_DaysWhenFlexible_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = FrequencyUnit.Week,
+            FrequencyQuantity = 1,
+            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday }, IsFlexible: true)
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.Days : null);
+    }
+
+    [Fact]
+    public void Validate_OneTimeTaskWithEndDate_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = null,
+            FrequencyQuantity = null,
+            Options = new HabitCommandOptions(EndDate: new DateOnly(2030, 1, 1))
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
+    }
+
+    [Fact]
+    public void Validate_RecurringTaskWithEndDate_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(EndDate: new DateOnly(2030, 1, 1))
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
+    }
+
+    [Fact]
+    public void Validate_GeneralHabitWithEndDate_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            FrequencyUnit = null,
+            FrequencyQuantity = null,
+            IsGeneral = true,
+            Options = new HabitCommandOptions(EndDate: new DateOnly(2030, 1, 1))
+        };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.EndDate : null);
+    }
+
+    [Fact]
     public void Validate_Over20SubHabits_HasError()
     {
         var subHabits = Enumerable.Range(0, 21).Select(i => $"Sub {i}").ToList();
@@ -221,5 +296,66 @@ public class CreateHabitCommandValidatorTests
 
         var result = _validator.TestValidate(command);
         result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.ScheduledReminders : null);
+    }
+
+    [Fact]
+    public void Validate_ValidReminderTimes_NoError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(ReminderTimes: new[] { 0, 15, 60, 1440 })
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldNotHaveValidationErrorFor(x => x.Options != null ? x.Options.ReminderTimes : null);
+    }
+
+    [Fact]
+    public void Validate_ReminderTimes_Duplicates_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(ReminderTimes: new[] { 15, 15 })
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ReminderTimes : null);
+    }
+
+    [Fact]
+    public void Validate_ReminderTimes_Negative_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(ReminderTimes: new[] { -1 })
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ReminderTimes : null);
+    }
+
+    [Fact]
+    public void Validate_ReminderTimes_OverMax_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(ReminderTimes: new[] { AppConstants.MaxReminderMinutesBefore + 1 })
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ReminderTimes : null);
+    }
+
+    [Fact]
+    public void Validate_ReminderTimes_OverCountCap_HasError()
+    {
+        var command = ValidCommand() with
+        {
+            Options = new HabitCommandOptions(
+                ReminderTimes: Enumerable.Range(0, AppConstants.MaxReminderTimes + 1).ToList())
+        };
+
+        var result = _validator.TestValidate(command);
+        result.ShouldHaveValidationErrorFor(x => x.Options != null ? x.Options.ReminderTimes : null);
     }
 }

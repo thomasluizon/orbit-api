@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Application.UserFacts.Commands;
 using Orbit.Application.UserFacts.Queries;
-using Orbit.Domain.Common;
 
 #pragma warning disable CA1873
 
@@ -37,13 +36,10 @@ public partial class UserFactsController(IMediator mediator, ILogger<UserFactsCo
         var command = new DeleteUserFactCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
 
-        if (result.IsFailure && result.ErrorCode == Result.PayGateErrorCode)
-            return result.ToPayGateAwareResult(() => NoContent());
-
         if (result.IsSuccess)
             LogUserFactDeleted(logger, id, HttpContext.GetUserId());
 
-        return result.ToPayGateAwareResult(() => NoContent(), StatusCodes.Status404NotFound);
+        return result.ToPayGateAwareResult(() => NoContent());
     }
 
     [HttpDelete("bulk")]

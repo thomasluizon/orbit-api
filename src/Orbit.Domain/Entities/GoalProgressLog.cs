@@ -2,7 +2,7 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
-public class GoalProgressLog : Entity, ITimestamped
+public class GoalProgressLog : Entity, ITimestamped, ISoftDeletable
 {
     public Guid GoalId { get; private set; }
     public decimal Value { get; private set; }
@@ -10,6 +10,8 @@ public class GoalProgressLog : Entity, ITimestamped
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public string? Note { get; private set; }
+    public bool IsDeleted { get; private set; }
+    public DateTime? DeletedAtUtc { get; private set; }
 
     private GoalProgressLog() { }
 
@@ -24,5 +26,12 @@ public class GoalProgressLog : Entity, ITimestamped
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow
         };
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTime.UtcNow;
+        UpdatedAtUtc = DateTime.UtcNow;
     }
 }
