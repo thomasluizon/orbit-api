@@ -116,6 +116,24 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         return new EmptyResult();
     }
 
+    [HttpPost("transcribe")]
+    [RequestSizeLimit(AppConstants.MaxAudioBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = AppConstants.MaxAudioBytes)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Transcribe(IFormFile? audio, CancellationToken cancellationToken)
+    {
+        if (audio is null || audio.Length == 0)
+            return BadRequest(ErrorMessages.AudioRequired.ToErrorBody());
+
+        using var ms = new MemoryStream();
+        await audio.CopyToAsync(ms, cancellationToken);
+
+        var result = await mediator.Send(new TranscribeAudioCommand(ms.ToArray(), audio.FileName), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
+    }
+
     private async Task StartEventStreamAsync(CancellationToken cancellationToken)
     {
         Response.ContentType = "text/event-stream";

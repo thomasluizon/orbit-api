@@ -45,6 +45,7 @@ public static class AppConstants
     public const int MaxChatHistoryLength = 50_000;
     public const int MaxChatHistoryMessages = 40;
     public const int MaxChatHistoryMessageLength = 4000;
+    public const long MaxAudioBytes = 26_214_400;
     public const int MaxAiToolResultTextLength = 12_000;
     public const int MaxCalendarRangeDays = 62;
     public const int MaxPageSize = 200;

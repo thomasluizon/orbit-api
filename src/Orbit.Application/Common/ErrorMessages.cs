@@ -107,6 +107,9 @@ public static class ErrorMessages
     public static readonly AppError ImageExtensionNotAllowed = new(ErrorCodes.ImageExtensionNotAllowed, "File extension '{0}' is not allowed. Allowed: {1}.");
     public static readonly AppError ImageFormatUnknown = new(ErrorCodes.ImageFormatUnknown, "Unable to determine file format from magic bytes.");
     public static readonly AppError ImageNotAnImage = new(ErrorCodes.ImageNotAnImage, "File is not a recognized image format. Detected: {0}");
+    public static readonly AppError AudioRequired = new(ErrorCodes.AudioRequired, "Audio file is required.");
+    public static readonly AppError AudioTranscriptionFailed = new(ErrorCodes.AudioTranscriptionFailed, "Could not transcribe the audio. Please try again.");
+    public static readonly AppError AudioTranscriptionEmpty = new(ErrorCodes.AudioTranscriptionEmpty, "No speech was detected in the recording.");
     public static readonly AppError ConcurrentUpdateConflict = new(ErrorCodes.ConcurrentUpdateConflict, "This was changed at the same time by another request. Please try again.");
     public static readonly AppError UnexpectedServerError = new(ErrorCodes.InternalServerError, "Unexpected server error");
     public static readonly AppError TooManyRequests = new(ErrorCodes.RateLimited, "Too many requests");

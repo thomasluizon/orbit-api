@@ -106,4 +106,7 @@ public static class ErrorCodes
     public const string NoMutations = "NO_MUTATIONS";
     public const string TooManyMutations = "TOO_MANY_MUTATIONS";
     public const string MutationFailed = "MUTATION_FAILED";
+    public const string AudioRequired = "AUDIO_REQUIRED";
+    public const string AudioTranscriptionFailed = "AUDIO_TRANSCRIPTION_FAILED";
+    public const string AudioTranscriptionEmpty = "AUDIO_TRANSCRIPTION_EMPTY";
 }
