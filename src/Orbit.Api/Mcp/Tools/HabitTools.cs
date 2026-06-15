@@ -538,7 +538,11 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
             return $"Error: {result.Error}";
 
         var r = result.Value;
-        return $"Retrospective ({period}){(r.FromCache ? " (cached)" : "")}:\n{r.Retrospective}";
+        var n = r.Narrative;
+        var narrativeText = string.Join(
+            "\n\n",
+            new[] { n.Highlights, n.Missed, n.Trends, n.Suggestion }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        return $"Retrospective ({period}){(r.FromCache ? " (cached)" : "")}:\n{narrativeText}";
     }
 
     private static Guid GetUserId(ClaimsPrincipal user)

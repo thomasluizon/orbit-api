@@ -29,6 +29,9 @@ public class HabitToolsTests
         _user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
     }
 
+    private static RetrospectiveMetrics EmptyMetrics() =>
+        new(0, 0, 0, 0, 0, 0, 0, 0, new int[7], [], []);
+
     private void StubExecutor(AgentOperationStatus status, string? targetId = null, string? targetName = null,
         string? policyReason = null, object? payload = null, Guid? pendingOperationId = null)
     {
@@ -602,7 +605,11 @@ public class HabitToolsTests
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new DateOnly(2026, 4, 3));
 
-        var response = new RetrospectiveResponse("Great week!", false);
+        var response = new RetrospectiveResponse(
+            "week",
+            EmptyMetrics(),
+            new RetrospectiveNarrative("Great week!", "", "", ""),
+            FromCache: false);
         _mediator.Send(Arg.Any<GetRetrospectiveQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
