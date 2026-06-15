@@ -23,13 +23,6 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 {
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-    private const long MaxAudioBytes = 26_214_400;
-
-    private static readonly HashSet<string> AllowedAudioExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".webm", ".m4a", ".mp4", ".mp3", ".wav", ".ogg", ".oga", ".mpeg", ".mpga", ".flac"
-    };
-
     [HttpPost]
     [RequestSizeLimit(10_485_760)]    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)]    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -124,34 +117,21 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     }
 
     [HttpPost("transcribe")]
-    [RequestSizeLimit(MaxAudioBytes)]
-    [RequestFormLimits(MultipartBodyLengthLimit = MaxAudioBytes)]
+    [RequestSizeLimit(AppConstants.MaxAudioBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = AppConstants.MaxAudioBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Transcribe(IFormFile? audio, CancellationToken cancellationToken)
     {
-        var validationError = ValidateAudio(audio);
-        if (validationError is not null)
-            return validationError;
+        if (audio is null || audio.Length == 0)
+            return BadRequest(ErrorMessages.AudioRequired.ToErrorBody());
 
         using var ms = new MemoryStream();
-        await audio!.CopyToAsync(ms, cancellationToken);
+        await audio.CopyToAsync(ms, cancellationToken);
 
         var result = await mediator.Send(new TranscribeAudioCommand(ms.ToArray(), audio.FileName), cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : result.ToErrorResult();
-    }
-
-    private static IActionResult? ValidateAudio(IFormFile? audio)
-    {
-        if (audio is null || audio.Length == 0)
-            return new BadRequestObjectResult(ErrorMessages.AudioRequired.ToErrorBody());
-        if (audio.Length > MaxAudioBytes)
-            return new BadRequestObjectResult(ErrorMessages.AudioTooLarge.Format(MaxAudioBytes / (1024 * 1024)).ToErrorBody());
-        var ext = Path.GetExtension(audio.FileName);
-        if (string.IsNullOrWhiteSpace(ext) || !AllowedAudioExtensions.Contains(ext))
-            return new BadRequestObjectResult(ErrorMessages.AudioFormatNotAllowed.Format(ext).ToErrorBody());
-        return null;
     }
 
     private async Task StartEventStreamAsync(CancellationToken cancellationToken)

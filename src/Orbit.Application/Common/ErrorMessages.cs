@@ -108,8 +108,6 @@ public static class ErrorMessages
     public static readonly AppError ImageFormatUnknown = new(ErrorCodes.ImageFormatUnknown, "Unable to determine file format from magic bytes.");
     public static readonly AppError ImageNotAnImage = new(ErrorCodes.ImageNotAnImage, "File is not a recognized image format. Detected: {0}");
     public static readonly AppError AudioRequired = new(ErrorCodes.AudioRequired, "Audio file is required.");
-    public static readonly AppError AudioTooLarge = new(ErrorCodes.AudioTooLarge, "Audio exceeds the maximum size of {0}MB.");
-    public static readonly AppError AudioFormatNotAllowed = new(ErrorCodes.AudioFormatNotAllowed, "Audio format '{0}' is not supported.");
     public static readonly AppError AudioTranscriptionFailed = new(ErrorCodes.AudioTranscriptionFailed, "Could not transcribe the audio. Please try again.");
     public static readonly AppError AudioTranscriptionEmpty = new(ErrorCodes.AudioTranscriptionEmpty, "No speech was detected in the recording.");
     public static readonly AppError ConcurrentUpdateConflict = new(ErrorCodes.ConcurrentUpdateConflict, "This was changed at the same time by another request. Please try again.");
