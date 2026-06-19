@@ -594,7 +594,7 @@ public static class ServiceCollectionExtensions
 
         if (sentryEvent.Request is { } request)
         {
-            request.Headers.Clear();
+            request.Headers?.Clear();
             request.Cookies = null;
             request.Data = null;
         }
