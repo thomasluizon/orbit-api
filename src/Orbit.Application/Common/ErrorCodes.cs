@@ -109,4 +109,5 @@ public static class ErrorCodes
     public const string AudioRequired = "AUDIO_REQUIRED";
     public const string AudioTranscriptionFailed = "AUDIO_TRANSCRIPTION_FAILED";
     public const string AudioTranscriptionEmpty = "AUDIO_TRANSCRIPTION_EMPTY";
+    public const string UpgradeRequired = "UPGRADE_REQUIRED";
 }

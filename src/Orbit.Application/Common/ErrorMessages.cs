@@ -118,4 +118,5 @@ public static class ErrorMessages
     public static readonly AppError TooManyMutations = new(ErrorCodes.TooManyMutations, "Maximum {0} mutations per batch.");
     public static readonly AppError MutationFailed = new(ErrorCodes.MutationFailed, "Mutation failed");
     public static readonly AppError BulkLogItemFailed = new(ErrorCodes.MutationFailed, "An error occurred processing this item");
+    public static readonly AppError UpgradeRequired = new(ErrorCodes.UpgradeRequired, "This app version is no longer supported. Please update to continue.");
 }

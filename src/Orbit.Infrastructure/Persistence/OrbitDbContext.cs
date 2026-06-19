@@ -355,7 +355,8 @@ public class OrbitDbContext : DbContext
                 AppConfig.Create("MaxHabitDepth", "5", "Maximum nesting depth for sub-habits"),
                 AppConfig.Create("MaxTagsPerHabit", "5", "Maximum number of tags per habit"),
                 AppConfig.Create("ReferralRewardDays", "10", "Days of Pro added per successful referral"),
-                AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"));
+                AppConfig.Create("MaxReferrals", "10", "Maximum successful referrals per user"),
+                AppConfig.Create("MinSupportedVersion", "0.0.0", "Minimum supported client app version; clients below this receive HTTP 426"));
         });
     }
 
