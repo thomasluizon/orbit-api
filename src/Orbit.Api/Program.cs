@@ -10,7 +10,8 @@ builder
     .AddOrbitAuthentication()
     .AddOrbitAiServices()
     .AddOrbitInfrastructure()
-    .AddOrbitRateLimiting();
+    .AddOrbitRateLimiting()
+    .AddOrbitObservability();
 
 var app = builder.Build();
 
