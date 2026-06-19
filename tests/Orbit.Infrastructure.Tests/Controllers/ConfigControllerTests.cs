@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Controllers;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
@@ -54,5 +55,24 @@ public class ConfigControllerTests : IDisposable
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.Value.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetConfig_ExposesMinVersionFromConfigService()
+    {
+        _configService.GetAllAsync(Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, string>());
+        _configService
+            .GetAsync(AppConfigKeys.MinSupportedVersion, "0.0.0", Arg.Any<CancellationToken>())
+            .Returns("1.4.2");
+
+        var result = await _controller.GetConfig(CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        var minVersion = okResult.Value!
+            .GetType()
+            .GetProperty("minVersion")!
+            .GetValue(okResult.Value);
+        minVersion.Should().Be("1.4.2");
     }
 }

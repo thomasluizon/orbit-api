@@ -29,12 +29,16 @@ public partial class ConfigController(
 
         var features = featureFlags.ToDictionary(f => f.Key, f => new { f.Enabled, f.PlanRequirement });
 
+        var minVersion = await configService.GetAsync(
+            Orbit.Application.Common.AppConfigKeys.MinSupportedVersion, "0.0.0", cancellationToken);
+
         LogConfigFetched(logger);
         return Ok(new
         {
             limits,
             features,
-            settings = new { syncIntervalSeconds = 300, syncMaxBatchSize = 100 }
+            settings = new { syncIntervalSeconds = 300, syncMaxBatchSize = 100 },
+            minVersion
         });
     }
 

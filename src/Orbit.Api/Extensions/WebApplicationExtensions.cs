@@ -36,6 +36,8 @@ public static partial class WebApplicationExtensions
         app.UseCors();
         app.UseCookiePolicy();
 
+        app.UseMiddleware<Orbit.Api.Middleware.MinimumVersionMiddleware>();
+
         app.UseMcpSelectiveAuth();
 
         app.UseAuthentication();
