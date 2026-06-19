@@ -2,8 +2,10 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Api.Middleware;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Middleware;
 
@@ -55,7 +57,9 @@ public class RequestObservabilityMiddlewareTests
     [Fact]
     public async Task UnhandledExceptionHandler_ReturnsStructured500WithRequestId()
     {
-        var handler = new UnhandledExceptionHandler(NullLogger<UnhandledExceptionHandler>.Instance);
+        var handler = new UnhandledExceptionHandler(
+            NullLogger<UnhandledExceptionHandler>.Instance,
+            Substitute.For<IAlertNotifier>());
         var httpContext = new DefaultHttpContext();
         httpContext.TraceIdentifier = "req_server_123";
         httpContext.Request.Method = HttpMethods.Post;

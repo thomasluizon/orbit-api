@@ -1,23 +1,41 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Orbit.Api.Extensions;
+using Orbit.Domain.Interfaces;
+using Sentry;
 
 namespace Orbit.Api.Middleware;
 
-internal sealed partial class UnhandledExceptionHandler(ILogger<UnhandledExceptionHandler> logger) : IExceptionHandler
+internal sealed partial class UnhandledExceptionHandler(
+    ILogger<UnhandledExceptionHandler> logger,
+    IAlertNotifier alertNotifier) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,
         CancellationToken cancellationToken)
     {
-        LogUnhandledException(
-            logger,
-            httpContext.Request.Method,
-            httpContext.Request.Path,
-            httpContext.GetRequestId(),
-            httpContext.GetClientIpAddress(),
-            ResolveUserId(httpContext),
-            exception);
+        var requestId = httpContext.GetRequestId();
+        var method = httpContext.Request.Method;
+        var path = httpContext.Request.Path.ToString();
+        var clientIp = httpContext.GetClientIpAddress();
+        var userId = ResolveUserId(httpContext);
+
+        LogUnhandledException(logger, method, path, requestId, clientIp, userId, exception);
+
+        SentrySdk.CaptureException(exception);
+
+        _ = alertNotifier.SendCriticalAsync(
+            $"{exception.GetType().Name}: {exception.Message}",
+            $"{method} {path}",
+            new Dictionary<string, string?>
+            {
+                ["Method"] = method,
+                ["Path"] = path,
+                ["RequestId"] = requestId,
+                ["ClientIp"] = clientIp,
+                ["UserId"] = userId,
+            },
+            CancellationToken.None);
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
         httpContext.Response.ContentType = "application/json";

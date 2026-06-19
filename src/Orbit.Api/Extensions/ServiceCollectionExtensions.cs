@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Sentry;
+using Sentry.AspNetCore;
 using Orbit.Api.Authentication;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
@@ -553,6 +555,51 @@ public static class ServiceCollectionExtensions
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
 
         return builder;
+    }
+
+    public static WebApplicationBuilder AddOrbitObservability(this WebApplicationBuilder builder)
+    {
+        builder.Services.Configure<SentrySettings>(
+            builder.Configuration.GetSection(SentrySettings.SectionName));
+        builder.Services.Configure<DiscordAlertSettings>(
+            builder.Configuration.GetSection(DiscordAlertSettings.SectionName));
+
+        var httpTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
+        builder.Services.AddHttpClient("Discord", client => client.Timeout = httpTimeout);
+        builder.Services.AddSingleton<IAlertNotifier, DiscordAlertNotifier>();
+
+        var sentrySettings = builder.Configuration.GetSection(SentrySettings.SectionName).Get<SentrySettings>()
+            ?? new SentrySettings();
+
+        builder.WebHost.UseSentry(options =>
+        {
+            options.Dsn = sentrySettings.Dsn;
+            options.Environment = sentrySettings.Environment;
+            options.TracesSampleRate = sentrySettings.TracesSampleRate;
+            options.SendDefaultPii = false;
+            options.SetBeforeSend(ScrubSensitiveData);
+        });
+
+        return builder;
+    }
+
+    private static SentryEvent ScrubSensitiveData(SentryEvent sentryEvent, SentryHint hint)
+    {
+        if (sentryEvent.User is { } user)
+        {
+            user.Email = null;
+            user.Username = null;
+            user.IpAddress = null;
+        }
+
+        if (sentryEvent.Request is { } request)
+        {
+            request.Headers?.Clear();
+            request.Cookies = null;
+            request.Data = null;
+        }
+
+        return sentryEvent;
     }
 
     private static void InitializeFirebase(ConfigurationManager configuration)
