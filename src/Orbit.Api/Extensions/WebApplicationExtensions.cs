@@ -25,7 +25,6 @@ public static partial class WebApplicationExtensions
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
         app.UseForwardedHeaders(BuildForwardedHeadersOptions(app));
         app.UseMiddleware<Orbit.Api.Middleware.RequestCorrelationMiddleware>();
-        app.UseMiddleware<Orbit.Api.Middleware.MinimumVersionMiddleware>();
 
         if (app.Environment.IsDevelopment())
         {
@@ -36,6 +35,8 @@ public static partial class WebApplicationExtensions
         app.UseExceptionHandler();
         app.UseCors();
         app.UseCookiePolicy();
+
+        app.UseMiddleware<Orbit.Api.Middleware.MinimumVersionMiddleware>();
 
         app.UseMcpSelectiveAuth();
 
