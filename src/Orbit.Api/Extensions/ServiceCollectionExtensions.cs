@@ -561,12 +561,6 @@ public static class ServiceCollectionExtensions
     {
         builder.Services.Configure<SentrySettings>(
             builder.Configuration.GetSection(SentrySettings.SectionName));
-        builder.Services.Configure<DiscordAlertSettings>(
-            builder.Configuration.GetSection(DiscordAlertSettings.SectionName));
-
-        var httpTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
-        builder.Services.AddHttpClient("Discord", client => client.Timeout = httpTimeout);
-        builder.Services.AddSingleton<IAlertNotifier, DiscordAlertNotifier>();
 
         var sentrySettings = builder.Configuration.GetSection(SentrySettings.SectionName).Get<SentrySettings>()
             ?? new SentrySettings();
