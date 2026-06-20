@@ -1,13 +1,11 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Orbit.Api.Extensions;
-using Orbit.Domain.Interfaces;
 using Sentry;
 
 namespace Orbit.Api.Middleware;
 
 internal sealed partial class UnhandledExceptionHandler(
-    ILogger<UnhandledExceptionHandler> logger,
-    IAlertNotifier alertNotifier) : IExceptionHandler
+    ILogger<UnhandledExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
@@ -23,19 +21,6 @@ internal sealed partial class UnhandledExceptionHandler(
         LogUnhandledException(logger, method, path, requestId, clientIp, userId, exception);
 
         SentrySdk.CaptureException(exception);
-
-        _ = alertNotifier.SendCriticalAsync(
-            $"{exception.GetType().Name}: {exception.Message}",
-            $"{method} {path}",
-            new Dictionary<string, string?>
-            {
-                ["Method"] = method,
-                ["Path"] = path,
-                ["RequestId"] = requestId,
-                ["ClientIp"] = clientIp,
-                ["UserId"] = userId,
-            },
-            CancellationToken.None);
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
         httpContext.Response.ContentType = "application/json";

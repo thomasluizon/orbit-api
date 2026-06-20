@@ -93,7 +93,7 @@ public partial class GoalDeadlineNotificationService(
 
     private async Task<Dictionary<Guid, int>> ComputeFreshStreakValuesAsync(OrbitDbContext dbContext, CancellationToken ct)
     {
-        var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays);
+        var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays - 1);
         var streakGoals = await dbContext.Goals
             .AsNoTracking()
             .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active && g.Deadline != null && !g.IsDeleted)
