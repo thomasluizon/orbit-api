@@ -28,6 +28,11 @@ public partial class GamificationService(
 {
     private const int AchievementLogWindowDays = 400;
     private const int PerfectStreakWindowDays = 30;
+    private const int MaxConcurrencyAttempts = 3;
+
+    private sealed record PendingPush(Guid UserId, string Title, string Body);
+
+    private sealed record HabitsLoggedOutcome(IReadOnlyList<HabitLogGamificationResult> Results, bool ShouldSave);
 
     public async Task<HabitLogGamificationResult?> ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default)
     {
@@ -43,8 +48,35 @@ public partial class GamificationService(
     public async Task<IReadOnlyList<HabitLogGamificationResult>> ProcessHabitsLogged(
         Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken ct = default)
     {
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            var outcome = await ComputeHabitsLoggedAsync(userId, habitIds, pushes, ct);
+            if (!outcome.ShouldSave)
+                return outcome.Results;
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                continue;
+            }
+
+            await FlushPushesAsync(pushes, ct);
+            return outcome.Results;
+        }
+    }
+
+    private async Task<HabitsLoggedOutcome> ComputeHabitsLoggedAsync(
+        Guid userId, IReadOnlyList<Guid> habitIds, List<PendingPush> pushes, CancellationToken ct)
+    {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return [];
+        if (user is null || !user.HasProAccess) return new HabitsLoggedOutcome([], ShouldSave: false);
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
@@ -54,7 +86,7 @@ public partial class GamificationService(
             h => h.UserId == userId && habitIds.Contains(h.Id),
             q => q.Include(h => h.Logs.Where(l => l.Date >= streakLogCutoff)),
             ct);
-        if (loggedHabits.Count == 0) return [];
+        if (loggedHabits.Count == 0) return new HabitsLoggedOutcome([], ShouldSave: false);
 
         var context = await LoadLoggedHabitsContext(user, earned, today, ct);
 
@@ -64,12 +96,10 @@ public partial class GamificationService(
             var habit = loggedHabits.FirstOrDefault(h => h.Id == habitId);
             if (habit is null) continue;
 
-            results.Add(await ProcessLoggedHabit(user, habit, earned, context, today, ct));
+            results.Add(await ProcessLoggedHabit(user, habit, earned, context, today, pushes, ct));
         }
 
-        await unitOfWork.SaveChangesAsync(ct);
-
-        return results;
+        return new HabitsLoggedOutcome(results, ShouldSave: true);
     }
 
     private sealed record LoggedHabitsContext(
@@ -116,7 +146,8 @@ public partial class GamificationService(
     }
 
     private async Task<HabitLogGamificationResult> ProcessLoggedHabit(
-        User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today, CancellationToken ct)
+        User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
+        List<PendingPush> pushes, CancellationToken ct)
     {
         var previousLevel = user.Level;
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
@@ -157,12 +188,12 @@ public partial class GamificationService(
         UpdateLevel(user);
 
         foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(user.Id, definition, user.Language, ct);
+            await QueueAchievementNotification(user.Id, definition, user.Language, pushes, ct);
 
         if (user.Level > previousLevel)
         {
             var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(user.Id, newLevel, user.Language, ct);
+            await QueueLevelUpNotification(user.Id, newLevel, user.Language, pushes, ct);
         }
 
         return new HabitLogGamificationResult(
@@ -227,8 +258,38 @@ public partial class GamificationService(
         Func<User, HashSet<string>, List<(UserAchievement Entity, AchievementDefinition Definition)>, Task> checkAchievements,
         CancellationToken ct)
     {
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            var shouldSave = await ComputeGamificationEventAsync(userId, checkAchievements, pushes, ct);
+            if (!shouldSave)
+                return;
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                continue;
+            }
+
+            await FlushPushesAsync(pushes, ct);
+            return;
+        }
+    }
+
+    private async Task<bool> ComputeGamificationEventAsync(
+        Guid userId,
+        Func<User, HashSet<string>, List<(UserAchievement Entity, AchievementDefinition Definition)>, Task> checkAchievements,
+        List<PendingPush> pushes,
+        CancellationToken ct)
+    {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return;
+        if (user is null || !user.HasProAccess) return false;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
@@ -242,15 +303,15 @@ public partial class GamificationService(
         UpdateLevel(user);
 
         foreach (var (_, definition) in newAchievements)
-            await SendAchievementNotification(userId, definition, user.Language, ct);
+            await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
 
         if (user.Level > previousLevel)
         {
             var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            await SendLevelUpNotification(userId, newLevel, user.Language, ct);
+            await QueueLevelUpNotification(userId, newLevel, user.Language, pushes, ct);
         }
 
-        await unitOfWork.SaveChangesAsync(ct);
+        return true;
     }
 
     private async Task<HashSet<string>> LoadEarnedAchievementIds(Guid userId, CancellationToken ct)
@@ -457,7 +518,8 @@ public partial class GamificationService(
         [10] = "Lenda"
     };
 
-    private async Task SendAchievementNotification(Guid userId, AchievementDefinition achievement, string? language, CancellationToken ct)
+    private async Task QueueAchievementNotification(
+        Guid userId, AchievementDefinition achievement, string? language, List<PendingPush> pushes, CancellationToken ct)
     {
         var isPt = LocaleHelper.IsPortuguese(language);
         string name, description;
@@ -481,17 +543,11 @@ public partial class GamificationService(
         var notification = Notification.Create(userId, title, body);
         await repos.NotificationRepository.AddAsync(notification, ct);
 
-        try
-        {
-            await pushService.SendToUserAsync(userId, title, body, cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailedForAchievement(logger, ex, achievement.Id, userId);
-        }
+        pushes.Add(new PendingPush(userId, title, body));
     }
 
-    private async Task SendLevelUpNotification(Guid userId, LevelDefinition newLevel, string? language, CancellationToken ct)
+    private async Task QueueLevelUpNotification(
+        Guid userId, LevelDefinition newLevel, string? language, List<PendingPush> pushes, CancellationToken ct)
     {
         var isPt = LocaleHelper.IsPortuguese(language);
         var title = isPt
@@ -506,19 +562,24 @@ public partial class GamificationService(
         var notification = Notification.Create(userId, title, body);
         await repos.NotificationRepository.AddAsync(notification, ct);
 
-        try
+        pushes.Add(new PendingPush(userId, title, body));
+    }
+
+    private async Task FlushPushesAsync(IReadOnlyList<PendingPush> pushes, CancellationToken ct)
+    {
+        foreach (var push in pushes)
         {
-            await pushService.SendToUserAsync(userId, title, body, cancellationToken: ct);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailedForLevelUp(logger, ex, newLevel.Level, userId);
+            try
+            {
+                await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, cancellationToken: ct);
+            }
+            catch (Exception ex)
+            {
+                LogPushNotificationFailed(logger, ex, push.UserId);
+            }
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Push notification failed for achievement {AchievementId} for user {UserId}")]
-    private static partial void LogPushNotificationFailedForAchievement(ILogger logger, Exception ex, string achievementId, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Push notification failed for level up to level {Level} for user {UserId}")]
-    private static partial void LogPushNotificationFailedForLevelUp(ILogger logger, Exception ex, int level, Guid userId);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Push notification failed for user {UserId}")]
+    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

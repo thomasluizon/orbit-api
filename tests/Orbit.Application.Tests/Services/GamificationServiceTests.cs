@@ -1,6 +1,8 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Entities;
@@ -754,6 +756,59 @@ public class GamificationServiceTests
         await _pushService.Received(1).SendToUserAsync(
             UserId,
             Arg.Is<string>(s => s.Contains("Achievement Unlocked")),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessGoalCompleted_ConcurrencyConflictThenSuccess_RetriesAndSendsPushOnce()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        SetupCompletedGoalCount(1);
+
+        var saveAttempts = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                saveAttempts++;
+                return saveAttempts == 1
+                    ? throw new DbUpdateConcurrencyException("simulated stale token")
+                    : Task.FromResult(1);
+            });
+
+        await _sut.ProcessGoalCompleted(UserId);
+
+        saveAttempts.Should().Be(2);
+        _unitOfWork.Received(1).ResetTracking();
+        await _pushService.Received(1).SendToUserAsync(
+            UserId,
+            Arg.Is<string>(s => s.Contains("Achievement Unlocked")),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessGoalCompleted_PersistentConflict_PropagatesAndNeverPushes()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        SetupCompletedGoalCount(1);
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateConcurrencyException("simulated stale token"));
+
+        var act = async () => await _sut.ProcessGoalCompleted(UserId);
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        _unitOfWork.Received(2).ResetTracking();
+        await _pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
