@@ -55,6 +55,11 @@ public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisp
         }
     }
 
+    public void ResetTracking()
+    {
+        context.ChangeTracker.Clear();
+    }
+
     public void Dispose()
     {
         context.Dispose();

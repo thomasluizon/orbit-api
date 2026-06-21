@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -8,7 +9,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
-public record ConfirmAccountDeletionCommand(Guid UserId, string Code) : IRequest<Result<DateTime>>;
+public record ConfirmAccountDeletionCommand(Guid UserId, string Code) : IRequest<Result<DateTime>>, IConcurrencyRetryable;
 
 public class ConfirmAccountDeletionCommandHandler(
     IMemoryCache cache,

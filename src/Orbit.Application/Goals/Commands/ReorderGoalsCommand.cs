@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -10,7 +11,7 @@ public record GoalPositionUpdate(Guid GoalId, int Position);
 
 public record ReorderGoalsCommand(
     Guid UserId,
-    IReadOnlyList<GoalPositionUpdate> Positions) : IRequest<Result>;
+    IReadOnlyList<GoalPositionUpdate> Positions) : IRequest<Result>, IConcurrencyRetryable;
 
 public class ReorderGoalsCommandHandler(
     IGenericRepository<Goal> goalRepository,

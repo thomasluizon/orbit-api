@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -10,7 +11,7 @@ namespace Orbit.Application.Goals.Commands;
 public record LinkHabitsToGoalCommand(
     Guid UserId,
     Guid GoalId,
-    IReadOnlyList<Guid> HabitIds) : IRequest<Result>;
+    IReadOnlyList<Guid> HabitIds) : IRequest<Result>, IConcurrencyRetryable;
 
 public class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,

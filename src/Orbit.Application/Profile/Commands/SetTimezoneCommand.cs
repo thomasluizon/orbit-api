@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -6,7 +7,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Commands;
 
-public record SetTimezoneCommand(Guid UserId, string TimeZone) : IRequest<Result>;
+public record SetTimezoneCommand(Guid UserId, string TimeZone) : IRequest<Result>, IConcurrencyRetryable;
 
 public class SetTimezoneCommandHandler(
     IGenericRepository<User> userRepository,
