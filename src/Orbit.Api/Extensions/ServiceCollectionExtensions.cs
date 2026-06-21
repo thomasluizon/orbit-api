@@ -577,8 +577,11 @@ public static class ServiceCollectionExtensions
         return builder;
     }
 
-    private static SentryEvent ScrubSensitiveData(SentryEvent sentryEvent, SentryHint hint)
+    private static SentryEvent? ScrubSensitiveData(SentryEvent sentryEvent, SentryHint hint)
     {
+        if (sentryEvent.Exception is DbUpdateConcurrencyException)
+            return null;
+
         if (sentryEvent.User is { } user)
         {
             user.Email = null;
