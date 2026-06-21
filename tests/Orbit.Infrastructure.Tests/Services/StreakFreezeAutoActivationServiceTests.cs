@@ -276,6 +276,36 @@ public class StreakFreezeAutoActivationServiceTests
     }
 
     [Fact]
+    public async Task ActivateMissedDayFreezes_OneUserConcurrencyConflict_SkipsUserAndContinuesBatch()
+    {
+        var conflictUser = CreateEligibleProUser();
+        var healthyUser = CreateEligibleProUser();
+
+        var interceptor = new ThrowConcurrencyForUserInterceptor(conflictUser.Id);
+        await using var dbContext = CreateInterceptingContext(interceptor);
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.AddRange(conflictUser, healthyUser);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        var conflictFreezes = await dbContext.StreakFreezes.AsNoTracking()
+            .CountAsync(f => f.UserId == conflictUser.Id);
+        var healthyFreezes = await dbContext.StreakFreezes.AsNoTracking()
+            .CountAsync(f => f.UserId == healthyUser.Id);
+
+        conflictFreezes.Should().Be(0);
+        healthyFreezes.Should().Be(1);
+
+        await pushService.DidNotReceive().SendToUserAsync(
+            conflictUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await pushService.Received(1).SendToUserAsync(
+            healthyUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ActivateMissedDayFreezes_PushFiresOnlyAfterFreezePersisted()
     {
         var user = CreateEligibleProUser();
@@ -357,6 +387,22 @@ public class StreakFreezeAutoActivationServiceTests
     private sealed class FakeUniqueViolationException : DbException
     {
         public override string SqlState => "23505";
+    }
+
+    private sealed class ThrowConcurrencyForUserInterceptor(Guid conflictUserId) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var hasConflictingFreeze = eventData.Context?.ChangeTracker
+                .Entries<StreakFreeze>()
+                .Any(e => e.State == EntityState.Added && e.Entity.UserId == conflictUserId) == true;
+
+            if (hasConflictingFreeze)
+                throw new DbUpdateConcurrencyException("simulated stale token");
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     private static int GetConfiguredIntervalMinutesDefault()
