@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -15,7 +16,7 @@ public record UpdateGoalCommand(
     string? Description,
     decimal TargetValue,
     string Unit,
-    DateOnly? Deadline) : IRequest<Result>;
+    DateOnly? Deadline) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class UpdateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
