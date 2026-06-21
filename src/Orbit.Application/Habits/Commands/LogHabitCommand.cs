@@ -115,9 +115,12 @@ public partial class LogHabitCommandHandler(
         var goalSync = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        var streakState = await services.UserStreakService.RecalculateAsync(
-            habit.UserId, cancellationToken, awardFreezeIfEligible: false);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        UserStreakState? streakState = null;
+        await ConcurrencyRetry.SaveWithRetryAsync(
+            unitOfWork,
+            async ct => streakState = await services.UserStreakService.RecalculateAsync(
+                habit.UserId, ct, awardFreezeIfEligible: false),
+            cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
         return Result.Success(new LogHabitResponse(
