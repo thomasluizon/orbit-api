@@ -85,31 +85,57 @@ public partial class CheckReferralCompletionCommandHandler(
             return Result.Success();
         }
 
+        var pointerAssignments = new List<(User User, string CouponId)>();
         if (referrer is not null)
-            await GrantCoupon(referrer, cancellationToken);
+            await GrantCoupon(referrer, pointerAssignments, cancellationToken);
 
-        await GrantCoupon(referredUser, cancellationToken);
+        await GrantCoupon(referredUser, pointerAssignments, cancellationToken);
 
         if (referrer is not null)
             await SendNotification(referrer, isReferrer: true, cancellationToken);
 
         await SendNotification(referredUser, isReferrer: false, cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await PersistCouponPointersWithRetryAsync(pointerAssignments, cancellationToken);
         return Result.Success();
     }
 
+    private async Task PersistCouponPointersWithRetryAsync(
+        IReadOnlyList<(User User, string CouponId)> pointerAssignments, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxReferralAttempts)
+            {
+                foreach (var (user, couponId) in pointerAssignments)
+                {
+                    await repos.UserRepository.ReloadAsync(user, cancellationToken);
+                    user.SetReferralCoupon(couponId);
+                }
+            }
+        }
+    }
+
+    private const int MaxReferralAttempts = 3;
+
     /// <summary>
     /// If user is Pro with active subscription, apply coupon to next invoice directly.
-    /// Otherwise, store coupon ID for checkout.
+    /// Otherwise, store coupon ID for checkout. A stored pointer is recorded in
+    /// <paramref name="pointerAssignments"/> so it can be re-applied if the persisting save
+    /// loses a concurrent update on the user's row.
     /// </summary>
-    private async Task GrantCoupon(User user, CancellationToken cancellationToken)
+    private async Task GrantCoupon(User user, List<(User User, string CouponId)> pointerAssignments, CancellationToken cancellationToken)
     {
         string couponId;
         try
         {
             couponId = await referralRewardService.CreateReferralCouponAsync(
-                user.Id, cancellationToken);
+                user.Id, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -123,17 +149,16 @@ public partial class CheckReferralCompletionCommandHandler(
             {
                 await referralRewardService.ApplyCouponToSubscriptionAsync(
                     user.StripeSubscriptionId, couponId, cancellationToken);
+                return;
             }
             catch (Exception ex)
             {
                 LogApplyReferralCouponFailed(logger, ex, couponId, user.StripeSubscriptionId, user.Id);
-                user.SetReferralCoupon(couponId);
             }
         }
-        else
-        {
-            user.SetReferralCoupon(couponId);
-        }
+
+        user.SetReferralCoupon(couponId);
+        pointerAssignments.Add((user, couponId));
     }
 
     private async Task SendNotification(User user, bool isReferrer, CancellationToken cancellationToken)

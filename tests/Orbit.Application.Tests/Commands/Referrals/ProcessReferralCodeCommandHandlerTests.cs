@@ -29,7 +29,7 @@ public class ProcessReferralCodeCommandHandlerTests
         _appConfig.GetAsync("MaxReferrals", AppConstants.DefaultMaxReferrals, Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultMaxReferrals);
 
-        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns("promo_test456");
     }
 
@@ -102,7 +102,7 @@ public class ProcessReferralCodeCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            NewUserId, Arg.Any<CancellationToken>());
+            NewUserId, $"orbit-referral-signup-{NewUserId}", Arg.Any<CancellationToken>());
         newUser.ReferralCouponId.Should().Be("promo_test456");
     }
 

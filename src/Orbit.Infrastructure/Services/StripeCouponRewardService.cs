@@ -14,7 +14,7 @@ public partial class StripeCouponRewardService(
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
 
-    public async Task<string> CreateReferralCouponAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task<string> CreateReferralCouponAsync(Guid userId, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
         var user = await userRepository.FindOneTrackedAsync(
             u => u.Id == userId,
@@ -37,7 +37,7 @@ public partial class StripeCouponRewardService(
             AppliesTo = !string.IsNullOrEmpty(_settings.ProProductId)
                 ? new CouponAppliesToOptions { Products = [_settings.ProProductId] }
                 : null
-        }, cancellationToken: cancellationToken);
+        }, idempotencyKey is null ? null : new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogCouponCreated(logger, userId, coupon.Id);

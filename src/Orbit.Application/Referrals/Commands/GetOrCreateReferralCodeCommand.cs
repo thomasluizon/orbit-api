@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -7,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Referrals.Commands;
 
-public record GetOrCreateReferralCodeCommand(Guid UserId) : IRequest<Result<string>>;
+public record GetOrCreateReferralCodeCommand(Guid UserId) : IRequest<Result<string>>, IConcurrencyRetryable;
 
 public class GetOrCreateReferralCodeCommandHandler(
     IGenericRepository<User> userRepository,

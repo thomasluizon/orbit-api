@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Services;
@@ -15,7 +16,7 @@ namespace Orbit.Application.Habits.Commands;
 public record SkipHabitCommand(
     Guid UserId,
     Guid HabitId,
-    DateOnly? Date = null) : IRequest<Result>;
+    DateOnly? Date = null) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class SkipHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,

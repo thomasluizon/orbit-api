@@ -82,6 +82,39 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ConcurrencyConflictOnLogCommit_ReloadsHabitAndRetries()
+    {
+        var habit = CreateTestHabit();
+        var reloadedHabit = CreateTestHabit();
+        typeof(Habit).GetProperty("Id")!.SetValue(reloadedHabit, habit.Id);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit, reloadedHabit);
+
+        var saveCount = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                saveCount++;
+                return saveCount == 1
+                    ? throw new DbUpdateConcurrencyException("simulated stale linked goal")
+                    : Task.FromResult(1);
+            });
+
+        var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _unitOfWork.Received(1).ResetTracking();
+        await _habitRepo.Received(2).FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_AlreadyLogged_TogglesUnlog()
     {
         var habit = CreateTestHabit();

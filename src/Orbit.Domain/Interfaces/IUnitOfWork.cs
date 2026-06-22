@@ -13,4 +13,11 @@ public interface IUnitOfWork : IDisposable
     /// before reloading and replaying, so a retry doesn't double-insert them.
     /// </summary>
     void DiscardChanges();
+
+    /// <summary>
+    /// Detaches every tracked entity so the next query reloads from the database. Used by the
+    /// concurrency-retry pipeline between attempts so a re-run sees current state rather than the
+    /// stale tracked instances from the conflicted attempt.
+    /// </summary>
+    void ResetTracking();
 }

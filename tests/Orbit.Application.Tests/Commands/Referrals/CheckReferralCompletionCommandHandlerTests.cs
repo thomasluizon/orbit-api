@@ -34,7 +34,7 @@ public class CheckReferralCompletionCommandHandlerTests
             repos, _pushNotification, _referralReward, _unitOfWork,
             Substitute.For<ILogger<CheckReferralCompletionCommandHandler>>());
 
-        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns("promo_test123");
     }
 
@@ -169,7 +169,7 @@ public class CheckReferralCompletionCommandHandlerTests
         referral.CompletedAtUtc.Should().NotBeNull();
         referral.RewardGrantedAtUtc.Should().NotBeNull();
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferrerId, Arg.Any<CancellationToken>());
+            ReferrerId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         referrer.ReferralCouponId.Should().Be("promo_test123");
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -192,7 +192,7 @@ public class CheckReferralCompletionCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Rewarded);
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferrerId, Arg.Any<CancellationToken>());
+            ReferrerId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -262,9 +262,40 @@ public class CheckReferralCompletionCommandHandlerTests
         second.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Rewarded);
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferrerId, Arg.Any<CancellationToken>());
+            ReferrerId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferredUserId, Arg.Any<CancellationToken>());
+            ReferredUserId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrencyConflictOnCouponPersist_ReloadsUserAndRetries()
+    {
+        var referral = CreatePendingReferral();
+        var referredUser = CreateReferredUser();
+        var referrer = CreateReferrer();
+        SetupPendingReferral(referral);
+        SetupReferredAndReferrerUsers(referredUser, referrer);
+        SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
+
+        var saveCount = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                saveCount++;
+                return saveCount == 2
+                    ? throw new DbUpdateConcurrencyException("simulated stale user on coupon persist")
+                    : Task.FromResult(1);
+            });
+
+        var command = new CheckReferralCompletionCommand(ReferredUserId);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        referral.Status.Should().Be(ReferralStatus.Rewarded);
+        await _userRepo.Received().ReloadAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        referredUser.ReferralCouponId.Should().Be("promo_test123");
+        referrer.ReferralCouponId.Should().Be("promo_test123");
     }
 
     [Fact]
@@ -286,7 +317,7 @@ public class CheckReferralCompletionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _referralReward.DidNotReceive().CreateReferralCouponAsync(
-            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -301,7 +332,7 @@ public class CheckReferralCompletionCommandHandlerTests
 
         var rewardedWhenCouponCreated = false;
         _referralReward
-            .CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 rewardedWhenCouponCreated = referral.Status == ReferralStatus.Rewarded;

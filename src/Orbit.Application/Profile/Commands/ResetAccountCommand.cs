@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -7,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Commands;
 
-public record ResetAccountCommand(Guid UserId) : IRequest<Result>;
+public record ResetAccountCommand(Guid UserId) : IRequest<Result>, IConcurrencyRetryable;
 
 public class ResetAccountCommandHandler(
     IGenericRepository<User> userRepository,

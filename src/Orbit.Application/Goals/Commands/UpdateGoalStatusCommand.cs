@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -11,7 +12,7 @@ namespace Orbit.Application.Goals.Commands;
 public record UpdateGoalStatusCommand(
     Guid UserId,
     Guid GoalId,
-    GoalStatus NewStatus) : IRequest<Result>;
+    GoalStatus NewStatus) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class UpdateGoalStatusCommandHandler(
     IGenericRepository<Goal> goalRepository,

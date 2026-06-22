@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Chat.Tools;
 using Orbit.Domain.Common;
@@ -13,8 +14,10 @@ public partial class AgentOperationExecutor(
     IAgentAuditService auditService,
     IAgentTargetOwnershipService targetOwnershipService,
     AiToolRegistry toolRegistry,
+    IUnitOfWork unitOfWork,
     ILogger<AgentOperationExecutor> logger) : IAgentOperationExecutor
 {
+    private const int MaxToolConcurrencyAttempts = 3;
     private static readonly JsonElement EmptyArguments = JsonDocument.Parse("{}").RootElement.Clone();
 
     public async Task<AgentExecuteOperationResponse> ExecuteAsync(
@@ -220,7 +223,7 @@ public partial class AgentOperationExecutor(
     {
         try
         {
-            var result = await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+            var result = await ExecuteToolWithConcurrencyRetryAsync(tool, execution, cancellationToken);
             return await BuildToolOutcomeResponseAsync(execution, policyDecision, result, cancellationToken);
         }
         catch (Exception ex)
@@ -246,6 +249,27 @@ public partial class AgentOperationExecutor(
                 AgentOperationStatus.Failed,
                 Summary: execution.Summary,
                 PolicyReason: "unexpected_error"));
+        }
+    }
+
+    private async Task<ToolResult> ExecuteToolWithConcurrencyRetryAsync(
+        IAiTool tool,
+        OperationExecutionContext execution,
+        CancellationToken cancellationToken)
+    {
+        if (tool is not IConcurrencyRetryableTool)
+            return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxToolConcurrencyAttempts)
+            {
+                unitOfWork.ResetTracking();
+            }
         }
     }
 

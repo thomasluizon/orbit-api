@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -8,7 +9,7 @@ namespace Orbit.Application.Goals.Commands;
 
 public record DeleteGoalCommand(
     Guid UserId,
-    Guid GoalId) : IRequest<Result>;
+    Guid GoalId) : IRequest<Result>, IConcurrencyRetryable;
 
 public class DeleteGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,

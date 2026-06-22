@@ -9,7 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class LinkHabitsToGoalTool(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IAiTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "link_habits_to_goal";
 

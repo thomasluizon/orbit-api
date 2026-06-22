@@ -184,6 +184,75 @@ public class ConcurrencyRetryTests
         await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
     }
 
+    [Fact]
+    public async Task SaveWithRetryAsync_ConflictThenSuccess_ReloadsAndPersists()
+    {
+        var dbName = NewDbName();
+        Guid userId;
+
+        await using (var seed = CreateContext(dbName))
+        {
+            var seedUser = CreateFreeUser();
+            seed.Users.Add(seedUser);
+            await seed.SaveChangesAsync();
+            userId = seedUser.Id;
+        }
+
+        var interceptor = new ConflictOnceInterceptor();
+        await using var context = CreateContext(dbName, interceptor);
+        var userRepo = new GenericRepository<User>(context);
+        var unitOfWork = new UnitOfWork(context);
+
+        var mutateRuns = 0;
+        await ConcurrencyRetry.SaveWithRetryAsync(
+            unitOfWork,
+            async ct =>
+            {
+                mutateRuns++;
+                var user = await userRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+                user!.SetStreakState(7, 7, DateOnly.FromDateTime(DateTime.UtcNow));
+            },
+            CancellationToken.None);
+
+        interceptor.SaveAttempts.Should().Be(2);
+        mutateRuns.Should().Be(2);
+
+        await using var verify = CreateContext(dbName);
+        verify.Users.Single(u => u.Id == userId).CurrentStreak.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task SaveWithRetryAsync_PersistentConflict_PropagatesAfterMaxAttempts()
+    {
+        var dbName = NewDbName();
+        Guid userId;
+
+        await using (var seed = CreateContext(dbName))
+        {
+            var seedUser = CreateFreeUser();
+            seed.Users.Add(seedUser);
+            await seed.SaveChangesAsync();
+            userId = seedUser.Id;
+        }
+
+        var interceptor = new ConflictAlwaysInterceptor();
+        await using var context = CreateContext(dbName, interceptor);
+        var userRepo = new GenericRepository<User>(context);
+        var unitOfWork = new UnitOfWork(context);
+
+        var act = async () => await ConcurrencyRetry.SaveWithRetryAsync(
+            unitOfWork,
+            async ct =>
+            {
+                var user = await userRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+                user!.SetStreakState(7, 7, null);
+            },
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        interceptor.SaveAttempts.Should().Be(3);
+    }
+
     private static string NewDbName() => $"ConcurrencyRetryTests_{Guid.NewGuid()}";
 
     private static User CreateFreeUser()

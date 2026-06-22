@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Orbit.Api.Extensions;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
@@ -248,6 +249,35 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             var index = i;
             try
             {
+                await ApplyMutationWithRetryAsync(userId, mutation, supportsTransactions, strategy, cancellationToken);
+                results.Add(new SyncMutationResult(index, "success"));
+                processed++;
+            }
+            catch (Exception ex)
+            {
+                LogMutationFailed(logger, index, mutation.Entity, mutation.Action, ex);
+                results.Add(new SyncMutationResult(index, "failed", ErrorMessages.MutationFailed.Message));
+                failed++;
+            }
+        }
+
+        LogSyncBatch(logger, userId, processed, failed);
+        return Ok(new SyncBatchResponse(processed, failed, results));
+    }
+
+    private const int MaxMutationAttempts = 3;
+
+    private async Task ApplyMutationWithRetryAsync(
+        Guid userId,
+        SyncMutation mutation,
+        bool supportsTransactions,
+        IExecutionStrategy strategy,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
                 if (supportsTransactions)
                 {
                     await strategy.ExecuteAsync(async () =>
@@ -272,19 +302,13 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
                     await ProcessMutation(userId, mutation, cancellationToken);
                     await dbContext.SaveChangesAsync(cancellationToken);
                 }
-                results.Add(new SyncMutationResult(index, "success"));
-                processed++;
+                return;
             }
-            catch (Exception ex)
+            catch (DbUpdateConcurrencyException) when (attempt < MaxMutationAttempts)
             {
-                LogMutationFailed(logger, index, mutation.Entity, mutation.Action, ex);
-                results.Add(new SyncMutationResult(index, "failed", ErrorMessages.MutationFailed.Message));
-                failed++;
+                dbContext.ChangeTracker.Clear();
             }
         }
-
-        LogSyncBatch(logger, userId, processed, failed);
-        return Ok(new SyncBatchResponse(processed, failed, results));
     }
 
     private async Task ProcessMutation(Guid userId, SyncMutation mutation, CancellationToken ct)

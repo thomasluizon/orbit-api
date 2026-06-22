@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
@@ -283,12 +284,49 @@ public class AgentExecutionAndSanitizerTests
         response.Operation.PolicyReason.Should().Be("unexpected_error");
     }
 
+    [Fact]
+    public async Task AgentOperationExecutor_RetriesConcurrencyConflictForRetryableTool()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.GoalsWrite, AgentScopes.WriteGoals, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("update_goal", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        policy.Evaluate(Arg.Any<AgentPolicyEvaluationContext>())
+            .Returns(new AgentPolicyDecision(AgentPolicyDecisionStatus.Allowed, capability));
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+
+        var attempts = 0;
+        var tool = new RetryableStubTool(operation.Id, (_, _, _) =>
+        {
+            attempts++;
+            return attempts == 1
+                ? throw new DbUpdateConcurrencyException("simulated stale goal")
+                : Task.FromResult(new ToolResult(true, EntityId: "1", EntityName: "Goal"));
+        });
+        var executor = CreateExecutor(
+            catalog, policyEvaluator: policy, toolRegistry: new AiToolRegistry([tool]), unitOfWork: unitOfWork);
+
+        var response = await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId,
+            operation.Id,
+            Parse("""{"goal_id":"1"}"""),
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt));
+
+        response.Operation.Status.Should().Be(AgentOperationStatus.Succeeded);
+        attempts.Should().Be(2);
+        unitOfWork.Received(1).ResetTracking();
+    }
+
     private static AgentOperationExecutor CreateExecutor(
         IAgentCatalogService catalogService,
         IAgentPolicyEvaluator? policyEvaluator = null,
         IAgentAuditService? auditService = null,
         IAgentTargetOwnershipService? ownershipService = null,
-        AiToolRegistry? toolRegistry = null)
+        AiToolRegistry? toolRegistry = null,
+        IUnitOfWork? unitOfWork = null)
     {
         if (ownershipService is null)
         {
@@ -303,6 +341,7 @@ public class AgentExecutionAndSanitizerTests
             auditService ?? Substitute.For<IAgentAuditService>(),
             ownershipService,
             toolRegistry ?? new AiToolRegistry([]),
+            unitOfWork ?? Substitute.For<IUnitOfWork>(),
             NullLogger<AgentOperationExecutor>.Instance);
     }
 
@@ -352,6 +391,16 @@ public class AgentExecutionAndSanitizerTests
     }
 
     private sealed class StubTool(string name, Func<JsonElement, Guid, CancellationToken, Task<ToolResult>> executeAsync) : IAiTool
+    {
+        public string Name => name;
+        public string Description => name;
+        public bool IsReadOnly => false;
+        public object GetParameterSchema() => new { };
+        public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) => executeAsync(args, userId, ct);
+    }
+
+    private sealed class RetryableStubTool(string name, Func<JsonElement, Guid, CancellationToken, Task<ToolResult>> executeAsync)
+        : IAiTool, IConcurrencyRetryableTool
     {
         public string Name => name;
         public string Description => name;

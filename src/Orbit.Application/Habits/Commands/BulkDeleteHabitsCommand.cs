@@ -60,8 +60,10 @@ public class BulkDeleteHabitsCommandHandler(
             await unitOfWork.SaveChangesAsync(ct);
             if (results.Any(r => r.Status == BulkItemStatus.Success))
             {
-                await userStreakService.RecalculateAsync(request.UserId, ct);
-                await unitOfWork.SaveChangesAsync(ct);
+                await ConcurrencyRetry.SaveWithRetryAsync(
+                    unitOfWork,
+                    c => userStreakService.RecalculateAsync(request.UserId, c),
+                    ct);
             }
         }, cancellationToken);
 

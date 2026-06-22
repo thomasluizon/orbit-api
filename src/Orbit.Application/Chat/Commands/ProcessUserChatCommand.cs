@@ -317,8 +317,10 @@ public partial class ProcessUserChatCommandHandler(
         await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
         if (RequiresStreakRecalculation(actionResults))
         {
-            await execution.UserStreakService.RecalculateAsync(userId, cancellationToken);
-            await execution.UnitOfWork.SaveChangesAsync(cancellationToken);
+            await ConcurrencyRetry.SaveWithRetryAsync(
+                execution.UnitOfWork,
+                ct => execution.UserStreakService.RecalculateAsync(userId, ct),
+                cancellationToken);
         }
     }
 

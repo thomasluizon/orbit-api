@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -6,7 +7,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Commands;
 
-public record SetThemePreferenceCommand(Guid UserId, string? Preference) : IRequest<Result>;
+public record SetThemePreferenceCommand(Guid UserId, string? Preference) : IRequest<Result>, IConcurrencyRetryable;
 
 public class SetThemePreferenceCommandHandler(
     IGenericRepository<User> userRepository,

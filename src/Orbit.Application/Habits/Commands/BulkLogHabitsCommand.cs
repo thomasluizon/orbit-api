@@ -86,14 +86,16 @@ public partial class BulkLogHabitsCommandHandler(
                 .ToList();
             if (loggedHabitIds.Count > 0)
             {
-                await services.UserStreakService.RecalculateAsync(request.UserId, ct);
                 try
                 {
                     await services.GamificationService.ProcessHabitsLogged(request.UserId, loggedHabitIds, ct);
                 }
                 catch (Exception ex) { LogGamificationBulkLogFailed(logger, ex, request.UserId); }
 
-                await unitOfWork.SaveChangesAsync(ct);
+                await ConcurrencyRetry.SaveWithRetryAsync(
+                    unitOfWork,
+                    c => services.UserStreakService.RecalculateAsync(request.UserId, c),
+                    ct);
             }
         }, cancellationToken);
 

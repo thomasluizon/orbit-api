@@ -347,6 +347,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly);
+            cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 

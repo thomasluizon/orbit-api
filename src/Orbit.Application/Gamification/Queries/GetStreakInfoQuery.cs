@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,7 +22,7 @@ public record StreakInfoResponse(
     int FreezesAvailableToUse,
     bool CanEarnMore);
 
-public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoResponse>>;
+public record GetStreakInfoQuery(Guid UserId) : IRequest<Result<StreakInfoResponse>>, IConcurrencyRetryable;
 
 public class GetStreakInfoQueryHandler(
     IGenericRepository<User> userRepository,

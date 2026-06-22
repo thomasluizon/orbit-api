@@ -219,8 +219,14 @@ public partial class OAuthController(
 
         if (user.IsDeactivated)
         {
-            user.CancelDeactivation();
-            await unitOfWork.SaveChangesAsync(ct);
+            await ConcurrencyRetry.SaveWithRetryAsync(
+                unitOfWork,
+                async c =>
+                {
+                    var tracked = await userRepository.FindOneTrackedAsync(u => u.Id == user.Id, cancellationToken: c);
+                    tracked?.CancelDeactivation();
+                },
+                ct);
         }
 
         var authCode = authStore.CreateCode(

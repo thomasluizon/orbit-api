@@ -29,8 +29,10 @@ public class DeleteHabitCommandHandler(
 
         habit.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await userStreakService.RecalculateAsync(request.UserId, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await ConcurrencyRetry.SaveWithRetryAsync(
+            unitOfWork,
+            ct => userStreakService.RecalculateAsync(request.UserId, ct),
+            cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 

@@ -181,6 +181,13 @@ public partial class StreakFreezeAutoActivationService(
             await dbContext.SaveChangesAsync(ct);
             return true;
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            DiscardPendingChanges(dbContext);
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFreezeConflictSkipped(logger, userId);
+            return false;
+        }
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
         {
             DiscardPendingChanges(dbContext);
@@ -227,4 +234,7 @@ public partial class StreakFreezeAutoActivationService(
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Streak freeze already activated for user {UserId}; skipping")]
     private static partial void LogFreezeAlreadyActivated(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Streak freeze skipped for user {UserId} due to a concurrent update; will re-evaluate next run")]
+    private static partial void LogFreezeConflictSkipped(ILogger logger, Guid userId);
 }

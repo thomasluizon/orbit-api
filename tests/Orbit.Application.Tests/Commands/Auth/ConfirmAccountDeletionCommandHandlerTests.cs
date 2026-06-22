@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Behaviors;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -122,6 +123,14 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.Error.Should().Contain("Too many attempts");
         user.IsDeactivated.Should().BeFalse();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Command_IsNotConcurrencyRetryable_BecauseItConsumesTheOtpBeforeSaving()
+    {
+        typeof(ConfirmAccountDeletionCommand).Should().NotBeAssignableTo<IConcurrencyRetryable>(
+            "the handler removes the OTP from cache before SaveChangesAsync, so a transparent retry would re-enter, "
+            + "find the code consumed, and silently fail with DeletionCodeExpired");
     }
 
     private void SetupUser(User user)

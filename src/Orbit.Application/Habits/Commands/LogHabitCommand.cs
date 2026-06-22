@@ -55,15 +55,13 @@ public partial class LogHabitCommandHandler(
     IMemoryCache cache,
     ILogger<LogHabitCommandHandler> logger) : IRequestHandler<LogHabitCommand, Result<LogHabitResponse>>
 {
+    private const int MaxLogAttempts = 3;
+
     public async Task<Result<LogHabitResponse>> Handle(LogHabitCommand request, CancellationToken cancellationToken)
     {
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
 
-        var habit = await repos.HabitRepository.FindOneTrackedAsync(
-            h => h.Id == request.HabitId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
-            cancellationToken);
+        var habit = await LoadLoggableHabitAsync(request.HabitId, today, cancellationToken);
 
         if (habit is null)
             return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
@@ -108,20 +106,42 @@ public partial class LogHabitCommandHandler(
     private async Task<Result<LogHabitResponse>> HandleUnlogAsync(
         Habit habit, DateOnly targetDate, DateOnly today, CancellationToken cancellationToken)
     {
-        var unlogResult = habit.Unlog(targetDate);
-        if (unlogResult.IsFailure)
-            return unlogResult.PropagateError<LogHabitResponse>();
+        HabitLog unlogEntity;
+        LinkedGoalSyncResult goalSync;
+        for (var attempt = 1; ; attempt++)
+        {
+            var unlogResult = habit.Unlog(targetDate);
+            if (unlogResult.IsFailure)
+                return unlogResult.PropagateError<LogHabitResponse>();
+            unlogEntity = unlogResult.Value;
 
-        var goalSync = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
+            goalSync = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        var streakState = await services.UserStreakService.RecalculateAsync(
-            habit.UserId, cancellationToken, awardFreezeIfEligible: false);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
+            {
+                unitOfWork.ResetTracking();
+                var reloaded = await LoadLoggableHabitAsync(habit.Id, today, cancellationToken);
+                if (reloaded is null)
+                    return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
+                habit = reloaded;
+            }
+        }
+
+        UserStreakState? streakState = null;
+        await ConcurrencyRetry.SaveWithRetryAsync(
+            unitOfWork,
+            async ct => streakState = await services.UserStreakService.RecalculateAsync(
+                habit.UserId, ct, awardFreezeIfEligible: false),
+            cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
         return Result.Success(new LogHabitResponse(
-            unlogResult.Value.Id,
+            unlogEntity.Id,
             IsFirstCompletionToday: false,
             CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalSync.Updates));
@@ -137,21 +157,36 @@ public partial class LogHabitCommandHandler(
                 cancellationToken);
 
         var shouldAdvanceDueDate = targetDate >= today;
-        var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
-        if (logResult.IsFailure)
-            return logResult.PropagateError<LogHabitResponse>();
-
-        await repos.HabitLogRepository.AddAsync(logResult.Value, cancellationToken);
-
-        var goalSync = await UpdateLinkedGoalProgress(habit, 1, today, cancellationToken);
-
-        try
+        HabitLog logEntity;
+        LinkedGoalSyncResult goalSync;
+        for (var attempt = 1; ; attempt++)
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
-        {
-            return await BuildAlreadyLoggedResultAsync(habit, targetDate, cancellationToken);
+            var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
+            if (logResult.IsFailure)
+                return logResult.PropagateError<LogHabitResponse>();
+            logEntity = logResult.Value;
+
+            await repos.HabitLogRepository.AddAsync(logEntity, cancellationToken);
+
+            goalSync = await UpdateLinkedGoalProgress(habit, 1, today, cancellationToken);
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                break;
+            }
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+            {
+                return await BuildAlreadyLoggedResultAsync(habit, targetDate, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
+            {
+                unitOfWork.ResetTracking();
+                var reloaded = await LoadLoggableHabitAsync(request.HabitId, today, cancellationToken);
+                if (reloaded is null)
+                    return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
+                habit = reloaded;
+            }
         }
 
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
@@ -161,19 +196,45 @@ public partial class LogHabitCommandHandler(
             await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
 
         if (gamificationResult is null)
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
         return Result.Success(new LogHabitResponse(
-            logResult.Value.Id,
+            logEntity.Id,
             isFirstCompletionToday,
             CurrentStreak: streakState?.CurrentStreak ?? 0,
             LinkedGoalUpdates: goalSync.Updates,
             XpEarned: gamificationResult?.XpEarned,
             NewAchievementIds: gamificationResult?.NewAchievementIds));
+    }
+
+    private Task<Habit?> LoadLoggableHabitAsync(Guid habitId, DateOnly today, CancellationToken cancellationToken)
+    {
+        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        return repos.HabitRepository.FindOneTrackedAsync(
+            h => h.Id == habitId,
+            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
+            cancellationToken);
+    }
+
+    private async Task PersistStreakRecalcAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
+            {
+                unitOfWork.ResetTracking();
+                await services.UserStreakService.RecalculateAsync(userId, cancellationToken);
+            }
+        }
     }
 
     private async Task<Result<LogHabitResponse>> BuildAlreadyLoggedResultAsync(

@@ -29,7 +29,7 @@ public sealed partial class StripeBillingService(
                 Email = email,
                 Name = name,
                 Metadata = new Dictionary<string, string> { ["userId"] = userId.ToString() },
-            }, cancellationToken: cancellationToken);
+            }, new RequestOptions { IdempotencyKey = $"orbit-customer-create-{userId}" }, cancellationToken);
             return customer.Id;
         }
         catch (StripeException ex)

@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -7,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Referrals.Commands;
 
-public record ProcessReferralCodeCommand(Guid NewUserId, string ReferralCode) : IRequest<Result>;
+public record ProcessReferralCodeCommand(Guid NewUserId, string ReferralCode) : IRequest<Result>, IConcurrencyRetryable;
 
 public class ProcessReferralCodeCommandHandler(
     IGenericRepository<User> userRepository,
@@ -52,7 +53,7 @@ public class ProcessReferralCodeCommandHandler(
         await referralRepository.AddAsync(referral, cancellationToken);
 
         var promoCodeId = await referralRewardService.CreateReferralCouponAsync(
-            newUser.Id, cancellationToken);
+            newUser.Id, $"orbit-referral-signup-{newUser.Id}", cancellationToken);
         newUser.SetReferralCoupon(promoCodeId);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
