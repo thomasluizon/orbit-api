@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateGoalProgressTool(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
-    IUnitOfWork unitOfWork) : IAiTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "update_goal_progress";
     public string Description => "Update progress on an existing goal. Identify the goal by goal_id, or by fuzzy goal_name match, then set the new current value.";

@@ -7,7 +7,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalTool(
     IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork) : IAiTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "update_goal";
 

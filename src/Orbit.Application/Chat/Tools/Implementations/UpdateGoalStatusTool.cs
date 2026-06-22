@@ -11,7 +11,7 @@ public class UpdateGoalStatusTool(
     IGenericRepository<Goal> goalRepository,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
-    ILogger<UpdateGoalStatusTool> logger) : IAiTool
+    ILogger<UpdateGoalStatusTool> logger) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "update_goal_status";
 

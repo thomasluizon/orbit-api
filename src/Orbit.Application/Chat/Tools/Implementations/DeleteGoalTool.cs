@@ -6,7 +6,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DeleteGoalTool(
     IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork) : IAiTool
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "delete_goal";
 
