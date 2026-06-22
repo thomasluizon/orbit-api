@@ -109,7 +109,7 @@ public partial class CheckReferralCompletionCommandHandler(
         try
         {
             couponId = await referralRewardService.CreateReferralCouponAsync(
-                user.Id, cancellationToken);
+                user.Id, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

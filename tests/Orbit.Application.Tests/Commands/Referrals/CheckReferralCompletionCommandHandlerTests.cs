@@ -34,7 +34,7 @@ public class CheckReferralCompletionCommandHandlerTests
             repos, _pushNotification, _referralReward, _unitOfWork,
             Substitute.For<ILogger<CheckReferralCompletionCommandHandler>>());
 
-        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _referralReward.CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns("promo_test123");
     }
 
@@ -169,7 +169,7 @@ public class CheckReferralCompletionCommandHandlerTests
         referral.CompletedAtUtc.Should().NotBeNull();
         referral.RewardGrantedAtUtc.Should().NotBeNull();
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferrerId, Arg.Any<CancellationToken>());
+            ReferrerId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         referrer.ReferralCouponId.Should().Be("promo_test123");
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -192,7 +192,7 @@ public class CheckReferralCompletionCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Rewarded);
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferrerId, Arg.Any<CancellationToken>());
+            ReferrerId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -262,9 +262,9 @@ public class CheckReferralCompletionCommandHandlerTests
         second.IsSuccess.Should().BeTrue();
         referral.Status.Should().Be(ReferralStatus.Rewarded);
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferrerId, Arg.Any<CancellationToken>());
+            ReferrerId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await _referralReward.Received(1).CreateReferralCouponAsync(
-            ReferredUserId, Arg.Any<CancellationToken>());
+            ReferredUserId, Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class CheckReferralCompletionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _referralReward.DidNotReceive().CreateReferralCouponAsync(
-            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -301,7 +301,7 @@ public class CheckReferralCompletionCommandHandlerTests
 
         var rewardedWhenCouponCreated = false;
         _referralReward
-            .CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .CreateReferralCouponAsync(Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 rewardedWhenCouponCreated = referral.Status == ReferralStatus.Rewarded;
