@@ -22,7 +22,14 @@ public class SendCodeCommandHandler(
         var cacheKey = $"verify:{email}";
 
         var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        if (!string.Equals(aspNetEnv, "Production", StringComparison.OrdinalIgnoreCase))
+        var isProduction = string.Equals(aspNetEnv, "Production", StringComparison.OrdinalIgnoreCase);
+
+        if (isProduction)
+        {
+            if (TrySeedProductionSmokeCode(email, cacheKey))
+                return Result.Success();
+        }
+        else
         {
             var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
             if (!string.IsNullOrEmpty(testAccountsEnv))
@@ -61,5 +68,25 @@ public class SendCodeCommandHandler(
         await emailService.SendVerificationCodeAsync(email, code, request.Language, cancellationToken);
 
         return Result.Success();
+    }
+
+    private bool TrySeedProductionSmokeCode(string email, string cacheKey)
+    {
+        var smokeEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
+        var smokeCode = Environment.GetEnvironmentVariable("SMOKE_TEST_CODE");
+
+        if (string.IsNullOrEmpty(smokeEmail) || string.IsNullOrEmpty(smokeCode))
+            return false;
+
+        if (!string.Equals(smokeEmail.Trim(), email, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var entry = new VerificationEntry(smokeCode, 0, DateTime.UtcNow);
+        cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+        });
+
+        return true;
     }
 }
