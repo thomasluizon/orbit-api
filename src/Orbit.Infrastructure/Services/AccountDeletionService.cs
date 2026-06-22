@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -11,10 +12,20 @@ namespace Orbit.Infrastructure.Services;
 public partial class AccountDeletionService(
     IServiceScopeFactory scopeFactory,
     ILogger<AccountDeletionService> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromHours(
         configuration.GetValue("BackgroundServices:AccountDeletionIntervalHours", 24));
+
+    public string Name => "account-deletion";
+
+    public string CronExpression => "0 3 * * *";
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await ProcessScheduledDeletions(cancellationToken);
+        await CleanupStaleSentRecords(cancellationToken);
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

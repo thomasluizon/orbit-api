@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -13,11 +14,17 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public partial class PlayNotificationCleanupService(
     IServiceScopeFactory scopeFactory,
-    ILogger<PlayNotificationCleanupService> logger) : BackgroundService
+    ILogger<PlayNotificationCleanupService> logger) : BackgroundService, IScheduledJob
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan PlayRetentionPeriod = TimeSpan.FromDays(30);
     private static readonly TimeSpan StripeRetentionPeriod = TimeSpan.FromDays(90);
+
+    public string Name => "play-notification-cleanup";
+
+    public string CronExpression => "0 4 * * *";
+
+    public Task RunAsync(CancellationToken cancellationToken) => PurgeOldNotifications(cancellationToken);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

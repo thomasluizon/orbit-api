@@ -7,6 +7,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -14,13 +15,19 @@ namespace Orbit.Infrastructure.Services;
 public partial class SlipAlertSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<SlipAlertSchedulerService> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private const int DefaultMorningHour = 8;
     private const int MaxTimeZoneSkewDays = 1;
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:SlipAlertIntervalMinutes", 5));
+
+    public string Name => "slip-alert-scheduler";
+
+    public string CronExpression => "*/5 * * * *";
+
+    public Task RunAsync(CancellationToken cancellationToken) => CheckAndSendAlerts(cancellationToken);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

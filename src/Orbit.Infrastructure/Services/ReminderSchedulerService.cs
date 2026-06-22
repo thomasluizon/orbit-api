@@ -8,6 +8,7 @@ using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -15,10 +16,16 @@ namespace Orbit.Infrastructure.Services;
 public partial class ReminderSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<ReminderSchedulerService> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:ReminderIntervalMinutes", 1));
+
+    public string Name => "reminder-scheduler";
+
+    public string CronExpression => "* * * * *";
+
+    public Task RunAsync(CancellationToken cancellationToken) => CheckAndSendReminders(cancellationToken);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

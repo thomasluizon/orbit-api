@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -15,12 +16,18 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public partial class SyncCleanupService(
     IServiceScopeFactory scopeFactory,
-    ILogger<SyncCleanupService> logger) : BackgroundService
+    ILogger<SyncCleanupService> logger) : BackgroundService, IScheduledJob
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
     private static readonly TimeSpan RetentionPeriod =
         TimeSpan.FromDays(AppConstants.MaxSyncWindowDays + AppConstants.SyncCleanupMarginDays);
     private static readonly TimeSpan SuggestionRetentionPeriod = TimeSpan.FromDays(14);
+
+    public string Name => "sync-cleanup";
+
+    public string CronExpression => "30 3 * * *";
+
+    public Task RunAsync(CancellationToken cancellationToken) => PurgeSoftDeletedEntities(cancellationToken);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -8,6 +8,7 @@ using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -25,10 +26,16 @@ namespace Orbit.Infrastructure.Services;
 public partial class StreakGoalSyncService(
     IServiceScopeFactory scopeFactory,
     ILogger<StreakGoalSyncService> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:StreakGoalSyncIntervalMinutes", 60));
+
+    public string Name => "streak-goal-sync";
+
+    public string CronExpression => "0 * * * *";
+
+    public Task RunAsync(CancellationToken cancellationToken) => SyncActiveStreakGoals(cancellationToken);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

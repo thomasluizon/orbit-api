@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Domain.Enums;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -19,12 +20,18 @@ public partial class CalendarAutoSyncService(
     IServiceScopeFactory scopeFactory,
     ILogger<CalendarAutoSyncService> logger,
     IConfiguration configuration,
-    TimeProvider timeProvider) : BackgroundService
+    TimeProvider timeProvider) : BackgroundService, IScheduledJob
 {
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:CalendarAutoSyncIntervalMinutes", 15));
     private static readonly TimeSpan DedupeWindow = TimeSpan.FromHours(4);
     private const int BatchSize = 50;
+
+    public string Name => "calendar-auto-sync";
+
+    public string CronExpression => "*/15 * * * *";
+
+    public Task RunAsync(CancellationToken cancellationToken) => ProcessTick(cancellationToken);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
