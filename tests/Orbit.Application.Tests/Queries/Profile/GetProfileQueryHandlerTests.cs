@@ -51,6 +51,27 @@ public class GetProfileQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_UserWithStreak_ReturnsCurrentAndLongest()
+    {
+        var user = CreateTestUser();
+        user.SetStreakState(5, 12, Today);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var query = new GetProfileQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentStreak.Should().Be(5);
+        result.Value.LongestStreak.Should().Be(12);
+    }
+
+    [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
