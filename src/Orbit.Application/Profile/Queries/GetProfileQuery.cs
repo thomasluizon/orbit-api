@@ -35,6 +35,7 @@ public record ProfileResponse(
     string LevelTitle,
     int AdRewardsClaimedToday,
     int CurrentStreak,
+    int LongestStreak,
     int StreakFreezesAvailable,
     string? ThemePreference,
     string? ColorScheme,
@@ -97,6 +98,7 @@ public class GetProfileQueryHandler(
                 ? user.AdRewardsClaimedToday
                 : 0,
             user.CurrentStreak,
+            user.LongestStreak,
             freezesAvailable,
             user.ThemePreference,
             user.ColorScheme,
