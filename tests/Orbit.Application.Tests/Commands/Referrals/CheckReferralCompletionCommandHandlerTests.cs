@@ -268,6 +268,37 @@ public class CheckReferralCompletionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ConcurrencyConflictOnCouponPersist_ReloadsUserAndRetries()
+    {
+        var referral = CreatePendingReferral();
+        var referredUser = CreateReferredUser();
+        var referrer = CreateReferrer();
+        SetupPendingReferral(referral);
+        SetupReferredAndReferrerUsers(referredUser, referrer);
+        SetupHabitsAndLogs(ReferredUserId, 1, AppConstants.ReferralCompletionThreshold);
+
+        var saveCount = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                saveCount++;
+                return saveCount == 2
+                    ? throw new DbUpdateConcurrencyException("simulated stale user on coupon persist")
+                    : Task.FromResult(1);
+            });
+
+        var command = new CheckReferralCompletionCommand(ReferredUserId);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        referral.Status.Should().Be(ReferralStatus.Rewarded);
+        await _userRepo.Received().ReloadAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        referredUser.ReferralCouponId.Should().Be("promo_test123");
+        referrer.ReferralCouponId.Should().Be("promo_test123");
+    }
+
+    [Fact]
     public async Task Handle_ConcurrentClaimConflict_ReturnsSuccessWithoutGrantingCoupon()
     {
         var referral = CreatePendingReferral();
