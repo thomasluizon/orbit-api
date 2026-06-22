@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -10,7 +12,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class UserDateServiceTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
-    private readonly MemoryCache _cache = new(new MemoryCacheOptions());
+    private readonly IDistributedCache _cache = NewDistributedCache();
     private readonly UserDateService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -72,4 +74,42 @@ public class UserDateServiceTests
 
         await _userRepo.Received(1).GetByIdAsync(UserId, Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task GetUserWeekStartDayAsync_AfterInvalidation_RereadsFromRepository()
+    {
+        var user = User.Create("Test", "test@test.com").Value;
+        user.SetWeekStartDay(0);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        (await _sut.GetUserWeekStartDayAsync(UserId)).Should().Be(0);
+
+        _sut.InvalidateUserDatePreferences(UserId);
+        await _sut.GetUserWeekStartDayAsync(UserId);
+
+        await _userRepo.Received(2).GetByIdAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetUserWeekStartDayAsync_SecondInstanceSharingCache_ReadsCachedValueWithoutRepository()
+    {
+        var user = User.Create("Test", "test@test.com").Value;
+        user.SetWeekStartDay(0);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        await _sut.GetUserWeekStartDayAsync(UserId);
+
+        var secondInstanceRepo = Substitute.For<IGenericRepository<User>>();
+        var secondInstance = new UserDateService(secondInstanceRepo, _cache);
+
+        var result = await secondInstance.GetUserWeekStartDayAsync(UserId);
+
+        result.Should().Be(0);
+        await secondInstanceRepo.DidNotReceive().GetByIdAsync(UserId, Arg.Any<CancellationToken>());
+    }
+
+    private static IDistributedCache NewDistributedCache() =>
+        new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 }

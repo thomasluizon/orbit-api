@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Caching.Memory;
+using System.Text.Json;
+using Microsoft.Extensions.Caching.Distributed;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -7,8 +8,13 @@ namespace Orbit.Infrastructure.Services;
 
 public class UserDateService(
     IGenericRepository<User> userRepository,
-    IMemoryCache cache) : IUserDateService
+    IDistributedCache cache) : IUserDateService
 {
+    private static readonly DistributedCacheEntryOptions CacheEntryOptions = new()
+    {
+        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15)
+    };
+
     private record UserDatePreferences(string? TimeZone, int WeekStartDay);
 
     private static string CacheKey(Guid userId) => $"user-tz:{userId}";
@@ -29,12 +35,18 @@ public class UserDateService(
     private async Task<UserDatePreferences> GetPreferencesAsync(Guid userId, CancellationToken cancellationToken)
     {
         var cacheKey = CacheKey(userId);
-        if (!cache.TryGetValue(cacheKey, out UserDatePreferences? preferences) || preferences is null)
+        var cached = await cache.GetStringAsync(cacheKey, cancellationToken);
+        if (cached is not null)
         {
-            var user = await userRepository.GetByIdAsync(userId, cancellationToken);
-            preferences = new UserDatePreferences(user?.TimeZone, user?.WeekStartDay ?? 1);
-            cache.Set(cacheKey, preferences, TimeSpan.FromMinutes(15));
+            var deserialized = JsonSerializer.Deserialize<UserDatePreferences>(cached);
+            if (deserialized is not null)
+                return deserialized;
         }
+
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        var preferences = new UserDatePreferences(user?.TimeZone, user?.WeekStartDay ?? 1);
+        await cache.SetStringAsync(
+            cacheKey, JsonSerializer.Serialize(preferences), CacheEntryOptions, cancellationToken);
 
         return preferences;
     }
