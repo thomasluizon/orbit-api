@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
@@ -12,7 +13,7 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Calendar.Commands;
 
 public record RunCalendarAutoSyncCommand(Guid UserId, bool IsOpportunistic = false)
-    : IRequest<Result<CalendarAutoSyncResult>>;
+    : IRequest<Result<CalendarAutoSyncResult>>, IConcurrencyRetryable;
 
 public record CalendarAutoSyncResult(
     int NewSuggestions,

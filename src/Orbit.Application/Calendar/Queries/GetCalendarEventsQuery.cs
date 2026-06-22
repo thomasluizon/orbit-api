@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -20,7 +21,7 @@ public record CalendarEventItem(
     List<int> Reminders,
     DateTime? StartUtc = null);
 
-public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>;
+public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
 public partial class GetCalendarEventsQueryHandler(
     IGenericRepository<User> userRepository,
