@@ -1302,7 +1302,19 @@ public class AgentCatalogService : IAgentCatalogService
                     "OAuthController.VerifyCode",
                     "OAuthController.GoogleAuth",
                     "OAuthController.Token"
-                ])
+                ]),
+
+            CreateCapability(
+                AgentCapabilityIds.MediaUpload,
+                "Upload Media",
+                "Issues short-lived signed URLs so the authenticated user can upload images directly to object storage.",
+                "media",
+                AgentScopes.UploadMedia,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                controllerActions: ["UploadsController.SignUpload"])
         ];
     }
 

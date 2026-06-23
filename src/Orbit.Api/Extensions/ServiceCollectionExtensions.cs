@@ -372,6 +372,21 @@ public static class ServiceCollectionExtensions
             client.Timeout = httpTimeout;
         });
 
+        builder.Services.Configure<SupabaseStorageSettings>(
+            builder.Configuration.GetSection(SupabaseStorageSettings.SectionName));
+
+        builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
+        {
+            var serviceRoleKey = builder.Configuration["Supabase:ServiceRoleKey"]!;
+            client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
+            client.DefaultRequestHeaders.Add("apikey", serviceRoleKey);
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", serviceRoleKey);
+            client.Timeout = httpTimeout;
+        });
+
+        builder.Services.AddScoped<IObjectStorageService, SupabaseObjectStorageService>();
+
         builder.Services.Configure<ResendSettings>(
             builder.Configuration.GetSection(ResendSettings.SectionName));
 
