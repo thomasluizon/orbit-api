@@ -51,5 +51,6 @@ public class UserDateService(
         return preferences;
     }
 
-    public void InvalidateUserDatePreferences(Guid userId) => cache.Remove(CacheKey(userId));
+    public Task InvalidateUserDatePreferencesAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        cache.RemoveAsync(CacheKey(userId), cancellationToken);
 }

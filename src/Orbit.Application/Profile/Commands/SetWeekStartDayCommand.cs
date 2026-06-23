@@ -29,7 +29,7 @@ public class SetWeekStartDayCommandHandler(
             return result;
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        userDateService.InvalidateUserDatePreferences(request.UserId);
+        await userDateService.InvalidateUserDatePreferencesAsync(request.UserId, cancellationToken);
 
         return Result.Success();
     }

@@ -17,7 +17,8 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["StreakFreezeAutoActivation"] = TimeSpan.FromMinutes(180),
         ["AccountDeletion"] = TimeSpan.FromHours(72),
         ["SyncCleanup"] = TimeSpan.FromHours(48),
-        ["PlayNotificationCleanup"] = TimeSpan.FromHours(48)
+        ["PlayNotificationCleanup"] = TimeSpan.FromHours(48),
+        ["CalendarAutoSync"] = TimeSpan.FromMinutes(45)
     };
 
     public static void RecordTick(string serviceName)

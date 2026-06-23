@@ -85,7 +85,7 @@ public class UserDateServiceTests
 
         (await _sut.GetUserWeekStartDayAsync(UserId)).Should().Be(0);
 
-        _sut.InvalidateUserDatePreferences(UserId);
+        await _sut.InvalidateUserDatePreferencesAsync(UserId);
         await _sut.GetUserWeekStartDayAsync(UserId);
 
         await _userRepo.Received(2).GetByIdAsync(UserId, Arg.Any<CancellationToken>());
