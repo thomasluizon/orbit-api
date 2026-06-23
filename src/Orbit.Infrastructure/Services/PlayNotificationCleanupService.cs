@@ -24,7 +24,11 @@ public partial class PlayNotificationCleanupService(
 
     public string CronExpression => "0 4 * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => PurgeOldNotifications(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await PurgeOldNotifications(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("PlayNotificationCleanup");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -27,7 +27,11 @@ public partial class SlipAlertSchedulerService(
 
     public string CronExpression => "*/5 * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => CheckAndSendAlerts(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await CheckAndSendAlerts(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

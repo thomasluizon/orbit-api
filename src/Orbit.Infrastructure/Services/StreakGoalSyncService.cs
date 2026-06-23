@@ -35,7 +35,11 @@ public partial class StreakGoalSyncService(
 
     public string CronExpression => "0 * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => SyncActiveStreakGoals(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await SyncActiveStreakGoals(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("StreakGoalSync");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

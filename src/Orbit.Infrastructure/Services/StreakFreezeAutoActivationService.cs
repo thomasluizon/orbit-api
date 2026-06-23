@@ -34,7 +34,11 @@ public partial class StreakFreezeAutoActivationService(
 
     public string CronExpression => "0 * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => ActivateMissedDayFreezes(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await ActivateMissedDayFreezes(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("StreakFreezeAutoActivation");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

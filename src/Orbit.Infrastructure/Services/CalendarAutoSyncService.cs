@@ -31,7 +31,11 @@ public partial class CalendarAutoSyncService(
 
     public string CronExpression => "*/15 * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => ProcessTick(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await ProcessTick(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("CalendarAutoSync");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

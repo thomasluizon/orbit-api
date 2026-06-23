@@ -23,7 +23,11 @@ public partial class HabitDueDateAdvancementService(
 
     public string CronExpression => "*/30 * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => AdvanceStaleDueDates(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await AdvanceStaleDueDates(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("HabitDueDateAdvancement");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

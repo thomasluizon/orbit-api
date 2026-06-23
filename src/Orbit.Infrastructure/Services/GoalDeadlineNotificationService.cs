@@ -27,7 +27,11 @@ public partial class GoalDeadlineNotificationService(
 
     public string CronExpression => "*/30 * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => CheckAndSendDeadlineNotifications(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await CheckAndSendDeadlineNotifications(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

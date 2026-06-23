@@ -27,7 +27,11 @@ public partial class SyncCleanupService(
 
     public string CronExpression => "30 3 * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => PurgeSoftDeletedEntities(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await PurgeSoftDeletedEntities(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("SyncCleanup");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -25,7 +25,11 @@ public partial class ReminderSchedulerService(
 
     public string CronExpression => "* * * * *";
 
-    public Task RunAsync(CancellationToken cancellationToken) => CheckAndSendReminders(cancellationToken);
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await CheckAndSendReminders(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("ReminderScheduler");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

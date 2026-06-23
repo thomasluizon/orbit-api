@@ -25,6 +25,7 @@ public partial class AccountDeletionService(
     {
         await ProcessScheduledDeletions(cancellationToken);
         await CleanupStaleSentRecords(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("AccountDeletion");
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
