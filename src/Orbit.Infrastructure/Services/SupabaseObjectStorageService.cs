@@ -1,14 +1,16 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed class SupabaseObjectStorageService(
+public sealed partial class SupabaseObjectStorageService(
     IHttpClientFactory httpClientFactory,
-    IOptions<SupabaseStorageSettings> options) : IObjectStorageService
+    IOptions<SupabaseStorageSettings> options,
+    ILogger<SupabaseObjectStorageService> logger) : IObjectStorageService
 {
     public const string HttpClientName = "SupabaseStorage";
 
@@ -24,6 +26,7 @@ public sealed class SupabaseObjectStorageService(
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            LogSignRequestFailed(logger, (int)response.StatusCode, _settings.Bucket, objectKey);
             throw new InvalidOperationException(
                 $"Supabase Storage sign request failed ({(int)response.StatusCode}): {body}");
         }
@@ -40,6 +43,9 @@ public sealed class SupabaseObjectStorageService(
 
         return new SignedUpload(objectKey, signedUrl, publicUrl);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Supabase Storage sign request failed with status {StatusCode} for bucket {Bucket} key {ObjectKey}")]
+    private static partial void LogSignRequestFailed(ILogger logger, int statusCode, string bucket, string objectKey);
 
     private sealed record SignResponse([property: JsonPropertyName("url")] string? Url);
 }

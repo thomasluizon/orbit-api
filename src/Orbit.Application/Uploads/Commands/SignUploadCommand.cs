@@ -9,7 +9,6 @@ public record SignUploadResponse(string Key, string SignedUrl, string PublicUrl)
 
 public record SignUploadCommand(
     Guid UserId,
-    string Filename,
     string ContentType,
     long SizeBytes) : IRequest<Result<SignUploadResponse>>;
 

@@ -29,7 +29,7 @@ public class SignUploadCommandHandlerTests
     [Fact]
     public async Task Handle_ValidCommand_ReturnsSignedUploadScopedToUser()
     {
-        var command = new SignUploadCommand(UserId, "avatar.png", "image/png", 1024);
+        var command = new SignUploadCommand(UserId, "image/png", 1024);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -41,9 +41,9 @@ public class SignUploadCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DerivesExtensionFromContentTypeNotFilename()
+    public async Task Handle_DerivesExtensionFromContentType()
     {
-        var command = new SignUploadCommand(UserId, "photo.heic", "image/jpeg", 2048);
+        var command = new SignUploadCommand(UserId, "image/jpeg", 2048);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
@@ -54,7 +54,7 @@ public class SignUploadCommandHandlerTests
     [Fact]
     public async Task Handle_DelegatesUserScopedKeyToStorage()
     {
-        var command = new SignUploadCommand(UserId, "avatar.webp", "image/webp", 4096);
+        var command = new SignUploadCommand(UserId, "image/webp", 4096);
 
         await _handler.Handle(command, CancellationToken.None);
 
@@ -69,7 +69,7 @@ public class SignUploadValidatorTests
     private readonly SignUploadValidator _validator = new();
 
     private static SignUploadCommand Valid() =>
-        new(Guid.NewGuid(), "avatar.png", "image/png", 1024);
+        new(Guid.NewGuid(), "image/png", 1024);
 
     [Fact]
     public void Validate_ValidCommand_Passes()
@@ -97,14 +97,6 @@ public class SignUploadValidatorTests
     public void Validate_ZeroSize_Fails()
     {
         var command = Valid() with { SizeBytes = 0 };
-
-        _validator.Validate(command).IsValid.Should().BeFalse();
-    }
-
-    [Fact]
-    public void Validate_EmptyFilename_Fails()
-    {
-        var command = Valid() with { Filename = "" };
 
         _validator.Validate(command).IsValid.Should().BeFalse();
     }

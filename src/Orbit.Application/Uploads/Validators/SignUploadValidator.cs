@@ -11,12 +11,6 @@ public class SignUploadValidator : AbstractValidator<SignUploadCommand>
         RuleFor(x => x.UserId)
             .NotEmpty();
 
-        RuleFor(x => x.Filename)
-            .NotEmpty()
-            .WithMessage("Filename is required.")
-            .MaximumLength(255)
-            .WithMessage("Filename must be 255 characters or less.");
-
         RuleFor(x => x.ContentType)
             .NotEmpty()
             .WithMessage("Content type is required.")
