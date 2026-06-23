@@ -18,7 +18,7 @@ public class SendCodeCommandHandlerTests
     private readonly SendCodeCommandHandler _handler;
 
     private const string SmokeEmail = "smoke@useorbit.org";
-    private const string SmokeCode = "a7Q3-not-a-real-otp-zX9";
+    private const string SmokeCode = "428913";
 
     public SendCodeCommandHandlerTests()
     {
@@ -125,6 +125,21 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().NotBe("short");
+            await _emailService.Received(1).SendVerificationCodeAsync(
+                SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task Production_NonNumericSmokeCode_NoBypass_SendsEmail()
+    {
+        await WithEnv("Production", SmokeEmail, "abc123", async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
+            entry!.Code.Should().NotBe("abc123");
             await _emailService.Received(1).SendVerificationCodeAsync(
                 SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         });
