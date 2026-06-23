@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -22,12 +23,22 @@ namespace Orbit.Infrastructure.Services;
 public partial class StreakFreezeAutoActivationService(
     IServiceScopeFactory scopeFactory,
     ILogger<StreakFreezeAutoActivationService> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private const int MaxTimeZoneSkewDays = 1;
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:StreakFreezeIntervalMinutes", 60));
+
+    public string Name => "streak-freeze-auto-activation";
+
+    public string CronExpression => "0 * * * *";
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await ActivateMissedDayFreezes(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("StreakFreezeAutoActivation");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -52,7 +52,7 @@ public class SetWeekStartDayCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.WeekStartDay.Should().Be(0);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        _userDateService.Received(1).InvalidateUserDatePreferences(UserId);
+        await _userDateService.Received(1).InvalidateUserDatePreferencesAsync(UserId, Arg.Any<CancellationToken>());
     }
 
     [Fact]

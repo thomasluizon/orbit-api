@@ -8,6 +8,7 @@ using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
@@ -15,12 +16,22 @@ namespace Orbit.Infrastructure.Services;
 public partial class GoalDeadlineNotificationService(
     IServiceScopeFactory scopeFactory,
     ILogger<GoalDeadlineNotificationService> logger,
-    IConfiguration configuration) : BackgroundService
+    IConfiguration configuration) : BackgroundService, IScheduledJob
 {
     private static readonly int[] NotifyDaysBefore = [7, 3, 1];
 
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(
         configuration.GetValue("BackgroundServices:GoalDeadlineIntervalMinutes", 30));
+
+    public string Name => "goal-deadline-notification";
+
+    public string CronExpression => "*/30 * * * *";
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        await CheckAndSendDeadlineNotifications(cancellationToken);
+        BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

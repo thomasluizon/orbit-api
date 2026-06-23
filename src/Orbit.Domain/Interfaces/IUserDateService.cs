@@ -16,5 +16,5 @@ public interface IUserDateService
     /// from any command that mutates User.TimeZone or User.WeekStartDay, otherwise subsequent
     /// date math can lag by up to 15 minutes.
     /// </summary>
-    void InvalidateUserDatePreferences(Guid userId);
+    Task InvalidateUserDatePreferencesAsync(Guid userId, CancellationToken cancellationToken = default);
 }

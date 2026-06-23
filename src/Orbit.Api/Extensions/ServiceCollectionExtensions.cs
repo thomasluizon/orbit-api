@@ -1,5 +1,7 @@
 using System.Text;
 using FluentValidation;
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +25,7 @@ using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -341,6 +344,7 @@ public static class ServiceCollectionExtensions
             .ConfigureHttpClient(c => c.Timeout = httpTimeout);
 
         builder.Services.AddMemoryCache();
+        AddOrbitDistributedCache(builder);
 
         builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
 
@@ -445,6 +449,24 @@ public static class ServiceCollectionExtensions
 
     private static void AddBackgroundServices(WebApplicationBuilder builder)
     {
+        builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
+
+        var useDurableQueue = builder.Configuration.GetSection(BackgroundJobSettings.SectionName)
+            .Get<BackgroundJobSettings>()?.UseDurableQueue ?? false;
+
+        builder.Services.AddHostedService<DataEncryptionMigrationService>();
+
+        if (useDurableQueue)
+            AddDurableRecurringJobs(builder);
+        else
+            AddInProcessSchedulers(builder);
+
+        builder.Services.AddHealthChecks()
+            .AddCheck<BackgroundServiceHealthCheck>("background-services");
+    }
+
+    private static void AddInProcessSchedulers(WebApplicationBuilder builder)
+    {
         builder.Services.AddHostedService<ReminderSchedulerService>();
         builder.Services.AddHostedService<GoalDeadlineNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
@@ -452,14 +474,67 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
         builder.Services.AddHostedService<StreakGoalSyncService>();
         builder.Services.AddHostedService<StreakFreezeAutoActivationService>();
-        builder.Services.AddHostedService<DataEncryptionMigrationService>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
-        builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
+    }
 
-        builder.Services.AddHealthChecks()
-            .AddCheck<BackgroundServiceHealthCheck>("background-services");
+    private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
+    {
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                $"{BackgroundJobSettings.SectionName}:UseDurableQueue is true but ConnectionStrings:DefaultConnection is not configured.");
+
+        builder.Services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(postgres => postgres.UseNpgsqlConnection(connectionString)));
+        builder.Services.AddHangfireServer();
+
+        builder.Services.AddSingleton<ScheduledJobRunner>();
+        AddScheduledJob<ReminderSchedulerService>(builder);
+        AddScheduledJob<GoalDeadlineNotificationService>(builder);
+        AddScheduledJob<SlipAlertSchedulerService>(builder);
+        AddScheduledJob<AccountDeletionService>(builder);
+        AddScheduledJob<HabitDueDateAdvancementService>(builder);
+        AddScheduledJob<StreakGoalSyncService>(builder);
+        AddScheduledJob<StreakFreezeAutoActivationService>(builder);
+        AddScheduledJob<SyncCleanupService>(builder);
+        AddScheduledJob<PlayNotificationCleanupService>(builder);
+        AddScheduledJob<CalendarAutoSyncService>(builder);
+
+        builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
+    }
+
+    private static void AddScheduledJob<TJob>(WebApplicationBuilder builder)
+        where TJob : class, IScheduledJob
+    {
+        builder.Services.AddSingleton<TJob>();
+        builder.Services.AddSingleton<IScheduledJob>(sp => sp.GetRequiredService<TJob>());
+    }
+
+    private static void AddOrbitDistributedCache(WebApplicationBuilder builder)
+    {
+        var redisSettings = builder.Configuration.GetSection(RedisCacheSettings.SectionName).Get<RedisCacheSettings>()
+            ?? new RedisCacheSettings();
+
+        if (!redisSettings.Enabled)
+        {
+            builder.Services.AddDistributedMemoryCache();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(redisSettings.ConnectionString))
+            throw new InvalidOperationException(
+                $"{RedisCacheSettings.SectionName}:Enabled is true but {RedisCacheSettings.SectionName}:ConnectionString is not configured.");
+
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = redisSettings.ConnectionString;
+            options.InstanceName = redisSettings.InstanceName;
+        });
     }
 
     private static void AddCorsPolicies(WebApplicationBuilder builder)
