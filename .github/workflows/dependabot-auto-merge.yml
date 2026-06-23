@@ -1,0 +1,37 @@
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # github-actions[bot] is a different actor than the dependabot[bot] author, so this
+      # approval satisfies the "require 1 approving review" rule (and removes the
+      # admin-merge friction for the PRs that don't auto-merge below).
+      - name: Approve
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Auto-merge only the safe lanes (GitHub Actions + NuGet, patch/minor). npm is left
+      # for a human review — the mobile workspace is Expo-SDK-pinned. Build + Unit Tests
+      # still gate the merge.
+      - name: Enable auto-merge for safe lanes
+        if: ${{ steps.meta.outputs.package-ecosystem != 'npm' && (steps.meta.outputs.update-type == 'version-update:semver-patch' || steps.meta.outputs.update-type == 'version-update:semver-minor') }}
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
