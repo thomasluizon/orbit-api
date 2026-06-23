@@ -377,9 +377,7 @@ public static class ServiceCollectionExtensions
 
         builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
         {
-            // Supabase secret keys (sb_secret_…) must be sent on the apikey header only;
-            // on Authorization: Bearer the gateway parses them as a JWT and returns Invalid JWT.
-            // https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
+            // Secret keys use the apikey header only — on Authorization: Bearer the gateway parses them as a JWT and rejects the request: https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
             var secretKey = builder.Configuration["Supabase:SecretKey"]!;
             client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
             client.DefaultRequestHeaders.Add("apikey", secretKey);
