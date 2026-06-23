@@ -10,9 +10,18 @@ updates:
         update-types:
           - minor
           - patch
+    # Majors are reviewed manually (e.g. Stripe.net 50->52 is breaking). Scoping the
+    # ignore to version-update:semver-major leaves Dependabot *security* updates intact.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
