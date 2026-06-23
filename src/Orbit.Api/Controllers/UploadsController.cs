@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Uploads.Commands;
 
 namespace Orbit.Api.Controllers;
@@ -14,6 +15,7 @@ public class UploadsController(IMediator mediator) : ControllerBase
     public record SignUploadRequest(string Filename, string ContentType, long SizeBytes);
 
     [HttpPost("sign")]
+    [DistributedRateLimit("uploads")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
