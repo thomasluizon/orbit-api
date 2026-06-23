@@ -16,6 +16,8 @@ public class SendCodeCommandHandler(
     IMemoryCache cache,
     IEmailService emailService) : IRequestHandler<SendCodeCommand, Result>
 {
+    private const int MinSmokeCodeLength = 16;
+
     public async Task<Result> Handle(SendCodeCommand request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -76,6 +78,9 @@ public class SendCodeCommandHandler(
         var smokeCode = Environment.GetEnvironmentVariable("SMOKE_TEST_CODE");
 
         if (string.IsNullOrEmpty(smokeEmail) || string.IsNullOrEmpty(smokeCode))
+            return false;
+
+        if (smokeCode.Length < MinSmokeCodeLength)
             return false;
 
         if (!string.Equals(smokeEmail.Trim(), email, StringComparison.OrdinalIgnoreCase))

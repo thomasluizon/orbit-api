@@ -115,6 +115,21 @@ public class SendCodeCommandHandlerTests
         });
     }
 
+    [Fact]
+    public async Task Production_ShortSmokeCode_NoBypass_SendsEmail()
+    {
+        await WithEnv("Production", SmokeEmail, "short", async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
+            entry!.Code.Should().NotBe("short");
+            await _emailService.Received(1).SendVerificationCodeAsync(
+                SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        });
+    }
+
     private VerifyCodeCommandHandler BuildVerifyHandler()
     {
         var userRepo = Substitute.For<IGenericRepository<User>>();
