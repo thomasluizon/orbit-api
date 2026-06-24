@@ -67,7 +67,9 @@ public class GetDailySummaryQueryHandler(
 
         var habits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && !h.IsGeneral,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo)),
+            q => q
+                .Include(h => h.Logs.Where(l => l.Date >= request.DateFrom && l.Date <= request.DateTo))
+                .Include(h => h.Goals),
             cancellationToken);
 
         var summaryHabits = habits
@@ -81,6 +83,8 @@ public class GetDailySummaryQueryHandler(
             userToday,
             effectiveLanguage,
             currentLocalTime,
+            user.CurrentStreak,
+            user.StreakFreezesAccumulated,
             cancellationToken);
 
         if (summaryResult.IsFailure)

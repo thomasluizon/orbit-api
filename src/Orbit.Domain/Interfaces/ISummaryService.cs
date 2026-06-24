@@ -12,5 +12,7 @@ public interface ISummaryService
         DateOnly userToday,
         string language,
         TimeOnly? currentLocalTime,
+        int currentStreak,
+        int streakFreezesAccumulated,
         CancellationToken cancellationToken = default);
 }

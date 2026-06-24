@@ -616,7 +616,101 @@ public class AiSummaryServiceTests
         var selected = InvokeSelectScheduledHabits([task], Today);
 
         selected.Should().ContainSingle();
-        InvokeBuildHabitSection(selected).Should().Contain("Renovar passaporte (pending)");
+        InvokeBuildHabitSection(selected, Today).Should().Contain("Renovar passaporte (pending, overdue)");
+    }
+
+    [Fact]
+    public void BuildHabitSection_BadHabitLoggedToday_FramedAsSlipNotDone()
+    {
+        var badHabit = CreateBadHabit("Skip Gym");
+        badHabit.Log(Today);
+
+        var section = InvokeBuildHabitSection([badHabit]);
+
+        section.Should().Contain("Skip Gym (bad habit -- slipped)");
+        section.Should().NotContain("(done)");
+    }
+
+    [Fact]
+    public void BuildHabitSection_BadHabitCleanInRange_FramedAsCleanWinWithDaysSinceSlip()
+    {
+        var badHabit = CreateBadHabit("Cheat diet");
+        badHabit.Log(Today.AddDays(-3), advanceDueDate: false);
+
+        var section = InvokeBuildHabitSection([badHabit], Today);
+
+        section.Should().Contain("Cheat diet (bad habit -- clean, 3 days since last slip)");
+        section.Should().NotContain("(done)");
+        section.Should().NotContain("slipped");
+    }
+
+    [Fact]
+    public void BuildHabitSection_BadHabitNeverLogged_FramedAsCleanNoSlipsOnRecord()
+    {
+        var badHabit = CreateBadHabit("Smoke");
+
+        var section = InvokeBuildHabitSection([badHabit], Today);
+
+        section.Should().Contain("Smoke (bad habit -- clean, no slips on record)");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_BadHabitSlip_ExcludedFromCompletedTally()
+    {
+        var goodDone = CreateHabit("Drink water");
+        goodDone.Log(Today);
+        var badSlip = CreateBadHabit("Skip Gym");
+        badSlip.Log(Today);
+
+        var result = InvokeBuildSummaryPrompt([goodDone, badSlip], Today, "en");
+
+        result.Should().Contain("Progress: 1/1 habits completed");
+        result.Should().Contain("Bad habit slips today: 1");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_RulesContainWinVsSlipGuidance()
+    {
+        var badHabit = CreateBadHabit("Skip Gym");
+
+        var result = InvokeBuildSummaryPrompt([badHabit], Today, "en");
+
+        result.Should().Contain("bad habit -- slipped");
+        result.Should().Contain("never congratulate it");
+        result.Should().Contain("bad habit -- clean");
+        result.Should().Contain("the real win worth naming");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_OverdueGoodHabit_MarkedOverdueInSection()
+    {
+        var overdue = CreateOneTimeTask("Renew passport", dueDate: Today.AddDays(-2));
+
+        var result = InvokeBuildSummaryPrompt([overdue], Today, "en");
+
+        result.Should().Contain("Renew passport (pending, overdue)");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_StreakAndFreezesProvided_IncludedInContextHeader()
+    {
+        var habit = CreateHabit("Walk");
+
+        var result = InvokeBuildSummaryPrompt([habit], Today, "en", currentStreak: 12, streakFreezesAccumulated: 2);
+
+        result.Should().Contain("Current streak: 12 days");
+        result.Should().Contain("Streak freezes banked: 2");
+    }
+
+    [Fact]
+    public void BuildSummaryPrompt_NoStreak_OmitsStreakLines()
+    {
+        var habit = CreateHabit("Walk");
+
+        var result = InvokeBuildSummaryPrompt([habit], Today, "en");
+
+        result.Should().NotContain("Current streak:");
+        result.Should().NotContain("Streak freezes banked:");
     }
 
     private static Habit CreateHabit(
@@ -651,6 +745,17 @@ public class AiSummaryServiceTests
             ParentHabitId: parentId)).Value;
     }
 
+    private static Habit CreateBadHabit(string title, DateOnly? dueDate = null)
+    {
+        return Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            title,
+            FrequencyUnit.Day,
+            1,
+            DueDate: dueDate ?? Today,
+            IsBadHabit: true)).Value;
+    }
+
     private static Habit CreateOneTimeTask(string title, DateOnly dueDate, Guid? parentId = null)
     {
         return Habit.Create(new HabitCreateParams(
@@ -666,18 +771,21 @@ public class AiSummaryServiceTests
         List<Habit> scheduledHabits,
         DateOnly date,
         string language,
-        TimeOnly? currentLocalTime = null)
+        TimeOnly? currentLocalTime = null,
+        int currentStreak = 0,
+        int streakFreezesAccumulated = 0)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildSummaryPrompt", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits, date, date, language, currentLocalTime])!;
+        return (string)method.Invoke(null,
+            [scheduledHabits, date, date, date, language, currentLocalTime, currentStreak, streakFreezesAccumulated])!;
     }
 
-    private static string InvokeBuildHabitSection(List<Habit> scheduledHabits)
+    private static string InvokeBuildHabitSection(List<Habit> scheduledHabits, DateOnly? userToday = null)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildHabitSection", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits, Today, Today])!;
+        return (string)method.Invoke(null, [scheduledHabits, Today, Today, userToday ?? Today])!;
     }
 
     private static List<Habit> InvokeSelectScheduledHabits(

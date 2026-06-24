@@ -50,6 +50,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Test summary content"));
 
@@ -79,6 +80,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("First call summary"));
 
@@ -115,6 +117,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
@@ -128,6 +131,7 @@ public class GetDailySummaryQueryHandlerTests
                 habits.Select(h => h.Title).SequenceEqual(new[] { "Read" })),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -193,6 +197,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Failure<string>("AI service unavailable"));
 
@@ -222,6 +227,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo em portugues"));
 
@@ -234,11 +240,13 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
         await _summaryService.DidNotReceive().GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -258,6 +266,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo"));
 
@@ -270,6 +279,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -290,6 +300,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
@@ -302,6 +313,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -327,6 +339,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<IEnumerable<Habit>>(),
             futureDate, futureDate, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
