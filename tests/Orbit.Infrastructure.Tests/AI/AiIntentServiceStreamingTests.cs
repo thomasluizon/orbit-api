@@ -137,6 +137,54 @@ public class AiIntentServiceStreamingTests
         logger.WarningEventIds.Should().Contain(8);
     }
 
+    [Fact]
+    public async Task SendWithToolsAsync_WithUserId_SetsEndUserIdForCacheRouting()
+    {
+        var handler = new JsonHandler(BufferedCompletion);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+        var userId = Guid.NewGuid();
+
+        await service.SendWithToolsAsync("hello", "system", [], userId);
+
+        handler.LastRequestBody.Should().Contain(userId.ToString("N"));
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_HistoryWithinWindow_DoesNotSummarize()
+    {
+        var handler = new CountingJsonHandler(BufferedCompletion);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+
+        await service.SendWithToolsAsync("hello", "system", [], Guid.NewGuid(), history: BuildHistory(40));
+
+        handler.RequestCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_HistoryOverflowsWindow_SummarizesOlderMessages()
+    {
+        var handler = new CountingJsonHandler(BufferedCompletion);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+
+        await service.SendWithToolsAsync("hello", "system", [], Guid.NewGuid(), history: BuildHistory(50));
+
+        handler.RequestCount.Should().Be(2);
+    }
+
+    private const string BufferedCompletion = """
+        {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
+         "choices":[{"index":0,"message":{"role":"assistant","content":"Hi there"},"finish_reason":"stop"}],
+         "usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
+        """;
+
+    private static List<ChatHistoryMessage> BuildHistory(int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => new ChatHistoryMessage(i % 2 == 0 ? "user" : "assistant", $"message {i}"))
+            .ToList();
+
     private static (AiIntentService Service, CollectingSink Sink) BuildService(HttpMessageHandler handler)
     {
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
@@ -253,6 +301,29 @@ public class AiIntentServiceStreamingTests
         }
 
         private HttpResponseMessage BuildResponse(HttpRequestMessage request)
+        {
+            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            return new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content };
+        }
+    }
+
+    private sealed class CountingJsonHandler(string body) : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            return Build(request);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            return Task.FromResult(Build(request));
+        }
+
+        private HttpResponseMessage Build(HttpRequestMessage request)
         {
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             return new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content };

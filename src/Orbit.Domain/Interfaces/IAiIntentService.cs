@@ -9,6 +9,7 @@ public interface IAiIntentService
         string userMessage,
         string systemPrompt,
         IReadOnlyList<object> toolDeclarations,
+        Guid userId = default,
         byte[]? imageData = null,
         string? imageMimeType = null,
         IReadOnlyList<ChatHistoryMessage>? history = null,

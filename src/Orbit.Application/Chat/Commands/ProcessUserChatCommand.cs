@@ -114,6 +114,11 @@ public partial class ProcessUserChatCommandHandler(
         var context = contextResult.Value;
         var aiStreamSink = BuildAiStreamSink(request.StreamSink);
 
+        var faqLocale = context.User?.Language ?? request.ClientContext?.Locale ?? "en";
+        var faqKey = ChatFaqCache.TryMatchFaqKey(request.Message);
+        if (faqKey is not null && ChatFaqCache.TryGetAnswer(faqKey, faqLocale, out var cachedFaqAnswer))
+            return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
+
         var skipTools = request.ImageData is null
             && request.ConfirmationToken is null
             && (request.History is null || request.History.Count == 0)
@@ -156,6 +161,9 @@ public partial class ProcessUserChatCommandHandler(
             if (request.ClientContext?.SupportsGoalListCard == true)
                 goalList = GoalListCardBuilder.Build(context.ActiveGoals);
         }
+
+        if (faqKey is not null && iterations == 0 && executionResults.ActionResults.Count == 0 && !string.IsNullOrWhiteSpace(aiMessage))
+            ChatFaqCache.StoreAnswer(faqKey, faqLocale, aiMessage);
 
         RunBackgroundPostResponseWork(
             request.UserId,
@@ -293,9 +301,14 @@ public partial class ProcessUserChatCommandHandler(
         if (request.ClientContext?.SupportsGoalListCard == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, GoalListCardBuilder.PromptInstruction);
 
+        var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
+            ai.ToolRegistry.GetAll().Select(t => t.Name),
+            BuildConversationText(request));
+
         var toolDeclarations = skipTools
             ? new List<object>()
             : ai.ToolRegistry.GetAll()
+                .Where(t => activeToolNames.Contains(t.Name))
                 .OrderBy(t => t.Name, StringComparer.Ordinal)
                 .Select(t => (object)new
                 {
@@ -311,11 +324,20 @@ public partial class ProcessUserChatCommandHandler(
             request.Message,
             systemPrompt,
             toolDeclarations,
+            request.UserId,
             request.ImageData,
             request.ImageMimeType,
             request.History,
             aiStreamSink,
             cancellationToken);
+    }
+
+    private static string BuildConversationText(ProcessUserChatCommand request)
+    {
+        if (request.History is not { Count: > 0 })
+            return request.Message;
+
+        return request.Message + " " + string.Join(" ", request.History.Select(message => message.Content));
     }
 
     private async Task<(AiResponse FinalResponse, int Iterations)> RunToolCallLoopAsync(
