@@ -19,6 +19,7 @@ public record GetDailySummaryQuery(
 public class GetDailySummaryQueryHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IPayGateService payGate,
     ISummaryService summaryService,
     IMemoryCache cache) : IRequestHandler<GetDailySummaryQuery, Result<DailySummaryResponse>>
@@ -76,6 +77,9 @@ public class GetDailySummaryQueryHandler(
             .Where(h => !HasSkipLogInRange(h, request.DateFrom, request.DateTo))
             .ToList();
 
+        var lastBadHabitSlipDates = await LoadLastBadHabitSlipDates(
+            summaryHabits, userToday, cancellationToken);
+
         var summaryResult = await summaryService.GenerateSummaryAsync(
             summaryHabits,
             request.DateFrom,
@@ -85,6 +89,7 @@ public class GetDailySummaryQueryHandler(
             currentLocalTime,
             user.CurrentStreak,
             user.StreakFreezesAccumulated,
+            lastBadHabitSlipDates,
             cancellationToken);
 
         if (summaryResult.IsFailure)
@@ -106,6 +111,29 @@ public class GetDailySummaryQueryHandler(
 
     private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
         habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value == 0);
+
+    /// <summary>
+    /// Returns the most-recent slip date (a completion log, <c>Value &gt; 0</c>) on or before
+    /// <paramref name="userToday"/> for each bad habit, keyed by habit id. The habits' own
+    /// <see cref="Habit.Logs"/> are date-windowed to the summary range and therefore cannot answer
+    /// "days since last slip" for a slip that fell outside that window, so this runs a separate
+    /// query scoped to bad-habit slip rows. Habits with no slip on record are absent from the map.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, DateOnly>> LoadLastBadHabitSlipDates(
+        IReadOnlyList<Habit> habits, DateOnly userToday, CancellationToken cancellationToken)
+    {
+        var badHabitIds = habits.Where(h => h.IsBadHabit).Select(h => h.Id).ToHashSet();
+        if (badHabitIds.Count == 0)
+            return new Dictionary<Guid, DateOnly>();
+
+        var slipLogs = await habitLogRepository.FindAsync(
+            l => badHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date <= userToday,
+            cancellationToken);
+
+        return slipLogs
+            .GroupBy(l => l.HabitId)
+            .ToDictionary(g => g.Key, g => g.Max(l => l.Date));
+    }
 
     private static string SummaryTimeBucket(TimeOnly? currentLocalTime)
     {

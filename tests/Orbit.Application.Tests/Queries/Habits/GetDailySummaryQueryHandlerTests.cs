@@ -15,6 +15,7 @@ public class GetDailySummaryQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
+    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly ISummaryService _summaryService = Substitute.For<ISummaryService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
@@ -25,7 +26,8 @@ public class GetDailySummaryQueryHandlerTests
 
     public GetDailySummaryQueryHandlerTests()
     {
-        _handler = new GetDailySummaryQueryHandler(_habitRepo, _userRepo, _payGate, _summaryService, _cache);
+        _handler = new GetDailySummaryQueryHandler(
+            _habitRepo, _userRepo, _habitLogRepo, _payGate, _summaryService, _cache);
     }
 
     private static User CreateTestUser()
@@ -51,6 +53,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Test summary content"));
 
@@ -81,6 +84,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("First call summary"));
 
@@ -118,6 +122,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
@@ -132,6 +137,94 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_BadHabitSlippedBeforeWindow_PassesLastSlipDateFromTargetedQuery()
+    {
+        var user = CreateTestUser();
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { badHabit }.AsReadOnly());
+
+        var slipDate = Today.AddDays(-3);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog> { HabitLog.Create(badHabit.Id, slipDate, 1) }.AsReadOnly());
+
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, Arg.Any<DateOnly>(), "en",
+            Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Summary"));
+
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _summaryService.Received(1).GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, Arg.Any<DateOnly>(), "en",
+            Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Is<IReadOnlyDictionary<Guid, DateOnly>>(map =>
+                map.ContainsKey(badHabit.Id) && map[badHabit.Id] == slipDate),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoBadHabits_SkipsSlipQueryAndPassesEmptyMap()
+    {
+        var user = CreateTestUser();
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var goodHabit = Habit.Create(new HabitCreateParams(
+            UserId, "Read", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { goodHabit }.AsReadOnly());
+
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, Arg.Any<DateOnly>(), "en",
+            Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success("Summary"));
+
+        var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
+
+        await _handler.Handle(query, CancellationToken.None);
+
+        await _habitLogRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>());
+        await _summaryService.Received(1).GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, Arg.Any<DateOnly>(), "en",
+            Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Is<IReadOnlyDictionary<Guid, DateOnly>>(map => map.Count == 0),
             Arg.Any<CancellationToken>());
     }
 
@@ -198,6 +291,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Failure<string>("AI service unavailable"));
 
@@ -228,6 +322,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo em portugues"));
 
@@ -241,12 +336,14 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>());
         await _summaryService.DidNotReceive().GenerateSummaryAsync(
             Arg.Any<IEnumerable<Habit>>(),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -267,6 +364,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Resumo"));
 
@@ -280,6 +378,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "pt-BR",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -301,6 +400,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 
@@ -314,6 +414,7 @@ public class GetDailySummaryQueryHandlerTests
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -321,7 +422,8 @@ public class GetDailySummaryQueryHandlerTests
     public async Task Handle_CacheExpiry_UsesUserTimezoneEndOfDay()
     {
         var capturingCache = new CapturingCache();
-        var handler = new GetDailySummaryQueryHandler(_habitRepo, _userRepo, _payGate, _summaryService, capturingCache);
+        var handler = new GetDailySummaryQueryHandler(
+            _habitRepo, _userRepo, _habitLogRepo, _payGate, _summaryService, capturingCache);
 
         var user = CreateTestUser();
         user.SetTimeZone("America/Sao_Paulo");
@@ -340,6 +442,7 @@ public class GetDailySummaryQueryHandlerTests
             futureDate, futureDate, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
             .Returns(Result.Success("Summary"));
 

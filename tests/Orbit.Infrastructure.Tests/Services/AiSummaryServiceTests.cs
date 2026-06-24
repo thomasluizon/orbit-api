@@ -632,12 +632,12 @@ public class AiSummaryServiceTests
     }
 
     [Fact]
-    public void BuildHabitSection_BadHabitCleanInRange_FramedAsCleanWinWithDaysSinceSlip()
+    public void BuildHabitSection_BadHabitCleanWithPriorSlip_FramedAsCleanWinWithDaysSinceSlip()
     {
         var badHabit = CreateBadHabit("Cheat diet");
-        badHabit.Log(Today.AddDays(-3), advanceDueDate: false);
+        var lastSlips = new Dictionary<Guid, DateOnly> { [badHabit.Id] = Today.AddDays(-3) };
 
-        var section = InvokeBuildHabitSection([badHabit], Today);
+        var section = InvokeBuildHabitSection([badHabit], Today, lastSlips);
 
         section.Should().Contain("Cheat diet (bad habit -- clean, 3 days since last slip)");
         section.Should().NotContain("(done)");
@@ -645,7 +645,18 @@ public class AiSummaryServiceTests
     }
 
     [Fact]
-    public void BuildHabitSection_BadHabitNeverLogged_FramedAsCleanNoSlipsOnRecord()
+    public void BuildHabitSection_BadHabitCleanWithPriorSlip_IgnoresWindowedHabitLogsUsesSlipMap()
+    {
+        var badHabit = CreateBadHabit("Cheat diet");
+        var lastSlips = new Dictionary<Guid, DateOnly> { [badHabit.Id] = Today.AddDays(-7) };
+
+        var section = InvokeBuildHabitSection([badHabit], Today, lastSlips);
+
+        section.Should().Contain("Cheat diet (bad habit -- clean, 7 days since last slip)");
+    }
+
+    [Fact]
+    public void BuildHabitSection_BadHabitNoEntryInSlipMap_FramedAsCleanNoSlipsOnRecord()
     {
         var badHabit = CreateBadHabit("Smoke");
 
@@ -773,19 +784,26 @@ public class AiSummaryServiceTests
         string language,
         TimeOnly? currentLocalTime = null,
         int currentStreak = 0,
-        int streakFreezesAccumulated = 0)
+        int streakFreezesAccumulated = 0,
+        IReadOnlyDictionary<Guid, DateOnly>? lastBadHabitSlipDates = null)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildSummaryPrompt", PrivateStatic)!;
         return (string)method.Invoke(null,
-            [scheduledHabits, date, date, date, language, currentLocalTime, currentStreak, streakFreezesAccumulated])!;
+            [scheduledHabits, date, date, date, language, currentLocalTime, currentStreak, streakFreezesAccumulated,
+             lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>()])!;
     }
 
-    private static string InvokeBuildHabitSection(List<Habit> scheduledHabits, DateOnly? userToday = null)
+    private static string InvokeBuildHabitSection(
+        List<Habit> scheduledHabits,
+        DateOnly? userToday = null,
+        IReadOnlyDictionary<Guid, DateOnly>? lastBadHabitSlipDates = null)
     {
         var method = typeof(AiSummaryService)
             .GetMethod("BuildHabitSection", PrivateStatic)!;
-        return (string)method.Invoke(null, [scheduledHabits, Today, Today, userToday ?? Today])!;
+        return (string)method.Invoke(null,
+            [scheduledHabits, Today, Today, userToday ?? Today,
+             lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>()])!;
     }
 
     private static List<Habit> InvokeSelectScheduledHabits(

@@ -23,12 +23,14 @@ public sealed partial class AiSummaryService(
         TimeOnly? currentLocalTime,
         int currentStreak,
         int streakFreezesAccumulated,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
         CancellationToken cancellationToken = default)
     {
         var scheduledHabits = SelectScheduledHabits(allHabits, userToday, dateFrom, dateTo);
 
         var prompt = BuildSummaryPrompt(
-            scheduledHabits, dateFrom, dateTo, userToday, language, currentLocalTime, currentStreak, streakFreezesAccumulated);
+            scheduledHabits, dateFrom, dateTo, userToday, language, currentLocalTime,
+            currentStreak, streakFreezesAccumulated, lastBadHabitSlipDates);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogGeneratingDailySummary(logger, dateFrom, language);
@@ -99,11 +101,12 @@ public sealed partial class AiSummaryService(
         string language,
         TimeOnly? currentLocalTime,
         int currentStreak,
-        int streakFreezesAccumulated)
+        int streakFreezesAccumulated,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
-        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo, userToday);
+        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo, userToday, lastBadHabitSlipDates);
 
         var goodHabits = scheduledHabits.Where(h => h.ParentHabitId is null && !h.IsBadHabit).ToList();
         var doneTotal = goodHabits.Count(h => IsDoneInRange(h, date, dateTo));
@@ -162,7 +165,8 @@ public sealed partial class AiSummaryService(
         List<Habit> scheduledHabits,
         DateOnly dateFrom,
         DateOnly dateTo,
-        DateOnly userToday)
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         var habitLines = new List<string>();
 
@@ -176,11 +180,11 @@ public sealed partial class AiSummaryService(
                 var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
                 habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{DescribeTiming(habit)}]");
                 foreach (var child in children)
-                    habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday)}");
+                    habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}");
             }
             else
             {
-                habitLines.Add($"- {DescribeHabitLine(habit, dateFrom, dateTo, userToday)}");
+                habitLines.Add($"- {DescribeHabitLine(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}");
             }
 
             AppendGoalsLine(habitLines, habit);
@@ -189,10 +193,12 @@ public sealed partial class AiSummaryService(
         return habitLines.Count > 0 ? string.Join("\n", habitLines) : "(no habits scheduled)";
     }
 
-    private static string DescribeHabitLine(Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday)
+    private static string DescribeHabitLine(
+        Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         if (habit.IsBadHabit)
-            return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday)}) [{DescribeTiming(habit)}]";
+            return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}) [{DescribeTiming(habit)}]";
 
         var status = IsDoneInRange(habit, dateFrom, dateTo)
             ? "done"
@@ -200,20 +206,17 @@ public sealed partial class AiSummaryService(
         return $"{habit.Title} ({status}) [{DescribeTiming(habit)}]";
     }
 
-    private static string DescribeBadHabitState(Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday)
+    private static string DescribeBadHabitState(
+        Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         if (IsDoneInRange(habit, dateFrom, dateTo))
             return "bad habit -- slipped";
 
-        var lastSlip = habit.Logs
-            .Where(l => l.Value > 0 && l.Date <= userToday)
-            .Select(l => (DateOnly?)l.Date)
-            .Max();
-
-        if (lastSlip is null)
+        if (!lastBadHabitSlipDates.TryGetValue(habit.Id, out var lastSlip))
             return "bad habit -- clean, no slips on record";
 
-        var daysClean = userToday.DayNumber - lastSlip.Value.DayNumber;
+        var daysClean = userToday.DayNumber - lastSlip.DayNumber;
         return $"bad habit -- clean, {daysClean} days since last slip";
     }
 

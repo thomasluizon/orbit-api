@@ -14,5 +14,6 @@ public interface ISummaryService
         TimeOnly? currentLocalTime,
         int currentStreak,
         int streakFreezesAccumulated,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
         CancellationToken cancellationToken = default);
 }
