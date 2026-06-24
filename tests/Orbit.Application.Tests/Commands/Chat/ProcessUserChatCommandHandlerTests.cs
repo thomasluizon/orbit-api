@@ -77,14 +77,16 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(callInfo => BuildCapability(callInfo.Arg<string>()));
         _catalogService.GetCapabilityByChatTool(Arg.Any<string>())
             .Returns(callInfo => BuildCapability(callInfo.Arg<string>()));
-        _catalogService.BuildPromptSupplement(Arg.Any<AgentContextSnapshot>()).Returns("agent policy");
+        _catalogService.BuildStaticSupplement().Returns("static supplement");
+        _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("dynamic supplement");
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
         _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
-        _promptBuilder.Build(Arg.Any<PromptBuildRequest>()).Returns("system prompt");
+        _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("static prompt");
+        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
 
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -291,7 +293,7 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create morning walk"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveHabits.Count == 1 &&
             request.ActiveHabits[0].Id == activeHabit.Id));
     }
@@ -323,7 +325,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
-        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null &&
             request.ActiveGoals.Count == 1 &&
             request.ActiveGoals[0].CurrentValue == 4));
@@ -362,7 +364,7 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Update my push-ups habit"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _promptBuilder.Received(1).Build(Arg.Is<PromptBuildRequest>(request =>
+        _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveHabits.Select(habit => habit.Id).ToHashSet().SetEquals(new[]
             {
                 completedParent.Id,
@@ -388,7 +390,7 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Create read book"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _catalogService.Received(1).BuildPromptSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>
+        _catalogService.Received(1).BuildDynamicSupplement(Arg.Is<AgentContextSnapshot>(snapshot =>
             snapshot.RecentHabitTitles != null &&
             snapshot.RecentHabitTitles.Count == 1 &&
             snapshot.RecentHabitTitles[0] == "Read Book" &&
@@ -559,6 +561,38 @@ public class ProcessUserChatCommandHandlerTests
                 ToolNames(declarations).SequenceEqual(new[] { "assign_tags", "create_habit", "delete_habit" })),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_AssemblesSystemPromptStaticBeforeDynamic()
+    {
+        SetupUserAndPayGate();
+        _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("STATIC_SECTIONS");
+        _catalogService.BuildStaticSupplement().Returns("STATIC_SUPPLEMENT");
+        _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("DYNAMIC_SECTIONS");
+        _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("DYNAMIC_SUPPLEMENT");
+
+        string? capturedPrompt = null;
+        _aiIntentService.SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
+
+        var handler = CreateHandler();
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedPrompt.Should().NotBeNull();
+        var staticSections = capturedPrompt!.IndexOf("STATIC_SECTIONS", StringComparison.Ordinal);
+        var staticSupplement = capturedPrompt.IndexOf("STATIC_SUPPLEMENT", StringComparison.Ordinal);
+        var dynamicSections = capturedPrompt.IndexOf("DYNAMIC_SECTIONS", StringComparison.Ordinal);
+        var dynamicSupplement = capturedPrompt.IndexOf("DYNAMIC_SUPPLEMENT", StringComparison.Ordinal);
+
+        staticSections.Should().BeGreaterThanOrEqualTo(0);
+        staticSections.Should().BeLessThan(staticSupplement);
+        staticSupplement.Should().BeLessThan(dynamicSections);
+        dynamicSections.Should().BeLessThan(dynamicSupplement);
     }
 
     [Fact]
