@@ -115,6 +115,7 @@ public partial class ProcessUserChatCommandHandler(
 
         var skipTools = request.ImageData is null
             && request.ConfirmationToken is null
+            && (request.History is null || request.History.Count == 0)
             && ChatIntentRouter.IsNoToolTurn(request.Message);
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();

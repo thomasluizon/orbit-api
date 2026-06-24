@@ -670,6 +670,26 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TrivialReplyMidConversation_KeepsTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Logged it!" });
+        var handler = CreateHandler(FakeTool("log_habit"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId, "yes",
+                History: [new ChatHistoryMessage("ai", "I can log your 5 km run — should I?")]),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_AssemblesSystemPromptStaticBeforeDynamic()
     {
         SetupUserAndPayGate();
