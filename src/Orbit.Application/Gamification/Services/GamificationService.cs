@@ -153,31 +153,14 @@ public partial class GamificationService(
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
 
         var metrics = HabitMetricsCalculator.Calculate(habit, today, context.UserTimeZone);
-        var xp = 10 + metrics.CurrentStreak;
-        user.AddXp(xp);
 
-        if (!earned.Contains(AchievementDefinitions.Liftoff) && context.TotalLogCount == 1)
-            TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
+        var xpEarned = habit.IsBadHabit
+            ? 0
+            : AwardLoggedHabitXpAndAchievements(user, habit, earned, context, today, newAchievements, metrics.CurrentStreak);
 
-        CheckConsistencyAchievements(metrics.CurrentStreak, earned, user, newAchievements);
-
-        if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
-            CheckVolumeAchievements(context.TotalLogCount, earned, user, newAchievements);
-
-        CheckPerfectDay(context.AllUserHabits, today, earned, user, newAchievements);
-
-        if (earned.Contains(AchievementDefinitions.PerfectDay)
-            || newAchievements.Any(a => a.Definition.Id == AchievementDefinitions.PerfectDay))
-        {
-            CheckPerfectWeekAndMonth(context.AllUserHabits, today, earned, user, newAchievements);
-        }
-
-        CheckTimeBasedAchievements(user, earned, newAchievements, context.LogsWithRecentCreationTimes, context.UserTimeZone);
-
-        if (!earned.Contains(AchievementDefinitions.Comeback) && !context.HasActivityInPriorWeek)
-            TryGrant(AchievementDefinitions.Comeback, user, earned, newAchievements);
-
-        if (!earned.Contains(AchievementDefinitions.BadHabitBreaker) && habit.IsBadHabit && metrics.CurrentStreak >= 30)
+        if (habit.IsBadHabit
+            && !earned.Contains(AchievementDefinitions.BadHabitBreaker)
+            && metrics.CurrentStreak >= 30)
         {
             TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
         }
@@ -197,8 +180,45 @@ public partial class GamificationService(
         }
 
         return new HabitLogGamificationResult(
-            xp,
+            xpEarned,
             newAchievements.Select(a => a.Definition.Id).ToList());
+    }
+
+    /// <summary>
+    /// Grants the base + streak XP and runs every generic completion achievement check for a good
+    /// habit log. Bad-habit logs never reach this — logging a habit you are trying to quit is a slip,
+    /// not progress, so it earns no XP and no generic achievements (only <c>BadHabitBreaker</c>,
+    /// evaluated separately, rewards a sustained abstinence streak). Returns the XP awarded.
+    /// </summary>
+    private static int AwardLoggedHabitXpAndAchievements(
+        User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements, int currentStreak)
+    {
+        var xp = 10 + currentStreak;
+        user.AddXp(xp);
+
+        if (!earned.Contains(AchievementDefinitions.Liftoff) && context.TotalLogCount == 1)
+            TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
+
+        CheckConsistencyAchievements(currentStreak, earned, user, newAchievements);
+
+        if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
+            CheckVolumeAchievements(context.TotalLogCount, earned, user, newAchievements);
+
+        CheckPerfectDay(context.AllUserHabits, today, earned, user, newAchievements);
+
+        if (earned.Contains(AchievementDefinitions.PerfectDay)
+            || newAchievements.Any(a => a.Definition.Id == AchievementDefinitions.PerfectDay))
+        {
+            CheckPerfectWeekAndMonth(context.AllUserHabits, today, earned, user, newAchievements);
+        }
+
+        CheckTimeBasedAchievements(user, earned, newAchievements, context.LogsWithRecentCreationTimes, context.UserTimeZone);
+
+        if (!earned.Contains(AchievementDefinitions.Comeback) && !context.HasActivityInPriorWeek)
+            TryGrant(AchievementDefinitions.Comeback, user, earned, newAchievements);
+
+        return xp;
     }
 
     public async Task ProcessHabitCreated(Guid userId, CancellationToken ct = default)

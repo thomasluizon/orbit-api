@@ -21,11 +21,16 @@ public sealed partial class AiSummaryService(
         DateOnly userToday,
         string language,
         TimeOnly? currentLocalTime,
+        int currentStreak,
+        int streakFreezesAccumulated,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
         CancellationToken cancellationToken = default)
     {
         var scheduledHabits = SelectScheduledHabits(allHabits, userToday, dateFrom, dateTo);
 
-        var prompt = BuildSummaryPrompt(scheduledHabits, dateFrom, dateTo, language, currentLocalTime);
+        var prompt = BuildSummaryPrompt(
+            scheduledHabits, dateFrom, dateTo, userToday, language, currentLocalTime,
+            currentStreak, streakFreezesAccumulated, lastBadHabitSlipDates);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogGeneratingDailySummary(logger, dateFrom, language);
@@ -33,7 +38,7 @@ public sealed partial class AiSummaryService(
         try
         {
             var text = await aiClient.CompleteTextAsync(
-                "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate what they have already done, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You write plain text only -- no markdown, bullets, headings, emoji, or JSON -- with no greeting and no sign-off, only in the language you are told to use.",
+                "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate the good things they have already done, you treat a slip on a habit they are trying to quit as a gentle, judgment-free moment rather than something to praise, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You write plain text only -- no markdown, bullets, headings, emoji, or JSON -- with no greeting and no sign-off, only in the language you are told to use.",
                 prompt,
                 temperature: 0.7,
                 cancellationToken,
@@ -92,21 +97,26 @@ public sealed partial class AiSummaryService(
         List<Habit> scheduledHabits,
         DateOnly date,
         DateOnly dateTo,
+        DateOnly userToday,
         string language,
-        TimeOnly? currentLocalTime)
+        TimeOnly? currentLocalTime,
+        int currentStreak,
+        int streakFreezesAccumulated,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
-        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo);
+        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo, userToday, lastBadHabitSlipDates);
 
-        var totalCount = scheduledHabits.Count;
-        var doneTotal = scheduledHabits.Count(h => IsDoneInRange(h, date, dateTo));
-        var timeContext = BuildTimeContext(currentLocalTime);
+        var goodHabits = scheduledHabits.Where(h => h.ParentHabitId is null && !h.IsBadHabit).ToList();
+        var doneTotal = goodHabits.Count(h => IsDoneInRange(h, date, dateTo));
+        var badHabitSlips = scheduledHabits.Count(h => h.IsBadHabit && IsDoneInRange(h, date, dateTo));
+        var contextHeader = BuildContextHeader(currentLocalTime, currentStreak, streakFreezesAccumulated, badHabitSlips);
 
         return $"""
             Date: {date:MMMM d, yyyy}
-            Current part of day: {timeContext}
-            Progress: {doneTotal}/{totalCount} habits completed
+            {contextHeader}
+            Progress: {doneTotal}/{goodHabits.Count} habits completed
 
             Today's habits:
             {habitSection}
@@ -116,8 +126,12 @@ public sealed partial class AiSummaryService(
             Rules:
             - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
             - THEN, gently point at ONE still-pending habit as an easy next move -- never list everything, never frame it as a checklist, never guilt-trip
+            - Lines marked "overdue" are the most worth a gentle nudge, but raise at most one and never with guilt
+            - A line tagged "bad habit -- slipped" is a slip on something they are trying to QUIT: never congratulate it, never count it as a win; acknowledge it briefly and kindly, or simply focus elsewhere
+            - A line tagged "bad habit -- clean" means they have stayed away from something they are trying to quit: THAT is the real win worth naming warmly; for these, fewer slips and longer clean streaks are the progress
             - If EVERYTHING is already done (nothing is pending), simply celebrate the full day warmly and leave it there -- do NOT invent, imply, or suggest any remaining task
             - If nothing is done yet, stay warm and forward-looking; do NOT imply they are behind or failing
+            - If a current streak or streak freezes are noted above, you MAY reference that momentum naturally, but never turn it into pressure
             - Describe the ACTIVITY naturally, don't just parrot the exact habit title
             - BAD: "You have Yoga, Morning Routine, and Guitar Playing left."
             - GOOD: "Nice work getting your run in -- some guitar later could be a great way to unwind."
@@ -132,33 +146,87 @@ public sealed partial class AiSummaryService(
             """;
     }
 
+    private static string BuildContextHeader(
+        TimeOnly? currentLocalTime, int currentStreak, int streakFreezesAccumulated, int badHabitSlips)
+    {
+        var lines = new List<string> { $"Current part of day: {BuildTimeContext(currentLocalTime)}" };
+
+        if (currentStreak > 0)
+            lines.Add($"Current streak: {currentStreak} days");
+        if (streakFreezesAccumulated > 0)
+            lines.Add($"Streak freezes banked: {streakFreezesAccumulated}");
+        if (badHabitSlips > 0)
+            lines.Add($"Bad habit slips today: {badHabitSlips}");
+
+        return string.Join("\n", lines);
+    }
+
     private static string BuildHabitSection(
         List<Habit> scheduledHabits,
         DateOnly dateFrom,
-        DateOnly dateTo)
+        DateOnly dateTo,
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
     {
         var habitLines = new List<string>();
 
         foreach (var habit in scheduledHabits.Where(h => h.ParentHabitId is null))
         {
-            var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
-            var timing = DescribeTiming(habit);
             var children = scheduledHabits.Where(h => h.ParentHabitId == habit.Id).ToList();
 
             if (children.Count > 0)
             {
                 var doneCount = children.Count(c => IsDoneInRange(c, dateFrom, dateTo));
-                habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{timing}]");
+                var status = IsDoneInRange(habit, dateFrom, dateTo) ? "done" : "pending";
+                habitLines.Add($"- {habit.Title} ({status}, {doneCount}/{children.Count} sub-tasks done) [{DescribeTiming(habit)}]");
                 foreach (var child in children)
-                    habitLines.Add($"  - {child.Title} ({(IsDoneInRange(child, dateFrom, dateTo) ? "done" : "pending")}) [{DescribeTiming(child)}]");
+                    habitLines.Add($"  - {DescribeHabitLine(child, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}");
             }
             else
             {
-                habitLines.Add($"- {habit.Title} ({status}) [{timing}]");
+                habitLines.Add($"- {DescribeHabitLine(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}");
             }
+
+            AppendGoalsLine(habitLines, habit);
         }
 
         return habitLines.Count > 0 ? string.Join("\n", habitLines) : "(no habits scheduled)";
+    }
+
+    private static string DescribeHabitLine(
+        Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
+    {
+        if (habit.IsBadHabit)
+            return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}) [{DescribeTiming(habit)}]";
+
+        var status = IsDoneInRange(habit, dateFrom, dateTo)
+            ? "done"
+            : HabitScheduleService.IsOverdueOnDate(habit, userToday) ? "pending, overdue" : "pending";
+        return $"{habit.Title} ({status}) [{DescribeTiming(habit)}]";
+    }
+
+    private static string DescribeBadHabitState(
+        Habit habit, DateOnly dateFrom, DateOnly dateTo, DateOnly userToday,
+        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
+    {
+        if (IsDoneInRange(habit, dateFrom, dateTo))
+            return "bad habit -- slipped";
+
+        if (!lastBadHabitSlipDates.TryGetValue(habit.Id, out var lastSlip))
+            return "bad habit -- clean, no slips on record";
+
+        var daysClean = userToday.DayNumber - lastSlip.DayNumber;
+        return $"bad habit -- clean, {daysClean} days since last slip";
+    }
+
+    private static void AppendGoalsLine(List<string> habitLines, Habit habit)
+    {
+        if (habit.Goals.Count == 0)
+            return;
+
+        var goalNames = string.Join(", ", habit.Goals.Select(g => g.Title));
+        habitLines.Add($"  Goals: {goalNames}");
     }
 
     private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>

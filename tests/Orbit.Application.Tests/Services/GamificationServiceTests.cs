@@ -608,6 +608,65 @@ public class GamificationServiceTests
     }
 
     [Fact]
+    public async Task ProcessHabitLogged_BadHabit_NoXpNoAchievementsNoLevelNoStreak()
+    {
+        var user = CreateProUser();
+        var initialXp = user.TotalXp;
+        var initialLevel = user.Level;
+        var initialStreak = user.CurrentStreak;
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var habit = CreateTestHabit(isBadHabit: true);
+        habit.Log(Today);
+        SetupHabitWithLogs(habit);
+        SetupUserHabits(habit);
+        SetupHabitLogs();
+
+        var result = await _sut.ProcessHabitLogged(UserId, habit.Id);
+
+        result.Should().NotBeNull();
+        result!.XpEarned.Should().Be(0);
+        result.NewAchievementIds.Should().BeEmpty();
+        user.TotalXp.Should().Be(initialXp);
+        user.Level.Should().Be(initialLevel);
+        user.CurrentStreak.Should().Be(initialStreak);
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitLogged_BadHabit_ThirtyDayAbstinence_StillGrantsBadHabitBreaker()
+    {
+        var user = CreateProUser();
+        var initialXp = user.TotalXp;
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var startDate = Today.AddDays(-30);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: startDate, IsBadHabit: true)).Value;
+        typeof(Habit).GetProperty("CreatedAtUtc")!.SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
+        SetupHabitWithLogs(habit);
+        SetupUserHabits(habit);
+        SetupHabitLogs();
+
+        var result = await _sut.ProcessHabitLogged(UserId, habit.Id);
+
+        result.Should().NotBeNull();
+        result!.XpEarned.Should().Be(0);
+        result.NewAchievementIds.Should().Contain(AchievementDefinitions.BadHabitBreaker);
+        await _achievementRepo.Received(1).AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.BadHabitBreaker),
+            Arg.Any<CancellationToken>());
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.MonthlyMaster),
+            Arg.Any<CancellationToken>());
+        user.TotalXp.Should().BeGreaterThan(initialXp);
+    }
+
+    [Fact]
     public async Task ProcessHabitsLogged_ThreeHabits_LoadsSharedContextOnceAndGrantsXpPerHabit()
     {
         var user = CreateProUser();
