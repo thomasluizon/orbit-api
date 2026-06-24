@@ -1,59 +1,72 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
-using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
-using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiFactExtractionService(
-    AiCompletionClient aiClient,
+    IAiBatchClient batchClient,
+    IGenericRepository<AiFactExtractionBatch> batchRepository,
+    IUnitOfWork unitOfWork,
+    IOptions<AiSettings> aiSettings,
     ILogger<AiFactExtractionService> logger) : IFactExtractionService
 {
-    public async Task<Result<ExtractedFacts>> ExtractFactsAsync(
+    private const string SystemMessage = "You are a helpful assistant. Respond only with valid JSON.";
+
+    public async Task SubmitBatchAsync(
+        Guid userId,
         string userMessage,
         string? aiResponse,
         IReadOnlyList<UserFact> existingFacts,
         CancellationToken cancellationToken = default)
     {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-        var prompt = BuildExtractionPrompt(userMessage, aiResponse, existingFacts);
-
         try
         {
-            LogCallingFactExtraction(logger);
+            var prompt = BuildExtractionPrompt(userMessage, aiResponse, existingFacts);
+            var jsonl = BuildJsonlLine(aiSettings.Value.SubTaskModel, prompt);
 
-            var facts = await aiClient.CompleteJsonAsync<ExtractedFacts>(
-                prompt, cancellationToken: cancellationToken, purpose: "fact_extraction", tier: AiModelTier.SubTask);
+            var inputFileId = await batchClient.UploadJsonlAsync(jsonl, cancellationToken);
+            var batchId = await batchClient.CreateChatCompletionsBatchAsync(inputFileId, cancellationToken);
 
-            stopwatch.Stop();
-            if (logger.IsEnabled(LogLevel.Information))
-                LogFactExtractionResponded(logger, stopwatch.ElapsedMilliseconds);
-
-            if (facts is null)
-            {
-                LogEmptyFactResponse(logger);
-                return Result.Success(new ExtractedFacts { Facts = [] });
-            }
+            var tracking = AiFactExtractionBatch.Create(userId, batchId, inputFileId);
+            await batchRepository.AddAsync(tracking, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
 
             if (logger.IsEnabled(LogLevel.Information))
-                LogFactsExtracted(logger, facts.Facts.Count);
-            return Result.Success(facts);
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            LogFactDeserializationFailed(logger, ex);
-            return Result.Success(new ExtractedFacts { Facts = [] });
+                LogBatchSubmitted(logger, batchId, userId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogFactExtractionFailed(logger, ex);
-            return Result.Success(new ExtractedFacts { Facts = [] });
+            LogBatchSubmitFailed(logger, ex);
         }
+    }
+
+    internal static string BuildJsonlLine(string model, string prompt)
+    {
+        var request = new
+        {
+            custom_id = Guid.NewGuid().ToString(),
+            method = "POST",
+            url = "/v1/chat/completions",
+            body = new
+            {
+                model,
+                response_format = new { type = "json_object" },
+                messages = new object[]
+                {
+                    new { role = "system", content = SystemMessage },
+                    new { role = "user", content = prompt }
+                }
+            }
+        };
+
+        return JsonSerializer.Serialize(request);
     }
 
     private static string BuildExtractionPrompt(string userMessage, string? aiResponse, IReadOnlyList<UserFact> existingFacts)
@@ -133,22 +146,9 @@ public sealed partial class AiFactExtractionService(
             """;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API for fact extraction...")]
-    private static partial void LogCallingFactExtraction(ILogger logger);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Submitted fact-extraction batch {BatchId} for user {UserId}")]
+    private static partial void LogBatchSubmitted(ILogger logger, string batchId, Guid userId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI fact extraction responded in {ElapsedMs}ms")]
-    private static partial void LogFactExtractionResponded(ILogger logger, long elapsedMs);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI returned empty response - no facts to extract")]
-    private static partial void LogEmptyFactResponse(ILogger logger);
-
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Extracted {FactCount} facts from conversation")]
-    private static partial void LogFactsExtracted(ILogger logger, int factCount);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Failed to deserialize fact extraction response - returning empty facts")]
-    private static partial void LogFactDeserializationFailed(ILogger logger, Exception ex);
-
-    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Fact extraction failed - non-critical error")]
-    private static partial void LogFactExtractionFailed(ILogger logger, Exception ex);
-
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Fact-extraction batch submit failed - non-critical error")]
+    private static partial void LogBatchSubmitFailed(ILogger logger, Exception ex);
 }
