@@ -15,4 +15,12 @@ public class AiSettingsTests
         settings.Model.Should().Be("gpt-4.1-mini");
         settings.BaseUrl.Should().Be("https://api.openai.com/v1");
     }
+
+    [Fact]
+    public void Defaults_RouteMechanicalSubTasksToNano_WhenConfigOmitsThem()
+    {
+        var settings = new AiSettings();
+
+        settings.SubTaskModel.Should().Be("gpt-5.4-nano");
+    }
 }
