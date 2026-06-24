@@ -626,12 +626,65 @@ public class ProcessUserChatCommandHandlerTests
         SetupAiResponse(new AiResponse { TextMessage = "ok" });
         var handler = CreateHandler(FakeTool("delete_habit"), FakeTool("assign_tags"), FakeTool("create_habit"));
 
-        await handler.Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
+        await handler.Handle(new ProcessUserChatCommand(UserId, "Hello AI"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(),
             Arg.Is<IReadOnlyList<object>>(declarations =>
                 ToolNames(declarations).SequenceEqual(new[] { "assign_tags", "create_habit", "delete_habit" })),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TrivialGreeting_SkipsToolDeclarations()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Hi! How can I help?" });
+        var handler = CreateHandler(FakeTool("delete_habit"), FakeTool("create_habit"));
+
+        await handler.Handle(new ProcessUserChatCommand(UserId, "thanks"), CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 0),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TrivialReplyWithPendingConfirmation_KeepsTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "ok" });
+        var handler = CreateHandler(FakeTool("delete_habit"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "ok", ConfirmationToken: "confirm-token"), CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TrivialReplyMidConversation_KeepsTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Logged it!" });
+        var handler = CreateHandler(FakeTool("log_habit"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(
+                UserId, "yes",
+                History: [new ChatHistoryMessage("ai", "I can log your 5 km run — should I?")]),
+            CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }

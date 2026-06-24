@@ -114,8 +114,13 @@ public partial class ProcessUserChatCommandHandler(
         var context = contextResult.Value;
         var aiStreamSink = BuildAiStreamSink(request.StreamSink);
 
+        var skipTools = request.ImageData is null
+            && request.ConfirmationToken is null
+            && (request.History is null || request.History.Count == 0)
+            && ChatIntentRouter.IsNoToolTurn(request.Message);
+
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, cancellationToken);
+        var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
         aiStopwatch.Stop();
         LogAiIntentServiceCompleted(logger, aiStopwatch.ElapsedMilliseconds);
 
@@ -258,6 +263,7 @@ public partial class ProcessUserChatCommandHandler(
         ProcessUserChatCommand request,
         ChatContext context,
         Func<AiStreamEvent, Task>? aiStreamSink,
+        bool skipTools,
         CancellationToken cancellationToken)
     {
         var promptRequest = new PromptBuildRequest(
@@ -287,15 +293,17 @@ public partial class ProcessUserChatCommandHandler(
         if (request.ClientContext?.SupportsGoalListCard == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, GoalListCardBuilder.PromptInstruction);
 
-        var tools = ai.ToolRegistry.GetAll()
-            .OrderBy(t => t.Name, StringComparer.Ordinal)
-            .ToList();
-        var toolDeclarations = tools.Select(t => (object)new
-        {
-            name = t.Name,
-            description = t.Description,
-            parameters = t.GetParameterSchema()
-        }).ToList();
+        var toolDeclarations = skipTools
+            ? new List<object>()
+            : ai.ToolRegistry.GetAll()
+                .OrderBy(t => t.Name, StringComparer.Ordinal)
+                .Select(t => (object)new
+                {
+                    name = t.Name,
+                    description = t.Description,
+                    parameters = t.GetParameterSchema()
+                })
+                .ToList();
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
 
