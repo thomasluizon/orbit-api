@@ -653,6 +653,23 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TrivialReplyWithPendingConfirmation_KeepsTools()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "ok" });
+        var handler = CreateHandler(FakeTool("delete_habit"));
+
+        await handler.Handle(
+            new ProcessUserChatCommand(UserId, "ok", ConfirmationToken: "confirm-token"), CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_AssemblesSystemPromptStaticBeforeDynamic()
     {
         SetupUserAndPayGate();

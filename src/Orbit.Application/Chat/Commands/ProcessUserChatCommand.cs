@@ -113,7 +113,9 @@ public partial class ProcessUserChatCommandHandler(
         var context = contextResult.Value;
         var aiStreamSink = BuildAiStreamSink(request.StreamSink);
 
-        var skipTools = request.ImageData is null && ChatIntentRouter.IsNoToolTurn(request.Message);
+        var skipTools = request.ImageData is null
+            && request.ConfirmationToken is null
+            && ChatIntentRouter.IsNoToolTurn(request.Message);
 
         var aiStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await RequestInitialAiResponseAsync(request, context, aiStreamSink, skipTools, cancellationToken);
