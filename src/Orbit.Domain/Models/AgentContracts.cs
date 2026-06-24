@@ -190,7 +190,8 @@ public record AgentClientContext(
     string? Locale = null,
     string? TimeFormat = null,
     string? CurrentAppArea = null,
-    bool? ShowGeneralOnToday = null);
+    bool? ShowGeneralOnToday = null,
+    bool? SupportsHabitListCard = null);
 
 public record AgentContextSnapshot(
     string Plan,

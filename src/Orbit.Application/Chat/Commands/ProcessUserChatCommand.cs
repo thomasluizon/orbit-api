@@ -39,7 +39,8 @@ public record ChatResponse(
     IReadOnlyList<PendingAgentOperation>? PendingOperations = null,
     IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null,
     string? CorrelationId = null,
-    IReadOnlyList<string>? RelatedSurfaces = null);
+    IReadOnlyList<string>? RelatedSurfaces = null,
+    HabitListCard? HabitList = null);
 
 public record ActionResult(
     string Type,
@@ -134,6 +135,14 @@ public partial class ProcessUserChatCommandHandler(
 
         var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
 
+        HabitListCard? habitList = null;
+        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage))
+        {
+            aiMessage = strippedMessage;
+            if (request.ClientContext?.SupportsHabitListCard == true)
+                habitList = HabitListCardBuilder.Build(context.ActiveHabits, context.UserToday, habitListScope);
+        }
+
         RunBackgroundPostResponseWork(
             request.UserId,
             request.Message,
@@ -155,7 +164,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.PendingOperations,
             executionResults.PolicyDenials,
             request.CorrelationId,
-            executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null));
+            executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
+            habitList));
     }
 
     private async Task<Result<ChatContext>> LoadChatContextAsync(
@@ -260,6 +270,9 @@ public partial class ProcessUserChatCommandHandler(
             ai.CatalogService.BuildStaticSupplement(),
             ai.PromptBuilder.BuildDynamic(promptRequest),
             ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
+
+        if (request.ClientContext?.SupportsHabitListCard == true)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt, HabitListCardBuilder.PromptInstruction);
 
         var tools = ai.ToolRegistry.GetAll()
             .OrderBy(t => t.Name, StringComparer.Ordinal)
