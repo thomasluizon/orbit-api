@@ -667,6 +667,7 @@ public class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(),
             Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
+            Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
