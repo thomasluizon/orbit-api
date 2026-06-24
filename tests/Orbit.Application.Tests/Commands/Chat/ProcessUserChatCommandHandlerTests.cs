@@ -217,7 +217,7 @@ public class ProcessUserChatCommandHandlerTests
     private void SetupAiResponse(AiResponse response)
     {
         _aiIntentService.SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
@@ -226,7 +226,7 @@ public class ProcessUserChatCommandHandlerTests
     private void SetupAiFailure(string error)
     {
         _aiIntentService.SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>(error));
@@ -612,7 +612,7 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Hello there");
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
             Arg.Is<Func<AiStreamEvent, Task>?>(sink => sink == null),
@@ -632,6 +632,7 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<string>(), Arg.Any<string>(),
             Arg.Is<IReadOnlyList<object>>(declarations =>
                 ToolNames(declarations).SequenceEqual(new[] { "assign_tags", "create_habit", "delete_habit" })),
+            Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
@@ -648,6 +649,7 @@ public class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(),
             Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 0),
+            Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
@@ -700,7 +702,7 @@ public class ProcessUserChatCommandHandlerTests
 
         string? capturedPrompt = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<string>(), Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
@@ -1113,6 +1115,7 @@ public class ProcessUserChatCommandHandlerTests
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<Guid>(),
             Arg.Is<byte[]?>(b => b != null && b.Length == 4),
             Arg.Is<string?>(s => s == "image/png"),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
@@ -1138,7 +1141,7 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Is<IReadOnlyList<ChatHistoryMessage>?>(h => h != null && h.Count == 2),
             Arg.Any<Func<AiStreamEvent, Task>?>(),

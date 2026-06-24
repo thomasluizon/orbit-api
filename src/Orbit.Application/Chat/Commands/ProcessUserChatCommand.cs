@@ -311,6 +311,7 @@ public partial class ProcessUserChatCommandHandler(
             request.Message,
             systemPrompt,
             toolDeclarations,
+            request.UserId,
             request.ImageData,
             request.ImageMimeType,
             request.History,
