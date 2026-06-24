@@ -419,6 +419,33 @@ public class QueryHabitsToolTests
         result.Error.Should().Contain("User not found");
     }
 
+    [Fact]
+    public async Task IdenticalChildHabits_AreNumberedNotCollapsed()
+    {
+        var parent = CreateHabit("Water", FrequencyUnit.Day, 1, dueDate: Today, position: 0);
+        var first = CreateHabit("Water - 710ml", FrequencyUnit.Day, 1, dueDate: Today, parentId: parent.Id, position: 0);
+        var second = CreateHabit("Water - 710ml", FrequencyUnit.Day, 1, dueDate: Today, parentId: parent.Id, position: 1);
+        SetupHabits(parent, first, second);
+
+        var result = await Execute("{}");
+
+        result.EntityName.Should().Contain("(1 of 2)");
+        result.EntityName.Should().Contain("(2 of 2)");
+    }
+
+    [Fact]
+    public async Task IdenticalTopLevelHabits_AreNumbered()
+    {
+        var first = CreateHabit("Workout", FrequencyUnit.Day, 1, dueDate: Today, position: 0);
+        var second = CreateHabit("Workout", FrequencyUnit.Day, 1, dueDate: Today, position: 1);
+        SetupHabits(first, second);
+
+        var result = await Execute("{}");
+
+        result.EntityName.Should().Contain("(1 of 2)");
+        result.EntityName.Should().Contain("(2 of 2)");
+    }
+
     private static Habit CreateHabit(
         string title, FrequencyUnit? freq, int? qty,
         DateOnly? dueDate = null, int? position = null,
