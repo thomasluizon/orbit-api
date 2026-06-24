@@ -408,8 +408,9 @@ public partial class User : Entity
     }
 
     /// <summary>
-    /// Resets all user profile fields to their default state while preserving
-    /// identity, preferences, and subscription data.
+    /// Resets progress and integration state (onboarding, gamification, calendar) to defaults while
+    /// preserving identity, preferences, subscription, and metered AI usage — the monthly message
+    /// quota and ad-reward allowances are kept so an account reset cannot refill the AI paygate.
     /// </summary>
     public void ResetAccount()
     {
@@ -422,12 +423,6 @@ public partial class User : Entity
         LastActiveDate = null;
         StreakFreezesAccumulated = 0;
         LastFreezeAwardStreak = 0;
-        AiMessagesUsedThisMonth = 0;
-        AiMessagesResetAt = null;
-        AdRewardBonusMessages = 0;
-        AdRewardsClaimedToday = 0;
-        LastAdRewardAt = null;
-        LastAdRewardLocalDate = null;
         HasImportedCalendar = false;
         GoogleAccessToken = null;
         GoogleRefreshToken = null;

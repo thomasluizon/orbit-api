@@ -7,6 +7,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Common;
 
+[Collection("ProcessEnvironment")]
 public class PayGateServiceTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
@@ -156,6 +157,56 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+    }
+
+    [Fact]
+    public async Task CanSendAiMessage_ProductionSmokeAccount_OverLimit_Bypasses()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (int i = 0; i < 20; i++)
+            user.IncrementAiMessageCount();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        await WithEnvironment("Production", user.Email, async () =>
+        {
+            var result = await _sut.CanSendAiMessage(UserId);
+            result.IsSuccess.Should().BeTrue();
+        });
+    }
+
+    [Fact]
+    public async Task CanSendAiMessage_ProductionNonSmokeEmail_OverLimit_StillBlocked()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (int i = 0; i < 20; i++)
+            user.IncrementAiMessageCount();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        await WithEnvironment("Production", "not-the-smoke@example.com", async () =>
+        {
+            var result = await _sut.CanSendAiMessage(UserId);
+            result.IsFailure.Should().BeTrue();
+            result.ErrorCode.Should().Be("PAY_GATE");
+        });
+    }
+
+    [Fact]
+    public async Task CanSendAiMessage_NonProductionSmokeEmail_OverLimit_StillBlocked()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (int i = 0; i < 20; i++)
+            user.IncrementAiMessageCount();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        await WithEnvironment("Development", user.Email, async () =>
+        {
+            var result = await _sut.CanSendAiMessage(UserId);
+            result.IsFailure.Should().BeTrue();
+            result.ErrorCode.Should().Be("PAY_GATE");
+        });
     }
 
     [Fact]
@@ -468,5 +519,22 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
+    }
+
+    private static async Task WithEnvironment(string aspNetEnv, string? smokeEmail, Func<Task> body)
+    {
+        var priorEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        var priorEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspNetEnv);
+        Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", smokeEmail);
+        try
+        {
+            await body();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", priorEnv);
+            Environment.SetEnvironmentVariable("SMOKE_TEST_EMAIL", priorEmail);
+        }
     }
 }

@@ -461,6 +461,38 @@ public class UserTests
     }
 
     [Fact]
+    public void ResetAccount_PreservesMeteredAiUsageAndAdRewards()
+    {
+        var user = CreateValidUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (int i = 0; i < 20; i++)
+            user.IncrementAiMessageCount();
+        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), bonusMessages: 5);
+        var resetAt = user.AiMessagesResetAt;
+
+        user.ResetAccount();
+
+        user.AiMessagesUsedThisMonth.Should().Be(20);
+        user.AiMessagesResetAt.Should().Be(resetAt);
+        user.AdRewardBonusMessages.Should().Be(5);
+        user.AdRewardsClaimedToday.Should().Be(1);
+        user.LastAdRewardLocalDate.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
+    }
+
+    [Fact]
+    public void ResetAccount_ThenSendMessage_DoesNotRefillQuota()
+    {
+        var user = CreateValidUser();
+        for (int i = 0; i < 20; i++)
+            user.IncrementAiMessageCount();
+
+        user.ResetAccount();
+        user.IncrementAiMessageCount();
+
+        user.AiMessagesUsedThisMonth.Should().Be(21);
+    }
+
+    [Fact]
     public void SetReferralCode_SetsCode()
     {
         var user = CreateValidUser();

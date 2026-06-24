@@ -11,6 +11,7 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Application.Tests.Commands.Auth;
 
+[Collection("ProcessEnvironment")]
 public class SendCodeCommandHandlerTests
 {
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());

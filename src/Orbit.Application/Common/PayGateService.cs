@@ -47,6 +47,9 @@ public class PayGateService(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
+        if (IsProductionSmokeAccount(user.Email))
+            return Result.Success();
+
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
         var baseLimit = user.HasProAccess ? proLimit : freeLimit;
@@ -156,6 +159,17 @@ public class PayGateService(
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
         var baseLimit = user.HasProAccess ? proLimit : freeLimit;
         return baseLimit + user.AdRewardBonusMessages;
+    }
+
+    private static bool IsProductionSmokeAccount(string email)
+    {
+        var aspNetEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        if (!string.Equals(aspNetEnv, "Production", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var smokeEmail = Environment.GetEnvironmentVariable("SMOKE_TEST_EMAIL");
+        return !string.IsNullOrEmpty(smokeEmail)
+            && string.Equals(smokeEmail.Trim(), email, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<Result> RequireProAccess(Guid userId, string errorMessage, CancellationToken ct)
