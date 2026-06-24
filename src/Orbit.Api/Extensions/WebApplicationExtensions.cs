@@ -16,10 +16,13 @@ public static partial class WebApplicationExtensions
 {
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
-        using (var scope = app.Services.CreateScope())
+        var migrationConnectionString = OrbitConnectionStringFactory.ForSession(app.Configuration);
+        var migrationOptions = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseNpgsql(migrationConnectionString)
+            .Options;
+        await using (var migrationDb = new OrbitDbContext(migrationOptions))
         {
-            var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-            await db.Database.MigrateAsync();
+            await migrationDb.Database.MigrateAsync();
         }
 
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
