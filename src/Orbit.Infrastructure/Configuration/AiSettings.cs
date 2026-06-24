@@ -5,6 +5,7 @@ public sealed class AiSettings
     public const string SectionName = "AI";
     public string ApiKey { get; init; } = string.Empty;
     public string Model { get; init; } = "gpt-4.1-mini";
+    public string SubTaskModel { get; init; } = "gpt-5.4-nano";
     public string TranscriptionModel { get; init; } = "whisper-1";
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
     public int NetworkTimeoutSeconds { get; init; } = 15;
