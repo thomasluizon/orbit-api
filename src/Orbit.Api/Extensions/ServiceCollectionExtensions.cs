@@ -64,7 +64,7 @@ public static class ServiceCollectionExtensions
     {
         builder.Services.AddDbContext<OrbitDbContext>(options =>
             options.UseNpgsql(
-                builder.Configuration.GetConnectionString("DefaultConnection"),
+                OrbitConnectionStringFactory.ForRequestPath(builder.Configuration),
                 npgsql =>
                 {
                     npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
@@ -495,17 +495,21 @@ public static class ServiceCollectionExtensions
 
     private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
     {
-        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+        var connectionString = OrbitConnectionStringFactory.ForSession(builder.Configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException(
-                $"{BackgroundJobSettings.SectionName}:UseDurableQueue is true but ConnectionStrings:DefaultConnection is not configured.");
+                $"{BackgroundJobSettings.SectionName}:UseDurableQueue is true but no database connection string is configured.");
 
         builder.Services.AddHangfire(config => config
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
             .UsePostgreSqlStorage(postgres => postgres.UseNpgsqlConnection(connectionString)));
-        builder.Services.AddHangfireServer();
+        builder.Services.AddHangfireServer(options =>
+        {
+            options.WorkerCount = 2;
+            options.SchedulePollingInterval = TimeSpan.FromMinutes(1);
+        });
 
         builder.Services.AddSingleton<ScheduledJobRunner>();
         AddScheduledJob<ReminderSchedulerService>(builder);
