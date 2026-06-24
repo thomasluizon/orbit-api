@@ -114,6 +114,11 @@ public partial class ProcessUserChatCommandHandler(
         var context = contextResult.Value;
         var aiStreamSink = BuildAiStreamSink(request.StreamSink);
 
+        var faqLocale = context.User?.Language ?? request.ClientContext?.Locale ?? "en";
+        var faqKey = ChatFaqCache.TryMatchFaqKey(request.Message);
+        if (faqKey is not null && ChatFaqCache.TryGetAnswer(faqKey, faqLocale, out var cachedFaqAnswer))
+            return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
+
         var skipTools = request.ImageData is null
             && request.ConfirmationToken is null
             && (request.History is null || request.History.Count == 0)
@@ -156,6 +161,9 @@ public partial class ProcessUserChatCommandHandler(
             if (request.ClientContext?.SupportsGoalListCard == true)
                 goalList = GoalListCardBuilder.Build(context.ActiveGoals);
         }
+
+        if (faqKey is not null && iterations == 0 && executionResults.ActionResults.Count == 0 && !string.IsNullOrWhiteSpace(aiMessage))
+            ChatFaqCache.StoreAnswer(faqKey, faqLocale, aiMessage);
 
         RunBackgroundPostResponseWork(
             request.UserId,
