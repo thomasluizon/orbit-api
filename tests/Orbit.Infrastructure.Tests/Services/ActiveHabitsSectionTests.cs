@@ -278,4 +278,30 @@ public class ActiveHabitsSectionTests
         result.Should().Contain("1 due today");
         result.Should().Contain("1 overdue");
     }
+
+    [Fact]
+    public void Build_IdenticalChildHabits_AreNumberedNotCollapsed()
+    {
+        var parent = CreateHabit("Water");
+        var first = CreateHabit("Water - 710ml", parentId: parent.Id);
+        var second = CreateHabit("Water - 710ml", parentId: parent.Id);
+        var third = CreateHabit("Water - 710ml", parentId: parent.Id);
+        var context = CreateContext(habits: [parent, first, second, third]);
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("(1 of 3)");
+        result.Should().Contain("(2 of 3)");
+        result.Should().Contain("(3 of 3)");
+    }
+
+    [Fact]
+    public void Build_IncludesDuplicateMarkerInstruction()
+    {
+        var context = CreateContext(habits: [CreateHabit("Test")]);
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("Repeated identical habits are marked");
+    }
 }

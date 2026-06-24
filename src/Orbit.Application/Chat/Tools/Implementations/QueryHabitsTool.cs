@@ -173,9 +173,10 @@ public class QueryHabitsTool(
         sb.AppendLine($"Found {results.Count} habit(s):");
         sb.AppendLine();
 
+        var suffixes = SiblingTitleDisambiguator.ComputeSuffixes(results);
         foreach (var habit in results)
         {
-            sb.AppendLine(BuildHabitLine(habit, today, includeMetrics));
+            sb.AppendLine(BuildHabitLine(habit, today, includeMetrics, suffixes.GetValueOrDefault(habit.Id, string.Empty)));
 
             if (includeSubs)
                 AppendChildren(sb, allHabits, habit.Id, today, includeMetrics, 1);
@@ -184,13 +185,13 @@ public class QueryHabitsTool(
         return sb.ToString();
     }
 
-    private static string BuildHabitLine(Habit habit, DateOnly today, bool includeMetrics)
+    private static string BuildHabitLine(Habit habit, DateOnly today, bool includeMetrics, string dupSuffix)
     {
         var freqLabel = FormatFrequencyLabel(habit);
         var labels = BuildLabels(habit, today, includeMetrics);
         var labelStr = labels.Count > 0 ? $" [{string.Join(" | ", labels)}]" : "";
         var emojiLabel = string.IsNullOrWhiteSpace(habit.Emoji) ? "No emoji" : $"Emoji: {habit.Emoji}";
-        return $"- \"{habit.Title}\" | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
+        return $"- \"{habit.Title}\"{dupSuffix} | ID: {habit.Id} | {emojiLabel} | {freqLabel} | Due: {habit.DueDate:yyyy-MM-dd}{labelStr}";
     }
 
     private static List<string> BuildLabels(Habit habit, DateOnly today, bool includeMetrics)
@@ -241,7 +242,9 @@ public class QueryHabitsTool(
         var indent = new string(' ', depth * 2);
         var children = allHabits
             .Where(h => h.ParentHabitId == parentId)
-            .OrderBy(h => h.Position);
+            .OrderBy(h => h.Position)
+            .ToList();
+        var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(children);
 
         foreach (var child in children)
         {
@@ -250,7 +253,7 @@ public class QueryHabitsTool(
             if (child.IsCompleted) childLabels.Add("COMPLETED");
             var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
             var emojiLabel = string.IsNullOrWhiteSpace(child.Emoji) ? "No emoji" : $"Emoji: {child.Emoji}";
-            sb.AppendLine($"{indent}- \"{child.Title}\" | ID: {child.Id} | {emojiLabel}{childLabelStr}");
+            sb.AppendLine($"{indent}- \"{child.Title}\"{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | ID: {child.Id} | {emojiLabel}{childLabelStr}");
             AppendChildren(sb, allHabits, child.Id, today, includeMetrics, depth + 1);
         }
     }

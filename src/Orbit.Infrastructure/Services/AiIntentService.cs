@@ -164,6 +164,9 @@ public sealed partial class AiIntentService(
         if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
             return new CompletedRound(null, result.ToolCalls);
 
+        if (result.FinishReason == ChatFinishReason.Length)
+            LogResponseTruncated(logger);
+
         return new CompletedRound(result.Content.FirstOrDefault()?.Text, []);
     }
 
@@ -220,6 +223,9 @@ public sealed partial class AiIntentService(
             messages.Add(new AssistantChatMessage(toolCalls));
             return new CompletedRound(null, toolCalls);
         }
+
+        if (finishReason == ChatFinishReason.Length)
+            LogResponseTruncated(logger);
 
         var text = contentBuilder.ToString();
         if (!string.IsNullOrWhiteSpace(text))
@@ -347,5 +353,8 @@ public sealed partial class AiIntentService(
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "First content token after {ElapsedMs}ms")]
     private static partial void LogFirstContentToken(ILogger logger, long elapsedMs);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (finish_reason=length); output may be incomplete")]
+    private static partial void LogResponseTruncated(ILogger logger);
 
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Services.Prompts;
 
@@ -23,6 +24,7 @@ public class ActiveHabitsSection : IPromptSection
         sb.AppendLine($"## User's Habits ({total} total, {general} general, {dueToday} due today, {overdue} overdue)");
         sb.AppendLine();
         sb.AppendLine("This index is the source of truth for the user's habits: hierarchy, IDs, due status, and general/bad/completed flags. Answer listing and schedule questions directly from it - do not call query_habits to re-fetch it.");
+        sb.AppendLine("Repeated identical habits are marked (n of N) - each is a separate, individually-tracked entry. When listing, output every numbered instance; never merge them into one.");
         if (context.UserToday.HasValue)
             sb.AppendLine("When asked what is due, scheduled, or left for today: enumerate EVERY entry labeled TODAY or OVERDUE below - the heading counts state exactly how many; verify your list matches those counts before answering. Entries without those labels (including habits already completed today) are not part of today and must not be listed.");
         sb.AppendLine("query_habits exists for what the index lacks: metrics, streaks, completion %, descriptions, checklist items, completed habits, and filtered lookups. Filters: search, date, is_general, is_completed, is_bad_habit, frequency, tag, include_metrics, include_overdue, include_sub_habits, limit.");
@@ -32,9 +34,11 @@ public class ActiveHabitsSection : IPromptSection
 
         sb.AppendLine("### Active Habit Index:");
         sb.AppendLine("Completed parents may appear only to preserve the path to active sub-habits. Only non-COMPLETED entries count for duplicate checks.");
-        foreach (var habit in parents.OrderBy(h => h.Position))
+        var orderedParents = parents.OrderBy(habit => habit.Position).ToList();
+        var parentSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(orderedParents);
+        foreach (var habit in orderedParents)
         {
-            AppendHabitEntry(sb, habit, context);
+            AppendHabitEntry(sb, habit, context, parentSuffixes.GetValueOrDefault(habit.Id, string.Empty));
             AppendChildren(sb, indexedHabits, habit.Id, 1, context.UserToday);
         }
         sb.AppendLine();
@@ -60,10 +64,10 @@ public class ActiveHabitsSection : IPromptSection
         return (activeHabits.Count, general, dueToday, todayHabits.Count - dueToday);
     }
 
-    private static void AppendHabitEntry(StringBuilder sb, Habit habit, PromptContext context)
+    private static void AppendHabitEntry(StringBuilder sb, Habit habit, PromptContext context, string dupSuffix)
     {
         var labelStr = BuildHabitLabel(habit, context.UserToday);
-        sb.AppendLine($"- {PromptDataSanitizer.QuoteInline(habit.Title, 100)} | {habit.Id}{labelStr}");
+        sb.AppendLine($"- {PromptDataSanitizer.QuoteInline(habit.Title, 100)}{dupSuffix} | {habit.Id}{labelStr}");
 
         if (habit.Goals.Count > 0)
         {
@@ -105,11 +109,13 @@ public class ActiveHabitsSection : IPromptSection
         var indent = new string(' ', depth * 2);
         var children = allHabits
             .Where(h => h.ParentHabitId == parentId)
-            .OrderBy(h => h.Position);
+            .OrderBy(h => h.Position)
+            .ToList();
+        var childSuffixes = SiblingTitleDisambiguator.ComputeSuffixes(children);
         foreach (var child in children)
         {
             var labelStr = BuildHabitLabel(child, userToday);
-            sb.AppendLine($"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)} | {child.Id}{labelStr}");
+            sb.AppendLine($"{indent}- {PromptDataSanitizer.QuoteInline(child.Title, 100)}{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | {child.Id}{labelStr}");
             AppendChildren(sb, allHabits, child.Id, depth + 1, userToday);
         }
     }
