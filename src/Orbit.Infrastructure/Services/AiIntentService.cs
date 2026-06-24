@@ -159,6 +159,8 @@ public sealed partial class AiIntentService(
         var completion = await aiClient.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
         var result = completion.Value;
 
+        LogChatUsage(result.Usage, "buffered");
+
         messages.Add(new AssistantChatMessage(result));
 
         if (result.FinishReason == ChatFinishReason.ToolCalls && result.ToolCalls.Count > 0)
@@ -181,9 +183,13 @@ public sealed partial class AiIntentService(
         var toolCallBuilders = new SortedDictionary<int, StreamingToolCallBuilder>();
         ChatFinishReason? finishReason = null;
         var firstTokenLogged = false;
+        ChatTokenUsage? streamedUsage = null;
 
         await foreach (var update in aiClient.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
         {
+            if (update.Usage is not null)
+                streamedUsage = update.Usage;
+
             foreach (var part in update.ContentUpdate)
             {
                 if (string.IsNullOrEmpty(part.Text))
@@ -213,6 +219,8 @@ public sealed partial class AiIntentService(
             if (update.FinishReason is { } reason)
                 finishReason = reason;
         }
+
+        LogChatUsage(streamedUsage, "streaming");
 
         if (finishReason == ChatFinishReason.ToolCalls && toolCallBuilders.Count > 0)
         {
@@ -333,6 +341,20 @@ public sealed partial class AiIntentService(
             m => $@"""type"":""{m.Groups[1].Value.ToLowerInvariant()}""");
     }
 
+    private void LogChatUsage(ChatTokenUsage? usage, string phase)
+    {
+        if (usage is null)
+            return;
+
+        LogAiTokenUsage(
+            logger,
+            phase,
+            usage.InputTokenDetails?.CachedTokenCount ?? 0,
+            usage.InputTokenCount,
+            usage.OutputTokenCount,
+            usage.TotalTokenCount);
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API with tools...")]
     private static partial void LogCallingAiWithTools(ILogger logger);
 
@@ -356,5 +378,8 @@ public sealed partial class AiIntentService(
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (finish_reason=length); output may be incomplete")]
     private static partial void LogResponseTruncated(ILogger logger);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "AI token usage ({Phase}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
+    private static partial void LogAiTokenUsage(ILogger logger, string phase, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);
 
 }

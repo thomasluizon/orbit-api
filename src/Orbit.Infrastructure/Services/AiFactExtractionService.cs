@@ -27,7 +27,7 @@ public sealed partial class AiFactExtractionService(
         {
             LogCallingFactExtraction(logger);
 
-            var facts = await aiClient.CompleteJsonAsync<ExtractedFacts>(prompt, temperature: 0.1, cancellationToken);
+            var facts = await aiClient.CompleteJsonAsync<ExtractedFacts>(prompt, temperature: 0.1, cancellationToken, purpose: "fact_extraction");
 
             stopwatch.Stop();
             if (logger.IsEnabled(LogLevel.Information))

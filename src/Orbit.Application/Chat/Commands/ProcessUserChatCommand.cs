@@ -383,15 +383,16 @@ public partial class ProcessUserChatCommandHandler(
     {
         LogToolCallingIteration(logger, iteration, aiResponse.ToolCalls!.Count);
 
-        var toolResults = new List<AiToolCallResult>();
-
         var orderedCalls = aiResponse.ToolCalls!
             .OrderBy(c => ai.ToolRegistry.GetTool(c.Name)?.Order ?? int.MaxValue)
             .ToList();
 
+        var outcomesByCallId = await ExecuteToolCallsAsync(orderedCalls, request, cancellationToken);
+
+        var toolResults = new List<AiToolCallResult>(orderedCalls.Count);
         foreach (var call in orderedCalls)
         {
-            var outcome = await ExecuteSingleToolCallAsync(call, request, cancellationToken);
+            var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
             executionResults.Add(outcome.ActionResult, outcome.OperationResult, outcome.PolicyDenial, outcome.PendingOperation);
         }
@@ -407,12 +408,63 @@ public partial class ProcessUserChatCommandHandler(
     }
 
     /// <summary>
+    /// Executes a round's tool calls, dispatching the read-only subset concurrently (each on its
+    /// own DI scope for DbContext isolation) and the write subset sequentially on the ambient
+    /// scope in <c>Order</c>. Returns every outcome keyed by tool-call id so the caller can
+    /// reassemble results deterministically, independent of task-completion timing.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, ToolCallOutcome>> ExecuteToolCallsAsync(
+        IReadOnlyList<AiToolCall> orderedCalls,
+        ProcessUserChatCommand request,
+        CancellationToken cancellationToken)
+    {
+        var readOnlyCalls = orderedCalls
+            .Where(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly == true)
+            .ToList();
+        var writeCalls = orderedCalls
+            .Where(call => ai.ToolRegistry.GetTool(call.Name)?.IsReadOnly != true)
+            .ToList();
+
+        var readOnlyTasks = readOnlyCalls
+            .Select(call => ExecuteReadOnlyToolCallOnIsolatedScopeAsync(call, request, cancellationToken))
+            .ToList();
+        var readOnlyOutcomes = await Task.WhenAll(readOnlyTasks);
+
+        var outcomesByCallId = new Dictionary<string, ToolCallOutcome>(orderedCalls.Count, StringComparer.Ordinal);
+        for (var index = 0; index < readOnlyCalls.Count; index++)
+            outcomesByCallId[readOnlyCalls[index].Id] = readOnlyOutcomes[index];
+
+        foreach (var call in writeCalls)
+        {
+            outcomesByCallId[call.Id] = await ExecuteSingleToolCallAsync(
+                call, request, execution.OperationExecutor, execution.PendingClarificationStore, cancellationToken);
+        }
+
+        return outcomesByCallId;
+    }
+
+    private async Task<ToolCallOutcome> ExecuteReadOnlyToolCallOnIsolatedScopeAsync(
+        AiToolCall call,
+        ProcessUserChatCommand request,
+        CancellationToken cancellationToken)
+    {
+        using var scope = execution.ServiceScopeFactory.CreateScope();
+        var scopedExecutor = scope.ServiceProvider.GetRequiredService<IAgentOperationExecutor>();
+        var scopedClarificationStore = scope.ServiceProvider.GetRequiredService<IPendingClarificationStore>();
+
+        return await ExecuteSingleToolCallAsync(
+            call, request, scopedExecutor, scopedClarificationStore, cancellationToken);
+    }
+
+    /// <summary>
     /// Executes a single tool call: resolves the tool, runs it, and produces both a result
     /// for the AI and an optional action result for the frontend.
     /// </summary>
     private async Task<ToolCallOutcome> ExecuteSingleToolCallAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
+        IAgentOperationExecutor operationExecutor,
+        IPendingClarificationStore clarificationStore,
         CancellationToken cancellationToken)
     {
         var tool = ai.ToolRegistry.GetTool(call.Name);
@@ -426,7 +478,7 @@ public partial class ProcessUserChatCommandHandler(
         if (capability is null)
             return UnsupportedByPolicyOutcome(call, tool);
 
-        var executionResponse = await DispatchToolCallAsync(call, request, cancellationToken);
+        var executionResponse = await DispatchToolCallAsync(call, request, operationExecutor, cancellationToken);
         var operationResult = executionResponse.Operation;
         var toolResult = BuildToolCallResult(call, operationResult);
         LogToolCallOutcome(call, operationResult);
@@ -434,7 +486,7 @@ public partial class ProcessUserChatCommandHandler(
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
         {
-            return await StashClarificationAsync(call, request, toolResult, operationResult, executionResponse, payload, cancellationToken);
+            return await StashClarificationAsync(call, request, clarificationStore, toolResult, operationResult, executionResponse, payload, cancellationToken);
         }
 
         return operationResult.Status switch
@@ -503,16 +555,17 @@ public partial class ProcessUserChatCommandHandler(
             null);
     }
 
-    private async Task<AgentExecuteOperationResponse> DispatchToolCallAsync(
+    private static async Task<AgentExecuteOperationResponse> DispatchToolCallAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
+        IAgentOperationExecutor operationExecutor,
         CancellationToken cancellationToken)
     {
         var dispatchArgs = call.Name == "send_support_request" && !string.IsNullOrWhiteSpace(request.CorrelationId)
             ? AppendSupportTrace(call.Args, request.CorrelationId)
             : call.Args;
 
-        return await execution.OperationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
+        return await operationExecutor.ExecuteAsync(new AgentExecuteOperationRequest(
             request.UserId,
             call.Name,
             dispatchArgs,
@@ -543,6 +596,7 @@ public partial class ProcessUserChatCommandHandler(
     private async Task<ToolCallOutcome> StashClarificationAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
+        IPendingClarificationStore clarificationStore,
         AiToolCallResult toolResult,
         AgentOperationResult operationResult,
         AgentExecuteOperationResponse executionResponse,
@@ -568,7 +622,7 @@ public partial class ProcessUserChatCommandHandler(
                 executionResponse.PendingOperation);
         }
 
-        var stashedId = await execution.PendingClarificationStore.CreateAsync(
+        var stashedId = await clarificationStore.CreateAsync(
             request.UserId,
             call.Name,
             partialArgsJson,
