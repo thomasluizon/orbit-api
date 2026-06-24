@@ -72,6 +72,7 @@ public class ProcessUserChatCommandHandlerTests
 
     public ProcessUserChatCommandHandlerTests()
     {
+        SetupScopeFactory();
         _catalogService.GetCapabilities().Returns([BuildCapability("test_capability")]);
         _catalogService.GetCapability(Arg.Any<string>())
             .Returns(callInfo => BuildCapability(callInfo.Arg<string>()));
@@ -117,6 +118,17 @@ public class ProcessUserChatCommandHandlerTests
 
         _featureFlagService.GetEnabledKeysForUserAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new List<string>().AsReadOnly());
+    }
+
+    private void SetupScopeFactory()
+    {
+        var scopeProvider = Substitute.For<IServiceProvider>();
+        scopeProvider.GetService(typeof(IAgentOperationExecutor)).Returns(_operationExecutor);
+        scopeProvider.GetService(typeof(IPendingClarificationStore)).Returns(_pendingClarificationStore);
+
+        var scope = Substitute.For<IServiceScope>();
+        scope.ServiceProvider.Returns(scopeProvider);
+        _scopeFactory.CreateScope().Returns(scope);
     }
 
     private void SetupOperationExecutor(AiToolRegistry toolRegistry)
@@ -777,6 +789,36 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Actions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_ReadOnlyToolOnIsolatedScope_StillDispatchesThroughOperationExecutor()
+    {
+        SetupUserAndPayGate();
+
+        var readOnly = FakeTool("query_habits");
+        readOnly.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, EntityName: "Found habits"));
+
+        var handler = CreateHandler(readOnly);
+
+        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [new AiToolCall("query_habits", "call_1", toolCallArgs)],
+            ConversationContext = TestConversationContext
+        });
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Here you go.", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Show my habits"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(op => op.OperationId == "query_habits"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1484,5 +1526,178 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         dispatchedArgs.Should().NotBeNull();
         dispatchedArgs!.Value.GetRawText().Should().Be(rawArgs);
+    }
+
+    [Fact]
+    public async Task Handle_ReadOnlyToolsDispatchConcurrently_WhileWriteToolsRunSequentiallyInOrder()
+    {
+        SetupUserAndPayGate();
+
+        using var readOnlyBarrier = new Barrier(2);
+        var bothReadOnlyInFlight = false;
+
+        var firstReadOnly = ConcurrentReadOnlyTool("query_habits", readOnlyBarrier, isInFlight => bothReadOnlyInFlight = isInFlight);
+        var secondReadOnly = ConcurrentReadOnlyTool("get_streak_info", readOnlyBarrier, _ => { });
+
+        var writeExecutionOrder = new List<string>();
+        var maxConcurrentWrites = 0;
+        var currentWrites = 0;
+        var writeLock = new object();
+
+        var firstWrite = SequentialWriteTool("create_habit", 0, writeExecutionOrder, writeLock,
+            () => Interlocked.Increment(ref currentWrites), () => Interlocked.Decrement(ref currentWrites),
+            () => maxConcurrentWrites = Math.Max(maxConcurrentWrites, currentWrites));
+        var secondWrite = SequentialWriteTool("log_habit", 1, writeExecutionOrder, writeLock,
+            () => Interlocked.Increment(ref currentWrites), () => Interlocked.Decrement(ref currentWrites),
+            () => maxConcurrentWrites = Math.Max(maxConcurrentWrites, currentWrites));
+
+        var handler = CreateHandler(firstReadOnly, secondReadOnly, firstWrite, secondWrite);
+
+        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("log_habit", "call_w2", toolCallArgs),
+                new AiToolCall("query_habits", "call_r1", toolCallArgs),
+                new AiToolCall("create_habit", "call_w1", toolCallArgs),
+                new AiToolCall("get_streak_info", "call_r2", toolCallArgs)
+            ],
+            ConversationContext = TestConversationContext
+        });
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done!", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Mixed turn"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        bothReadOnlyInFlight.Should().BeTrue("read-only tools must be dispatched concurrently, so both reach the barrier");
+        writeExecutionOrder.Should().Equal("create_habit", "log_habit");
+        maxConcurrentWrites.Should().Be(1, "write tools must run strictly sequentially on the ambient scope");
+    }
+
+    [Fact]
+    public async Task Handle_UnknownToolAmongReadOnly_RoutesUnknownToSequentialDefaultAndStillSucceeds()
+    {
+        SetupUserAndPayGate();
+
+        var readOnly = FakeTool("query_habits");
+        readOnly.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, EntityName: "Found habits"));
+
+        var handler = CreateHandler(readOnly);
+
+        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("query_habits", "call_r1", toolCallArgs),
+                new AiToolCall("mystery_tool", "call_u1", toolCallArgs)
+            ],
+            ConversationContext = TestConversationContext
+        });
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Done.", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Mixed unknown turn"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Actions.Should().ContainSingle(action => action.Status == ActionStatus.Failed && action.Error!.Contains("Unknown tool"));
+    }
+
+    [Fact]
+    public async Task Handle_MultipleReadOnlyTools_PreserveDeterministicRelatedSurfacesOrderRegardlessOfCompletion()
+    {
+        SetupUserAndPayGate();
+
+        var slowFirst = Substitute.For<IAiTool>();
+        slowFirst.Name.Returns("describe_feature");
+        slowFirst.Description.Returns("Explains a feature");
+        slowFirst.IsReadOnly.Returns(true);
+        slowFirst.GetParameterSchema().Returns(new { type = "object" });
+        slowFirst.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await Task.Delay(40);
+                return new ToolResult(true, Payload: new { related_surfaces = new[] { "gamification", "today" } });
+            });
+
+        var fastSecond = Substitute.For<IAiTool>();
+        fastSecond.Name.Returns("get_streak_info");
+        fastSecond.Description.Returns("Streak info");
+        fastSecond.IsReadOnly.Returns(true);
+        fastSecond.GetParameterSchema().Returns(new { type = "object" });
+        fastSecond.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, Payload: new { related_surfaces = new[] { "habits" } }));
+
+        var handler = CreateHandler(slowFirst, fastSecond);
+
+        var toolCallArgs = JsonDocument.Parse("{}").RootElement;
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls =
+            [
+                new AiToolCall("describe_feature", "call_1", toolCallArgs),
+                new AiToolCall("get_streak_info", "call_2", toolCallArgs)
+            ],
+            ConversationContext = TestConversationContext
+        });
+
+        _aiIntentService.ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(), Arg.Any<IReadOnlyList<AiToolCallResult>>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse { TextMessage = "Here you go.", ToolCalls = null }));
+
+        var result = await handler.Handle(new ProcessUserChatCommand(UserId, "Two lookups"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.RelatedSurfaces.Should().Equal("gamification", "today", "habits");
+    }
+
+    private static IAiTool ConcurrentReadOnlyTool(string name, Barrier barrier, Action<bool> onBothInFlight)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns($"{name} description");
+        tool.IsReadOnly.Returns(true);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                await Task.Yield();
+                var bothArrived = barrier.SignalAndWait(TimeSpan.FromSeconds(5));
+                if (bothArrived)
+                    onBothInFlight(true);
+                return new ToolResult(true, EntityName: name);
+            });
+        return tool;
+    }
+
+    private static IAiTool SequentialWriteTool(
+        string name, int order, List<string> executionOrder, object executionLock,
+        Action onEnter, Action onExit, Action sampleConcurrency)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns($"{name} description");
+        tool.IsReadOnly.Returns(false);
+        tool.Order.Returns(order);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                onEnter();
+                sampleConcurrency();
+                await Task.Delay(20);
+                lock (executionLock)
+                    executionOrder.Add(name);
+                onExit();
+                return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: name);
+            });
+        return tool;
     }
 }

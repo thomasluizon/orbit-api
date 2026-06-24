@@ -42,7 +42,8 @@ public sealed partial class AiSummaryService(
                 prompt,
                 temperature: 0.7,
                 cancellationToken,
-                maxOutputTokens: 180);
+                maxOutputTokens: 180,
+                purpose: "daily_summary");
 
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<string>(ErrorMessages.AiEmptyResponse);

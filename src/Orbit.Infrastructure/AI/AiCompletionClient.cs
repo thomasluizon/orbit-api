@@ -52,7 +52,8 @@ public sealed partial class AiCompletionClient
         string userPrompt,
         double temperature = 0.7,
         CancellationToken cancellationToken = default,
-        int? maxOutputTokens = null)
+        int? maxOutputTokens = null,
+        string purpose = "text")
     {
         var messages = new List<ChatMessage>
         {
@@ -71,6 +72,7 @@ public sealed partial class AiCompletionClient
         LogCallingTextCompletion(_logger);
 
         var completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
+        LogCompletionUsage(completion.Value.Usage, purpose);
         var text = completion.Value.Content.FirstOrDefault()?.Text;
 
         if (!string.IsNullOrWhiteSpace(text))
@@ -82,7 +84,8 @@ public sealed partial class AiCompletionClient
     public async Task<T?> CompleteJsonAsync<T>(
         string prompt,
         double temperature = 0.1,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string purpose = "json")
     {
         var messages = new List<ChatMessage>
         {
@@ -99,6 +102,7 @@ public sealed partial class AiCompletionClient
         LogCallingJsonCompletion(_logger);
 
         var completion = await _chatClient.CompleteChatAsync(messages, options, cancellationToken);
+        LogCompletionUsage(completion.Value.Usage, purpose);
         var text = completion.Value.Content.FirstOrDefault()?.Text;
 
         if (string.IsNullOrWhiteSpace(text))
@@ -110,6 +114,20 @@ public sealed partial class AiCompletionClient
         LogJsonCompletionSuccessful(_logger, text.Length);
 
         return JsonSerializer.Deserialize<T>(text, JsonOptions);
+    }
+
+    private void LogCompletionUsage(ChatTokenUsage? usage, string purpose)
+    {
+        if (usage is null)
+            return;
+
+        LogAiTokenUsage(
+            _logger,
+            purpose,
+            usage.InputTokenDetails?.CachedTokenCount ?? 0,
+            usage.InputTokenCount,
+            usage.OutputTokenCount,
+            usage.TotalTokenCount);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API for text completion...")]
@@ -126,5 +144,8 @@ public sealed partial class AiCompletionClient
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "AI JSON completion successful ({Length} chars)")]
     private static partial void LogJsonCompletionSuccessful(ILogger logger, int length);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "AI token usage ({Purpose}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
+    private static partial void LogAiTokenUsage(ILogger logger, string purpose, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);
 
 }

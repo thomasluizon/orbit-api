@@ -36,7 +36,8 @@ public sealed partial class AiRetrospectiveService(
                 "You are a thoughtful habit coach writing retrospective reviews.",
                 prompt,
                 temperature: 0.7,
-                cancellationToken);
+                cancellationToken,
+                purpose: "retrospective");
 
             if (string.IsNullOrWhiteSpace(text))
                 return Result.Failure<RetrospectiveNarrative>(ErrorMessages.AiEmptyResponse);
