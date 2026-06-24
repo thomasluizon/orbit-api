@@ -255,7 +255,9 @@ public partial class ProcessUserChatCommandHandler(
                 context.ActiveGoals,
                 context.HasProAccess));
 
-        var tools = ai.ToolRegistry.GetAll();
+        var tools = ai.ToolRegistry.GetAll()
+            .OrderBy(t => t.Name, StringComparer.Ordinal)
+            .ToList();
         var toolDeclarations = tools.Select(t => (object)new
         {
             name = t.Name,
