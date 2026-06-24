@@ -18,7 +18,8 @@ public static partial class WebApplicationExtensions
     {
         var migrationConnectionString = OrbitConnectionStringFactory.ForSession(app.Configuration);
         var migrationOptions = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseNpgsql(migrationConnectionString)
+            .UseNpgsql(migrationConnectionString, npgsql =>
+                npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null))
             .Options;
         await using (var migrationDb = new OrbitDbContext(migrationOptions))
         {
