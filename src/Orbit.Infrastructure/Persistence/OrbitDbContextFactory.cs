@@ -19,7 +19,7 @@ public class OrbitDbContextFactory : IDesignTimeDbContextFactory<OrbitDbContext>
             .Build();
 
         var optionsBuilder = new DbContextOptionsBuilder<OrbitDbContext>();
-        optionsBuilder.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
+        optionsBuilder.UseNpgsql(OrbitConnectionStringFactory.ForSession(configuration));
 
         return new OrbitDbContext(optionsBuilder.Options);
     }
