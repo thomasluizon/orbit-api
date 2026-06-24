@@ -276,6 +276,67 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CapableClientWithDirective_PopulatesHabitListAndStripsToken()
+    {
+        SetupUserAndPayGate();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { CreateHabit("Meditate") }.AsReadOnly());
+        SetupAiResponse(new AiResponse { TextMessage = "Here are your habits for today:\n[[orbit:habits:today]]", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var command = new ProcessUserChatCommand(
+            UserId, "what are my habits today",
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true));
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Here are your habits for today:");
+        result.Value.HabitList.Should().NotBeNull();
+        result.Value.HabitList!.Scope.Should().Be("today");
+        result.Value.HabitList.Items.Should().ContainSingle(item => item.Title == "Meditate");
+    }
+
+    [Fact]
+    public async Task Handle_DirectiveWithoutCapability_StripsTokenButOmitsHabitList()
+    {
+        SetupUserAndPayGate();
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { CreateHabit("Meditate") }.AsReadOnly());
+        SetupAiResponse(new AiResponse { TextMessage = "Here are your habits:\n[[orbit:habits:today]]", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var command = new ProcessUserChatCommand(UserId, "what are my habits today");
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Here are your habits:");
+        result.Value.HabitList.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_CapableClientWithoutDirective_OmitsHabitList()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "Sure, I can help.", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var command = new ProcessUserChatCommand(
+            UserId, "hello",
+            ClientContext: new AgentClientContext(SupportsHabitListCard: true));
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Sure, I can help.");
+        result.Value.HabitList.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_PromptBuilderReceivesOnlyActiveHabits()
     {
         SetupUserAndPayGate();
