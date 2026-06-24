@@ -40,7 +40,8 @@ public record ChatResponse(
     IReadOnlyList<AgentPolicyDenial>? PolicyDenials = null,
     string? CorrelationId = null,
     IReadOnlyList<string>? RelatedSurfaces = null,
-    HabitListCard? HabitList = null);
+    HabitListCard? HabitList = null,
+    GoalListCard? GoalList = null);
 
 public record ActionResult(
     string Type,
@@ -143,6 +144,14 @@ public partial class ProcessUserChatCommandHandler(
                 habitList = HabitListCardBuilder.Build(context.ActiveHabits, context.UserToday, habitListScope);
         }
 
+        GoalListCard? goalList = null;
+        if (GoalListCardBuilder.TryExtractDirective(aiMessage, out var strippedGoalMessage))
+        {
+            aiMessage = strippedGoalMessage;
+            if (request.ClientContext?.SupportsGoalListCard == true)
+                goalList = GoalListCardBuilder.Build(context.ActiveGoals);
+        }
+
         RunBackgroundPostResponseWork(
             request.UserId,
             request.Message,
@@ -165,7 +174,8 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.PolicyDenials,
             request.CorrelationId,
             executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
-            habitList));
+            habitList,
+            goalList));
     }
 
     private async Task<Result<ChatContext>> LoadChatContextAsync(
@@ -273,6 +283,9 @@ public partial class ProcessUserChatCommandHandler(
 
         if (request.ClientContext?.SupportsHabitListCard == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, HabitListCardBuilder.PromptInstruction);
+
+        if (request.ClientContext?.SupportsGoalListCard == true)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt, GoalListCardBuilder.PromptInstruction);
 
         var tools = ai.ToolRegistry.GetAll()
             .OrderBy(t => t.Name, StringComparer.Ordinal)
