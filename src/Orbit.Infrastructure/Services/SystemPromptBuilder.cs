@@ -8,16 +8,20 @@ namespace Orbit.Infrastructure.Services;
 
 public class SystemPromptBuilder : ISystemPromptBuilder
 {
-    private readonly IReadOnlyList<IPromptSection> _sections;
+    private readonly IReadOnlyList<IPromptSection> _staticSections;
+    private readonly IReadOnlyList<IPromptSection> _dynamicSections;
 
     public SystemPromptBuilder()
     {
-        _sections =
+        _staticSections =
         [
             new CoreIdentitySection(),
             new GlobalRulesSection(),
             new StructuringStrategySection(),
             new ClarificationGuidanceSection(),
+        ];
+        _dynamicSections =
+        [
             new ActiveHabitsSection(),
             new ActiveGoalsSection(),
             new UserTagsSection(),
@@ -29,19 +33,22 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         ];
     }
 
-    public string Build(PromptContext context)
+    public string BuildStatic(PromptBuildRequest request) => Render(_staticSections, ToContext(request));
+
+    public string BuildDynamic(PromptBuildRequest request) => Render(_dynamicSections, ToContext(request));
+
+    private static string Render(IEnumerable<IPromptSection> sections, PromptContext context)
     {
         var sb = new StringBuilder();
-        foreach (var section in _sections.Where(s => s.ShouldInclude(context)).OrderBy(s => s.Order))
+        foreach (var section in sections.Where(s => s.ShouldInclude(context)).OrderBy(s => s.Order))
         {
             sb.Append(section.Build(context));
         }
         return sb.ToString();
     }
 
-    string ISystemPromptBuilder.Build(PromptBuildRequest request)
-    {
-        var context = new PromptContext(
+    private static PromptContext ToContext(PromptBuildRequest request) =>
+        new(
             request.ActiveHabits,
             request.UserFacts,
             request.HasImage,
@@ -50,7 +57,4 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             request.UserToday,
             request.HabitMetrics,
             request.ActiveGoals);
-        return Build(context);
-    }
-
 }

@@ -15,7 +15,18 @@ public interface IAgentCatalogService
     AgentCapability? GetCapabilityByChatTool(string toolName);
     AgentCapability? GetCapabilityByMcpTool(string toolName);
     bool IsMappedControllerAction(string actionKey);
-    string BuildPromptSupplement(AgentContextSnapshot snapshot);
+
+    /// <summary>
+    /// Builds the request-invariant supplement (agent policy + product-surface snapshot). Shared
+    /// across every user and request, so it belongs in the cacheable prefix before any dynamic content.
+    /// </summary>
+    string BuildStaticSupplement();
+
+    /// <summary>
+    /// Builds the per-request supplement (safe user context + untrusted client hints) from the
+    /// caller's snapshot. Emitted after all static content so it never poisons the cacheable prefix.
+    /// </summary>
+    string BuildDynamicSupplement(AgentContextSnapshot snapshot);
 }
 
 public interface IAgentPolicyEvaluator

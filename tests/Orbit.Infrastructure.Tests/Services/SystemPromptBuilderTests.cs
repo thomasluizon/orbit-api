@@ -17,7 +17,8 @@ public class SystemPromptBuilderTests
         DateOnly? userToday = null, IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
     {
         ISystemPromptBuilder builder = new SystemPromptBuilder();
-        return builder.Build(new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday, HabitMetrics: habitMetrics));
+        var request = new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday, HabitMetrics: habitMetrics);
+        return builder.BuildStatic(request) + builder.BuildDynamic(request);
     }
 
     [Fact]
@@ -167,5 +168,35 @@ public class SystemPromptBuilderTests
 
         result.Should().Contain("\"Works night shifts and weekends\"");
         result.Should().NotContain("Works night shifts\nand weekends");
+    }
+
+    [Fact]
+    public void BuildStatic_IsRequestInvariant_AndExcludesDynamicHabitIndex()
+    {
+        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1)).Value;
+        var withHabit = new PromptBuildRequest([habit], Array.Empty<UserFact>());
+        var empty = new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>());
+
+        var staticPrompt = builder.BuildStatic(withHabit);
+
+        staticPrompt.Should().Be(builder.BuildStatic(empty));
+        staticPrompt.Should().Contain("Structuring Strategy");
+        staticPrompt.Should().NotContain("Morning Run");
+        staticPrompt.Should().NotContain("User's Habits");
+    }
+
+    [Fact]
+    public void BuildDynamic_ContainsUserData_AndExcludesStaticRules()
+    {
+        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1)).Value;
+        var request = new PromptBuildRequest([habit], Array.Empty<UserFact>());
+
+        var dynamicPrompt = builder.BuildDynamic(request);
+
+        dynamicPrompt.Should().Contain("Morning Run");
+        dynamicPrompt.Should().Contain("User's Habits");
+        dynamicPrompt.Should().NotContain("Structuring Strategy");
     }
 }

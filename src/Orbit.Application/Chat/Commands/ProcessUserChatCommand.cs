@@ -240,20 +240,26 @@ public partial class ProcessUserChatCommandHandler(
         Func<AiStreamEvent, Task>? aiStreamSink,
         CancellationToken cancellationToken)
     {
-        var systemPrompt = ai.PromptBuilder.Build(new PromptBuildRequest(
+        var promptRequest = new PromptBuildRequest(
             context.PromptHabits, context.UserFacts,
             HasImage: request.ImageData is not null,
-            UserTags: context.UserTags, UserToday: context.UserToday, ActiveGoals: context.ActiveGoals));
-        systemPrompt += Environment.NewLine + ai.CatalogService.BuildPromptSupplement(
-            BuildAgentContextSnapshot(
-                context.User,
-                request.ClientContext,
-                context.EnabledFeatureFlags,
-                context.UserTags,
-                context.ChecklistTemplates,
-                context.ActiveHabits,
-                context.ActiveGoals,
-                context.HasProAccess));
+            UserTags: context.UserTags, UserToday: context.UserToday, ActiveGoals: context.ActiveGoals);
+        var agentSnapshot = BuildAgentContextSnapshot(
+            context.User,
+            request.ClientContext,
+            context.EnabledFeatureFlags,
+            context.UserTags,
+            context.ChecklistTemplates,
+            context.ActiveHabits,
+            context.ActiveGoals,
+            context.HasProAccess);
+
+        var systemPrompt = string.Join(
+            Environment.NewLine,
+            ai.PromptBuilder.BuildStatic(promptRequest),
+            ai.CatalogService.BuildStaticSupplement(),
+            ai.PromptBuilder.BuildDynamic(promptRequest),
+            ai.CatalogService.BuildDynamicSupplement(agentSnapshot));
 
         var tools = ai.ToolRegistry.GetAll()
             .OrderBy(t => t.Name, StringComparer.Ordinal)
