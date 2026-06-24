@@ -55,6 +55,7 @@ public class OrbitDbContext : DbContext
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
+    public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -83,6 +84,7 @@ public class OrbitDbContext : DbContext
         ConfigureSentStreakFreezeAlertEntity(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
+        ConfigureAiFactExtractionBatchEntity(modelBuilder);
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -192,6 +194,20 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(e => e.EventId).IsUnique();
             entity.Property(e => e.EventId).IsRequired().HasMaxLength(255);
+        });
+    }
+
+    private static void ConfigureAiFactExtractionBatchEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AiFactExtractionBatch>(entity =>
+        {
+            entity.HasIndex(b => b.Status);
+            entity.HasIndex(b => b.BatchId).IsUnique();
+            entity.Property(b => b.BatchId).IsRequired().HasMaxLength(255);
+            entity.Property(b => b.InputFileId).IsRequired().HasMaxLength(255);
+            entity.Property(b => b.OutputFileId).HasMaxLength(255);
+            entity.Property(b => b.Status).HasConversion<string>().HasMaxLength(32);
+            entity.HasOne<User>().WithMany().HasForeignKey(b => b.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

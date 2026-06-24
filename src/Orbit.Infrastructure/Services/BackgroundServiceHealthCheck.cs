@@ -18,7 +18,8 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["AccountDeletion"] = TimeSpan.FromHours(72),
         ["SyncCleanup"] = TimeSpan.FromHours(48),
         ["PlayNotificationCleanup"] = TimeSpan.FromHours(48),
-        ["CalendarAutoSync"] = TimeSpan.FromMinutes(45)
+        ["CalendarAutoSync"] = TimeSpan.FromMinutes(45),
+        ["OpenAiBatchPoller"] = TimeSpan.FromMinutes(10)
     };
 
     public static void RecordTick(string serviceName)

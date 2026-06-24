@@ -953,8 +953,6 @@ public partial class ProcessUserChatCommandHandler(
         bool shouldExtractFacts,
         IReadOnlyList<UserFact> existingFacts)
     {
-        var existingFactCount = existingFacts.Count;
-
         _ = Task.Run(async () =>
         {
             try
@@ -965,7 +963,7 @@ public partial class ProcessUserChatCommandHandler(
                 var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessUserChatCommandHandler>>();
 
                 if (shouldExtractFacts)
-                    await ExtractAndPersistFactsAsync(scope, userId, userMessage, aiMessage, existingFacts, existingFactCount, bgLogger);
+                    await SubmitFactExtractionBatchAsync(scope, userId, userMessage, aiMessage, existingFacts);
 
                 await IncrementAiMessageCountAsync(bgUserRepo, bgUnitOfWork, userId, bgLogger);
             }
@@ -976,47 +974,16 @@ public partial class ProcessUserChatCommandHandler(
         }, CancellationToken.None);
     }
 
-    private static async Task ExtractAndPersistFactsAsync(
+    private static async Task SubmitFactExtractionBatchAsync(
         IServiceScope scope,
         Guid userId,
         string userMessage,
         string? aiMessage,
-        IReadOnlyList<UserFact> existingFacts,
-        int existingFactCount,
-        ILogger bgLogger)
+        IReadOnlyList<UserFact> existingFacts)
     {
         var bgFactService = scope.ServiceProvider.GetRequiredService<IFactExtractionService>();
-        var bgUserFactRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<UserFact>>();
-        var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var bgAppConfig = scope.ServiceProvider.GetRequiredService<IAppConfigService>();
-
-        try
-        {
-            var extractionResult = await bgFactService.ExtractFactsAsync(
-                userMessage, aiMessage, existingFacts, CancellationToken.None);
-
-            if (extractionResult.IsFailure || extractionResult.Value.Facts.Count == 0)
-                return;
-
-            var maxFacts = await bgAppConfig.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, CancellationToken.None);
-            if (existingFactCount >= maxFacts)
-                return;
-
-            var remaining = maxFacts - existingFactCount;
-            foreach (var candidate in extractionResult.Value.Facts.Take(remaining))
-            {
-                var factResult = UserFact.Create(userId, candidate.FactText, candidate.Category);
-                if (factResult.IsSuccess)
-                    await bgUserFactRepo.AddAsync(factResult.Value, CancellationToken.None);
-            }
-
-            await bgUnitOfWork.SaveChangesAsync(CancellationToken.None);
-            LogBackgroundFactsPersisted(bgLogger, extractionResult.Value.Facts.Count);
-        }
-        catch (Exception ex)
-        {
-            LogBackgroundFactExtractionFailed(bgLogger, ex);
-        }
+        await bgFactService.SubmitBatchAsync(userMessage: userMessage, aiResponse: aiMessage,
+            existingFacts: existingFacts, userId: userId, cancellationToken: CancellationToken.None);
     }
 
     private static async Task IncrementAiMessageCountAsync(
@@ -1081,9 +1048,6 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Changes saved in {ElapsedMs}ms")]
     private static partial void LogChangesSaved(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Background: {FactCount} facts persisted")]
-    private static partial void LogBackgroundFactsPersisted(ILogger logger, int factCount);
-
     [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "TOTAL request processing time: {ElapsedMs}ms")]
     private static partial void LogTotalRequestProcessingTime(ILogger logger, long elapsedMs);
 
@@ -1104,9 +1068,6 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 20, Level = LogLevel.Information, Message = "Saving changes to database...")]
     private static partial void LogSavingChanges(ILogger logger);
-
-    [LoggerMessage(EventId = 21, Level = LogLevel.Warning, Message = "Background fact extraction failed")]
-    private static partial void LogBackgroundFactExtractionFailed(ILogger logger, Exception ex);
 
     [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Background message counter increment failed")]
     private static partial void LogBackgroundMessageCounterFailed(ILogger logger, Exception ex);

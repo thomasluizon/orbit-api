@@ -160,6 +160,7 @@ public static class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
+        builder.Services.AddSingleton<IAiBatchClient, AiBatchClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
         builder.Services.AddScoped<IFactExtractionService, AiFactExtractionService>();
@@ -491,6 +492,7 @@ public static class ServiceCollectionExtensions
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
+        builder.Services.AddHostedService<OpenAiBatchPollerService>();
     }
 
     private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
@@ -522,6 +524,7 @@ public static class ServiceCollectionExtensions
         AddScheduledJob<SyncCleanupService>(builder);
         AddScheduledJob<PlayNotificationCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
+        AddScheduledJob<OpenAiBatchPollerService>(builder);
 
         builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
     }
