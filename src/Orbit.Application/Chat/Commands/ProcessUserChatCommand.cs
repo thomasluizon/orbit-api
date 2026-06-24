@@ -293,9 +293,14 @@ public partial class ProcessUserChatCommandHandler(
         if (request.ClientContext?.SupportsGoalListCard == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, GoalListCardBuilder.PromptInstruction);
 
+        var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
+            ai.ToolRegistry.GetAll().Select(t => t.Name),
+            BuildConversationText(request));
+
         var toolDeclarations = skipTools
             ? new List<object>()
             : ai.ToolRegistry.GetAll()
+                .Where(t => activeToolNames.Contains(t.Name))
                 .OrderBy(t => t.Name, StringComparer.Ordinal)
                 .Select(t => (object)new
                 {
@@ -317,6 +322,14 @@ public partial class ProcessUserChatCommandHandler(
             request.History,
             aiStreamSink,
             cancellationToken);
+    }
+
+    private static string BuildConversationText(ProcessUserChatCommand request)
+    {
+        if (request.History is not { Count: > 0 })
+            return request.Message;
+
+        return request.Message + " " + string.Join(" ", request.History.Select(message => message.Content));
     }
 
     private async Task<(AiResponse FinalResponse, int Iterations)> RunToolCallLoopAsync(
