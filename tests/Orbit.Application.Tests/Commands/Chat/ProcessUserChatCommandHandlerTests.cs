@@ -218,6 +218,19 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(Result.Failure<AiResponse>(error));
     }
 
+    private static IAiTool FakeTool(string name)
+    {
+        var tool = Substitute.For<IAiTool>();
+        tool.Name.Returns(name);
+        tool.Description.Returns($"{name} description");
+        tool.IsReadOnly.Returns(true);
+        tool.GetParameterSchema().Returns(new { type = "object" });
+        return tool;
+    }
+
+    private static IReadOnlyList<string> ToolNames(IReadOnlyList<object> declarations) =>
+        declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!).ToList();
+
     [Fact]
     public async Task Handle_PayGateBlocks_ReturnsPayGateError()
     {
@@ -529,6 +542,23 @@ public class ProcessUserChatCommandHandlerTests
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
             Arg.Is<Func<AiStreamEvent, Task>?>(sink => sink == null),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SendsToolsInDeterministicOrdinalOrder()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "ok" });
+        var handler = CreateHandler(FakeTool("delete_habit"), FakeTool("assign_tags"), FakeTool("create_habit"));
+
+        await handler.Handle(new ProcessUserChatCommand(UserId, "Hello"), CancellationToken.None);
+
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<object>>(declarations =>
+                ToolNames(declarations).SequenceEqual(new[] { "assign_tags", "create_habit", "delete_habit" })),
+            Arg.Any<byte[]?>(), Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
