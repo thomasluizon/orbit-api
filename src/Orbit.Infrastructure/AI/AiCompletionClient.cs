@@ -48,12 +48,20 @@ public sealed partial class AiCompletionClient
     internal static string ResolveSubTaskModel(string subTaskModel, string primaryModel)
         => string.IsNullOrWhiteSpace(subTaskModel) ? primaryModel : subTaskModel;
 
+    /// <summary>
+    /// The sub-task temperature is suppressed only when the sub-task tier actually routes to a distinct
+    /// reasoning model (which rejects a custom temperature). When the kill-switch aliases the sub-task
+    /// tier back to the primary model, the configured temperature must still be sent.
+    /// </summary>
+    internal static bool ShouldApplyTemperature(AiModelTier tier, string primaryModel, string subTaskModel)
+        => tier == AiModelTier.Primary || subTaskModel == primaryModel;
+
     internal AiCompletionClient(ChatClient chatClient, ILogger<AiCompletionClient> logger)
     {
         _chatClient = chatClient;
         _subTaskChatClient = chatClient;
-        _primaryModel = string.Empty;
-        _subTaskModel = string.Empty;
+        _primaryModel = "primary-test";
+        _subTaskModel = "subtask-test";
         _logger = logger;
     }
 
@@ -78,7 +86,7 @@ public sealed partial class AiCompletionClient
         };
 
         var options = new ChatCompletionOptions();
-        if (tier == AiModelTier.Primary)
+        if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
             options.Temperature = (float)temperature;
 
         if (maxOutputTokens is int max)
@@ -115,7 +123,7 @@ public sealed partial class AiCompletionClient
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
-        if (tier == AiModelTier.Primary)
+        if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
             options.Temperature = (float)temperature;
 
         LogCallingJsonCompletion(_logger);

@@ -48,6 +48,14 @@ public class AiCompletionClientTests
         AiCompletionClient.ResolveSubTaskModel("gpt-5.4-nano", "gpt-4.1-mini").Should().Be("gpt-5.4-nano");
     }
 
+    [Theory]
+    [InlineData(AiModelTier.Primary, "gpt-4.1-mini", "gpt-5.4-nano", true)]
+    [InlineData(AiModelTier.SubTask, "gpt-4.1-mini", "gpt-5.4-nano", false)]
+    [InlineData(AiModelTier.SubTask, "gpt-4.1-mini", "gpt-4.1-mini", true)]
+    public void ShouldApplyTemperature_SuppressedOnlyForDistinctSubTaskModel(
+        AiModelTier tier, string primary, string subTask, bool expected)
+        => AiCompletionClient.ShouldApplyTemperature(tier, primary, subTask).Should().Be(expected);
+
     private static ChatClient BuildChatClient(HttpMessageHandler handler) =>
         new(
             model: "gpt-test",
