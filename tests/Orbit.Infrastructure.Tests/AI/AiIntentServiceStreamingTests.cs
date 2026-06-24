@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI;
 using OpenAI.Chat;
@@ -105,9 +106,54 @@ public class AiIntentServiceStreamingTests
         handler.LastRequestBody.Should().NotContain("\"stream\":true");
     }
 
+    [Fact]
+    public async Task SendWithToolsAsync_BufferedLengthFinish_LogsTruncationWarningAndKeepsText()
+    {
+        const string completion = """
+            {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
+             "choices":[{"index":0,"message":{"role":"assistant","content":"partial list"},"finish_reason":"length"}],
+             "usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
+            """;
+        var (service, logger) = BuildServiceWithRecordingLogger(new JsonHandler(completion));
+
+        var result = await service.SendWithToolsAsync("hello", "system", []);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TextMessage.Should().Be("partial list");
+        logger.WarningEventIds.Should().Contain(8);
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_StreamingLengthFinish_LogsTruncationWarningAndKeepsText()
+    {
+        var body = RoleChunk() + ContentChunk("partial") + FinishChunk("length") + Done();
+        var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body));
+        var sink = new CollectingSink();
+
+        var result = await service.SendWithToolsAsync("hello", "system", [], streamSink: sink.Handle);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TextMessage.Should().Be("partial");
+        logger.WarningEventIds.Should().Contain(8);
+    }
+
     private static (AiIntentService Service, CollectingSink Sink) BuildService(HttpMessageHandler handler)
     {
-        var chatClient = new ChatClient(
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+        return (service, new CollectingSink());
+    }
+
+    private static (AiIntentService Service, RecordingLogger Logger) BuildServiceWithRecordingLogger(HttpMessageHandler handler)
+    {
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var logger = new RecordingLogger();
+        var service = new AiIntentService(aiClient, logger);
+        return (service, logger);
+    }
+
+    private static ChatClient BuildChatClient(HttpMessageHandler handler) =>
+        new(
             model: "gpt-test",
             credential: new ApiKeyCredential("test-key"),
             options: new OpenAIClientOptions
@@ -115,11 +161,6 @@ public class AiIntentServiceStreamingTests
                 Endpoint = new Uri("https://orbit.test/v1"),
                 Transport = new HttpClientPipelineTransport(new HttpClient(handler)),
             });
-
-        var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance);
-        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
-        return (service, new CollectingSink());
-    }
 
     private static string Chunk(string deltaJson, string finishReason = "null")
     {
@@ -155,6 +196,27 @@ public class AiIntentServiceStreamingTests
         {
             Events.Add(streamEvent);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingLogger : ILogger<AiIntentService>
+    {
+        public List<int> WarningEventIds { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+                WarningEventIds.Add(eventId.Id);
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
         }
     }
 
