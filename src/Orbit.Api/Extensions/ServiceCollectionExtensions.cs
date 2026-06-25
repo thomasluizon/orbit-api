@@ -667,6 +667,7 @@ public static class ServiceCollectionExtensions
             options.Dsn = sentrySettings.Dsn;
             options.Environment = sentrySettings.Environment;
             options.TracesSampleRate = sentrySettings.TracesSampleRate;
+            options.EnableLogs = sentrySettings.EnableLogs;
             options.SendDefaultPii = false;
             options.SetBeforeSend(ScrubSensitiveData);
         });
