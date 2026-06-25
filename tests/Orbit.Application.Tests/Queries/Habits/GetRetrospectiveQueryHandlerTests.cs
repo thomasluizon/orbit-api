@@ -297,6 +297,28 @@ public class GetRetrospectiveQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_CompletionRate_CapsOverLoggingPerHabit_SoMissesStayVisible()
+    {
+        var overLogged = Habit.Create(new HabitCreateParams(
+            UserId, "Consistent", FrequencyUnit.Week, 1, DueDate: DateFrom)).Value;
+        for (var i = 0; i < 7; i++)
+            overLogged.Log(DateFrom.AddDays(i), advanceDueDate: false);
+
+        var missed = Habit.Create(new HabitCreateParams(
+            UserId, "Missed", FrequencyUnit.Week, 1, DueDate: DateFrom)).Value;
+
+        StubHabits(overLogged, missed);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var metrics = result.Value.Metrics;
+        metrics.CompletionRate.Should().Be(50);
+        metrics.TotalCompletions.Should().Be(7);
+        metrics.TopHabits.Single(s => s.Name == "Consistent").CompletionRate.Should().Be(100);
+    }
+
+    [Fact]
     public async Task Handle_FlagsOneTimeTasks_AsBinary()
     {
         var recurring = CreateLoggedHabit("Recurring");

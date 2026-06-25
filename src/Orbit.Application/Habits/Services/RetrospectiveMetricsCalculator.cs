@@ -34,6 +34,7 @@ public static class RetrospectiveMetricsCalculator
         var trackedHabits = habits.Where(h => h.ParentHabitId is null).ToList();
 
         var totalCompletions = 0;
+        var totalMet = 0;
         var totalScheduled = 0;
         var badHabitSlips = 0;
         var stats = new List<RetrospectiveHabitStat>();
@@ -56,12 +57,13 @@ public static class RetrospectiveMetricsCalculator
 
             totalScheduled += scheduledDates.Count;
             totalCompletions += completedCount;
+            totalMet += Math.Min(completedCount, scheduledDates.Count);
 
             AccumulateWeekdayConsistency(habit, scheduledDates, weekdayScheduled, weekdayCompleted);
             stats.Add(BuildHabitStat(habit, scheduledDates.Count, completedCount));
         }
 
-        var completionRate = Math.Min(100, Percent(totalCompletions, totalScheduled));
+        var completionRate = Percent(totalMet, totalScheduled);
         var activeDays = CountActiveDays(habits, dateFrom, dateTo);
         var periodDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
         var weeklyConsistency = BuildWeeklyConsistency(weekdayScheduled, weekdayCompleted);
