@@ -150,15 +150,15 @@ public sealed partial class AiRetrospectiveService(
         var (highlightsHeading, missedHeading, trendsHeading, suggestionHeading) = GetHeadings(language);
 
         var totalDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
-        var (habitSection, totalCompletions, totalScheduled, badHabitSlips) =
+        var (habitSection, totalMet, totalScheduled, badHabitSlips) =
             BuildHabitBreakdown(habits, dateFrom, dateTo, totalDays);
 
-        var overallRate = totalScheduled > 0 ? Math.Min(100, (int)Math.Round(100.0 * totalCompletions / totalScheduled)) : 0;
+        var overallRate = totalScheduled > 0 ? (int)Math.Round(100.0 * totalMet / totalScheduled) : 0;
 
         return $"""
             Period: Last {totalDays} days ({period}) -- {dateFrom:MMMM d} to {dateTo:MMMM d, yyyy}
             Total habits tracked: {habits.Count(h => h.ParentHabitId is null)}
-            Overall completion rate: {totalCompletions}/{totalScheduled} ({overallRate}%)
+            Overall completion rate: {totalMet}/{totalScheduled} ({overallRate}%)
             {(badHabitSlips > 0 ? $"Bad habit slips: {badHabitSlips}" : "")}
 
             Per-habit breakdown:
@@ -183,11 +183,11 @@ public sealed partial class AiRetrospectiveService(
             """;
     }
 
-    private static (string HabitSection, int TotalCompletions, int TotalScheduled, int BadHabitSlips) BuildHabitBreakdown(
+    private static (string HabitSection, int TotalMet, int TotalScheduled, int BadHabitSlips) BuildHabitBreakdown(
         List<Habit> habits, DateOnly dateFrom, DateOnly dateTo, int totalDays)
     {
         var habitLines = new List<string>();
-        var totalCompletions = 0;
+        var totalMet = 0;
         var totalScheduled = 0;
         var badHabitSlips = 0;
 
@@ -199,31 +199,33 @@ public sealed partial class AiRetrospectiveService(
             if (scheduledCount == 0 && completedCount == 0)
                 continue;
 
-            totalScheduled += scheduledCount;
-            totalCompletions += completedCount;
-
             AppendParentHabitLine(habitLines, habit, scheduledCount, completedCount, totalDays, ref badHabitSlips);
             AppendChildHabitLines(habitLines, habits, habit.Id, dateFrom, dateTo);
+
+            if (habit.IsBadHabit)
+                continue;
+
+            totalScheduled += scheduledCount;
+            totalMet += Math.Min(completedCount, scheduledCount);
         }
 
         var section = habitLines.Count > 0 ? string.Join("\n", habitLines) : "(no habit activity)";
-        return (section, totalCompletions, totalScheduled, badHabitSlips);
+        return (section, totalMet, totalScheduled, badHabitSlips);
     }
 
     private static void AppendParentHabitLine(
         List<string> lines, Habit habit, int scheduledCount, int completedCount, int totalDays, ref int badHabitSlips)
     {
-        var rate = scheduledCount > 0 ? Math.Min(100, (int)Math.Round(100.0 * completedCount / scheduledCount)) : 0;
-
         if (habit.IsBadHabit)
         {
             badHabitSlips += completedCount;
             lines.Add($"- {habit.Title} (bad habit): {completedCount} slips in {totalDays} days");
+            return;
         }
-        else
-        {
-            lines.Add($"- {habit.Title}: {completedCount}/{scheduledCount} completed ({rate}%)");
-        }
+
+        var met = Math.Min(completedCount, scheduledCount);
+        var rate = scheduledCount > 0 ? (int)Math.Round(100.0 * met / scheduledCount) : 0;
+        lines.Add($"- {habit.Title}: {met}/{scheduledCount} completed ({rate}%)");
     }
 
     private static void AppendChildHabitLines(
@@ -233,8 +235,9 @@ public sealed partial class AiRetrospectiveService(
         {
             var childLogs = child.Logs.Count(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
             var childScheduled = HabitScheduleService.GetScheduledDates(child, dateFrom, dateTo).Count;
-            var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childLogs / childScheduled) : 0;
-            lines.Add($"  - {child.Title}: {childLogs}/{childScheduled} ({childRate}%)");
+            var childMet = Math.Min(childLogs, childScheduled);
+            var childRate = childScheduled > 0 ? (int)Math.Round(100.0 * childMet / childScheduled) : 0;
+            lines.Add($"  - {child.Title}: {childMet}/{childScheduled} ({childRate}%)");
         }
     }
 
