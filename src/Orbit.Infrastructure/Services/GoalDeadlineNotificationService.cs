@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
@@ -10,13 +9,14 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services.Hosting;
 
 namespace Orbit.Infrastructure.Services;
 
 public partial class GoalDeadlineNotificationService(
     IServiceScopeFactory scopeFactory,
     ILogger<GoalDeadlineNotificationService> logger,
-    IConfiguration configuration) : BackgroundService, IScheduledJob
+    IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
 {
     private static readonly int[] NotifyDaysBefore = [7, 3, 1];
 
@@ -27,38 +27,21 @@ public partial class GoalDeadlineNotificationService(
 
     public string CronExpression => "*/30 * * * *";
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    public Task RunAsync(CancellationToken cancellationToken) => ExecuteTickAsync(cancellationToken);
+
+    protected override TimeSpan Interval => _interval;
+
+    protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
-        await CheckAndSendDeadlineNotifications(cancellationToken);
+        await CheckAndSendDeadlineNotifications(stoppingToken);
         BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        LogServiceStarted(logger);
+    protected override void LogStarted() => LogServiceStarted(logger);
 
-        try
-        {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await CheckAndSendDeadlineNotifications(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("GoalDeadlineNotification");
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    LogServiceError(logger, ex);
-                }
+    protected override void LogStopped() => LogServiceStopped(logger);
 
-                await Task.Delay(_interval, stoppingToken);
-            }
-        }
-        finally
-        {
-            LogServiceStopped(logger);
-        }
-    }
+    protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
 
     internal async Task CheckAndSendDeadlineNotifications(CancellationToken ct)
     {
