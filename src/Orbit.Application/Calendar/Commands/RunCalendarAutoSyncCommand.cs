@@ -104,7 +104,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
         List<CalendarEventItem> fetched;
         try
         {
-            fetched = await deps.EventFetcher.FetchAsync(accessToken, updatedMin: null, ct);
+            fetched = await deps.EventFetcher.FetchAsync(
+                accessToken, user.GetSelectedCalendarIds(), updatedMin: null, ct);
             fetched = NormalizeFetchedEvents(user.Id, fetched);
         }
         catch (CalendarProviderException ex) when (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)

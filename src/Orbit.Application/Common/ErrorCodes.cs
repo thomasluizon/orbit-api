@@ -76,6 +76,7 @@ public static class ErrorCodes
     public const string CalendarReconnectRequired = "CALENDAR_RECONNECT_REQUIRED";
     public const string CalendarFetchFailed = "CALENDAR_FETCH_FAILED";
     public const string AutoSyncEnabledRequired = "AUTO_SYNC_ENABLED_REQUIRED";
+    public const string CalendarIdsRequired = "CALENDAR_IDS_REQUIRED";
     public const string NoHabitsForPeriod = "NO_HABITS_FOR_PERIOD";
     public const string AiSummaryDisabled = "AI_SUMMARY_DISABLED";
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";

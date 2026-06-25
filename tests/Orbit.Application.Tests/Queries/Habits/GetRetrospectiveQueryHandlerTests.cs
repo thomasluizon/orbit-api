@@ -295,4 +295,21 @@ public class GetRetrospectiveQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("No habits found");
     }
+
+    [Fact]
+    public async Task Handle_FlagsOneTimeTasks_AsBinary()
+    {
+        var recurring = CreateLoggedHabit("Recurring");
+        var oneTime = Habit.Create(new HabitCreateParams(
+            UserId, "One Time", null, null, DueDate: DateFrom)).Value;
+        StubHabits(recurring, oneTime);
+        StubNarrative(SampleNarrative);
+
+        var result = await HandleWeek();
+
+        var needs = result.Value.Metrics.NeedsAttention;
+        needs.Single(s => s.Name == "One Time").IsOneTime.Should().BeTrue();
+        needs.Single(s => s.Name == "One Time").CompletedCount.Should().Be(0);
+        needs.Single(s => s.Name == "Recurring").IsOneTime.Should().BeFalse();
+    }
 }

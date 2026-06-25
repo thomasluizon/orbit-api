@@ -173,4 +173,38 @@ public class GetProfileQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.StreakFreezesAvailable.Should().Be(0);
     }
+
+    [Fact]
+    public async Task Handle_Returns24HourClock_ForBrazilTimeZone()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/Sao_Paulo");
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.Uses24HourClock.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_Returns12HourClock_ForUnitedStatesTimeZone()
+    {
+        var user = CreateTestUser();
+        user.SetTimeZone("America/New_York");
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.Uses24HourClock.Should().BeFalse();
+    }
 }

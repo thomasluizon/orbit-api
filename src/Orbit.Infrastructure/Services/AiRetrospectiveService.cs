@@ -153,7 +153,7 @@ public sealed partial class AiRetrospectiveService(
         var (habitSection, totalCompletions, totalScheduled, badHabitSlips) =
             BuildHabitBreakdown(habits, dateFrom, dateTo, totalDays);
 
-        var overallRate = totalScheduled > 0 ? (int)Math.Round(100.0 * totalCompletions / totalScheduled) : 0;
+        var overallRate = totalScheduled > 0 ? Math.Min(100, (int)Math.Round(100.0 * totalCompletions / totalScheduled)) : 0;
 
         return $"""
             Period: Last {totalDays} days ({period}) -- {dateFrom:MMMM d} to {dateTo:MMMM d, yyyy}
@@ -213,7 +213,7 @@ public sealed partial class AiRetrospectiveService(
     private static void AppendParentHabitLine(
         List<string> lines, Habit habit, int scheduledCount, int completedCount, int totalDays, ref int badHabitSlips)
     {
-        var rate = scheduledCount > 0 ? (int)Math.Round(100.0 * completedCount / scheduledCount) : 0;
+        var rate = scheduledCount > 0 ? Math.Min(100, (int)Math.Round(100.0 * completedCount / scheduledCount)) : 0;
 
         if (habit.IsBadHabit)
         {

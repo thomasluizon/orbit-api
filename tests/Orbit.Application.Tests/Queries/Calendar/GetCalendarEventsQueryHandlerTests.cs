@@ -109,7 +109,7 @@ public class GetCalendarEventsQueryHandlerTests
             Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
-        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>());
 
         var query = new GetCalendarEventsQuery(UserId);
@@ -165,7 +165,7 @@ public class GetCalendarEventsQueryHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
 
-        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
             .Returns(new List<CalendarEventItem>
             {
                 new("evt_already", "Existing", null, "2026-05-01", null, null, true, null, []),
@@ -219,6 +219,7 @@ public class GetCalendarEventsQueryHandlerTests
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
         _eventFetcher.FetchAsync(
                 Arg.Any<string>(),
+                Arg.Any<IReadOnlyCollection<string>?>(),
                 Arg.Any<DateTime?>(),
                 Arg.Any<CancellationToken>())
             .Returns<Task<List<CalendarEventItem>>>(_ => throw new CalendarProviderException(

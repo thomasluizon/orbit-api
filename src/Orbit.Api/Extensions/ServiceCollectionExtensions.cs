@@ -29,6 +29,7 @@ using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Services.Calendar;
 using Scalar.AspNetCore;
 
 namespace Orbit.Api.Extensions;
@@ -90,7 +91,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
-        builder.Services.AddScoped<Orbit.Application.Calendar.Services.ICalendarEventFetcher, Orbit.Infrastructure.Services.GoogleCalendarEventFetcher>();
+        builder.Services.AddGoogleCalendarServices();
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthSessionService, AuthSessionService>();

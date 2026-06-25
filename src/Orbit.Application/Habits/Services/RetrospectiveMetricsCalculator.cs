@@ -61,7 +61,7 @@ public static class RetrospectiveMetricsCalculator
             stats.Add(BuildHabitStat(habit, scheduledDates.Count, completedCount));
         }
 
-        var completionRate = Percent(totalCompletions, totalScheduled);
+        var completionRate = Math.Min(100, Percent(totalCompletions, totalScheduled));
         var activeDays = CountActiveDays(habits, dateFrom, dateTo);
         var periodDays = dateTo.DayNumber - dateFrom.DayNumber + 1;
         var weeklyConsistency = BuildWeeklyConsistency(weekdayScheduled, weekdayCompleted);
@@ -114,15 +114,16 @@ public static class RetrospectiveMetricsCalculator
         new(
             habit.Title,
             habit.Emoji,
-            Percent(completedCount, scheduledCount),
+            Math.Min(100, Percent(completedCount, scheduledCount)),
             completedCount,
-            scheduledCount);
+            scheduledCount,
+            habit.FrequencyUnit is null);
 
     private static IReadOnlyList<int> BuildWeeklyConsistency(int[] weekdayScheduled, int[] weekdayCompleted)
     {
         var consistency = new int[7];
         for (var i = 0; i < 7; i++)
-            consistency[i] = Percent(weekdayCompleted[i], weekdayScheduled[i]);
+            consistency[i] = Math.Min(100, Percent(weekdayCompleted[i], weekdayScheduled[i]));
         return consistency;
     }
 

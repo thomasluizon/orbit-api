@@ -48,6 +48,7 @@ public static class AppConstants
     public const long MaxAudioBytes = 26_214_400;
     public const int MaxAiToolResultTextLength = 12_000;
     public const int MaxCalendarRangeDays = 62;
+    public const int MaxSelectedCalendars = 50;
     public const int MaxPageSize = 200;
     public const int AdRewardBonusMessages = 5;
     public const int AdRewardDailyCap = 3;
