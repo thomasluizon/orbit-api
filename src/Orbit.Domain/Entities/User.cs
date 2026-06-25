@@ -34,6 +34,7 @@ public partial class User : Entity
     public string? GoogleAccessToken { get; private set; }
     public string? GoogleRefreshToken { get; private set; }
     public bool GoogleCalendarAutoSyncEnabled { get; private set; }
+    public string? GoogleCalendarSelectedIds { get; private set; }
     public GoogleCalendarAutoSyncStatus? GoogleCalendarAutoSyncStatus { get; private set; }
     public DateTime? GoogleCalendarLastSyncedAt { get; private set; }
     public string? GoogleCalendarLastSyncError { get; private set; }
@@ -132,6 +133,44 @@ public partial class User : Entity
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
 
     public void SetLanguage(string? language) => Language = language;
+
+    /// <summary>
+    /// Persists the user's Google Calendar selection as a JSON array of calendar ids.
+    /// A null <see cref="GoogleCalendarSelectedIds"/> means "all owned calendars" (the
+    /// default); an empty input list clears the selection back to that default.
+    /// </summary>
+    public void SetSelectedCalendars(IReadOnlyCollection<string> calendarIds)
+    {
+        var normalized = calendarIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        GoogleCalendarSelectedIds = normalized.Count == 0
+            ? null
+            : System.Text.Json.JsonSerializer.Serialize(normalized);
+    }
+
+    /// <summary>
+    /// Deserializes <see cref="GoogleCalendarSelectedIds"/> into the user's chosen calendar
+    /// ids, or null when no explicit selection exists (callers then fall back to all owned
+    /// calendars). Malformed stored JSON is treated as "no selection".
+    /// </summary>
+    public IReadOnlyList<string>? GetSelectedCalendarIds()
+    {
+        if (string.IsNullOrWhiteSpace(GoogleCalendarSelectedIds))
+            return null;
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(GoogleCalendarSelectedIds);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 
     public Result SetThemePreference(string? preference)
     {
@@ -427,6 +466,7 @@ public partial class User : Entity
         GoogleAccessToken = null;
         GoogleRefreshToken = null;
         GoogleCalendarAutoSyncEnabled = false;
+        GoogleCalendarSelectedIds = null;
         GoogleCalendarAutoSyncStatus = null;
         GoogleCalendarLastSyncedAt = null;
         GoogleCalendarLastSyncError = null;

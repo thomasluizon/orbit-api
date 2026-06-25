@@ -15,7 +15,8 @@ public record RetrospectiveHabitStat(
     string? Emoji,
     int CompletionRate,
     int CompletedCount,
-    int ScheduledCount);
+    int ScheduledCount,
+    bool IsOneTime = false);
 
 public record RetrospectiveMetrics(
     int CompletionRate,

@@ -43,6 +43,35 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
         return result.ToPayGateAwareResult(value => Ok(value));
     }
 
+    [HttpGet("calendars")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetCalendars(CancellationToken cancellationToken)
+    {
+        var query = new GetUserCalendarsQuery(HttpContext.GetUserId());
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
+    public record SetSelectedCalendarsRequest(IReadOnlyList<string>? CalendarIds);
+
+    [HttpPut("selected-calendars")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetSelectedCalendars(
+        [FromBody] SetSelectedCalendarsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.CalendarIds is null)
+            return BadRequest(ErrorMessages.CalendarIdsRequired.ToErrorBody());
+
+        var command = new SetSelectedCalendarsCommand(HttpContext.GetUserId(), request.CalendarIds);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
     [HttpPut("dismiss")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

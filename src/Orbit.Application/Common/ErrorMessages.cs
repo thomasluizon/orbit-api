@@ -75,6 +75,7 @@ public static class ErrorMessages
     public static readonly AppError CalendarReconnectRequired = new(ErrorCodes.CalendarReconnectRequired, "Google Calendar connection expired. Please reconnect.");
     public static readonly AppError CalendarFetchFailed = new(ErrorCodes.CalendarFetchFailed, "Failed to fetch calendar events. Please try again.");
     public static readonly AppError AutoSyncEnabledRequired = new(ErrorCodes.AutoSyncEnabledRequired, "Enabled is required.");
+    public static readonly AppError CalendarIdsRequired = new(ErrorCodes.CalendarIdsRequired, "Calendar ids are required.");
     public static readonly AppError NoHabitsForPeriod = new(ErrorCodes.NoHabitsForPeriod, "No habits found for this period.");
     public static readonly AppError AiSummaryDisabled = new(ErrorCodes.AiSummaryDisabled, "AI summary is disabled.");
     public static readonly AppError NoActiveGoals = new(ErrorCodes.NoActiveGoals, "No active goals found.");

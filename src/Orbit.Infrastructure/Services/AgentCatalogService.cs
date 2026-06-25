@@ -968,7 +968,8 @@ public class AgentCatalogService : IAgentCatalogService
                 controllerActions:
                 [
                     "CalendarController.GetEvents",
-                    "CalendarController.GetSuggestions"
+                    "CalendarController.GetSuggestions",
+                    "CalendarController.GetCalendars"
                 ]),
 
             CreateCapability(
@@ -990,7 +991,8 @@ public class AgentCatalogService : IAgentCatalogService
                     "CalendarController.DismissImport",
                     "CalendarController.SetAutoSync",
                     "CalendarController.DismissSuggestion",
-                    "CalendarController.RunSyncNow"
+                    "CalendarController.RunSyncNow",
+                    "CalendarController.SetSelectedCalendars"
                 ])
         ];
     }

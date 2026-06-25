@@ -451,6 +451,8 @@ public class OrbitDbContext : DbContext
 
             entity.Property(u => u.GoogleCalendarLastSyncError).HasMaxLength(500);
 
+            entity.Property(u => u.GoogleCalendarSelectedIds).HasColumnType("text");
+
             entity.HasIndex(u => new { u.GoogleCalendarAutoSyncEnabled, u.GoogleCalendarLastSyncedAt })
                 .HasFilter("\"GoogleCalendarAutoSyncEnabled\" = TRUE");
 

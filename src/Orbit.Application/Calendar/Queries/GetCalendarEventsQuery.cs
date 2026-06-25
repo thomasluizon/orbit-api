@@ -19,7 +19,9 @@ public record CalendarEventItem(
     bool IsRecurring,
     string? RecurrenceRule,
     List<int> Reminders,
-    DateTime? StartUtc = null);
+    DateTime? StartUtc = null,
+    string CalendarId = "",
+    string CalendarName = "");
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
@@ -51,7 +53,8 @@ public partial class GetCalendarEventsQueryHandler(
 
         try
         {
-            var fetched = await eventFetcher.FetchAsync(accessToken, updatedMin: null, cancellationToken);
+            var fetched = await eventFetcher.FetchAsync(
+                accessToken, user.GetSelectedCalendarIds(), updatedMin: null, cancellationToken);
 
             var importedEventIds = await BuildImportedEventIdSet(request.UserId, cancellationToken);
             var items = fetched

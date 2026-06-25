@@ -41,7 +41,8 @@ public record ProfileResponse(
     string? ColorScheme,
     bool GoogleCalendarAutoSyncEnabled,
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
-    DateTime? GoogleCalendarLastSyncedAt);
+    DateTime? GoogleCalendarLastSyncedAt,
+    bool Uses24HourClock = true);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -104,6 +105,7 @@ public class GetProfileQueryHandler(
             user.ColorScheme,
             user.GoogleCalendarAutoSyncEnabled,
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
-            user.GoogleCalendarLastSyncedAt));
+            user.GoogleCalendarLastSyncedAt,
+            TimeFormatResolver.Uses24HourClock(user.TimeZone)));
     }
 }
