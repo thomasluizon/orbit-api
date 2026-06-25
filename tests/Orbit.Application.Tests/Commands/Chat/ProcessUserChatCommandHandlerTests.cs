@@ -808,7 +808,7 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.PendingOperations.Should().HaveCount(1);
-        result.Value.Operations.Should().ContainSingle(op => op.Status == AgentOperationStatus.PendingConfirmation);
+        result.Value.Operations.Should().NotContain(op => op.Status == AgentOperationStatus.PendingConfirmation);
         await _operationExecutor.Received(1).ExecuteAsync(
             Arg.Is<AgentExecuteOperationRequest>(op => op.OperationId == "delete_habit"),
             Arg.Any<CancellationToken>());

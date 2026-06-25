@@ -17,34 +17,43 @@ public static class ChatFaqCache
 {
     private static readonly ConcurrentDictionary<string, string> Cache = new(StringComparer.Ordinal);
 
-    private static readonly IReadOnlyList<(string Key, string[] Phrases)> Faqs =
+    private static readonly IReadOnlyList<(string Key, string[] EnPhrases, string[] PtPhrases)> Faqs =
     [
-        ("streak_freeze", ["streak freeze", "how do freezes work", "what is a freeze", "what is a streak freeze",
-            "congelamento de sequencia", "como funciona o congelamento", "o que e um freeze"]),
-        ("streaks", ["how do streaks work", "how does the streak", "what is a streak", "what counts as a streak",
-            "como funciona a sequencia", "como funcionam as sequencias", "o que e uma sequencia", "o que e streak"]),
-        ("xp_levels", ["how does xp work", "how do levels work", "what is xp", "how does leveling work",
-            "como funciona o xp", "como funcionam os niveis", "o que e xp", "como subir de nivel"]),
-        ("free_vs_pro", ["free vs pro", "what does pro include", "what are the pro features", "difference between free and pro",
-            "o que o pro inclui", "quais sao os recursos pro", "diferenca entre free e pro", "o que vem no pro"]),
-        ("bad_habits", ["how do bad habits work", "what is a bad habit", "how does tracking a bad habit work",
-            "como funcionam os habitos ruins", "o que e um habito ruim", "o que e um mau habito"]),
+        ("streak_freeze",
+            ["streak freeze", "how do freezes work", "what is a freeze", "what is a streak freeze"],
+            ["congelamento de sequencia", "como funciona o congelamento", "o que e um freeze"]),
+        ("streaks",
+            ["how do streaks work", "how does the streak", "what is a streak", "what counts as a streak"],
+            ["como funciona a sequencia", "como funcionam as sequencias", "o que e uma sequencia", "o que e streak"]),
+        ("xp_levels",
+            ["how does xp work", "how do levels work", "what is xp", "how does leveling work"],
+            ["como funciona o xp", "como funcionam os niveis", "o que e xp", "como subir de nivel"]),
+        ("free_vs_pro",
+            ["free vs pro", "what does pro include", "what are the pro features", "difference between free and pro"],
+            ["o que o pro inclui", "quais sao os recursos pro", "diferenca entre free e pro", "o que vem no pro"]),
+        ("bad_habits",
+            ["how do bad habits work", "what is a bad habit", "how does tracking a bad habit work"],
+            ["como funcionam os habitos ruins", "o que e um habito ruim", "o que e um mau habito"]),
     ];
 
     /// <summary>
-    /// Returns the curated FAQ key when the message is one of the recognised general feature questions,
-    /// or null otherwise. Conservative: the message must contain a known FAQ phrase.
+    /// Returns the curated FAQ key plus the language the question was asked in ("en"/"pt") when the
+    /// message is one of the recognised general feature questions, or null otherwise. The locale is
+    /// derived from which language's phrase matched, since the model answers in the message's language —
+    /// so the answer is cached and served under the locale it was actually written in.
     /// </summary>
-    public static string? TryMatchFaqKey(string message)
+    public static (string Key, string Locale)? TryMatchFaqKey(string message)
     {
         if (string.IsNullOrWhiteSpace(message))
             return null;
 
         var normalized = Normalize(message);
-        foreach (var (key, phrases) in Faqs)
+        foreach (var (key, enPhrases, ptPhrases) in Faqs)
         {
-            if (phrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal)))
-                return key;
+            if (enPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal)))
+                return (key, "en");
+            if (ptPhrases.Any(phrase => normalized.Contains(phrase, StringComparison.Ordinal)))
+                return (key, "pt");
         }
 
         return null;
