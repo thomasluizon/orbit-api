@@ -97,6 +97,7 @@ public partial class ProcessUserChatCommandHandler(
 {
     private const int MaxToolIterations = 5;
     private const string UnsupportedByPolicyReason = "unsupported_by_policy";
+    private const string DescribeFeatureToolName = "describe_feature";
 
     private const int MaxSupportMessageLength = 5000;
 
@@ -114,9 +115,8 @@ public partial class ProcessUserChatCommandHandler(
         var context = contextResult.Value;
         var aiStreamSink = BuildAiStreamSink(request.StreamSink);
 
-        var faqLocale = context.User?.Language ?? request.ClientContext?.Locale ?? "en";
-        var faqKey = ChatFaqCache.TryMatchFaqKey(request.Message);
-        if (faqKey is not null && ChatFaqCache.TryGetAnswer(faqKey, faqLocale, out var cachedFaqAnswer))
+        var faqMatch = ChatFaqCache.TryMatchFaqKey(request.Message);
+        if (faqMatch is { } faqHit && ChatFaqCache.TryGetAnswer(faqHit.Key, faqHit.Locale, out var cachedFaqAnswer))
             return Result.Success(new ChatResponse(cachedFaqAnswer, [], CorrelationId: request.CorrelationId));
 
         var skipTools = request.ImageData is null
@@ -162,8 +162,8 @@ public partial class ProcessUserChatCommandHandler(
                 goalList = GoalListCardBuilder.Build(context.ActiveGoals);
         }
 
-        if (faqKey is not null && iterations == 0 && executionResults.ActionResults.Count == 0 && !string.IsNullOrWhiteSpace(aiMessage))
-            ChatFaqCache.StoreAnswer(faqKey, faqLocale, aiMessage);
+        if (faqMatch is { } faqToCache && !string.IsNullOrWhiteSpace(aiMessage) && IsShareableFaqTurn(executionResults))
+            ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, aiMessage);
 
         RunBackgroundPostResponseWork(
             request.UserId,
@@ -190,6 +190,16 @@ public partial class ProcessUserChatCommandHandler(
             habitList,
             goalList));
     }
+
+    /// <summary>
+    /// A FAQ answer is safe to cache and share across users only when the turn raised no pending
+    /// confirmation and every tool it ran (if any) was a successful describe_feature — a static,
+    /// user-data-free lookup. Any write or user-specific read makes the answer unshareable.
+    /// </summary>
+    internal static bool IsShareableFaqTurn(ToolExecutionAccumulator results) =>
+        results.PendingOperations.Count == 0
+        && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
+        && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
     private async Task<Result<ChatContext>> LoadChatContextAsync(
         ProcessUserChatCommand request,
@@ -437,7 +447,7 @@ public partial class ProcessUserChatCommandHandler(
         {
             var outcome = outcomesByCallId[call.Id];
             toolResults.Add(outcome.ToolResult);
-            executionResults.Add(outcome.ActionResult, outcome.OperationResult, outcome.PolicyDenial, outcome.PendingOperation);
+            executionResults.Add(call.Name, outcome.ActionResult, outcome.OperationResult, outcome.PolicyDenial, outcome.PendingOperation);
         }
 
         var continueResult = await ai.IntentService.ContinueWithToolResultsAsync(aiResponse.ConversationContext!, toolResults, aiStreamSink, cancellationToken);
@@ -537,7 +547,7 @@ public partial class ProcessUserChatCommandHandler(
             AgentOperationStatus.PendingConfirmation => new ToolCallOutcome(
                 new AiToolCallResult(call.Name, call.Id, false, null, null, "Confirmation required before this action can run."),
                 null,
-                operationResult,
+                null,
                 executionResponse.PolicyDenial,
                 executionResponse.PendingOperation),
             AgentOperationStatus.Denied or AgentOperationStatus.UnsupportedByPolicy => new ToolCallOutcome(
@@ -877,15 +887,22 @@ public partial class ProcessUserChatCommandHandler(
         return actionResults.Any(action => action.Status == ActionStatus.Success && action.Type is "LogHabit" or "BulkLogHabits" or "DeleteHabit");
     }
 
-    private sealed class ToolExecutionAccumulator
+    internal sealed class ToolExecutionAccumulator
     {
         private readonly List<string> _relatedSurfaces = [];
         private readonly HashSet<string> _seenRelatedSurfaces = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _calledToolNames = new(StringComparer.Ordinal);
 
         public List<ActionResult> ActionResults { get; } = [];
         public List<AgentOperationResult> OperationResults { get; } = [];
         public List<PendingAgentOperation> PendingOperations { get; } = [];
         public List<AgentPolicyDenial> PolicyDenials { get; } = [];
+
+        /// <summary>
+        /// Distinct names of every tool invoked this turn, used to decide whether the turn is safe to
+        /// serve from the shared FAQ cache (only static, user-data-free tools may have run).
+        /// </summary>
+        public IReadOnlyCollection<string> CalledToolNames => _calledToolNames;
 
         /// <summary>
         /// App surface IDs (e.g. "today", "gamification") surfaced by read-only tools such as
@@ -894,11 +911,14 @@ public partial class ProcessUserChatCommandHandler(
         public IReadOnlyList<string> RelatedSurfaces => _relatedSurfaces;
 
         public void Add(
+            string toolName,
             ActionResult? actionResult,
             AgentOperationResult? operationResult,
             AgentPolicyDenial? policyDenial,
             PendingAgentOperation? pendingOperation)
         {
+            _calledToolNames.Add(toolName);
+
             if (actionResult is not null)
                 ActionResults.Add(actionResult);
 
