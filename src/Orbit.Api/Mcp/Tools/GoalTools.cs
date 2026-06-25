@@ -19,14 +19,13 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
 {
-    private static readonly System.Text.Json.JsonSerializerOptions CaseInsensitiveJsonOptions = new() { PropertyNameCaseInsensitive = true };
     [McpServerTool(Name = "list_goals"), Description("List all goals for the authenticated user.")]
     public async Task<string> ListGoals(
         ClaimsPrincipal user,
         [Description("Filter by status: Active, Completed, or Abandoned")] string? status = null,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         GoalStatus? statusFilter = status is not null
             ? Enum.Parse<GoalStatus>(status, true)
             : null;
@@ -83,7 +82,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         [Description("The goal ID (GUID)")] string goalId,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetGoalByIdQuery(userId, McpInputParser.ParseGuid(goalId, "goalId"));
         var result = await mediator.Send(query, cancellationToken);
 
@@ -185,10 +184,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         [Description("JSON array of objects with 'id' (GUID) and 'position' (int)")] string positionsJson,
         CancellationToken cancellationToken = default)
     {
-        var items = System.Text.Json.JsonSerializer.Deserialize<List<GoalPositionDto>>(
-            positionsJson,
-            CaseInsensitiveJsonOptions)
-            ?? [];
+        var items = McpToolHelpers.DeserializeJson<List<McpToolHelpers.GoalPositionDto>>(positionsJson) ?? [];
 
         var result = await executorBridge.ExecuteAsync(user, "reorder_goals", new
         {
@@ -223,7 +219,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         [Description("The goal ID (GUID)")] string goalId,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetGoalMetricsQuery(userId, McpInputParser.ParseGuid(goalId, "goalId"));
         var result = await mediator.Send(query, cancellationToken);
 
@@ -254,7 +250,7 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         [Description("Language code (en, pt-BR)")] string language = "en",
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetGoalReviewQuery(userId, language);
         var result = await mediator.Send(query, cancellationToken);
 
@@ -264,15 +260,4 @@ public class GoalTools(IMediator mediator, McpExecutorBridge executorBridge)
         var r = result.Value;
         return $"Goal Review{(r.FromCache ? " (cached)" : "")}:\n{r.Review}";
     }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
-    }
-
-    private sealed record GoalPositionDto(string Id, int Position);
 }
