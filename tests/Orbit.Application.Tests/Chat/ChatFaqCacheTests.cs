@@ -6,14 +6,20 @@ namespace Orbit.Application.Tests.Chat;
 public class ChatFaqCacheTests
 {
     [Theory]
-    [InlineData("How do streaks work?", "streaks")]
-    [InlineData("como funciona a sequencia?", "streaks")]
-    [InlineData("what is a streak freeze", "streak_freeze")]
-    [InlineData("o que vem no pro", "free_vs_pro")]
-    [InlineData("how does xp work", "xp_levels")]
-    [InlineData("what is a bad habit", "bad_habits")]
-    public void TryMatchFaqKey_RecognisedQuestion_ReturnsKey(string message, string expected)
-        => ChatFaqCache.TryMatchFaqKey(message).Should().Be(expected);
+    [InlineData("How do streaks work?", "streaks", "en")]
+    [InlineData("como funciona a sequencia?", "streaks", "pt")]
+    [InlineData("what is a streak freeze", "streak_freeze", "en")]
+    [InlineData("o que vem no pro", "free_vs_pro", "pt")]
+    [InlineData("how does xp work", "xp_levels", "en")]
+    [InlineData("what is a bad habit", "bad_habits", "en")]
+    public void TryMatchFaqKey_RecognisedQuestion_ReturnsKeyAndQuestionLocale(string message, string expectedKey, string expectedLocale)
+    {
+        var match = ChatFaqCache.TryMatchFaqKey(message);
+
+        match.Should().NotBeNull();
+        match!.Value.Key.Should().Be(expectedKey);
+        match.Value.Locale.Should().Be(expectedLocale);
+    }
 
     [Theory]
     [InlineData("log my run")]
@@ -21,7 +27,7 @@ public class ChatFaqCacheTests
     [InlineData("what's my streak today")]
     [InlineData("")]
     public void TryMatchFaqKey_NonFaqOrUserSpecific_ReturnsNull(string message)
-        => ChatFaqCache.TryMatchFaqKey(message).Should().BeNull();
+        => ChatFaqCache.TryMatchFaqKey(message).HasValue.Should().BeFalse();
 
     [Fact]
     public void StoreAndGet_RoundTripsByFaqKeyAndLocale()
