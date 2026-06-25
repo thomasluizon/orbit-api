@@ -20,6 +20,7 @@ public record CalendarSyncSuggestionItem(
 public partial class GetCalendarSyncSuggestionsQueryHandler(
     IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<User> userRepository,
     IUserDateService userDateService,
     IPayGateService payGate,
     ILogger<GetCalendarSyncSuggestionsQueryHandler> logger) : IRequestHandler<GetCalendarSyncSuggestionsQuery, Result<List<CalendarSyncSuggestionItem>>>
@@ -29,6 +30,15 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         var gateCheck = await payGate.CanAccessCalendar(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<List<CalendarSyncSuggestionItem>>();
+
+        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        if (user is null)
+            return Result.Failure<List<CalendarSyncSuggestionItem>>(ErrorMessages.UserNotFound);
+
+        var selectedCalendarIds = user.GetSelectedCalendarIds();
+        var selectedCalendars = selectedCalendarIds is null
+            ? null
+            : new HashSet<string>(selectedCalendarIds, StringComparer.Ordinal);
 
         var suggestions = await suggestionRepository.FindAsync(
             s => s.UserId == request.UserId && s.DismissedAtUtc == null && s.ImportedAtUtc == null,
@@ -62,6 +72,9 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
 
             var eventItem = DeserializeEvent(suggestion);
             if (eventItem is null) continue;
+            if (selectedCalendars is not null
+                && !string.IsNullOrEmpty(eventItem.CalendarId)
+                && !selectedCalendars.Contains(eventItem.CalendarId)) continue;
             if (importedLegacyKeys.Contains(BuildLegacyMatchKey(
                 eventItem.Title,
                 eventItem.StartDate,

@@ -18,6 +18,8 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
         Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
     private readonly IGenericRepository<Habit> _habitRepo =
         Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<User> _userRepo =
+        Substitute.For<IGenericRepository<User>>();
     private readonly IUserDateService _userDateService =
         Substitute.For<IUserDateService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
@@ -33,9 +35,12 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
         _handler = new GetCalendarSyncSuggestionsQueryHandler(
             _suggestionRepo,
             _habitRepo,
+            _userRepo,
             _userDateService,
             _payGate,
             NullLogger<GetCalendarSyncSuggestionsQueryHandler>.Instance);
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(User.Create("Test", "test@example.com").Value);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
         _habitRepo.FindAsync(
@@ -192,6 +197,61 @@ public class GetCalendarSyncSuggestionsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_DeselectedCalendar_ExcludesItsSuggestions()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetSelectedCalendars(["cal-allowed"]);
+        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
+
+        var allowed = CreateSuggestionForCalendar("gcal-allowed", "Standup", "2026-04-15", "cal-allowed");
+        var blocked = CreateSuggestionForCalendar("gcal-blocked", "Holiday", "2026-04-16", "cal-blocked");
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { allowed, blocked }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+        result.Value[0].GoogleEventId.Should().Be("gcal-allowed");
+    }
+
+    [Fact]
+    public async Task Handle_NoExplicitSelection_KeepsSuggestionsFromAnyCalendar()
+    {
+        var suggestion = CreateSuggestionForCalendar("gcal-any", "Anything", "2026-04-15", "some-calendar");
+
+        _suggestionRepo.FindAsync(
+            Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion> { suggestion }.AsReadOnly());
+
+        var result = await _handler.Handle(new GetCalendarSyncSuggestionsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().ContainSingle();
+    }
+
+    private static GoogleCalendarSyncSuggestion CreateSuggestionForCalendar(
+        string googleEventId,
+        string title,
+        string startDate,
+        string calendarId)
+    {
+        var eventItem = new CalendarEventItem(
+            googleEventId, title, null, startDate, "09:00", null, false, null, [],
+            CalendarId: calendarId);
+        var rawJson = JsonSerializer.Serialize(eventItem);
+        var discoveredAt = DateTime.SpecifyKind(new DateTime(2026, 4, 10, 12, 0, 0), DateTimeKind.Utc);
+        var startDateUtc = DateTime.SpecifyKind(DateOnly.Parse(startDate).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+
+        return GoogleCalendarSyncSuggestion.Create(
+            UserId, googleEventId, title, startDateUtc, rawJson, discoveredAt);
     }
 
     private static GoogleCalendarSyncSuggestion CreateSuggestion(
