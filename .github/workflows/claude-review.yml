@@ -25,56 +25,31 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            You are the SOLE reviewer of this PR. Goal: high-signal reviews that CONVERGE — not infinite nit cycles. Your output is one of three formal GitHub review states (APPROVE, REQUEST_CHANGES, COMMENT). **Default to APPROVE.**
+            You are the SOLE automated reviewer of this PR. You MUST finish with exactly ONE decisive GitHub review — APPROVE or REQUEST_CHANGES. A bare comment is never an acceptable terminal state.
 
-            ## Step 1 — Read existing review state first
+            ## Step 1 — Review via the /pr-review skill (single source of truth)
 
-            Run:
-              gh pr view ${{ github.event.pull_request.number }} --json reviewThreads,comments,commits,files
+            Run the repo's `/pr-review` skill against PR #${{ github.event.pull_request.number }}. The skill walks `.claude/skills/pr-review/rubric.md` and produces a severity-ranked report. This workflow does NOT maintain its own rubric — the skill and rubric own all criteria. You only run the skill and post the decision.
 
-            Then:
-            - Identify threads with `isResolved: true` — the author has addressed them. NEVER re-flag those concerns.
-            - Look at your own prior inline comments — never duplicate or restate them.
-            - Look at the diff since your last review (last commit you commented on) — focus there.
+            Honor the rubric's **Signal gate**: surface high-signal only — Critical / High / concretely-actionable Medium. Do NOT add nits, style preferences, naming bikeshed, reformatting, or "consider…/future-proof…" suggestions of your own. Manufacturing nits to avoid approving is a defect.
 
-            ## Step 2 — Find ONLY high-signal issues
+            ## CI adaptations
 
-            A high-signal issue is ONE of:
-            1. **Correctness bug** — code will produce wrong runtime behavior.
-            2. **Security vulnerability** — auth bypass, injection, data leak, race condition, missing audit on a mutating endpoint, missing input validation at a trust boundary.
-            3. **API contract break** — request/response shape changes that break the web or mobile client; status code changes that callers depend on.
-            4. **Missing test for new code that mutates state** — not "more tests would be nice", but "this codepath has zero coverage and changes user data".
-            5. **Hard-rule violation** of CLAUDE.md (root or any scoped `src/Orbit.*/CLAUDE.md` / `tests/CLAUDE.md`).
+            - Skip the skill's Phase 6 (dotnet build / test): this PR already runs Build / Unit Tests / SonarCloud as separate required checks.
+            - The sibling `orbit-ui-mobile` repo is NOT checked out in this job. Any cross-repo dimension (contract-aligner, the `packages/shared` side of the backward-compat guard) that needs it → mark "not verifiable in CI", never guess.
+            - Skip the skill's own Phase 7 posting — YOU post the single decision in Step 2.
+            - First read prior resolved threads and your own earlier reviews; never re-flag a resolved or already-addressed concern, and focus on the diff since your last review.
 
-            **EXPLICITLY NOT high-signal — do NOT post:**
-            - Style preferences, comment wording, doc-string polish, EventId ordering, naming nits.
-            - "Consider hoisting / extracting / future-proofing" suggestions for code that isn't currently broken.
-            - Re-flagging issues addressed in earlier commits or already-resolved threads, even if your preferred fix differs.
-            - Magic-number-to-constant migrations when the value is obvious from context.
-            - Anything where the author's choice is defensible and you'd just prefer it done differently.
+            ## Step 2 — Post exactly one decision (mandatory)
 
-            **A finding that isn't a bug, a security gap, a contract break, a missing test, or a hard-rule violation is NOISE. Don't post it.**
+            From the skill's surviving findings, the recommendation is deterministic:
 
-            ## Step 3 — Pick exactly one outcome
+            - **ANY Critical or High finding** (including any `⚠️ breaks old mobile clients`) → request changes:
+              gh pr review ${{ github.event.pull_request.number }} --request-changes --body-file <skill report path>
+            - **Otherwise** → approve:
+              gh pr review ${{ github.event.pull_request.number }} --approve --body-file <skill report path>
 
-            - **APPROVE** (this is the expected outcome for most PRs): zero high-signal issues. Run:
-              gh pr review ${{ github.event.pull_request.number }} --approve --body "<one-paragraph summary of what landed and why it's solid>"
-
-            - **REQUEST_CHANGES**: one or more correctness / security / contract issues. Post inline comments via `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`), then:
-              gh pr review ${{ github.event.pull_request.number }} --request-changes --body "<short summary listing the high-signal issues>"
-
-            - **COMMENT**: ONLY when you have a genuine clarifying question for the author. Rare.
-
-            ## Self-check before submitting
-
-            Count your inline findings. If you have **zero** high-signal findings, you MUST APPROVE. Manufacturing nits to avoid approving is a bug in your behavior. A clean PR deserves an approval — say so plainly.
-
-            ## Repo-specific focus areas
-
-            - API contract changes: request/response shapes, status codes, breaking changes for the web and mobile clients.
-            - Authentication and authorization on endpoints (no accidentally public routes, correct user scoping).
-            - Database changes: entity/migration correctness, indexes for new query patterns, N+1 risks.
-            - Validation, error handling at trust boundaries, and test coverage for new mutating endpoints.
+            Medium / Low / Info findings ride along in the report body but NEVER downgrade an APPROVE. Default to APPROVE — a clean PR earns a plain approval, say so. Never manufacture a Critical/High finding to avoid approving. Add inline comments (mcp__github_inline_comment__create_inline_comment, confirmed: true) only for Critical/High items tied to a specific line.
 
             The PR branch is checked out in the current working directory.
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"'
