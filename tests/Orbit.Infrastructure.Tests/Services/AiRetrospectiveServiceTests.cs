@@ -185,6 +185,21 @@ public class AiRetrospectiveServiceTests
     }
 
     [Fact]
+    public void AppendParentHabitLine_OverLogged_CapsCompletionAt100Percent()
+    {
+        var lines = new List<string>();
+        var habit = CreateDailyHabit("Meds");
+        var badHabitSlips = 0;
+
+        InvokeAppendParentHabitLine(lines, habit, 1, 7, 7, ref badHabitSlips);
+
+        lines.Should().ContainSingle();
+        lines[0].Should().Contain("1/1");
+        lines[0].Should().Contain("100%");
+        lines[0].Should().NotContain("700");
+    }
+
+    [Fact]
     public void BuildHabitBreakdown_NoActivity_ReturnsNoHabitActivity()
     {
         var futureHabit = Habit.Create(new HabitCreateParams(
@@ -194,7 +209,7 @@ public class AiRetrospectiveServiceTests
         var result = InvokeBuildHabitBreakdown([futureHabit], DateFrom, DateTo, 7);
 
         result.HabitSection.Should().Contain("(no habit activity)");
-        result.TotalCompletions.Should().Be(0);
+        result.TotalMet.Should().Be(0);
         result.TotalScheduled.Should().Be(0);
     }
 
@@ -224,6 +239,22 @@ public class AiRetrospectiveServiceTests
         result.BadHabitSlips.Should().Be(2);
         result.HabitSection.Should().Contain("bad habit");
         result.HabitSection.Should().Contain("2 slips");
+    }
+
+    [Fact]
+    public void BuildHabitBreakdown_OverLoggedHabit_CapsAt100AndDoesNotInflateTotals()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Meds", FrequencyUnit.Week, 1, DueDate: DateFrom)).Value;
+        for (var i = 0; i < 7; i++)
+            habit.Log(DateFrom.AddDays(i), advanceDueDate: false);
+
+        var result = InvokeBuildHabitBreakdown([habit], DateFrom, DateTo, 7);
+
+        result.HabitSection.Should().Contain("1/1");
+        result.HabitSection.Should().NotContain("700");
+        result.TotalMet.Should().Be(1);
+        result.TotalScheduled.Should().Be(1);
     }
 
     [Fact]
@@ -334,7 +365,7 @@ public class AiRetrospectiveServiceTests
         badHabitSlips = (int)args[5];
     }
 
-    private static (string HabitSection, int TotalCompletions, int TotalScheduled, int BadHabitSlips)
+    private static (string HabitSection, int TotalMet, int TotalScheduled, int BadHabitSlips)
         InvokeBuildHabitBreakdown(List<Habit> habits, DateOnly dateFrom, DateOnly dateTo, int totalDays)
     {
         var method = typeof(AiRetrospectiveService)
