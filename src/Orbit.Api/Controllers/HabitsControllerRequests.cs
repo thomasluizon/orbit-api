@@ -3,8 +3,6 @@ using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Api.Controllers;
 
-// [Authorize] is declared on the primary HabitsController partial; repeating it here would be a
-// duplicate non-multiple attribute: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/compiler-messages/cs0579
 public partial class HabitsController
 {
     public record CreateHabitRequest(

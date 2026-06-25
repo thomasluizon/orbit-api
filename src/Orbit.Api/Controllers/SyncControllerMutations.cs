@@ -4,8 +4,6 @@ using Orbit.Domain.Entities;
 
 namespace Orbit.Api.Controllers;
 
-// [Authorize] is declared on the primary SyncController partial; repeating it here would be a
-// duplicate non-multiple attribute: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/compiler-messages/cs0579
 public partial class SyncController
 {
     private async Task ProcessMutation(Guid userId, SyncMutation mutation, CancellationToken ct)
