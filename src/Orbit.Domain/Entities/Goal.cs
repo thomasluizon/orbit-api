@@ -77,14 +77,9 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         if (p.UserId == Guid.Empty)
             return Result.Failure<Goal>(DomainErrors.UserIdRequired);
 
-        if (string.IsNullOrWhiteSpace(p.Title))
-            return Result.Failure<Goal>(DomainErrors.TitleRequired);
-
-        if (p.TargetValue <= 0)
-            return Result.Failure<Goal>(DomainErrors.TargetValueInvalid);
-
-        if (string.IsNullOrWhiteSpace(p.Unit))
-            return Result.Failure<Goal>(DomainErrors.UnitRequired);
+        var coreFieldsValidation = GoalInvariants.ValidateCoreFields(p.Title, p.TargetValue, p.Unit);
+        if (coreFieldsValidation is not null)
+            return Result.Failure<Goal>(coreFieldsValidation);
 
         return Result.Success(new Goal
         {
@@ -174,14 +169,9 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public Result<GoalEditTransition> Update(string title, string? description, decimal targetValue, string unit, DateOnly? deadline)
     {
-        if (string.IsNullOrWhiteSpace(title))
-            return Result.Failure<GoalEditTransition>(DomainErrors.TitleRequired);
-
-        if (targetValue <= 0)
-            return Result.Failure<GoalEditTransition>(DomainErrors.TargetValueInvalid);
-
-        if (string.IsNullOrWhiteSpace(unit))
-            return Result.Failure<GoalEditTransition>(DomainErrors.UnitRequired);
+        var coreFieldsValidation = GoalInvariants.ValidateCoreFields(title, targetValue, unit);
+        if (coreFieldsValidation is not null)
+            return Result.Failure<GoalEditTransition>(coreFieldsValidation);
 
         Title = title.Trim();
         Description = description?.Trim();

@@ -1,13 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services.Hosting;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -23,7 +23,7 @@ namespace Orbit.Infrastructure.Services;
 public partial class StreakFreezeAutoActivationService(
     IServiceScopeFactory scopeFactory,
     ILogger<StreakFreezeAutoActivationService> logger,
-    IConfiguration configuration) : BackgroundService, IScheduledJob
+    IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
 {
     private const int MaxTimeZoneSkewDays = 1;
 
@@ -34,38 +34,21 @@ public partial class StreakFreezeAutoActivationService(
 
     public string CronExpression => "0 * * * *";
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    public Task RunAsync(CancellationToken cancellationToken) => ExecuteTickAsync(cancellationToken);
+
+    protected override TimeSpan Interval => _interval;
+
+    protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
-        await ActivateMissedDayFreezes(cancellationToken);
+        await ActivateMissedDayFreezes(stoppingToken);
         BackgroundServiceHealthCheck.RecordTick("StreakFreezeAutoActivation");
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        LogServiceStarted(logger);
+    protected override void LogStarted() => LogServiceStarted(logger);
 
-        try
-        {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await ActivateMissedDayFreezes(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("StreakFreezeAutoActivation");
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    LogServiceError(logger, ex);
-                }
+    protected override void LogStopped() => LogServiceStopped(logger);
 
-                await Task.Delay(_interval, stoppingToken);
-            }
-        }
-        finally
-        {
-            LogServiceStopped(logger);
-        }
-    }
+    protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
 
     internal async Task ActivateMissedDayFreezes(CancellationToken ct)
     {

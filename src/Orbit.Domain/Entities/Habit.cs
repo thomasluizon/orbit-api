@@ -111,21 +111,21 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (string.IsNullOrWhiteSpace(p.Title))
             return Result.Failure<Habit>(DomainErrors.TitleRequired);
 
-        var emojiValidation = ValidateEmoji(p.Emoji);
+        var emojiValidation = HabitInvariants.ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
             return Result.Failure<Habit>(emojiValidation);
 
-        var scheduleValidation = ValidateScheduleOptions(
+        var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
             p.IsGeneral, p.IsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
         if (scheduleValidation is not null)
             return Result.Failure<Habit>(scheduleValidation);
 
-        var dateValidation = ValidateDateOptions(
+        var dateValidation = HabitInvariants.ValidateDateOptions(
             p.DueTime, p.DueEndTime, p.EndDate, p.FrequencyUnit, p.IsGeneral, p.DueDate);
         if (dateValidation is not null)
             return Result.Failure<Habit>(dateValidation);
 
-        var reminderValidation = ValidateScheduledReminders(p.ScheduledReminders);
+        var reminderValidation = HabitInvariants.ValidateScheduledReminders(p.ScheduledReminders);
         if (reminderValidation is not null)
             return Result.Failure<Habit>(reminderValidation);
 
@@ -136,7 +136,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             UserId = p.UserId,
             Title = p.Title.Trim(),
             Description = p.Description?.Trim(),
-            Emoji = NormalizeEmoji(p.Emoji),
+            Emoji = HabitInvariants.NormalizeEmoji(p.Emoji),
             FrequencyUnit = p.FrequencyUnit,
             FrequencyQuantity = p.FrequencyQuantity,
             Days = p.IsFlexible ? [] : (p.Days?.ToList() ?? []),
@@ -328,23 +328,23 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var effectiveIsGeneral = p.IsGeneral ?? IsGeneral;
         var effectiveIsFlexible = p.IsFlexible ?? IsFlexible;
 
-        var scheduleValidation = ValidateScheduleOptions(
+        var scheduleValidation = HabitInvariants.ValidateScheduleOptions(
             effectiveIsGeneral, effectiveIsFlexible, p.IsBadHabit, p.FrequencyUnit, p.FrequencyQuantity, p.Days);
         if (scheduleValidation is not null)
             return scheduleValidation;
 
-        var dateValidation = ValidateDateOptions(
+        var dateValidation = HabitInvariants.ValidateDateOptions(
             p.DueTime ?? DueTime, p.DueEndTime ?? DueEndTime,
             p.ClearEndDate == true ? null : (p.EndDate ?? EndDate),
             p.FrequencyUnit, effectiveIsGeneral, p.DueDate ?? DueDate);
         if (dateValidation is not null)
             return dateValidation;
 
-        var emojiValidation = ValidateEmoji(p.Emoji);
+        var emojiValidation = HabitInvariants.ValidateEmoji(p.Emoji);
         if (emojiValidation is not null)
             return emojiValidation;
 
-        return ValidateScheduledReminders(p.ScheduledReminders);
+        return HabitInvariants.ValidateScheduledReminders(p.ScheduledReminders);
     }
 
     private void ApplyRequiredUpdates(HabitUpdateParams p)
@@ -353,7 +353,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         Title = p.Title.Trim();
         Description = p.Description?.Trim();
-        Emoji = NormalizeEmoji(p.Emoji);
+        Emoji = HabitInvariants.NormalizeEmoji(p.Emoji);
         FrequencyUnit = p.FrequencyUnit;
         FrequencyQuantity = p.FrequencyQuantity;
         Days = effectiveIsFlexible ? [] : (p.Days?.ToList() ?? []);
@@ -447,84 +447,4 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public void AddGoal(Goal goal) { if (!_goals.Contains(goal)) _goals.Add(goal); }
 
     public void RemoveGoal(Goal goal) => _goals.Remove(goal);
-
-    private static AppError? ValidateScheduleOptions(
-        bool isGeneral, bool isFlexible, bool isBadHabit,
-        FrequencyUnit? frequencyUnit, int? frequencyQuantity,
-        IReadOnlyList<System.DayOfWeek>? days)
-    {
-        if (isGeneral && (frequencyUnit is not null || frequencyQuantity is not null))
-            return DomainErrors.GeneralHabitHasFrequency;
-
-        if (isGeneral && isBadHabit)
-            return DomainErrors.GeneralHabitIsBadHabit;
-
-        if (frequencyQuantity is not null && frequencyQuantity <= 0)
-            return DomainErrors.FrequencyQuantityInvalid;
-
-        if (isFlexible && frequencyUnit is null)
-            return DomainErrors.FlexibleNeedsFrequencyUnit;
-
-        if (isFlexible && days?.Count > 0)
-            return DomainErrors.FlexibleHasDays;
-
-        if (!isFlexible && days?.Count > 0 && (frequencyQuantity != 1 || frequencyUnit != Enums.FrequencyUnit.Day))
-            return DomainErrors.DaysRequireQuantityOne;
-
-        return null;
-    }
-
-    private static AppError? ValidateDateOptions(
-        TimeOnly? dueTime, TimeOnly? dueEndTime,
-        DateOnly? endDate, FrequencyUnit? frequencyUnit,
-        bool isGeneral, DateOnly? dueDate)
-    {
-        if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
-            return DomainErrors.EndTimeBeforeStartTime;
-
-        if (endDate.HasValue && frequencyUnit is null && !isGeneral)
-            return DomainErrors.OneTimeTaskHasEndDate;
-
-        var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        if (endDate.HasValue && endDate.Value < effectiveDueDate)
-            return DomainErrors.EndDateBeforeStartDate;
-
-        return null;
-    }
-
-    private static AppError? ValidateScheduledReminders(
-        IReadOnlyList<ScheduledReminderTime>? scheduledReminders)
-    {
-        if (scheduledReminders is null)
-            return null;
-
-        if (scheduledReminders.Count > DomainConstants.MaxScheduledReminders)
-            return DomainErrors.MaxScheduledReminders.Format(DomainConstants.MaxScheduledReminders);
-
-        var hasDuplicates = scheduledReminders
-            .GroupBy(sr => (sr.When, sr.Time))
-            .Any(g => g.Count() > 1);
-
-        if (hasDuplicates)
-            return DomainErrors.DuplicateScheduledReminders;
-
-        return null;
-    }
-
-    private static AppError? ValidateEmoji(string? emoji)
-    {
-        if (emoji is null)
-            return null;
-
-        if (emoji.Trim().Length > DomainConstants.MaxHabitEmojiLength)
-            return DomainErrors.EmojiTooLong.Format(DomainConstants.MaxHabitEmojiLength);
-
-        return null;
-    }
-
-    private static string? NormalizeEmoji(string? emoji)
-    {
-        var normalized = emoji?.Trim();
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
-    }
 }

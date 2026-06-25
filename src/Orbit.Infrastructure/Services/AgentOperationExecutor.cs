@@ -26,7 +26,7 @@ public partial class AgentOperationExecutor(
     {
         var operation = catalogService.GetOperation(request.OperationId);
         if (operation is null)
-            return UnknownOperationResponse(request.OperationId);
+            return AgentOperationResponseFactory.UnknownOperation(request.OperationId);
 
         var capability = catalogService.GetCapability(operation.CapabilityId)
             ?? throw new InvalidOperationException($"Operation '{operation.Id}' is mapped to an unknown capability '{operation.CapabilityId}'.");
@@ -63,27 +63,13 @@ public partial class AgentOperationExecutor(
 
         var tool = toolRegistry.GetTool(operation.Id);
         if (tool is null)
-            return MissingToolExecutorResponse(execution);
+            return AgentOperationResponseFactory.MissingTool(
+                execution.Operation.Id,
+                execution.Capability.RiskClass,
+                execution.Capability.ConfirmationRequirement,
+                execution.Summary);
 
         return await ExecuteToolAsync(tool, execution, policyDecision, cancellationToken);
-    }
-
-    private static AgentExecuteOperationResponse UnknownOperationResponse(string operationId)
-    {
-        return new AgentExecuteOperationResponse(
-            new AgentOperationResult(
-                operationId,
-                operationId,
-                AgentRiskClass.Low,
-                AgentConfirmationRequirement.None,
-                AgentOperationStatus.UnsupportedByPolicy,
-                PolicyReason: "unsupported_by_policy"),
-            PolicyDenial: new AgentPolicyDenial(
-                operationId,
-                operationId,
-                AgentRiskClass.Low,
-                AgentConfirmationRequirement.None,
-                "unsupported_by_policy"));
     }
 
     private async Task<AgentExecuteOperationResponse> DenyDirectUserFlowAsync(
@@ -183,36 +169,13 @@ public partial class AgentOperationExecutor(
                 shadowReason: policyDecision.ShadowReason),
             cancellationToken);
 
-        return new AgentExecuteOperationResponse(
-            new AgentOperationResult(
-                execution.Operation.Id,
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                AgentOperationStatus.PendingConfirmation,
-                Summary: execution.Summary,
-                PolicyReason: policyDecision.Reason,
-                PendingOperationId: policyDecision.PendingOperation?.Id),
-            PendingOperation: policyDecision.PendingOperation);
-    }
-
-    private static AgentExecuteOperationResponse MissingToolExecutorResponse(OperationExecutionContext execution)
-    {
-        return new AgentExecuteOperationResponse(
-            new AgentOperationResult(
-                execution.Operation.Id,
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                AgentOperationStatus.UnsupportedByPolicy,
-                Summary: execution.Summary,
-                PolicyReason: "missing_tool_executor"),
-            PolicyDenial: new AgentPolicyDenial(
-                execution.Operation.Id,
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                "missing_tool_executor"));
+        return AgentOperationResponseFactory.ConfirmationRequired(
+            execution.Operation.Id,
+            execution.Capability.RiskClass,
+            execution.Capability.ConfirmationRequirement,
+            execution.Summary,
+            policyDecision.Reason,
+            policyDecision.PendingOperation);
     }
 
     private async Task<AgentExecuteOperationResponse> ExecuteToolAsync(
@@ -241,14 +204,11 @@ public partial class AgentOperationExecutor(
                     shadowReason: policyDecision.ShadowReason),
                 cancellationToken);
 
-            return new AgentExecuteOperationResponse(new AgentOperationResult(
-                execution.Operation.Id,
+            return AgentOperationResponseFactory.Failed(
                 execution.Operation.Id,
                 execution.Capability.RiskClass,
                 execution.Capability.ConfirmationRequirement,
-                AgentOperationStatus.Failed,
-                Summary: execution.Summary,
-                PolicyReason: "unexpected_error"));
+                execution.Summary);
         }
     }
 
@@ -299,26 +259,14 @@ public partial class AgentOperationExecutor(
                 policyDecision.ShadowReason),
             cancellationToken);
 
-        return new AgentExecuteOperationResponse(
-            new AgentOperationResult(
-                execution.Operation.Id,
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                outcomeStatus,
-                Summary: execution.Summary,
-                TargetId: result.EntityId,
-                TargetName: result.EntityName,
-                PolicyReason: result.Success ? null : result.Error,
-                Payload: result.Payload),
-            PolicyDenial: isPayGateDenial
-                ? new AgentPolicyDenial(
-                    execution.Operation.Id,
-                    execution.Operation.Id,
-                    execution.Capability.RiskClass,
-                    execution.Capability.ConfirmationRequirement,
-                    result.Error ?? Result.PayGateErrorCode)
-                : null);
+        return AgentOperationResponseFactory.ToolOutcome(
+            execution.Operation.Id,
+            execution.Capability.RiskClass,
+            execution.Capability.ConfirmationRequirement,
+            execution.Summary,
+            result,
+            outcomeStatus,
+            isPayGateDenial);
     }
 
     private static AgentExecuteOperationResponse DeniedResponse(
@@ -327,21 +275,13 @@ public partial class AgentOperationExecutor(
         string? policyReason,
         string denialReason)
     {
-        return new AgentExecuteOperationResponse(
-            new AgentOperationResult(
-                execution.Operation.Id,
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                AgentOperationStatus.Denied,
-                Summary: summary,
-                PolicyReason: policyReason),
-            PolicyDenial: new AgentPolicyDenial(
-                execution.Operation.Id,
-                execution.Operation.Id,
-                execution.Capability.RiskClass,
-                execution.Capability.ConfirmationRequirement,
-                denialReason));
+        return AgentOperationResponseFactory.Denied(
+            execution.Operation.Id,
+            execution.Capability.RiskClass,
+            execution.Capability.ConfirmationRequirement,
+            summary,
+            policyReason,
+            denialReason);
     }
 
     private IReadOnlyList<string> GetGrantedScopes(AgentExecuteOperationRequest request)

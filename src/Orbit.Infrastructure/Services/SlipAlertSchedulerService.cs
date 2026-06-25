@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -9,13 +8,14 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services.Hosting;
 
 namespace Orbit.Infrastructure.Services;
 
 public partial class SlipAlertSchedulerService(
     IServiceScopeFactory scopeFactory,
     ILogger<SlipAlertSchedulerService> logger,
-    IConfiguration configuration) : BackgroundService, IScheduledJob
+    IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
 {
     private const int DefaultMorningHour = 8;
     private const int MaxTimeZoneSkewDays = 1;
@@ -27,38 +27,21 @@ public partial class SlipAlertSchedulerService(
 
     public string CronExpression => "*/5 * * * *";
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    public Task RunAsync(CancellationToken cancellationToken) => ExecuteTickAsync(cancellationToken);
+
+    protected override TimeSpan Interval => _interval;
+
+    protected override async Task ExecuteTickAsync(CancellationToken stoppingToken)
     {
-        await CheckAndSendAlerts(cancellationToken);
+        await CheckAndSendAlerts(stoppingToken);
         BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        LogServiceStarted(logger);
+    protected override void LogStarted() => LogServiceStarted(logger);
 
-        try
-        {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                try
-                {
-                    await CheckAndSendAlerts(stoppingToken);
-                    BackgroundServiceHealthCheck.RecordTick("SlipAlertScheduler");
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    LogServiceError(logger, ex);
-                }
+    protected override void LogStopped() => LogServiceStopped(logger);
 
-                await Task.Delay(_interval, stoppingToken);
-            }
-        }
-        finally
-        {
-            LogServiceStopped(logger);
-        }
-    }
+    protected override void LogTickError(Exception ex) => LogServiceError(logger, ex);
 
     internal async Task CheckAndSendAlerts(CancellationToken ct)
     {
