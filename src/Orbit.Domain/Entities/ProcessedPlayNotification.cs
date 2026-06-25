@@ -1,11 +1,8 @@
-using Orbit.Domain.Common;
-
 namespace Orbit.Domain.Entities;
 
-public class ProcessedPlayNotification : Entity
+public class ProcessedPlayNotification : ProcessedExternalEvent
 {
     public string MessageId { get; private set; } = "";
-    public DateTime ProcessedAtUtc { get; private set; }
 
     private ProcessedPlayNotification() { }
 

@@ -28,127 +28,75 @@ public class AiController(
     IValidator<ResolveClarificationRequest> resolveClarificationValidator) : ControllerBase
 {
     [HttpGet("capabilities")]
-    public async Task<IActionResult> GetCapabilitiesMetadata(CancellationToken cancellationToken)
-    {
-        var userId = HttpContext.GetUserId();
-        var decision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
-            AgentCapabilityIds.CatalogCapabilitiesRead,
-            userId,
-            AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
-            HttpContext.User.GetGrantedAgentScopes(),
-            nameof(GetCapabilitiesMetadata),
-            "Read AI capability catalog"));
-
-        if (decision.Status != AgentPolicyDecisionStatus.Allowed)
-            return Forbid();
-
-        await auditService.RecordAsync(new AgentAuditEntry(
-            userId,
+    public Task<IActionResult> GetCapabilitiesMetadata(CancellationToken cancellationToken) =>
+        ReadCatalogAsync(
             AgentCapabilityIds.CatalogCapabilitiesRead,
             nameof(GetCapabilitiesMetadata),
-            AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
-            AgentRiskClass.Low,
-            AgentPolicyDecisionStatus.Allowed,
-            AgentOperationStatus.Succeeded,
-            HttpContext.TraceIdentifier,
-            "Read AI capability catalog"), cancellationToken);
-
-        return Ok(catalogService.GetCapabilities());
-    }
+            "Read AI capability catalog",
+            catalogService.GetCapabilities,
+            cancellationToken);
 
     [HttpGet("operations")]
-    public async Task<IActionResult> GetOperationsMetadata(CancellationToken cancellationToken)
-    {
-        var userId = HttpContext.GetUserId();
-        var decision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
-            AgentCapabilityIds.CatalogCapabilitiesRead,
-            userId,
-            AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
-            HttpContext.User.GetGrantedAgentScopes(),
-            nameof(GetOperationsMetadata),
-            "Read AI operation catalog"));
-
-        if (decision.Status != AgentPolicyDecisionStatus.Allowed)
-            return Forbid();
-
-        await auditService.RecordAsync(new AgentAuditEntry(
-            userId,
+    public Task<IActionResult> GetOperationsMetadata(CancellationToken cancellationToken) =>
+        ReadCatalogAsync(
             AgentCapabilityIds.CatalogCapabilitiesRead,
             nameof(GetOperationsMetadata),
-            AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
-            AgentRiskClass.Low,
-            AgentPolicyDecisionStatus.Allowed,
-            AgentOperationStatus.Succeeded,
-            HttpContext.TraceIdentifier,
-            "Read AI operation catalog"), cancellationToken);
-
-        return Ok(catalogService.GetOperations());
-    }
+            "Read AI operation catalog",
+            catalogService.GetOperations,
+            cancellationToken);
 
     [HttpGet("data-catalog")]
-    public async Task<IActionResult> GetUserDataCatalog(CancellationToken cancellationToken)
-    {
-        var userId = HttpContext.GetUserId();
-        var decision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
-            AgentCapabilityIds.CatalogDataRead,
-            userId,
-            AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
-            HttpContext.User.GetGrantedAgentScopes(),
-            nameof(GetUserDataCatalog),
-            "Read AI user-data catalog"));
-
-        if (decision.Status != AgentPolicyDecisionStatus.Allowed)
-            return Forbid();
-
-        await auditService.RecordAsync(new AgentAuditEntry(
-            userId,
+    public Task<IActionResult> GetUserDataCatalog(CancellationToken cancellationToken) =>
+        ReadCatalogAsync(
             AgentCapabilityIds.CatalogDataRead,
             nameof(GetUserDataCatalog),
-            AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
-            AgentRiskClass.Low,
-            AgentPolicyDecisionStatus.Allowed,
-            AgentOperationStatus.Succeeded,
-            HttpContext.TraceIdentifier,
-            "Read AI user-data catalog"), cancellationToken);
-
-        return Ok(catalogService.GetUserDataCatalog());
-    }
+            "Read AI user-data catalog",
+            catalogService.GetUserDataCatalog,
+            cancellationToken);
 
     [HttpGet("surfaces")]
-    public async Task<IActionResult> GetAppSurfaces(CancellationToken cancellationToken)
+    public Task<IActionResult> GetAppSurfaces(CancellationToken cancellationToken) =>
+        ReadCatalogAsync(
+            AgentCapabilityIds.CatalogSurfacesRead,
+            nameof(GetAppSurfaces),
+            "Read AI app surface catalog",
+            catalogService.GetSurfaces,
+            cancellationToken);
+
+    private async Task<IActionResult> ReadCatalogAsync<TResult>(
+        string capabilityId,
+        string operationName,
+        string description,
+        Func<TResult> readCatalog,
+        CancellationToken cancellationToken)
     {
         var userId = HttpContext.GetUserId();
+        var authMethod = HttpContext.User.GetAgentAuthMethod();
         var decision = policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
-            AgentCapabilityIds.CatalogSurfacesRead,
+            capabilityId,
             userId,
             AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
+            authMethod,
             HttpContext.User.GetGrantedAgentScopes(),
-            nameof(GetAppSurfaces),
-            "Read AI app surface catalog"));
+            operationName,
+            description));
 
         if (decision.Status != AgentPolicyDecisionStatus.Allowed)
             return Forbid();
 
         await auditService.RecordAsync(new AgentAuditEntry(
             userId,
-            AgentCapabilityIds.CatalogSurfacesRead,
-            nameof(GetAppSurfaces),
+            capabilityId,
+            operationName,
             AgentExecutionSurface.Metadata,
-            HttpContext.User.GetAgentAuthMethod(),
+            authMethod,
             AgentRiskClass.Low,
             AgentPolicyDecisionStatus.Allowed,
             AgentOperationStatus.Succeeded,
             HttpContext.TraceIdentifier,
-            "Read AI app surface catalog"), cancellationToken);
+            description), cancellationToken);
 
-        return Ok(catalogService.GetSurfaces());
+        return Ok(readCatalog());
     }
 
     public record ConfirmPendingOperationResponse(Guid PendingOperationId, string ConfirmationToken, DateTime ExpiresAtUtc);

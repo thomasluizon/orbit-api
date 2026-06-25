@@ -1,11 +1,8 @@
-using Orbit.Domain.Common;
-
 namespace Orbit.Domain.Entities;
 
-public class ProcessedStripeEvent : Entity
+public class ProcessedStripeEvent : ProcessedExternalEvent
 {
     public string EventId { get; private set; } = "";
-    public DateTime ProcessedAtUtc { get; private set; }
 
     private ProcessedStripeEvent() { }
 
