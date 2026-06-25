@@ -86,11 +86,7 @@ public static class HabitScheduleService
         var union = new HashSet<DateOnly>();
         foreach (var habit in habits)
         {
-            if (habit.IsDeleted) continue;
-            if (habit.IsBadHabit) continue;
-            if (habit.IsGeneral) continue;
-            if (habit.IsFlexible) continue;
-            if (habit.FrequencyUnit is null && habit.IsCompleted) continue;
+            if (!IsStreakContributingHabit(habit)) continue;
 
             foreach (var date in GetScheduledDates(habit, from, to))
                 union.Add(date);
