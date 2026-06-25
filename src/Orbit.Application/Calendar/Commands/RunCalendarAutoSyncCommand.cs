@@ -199,8 +199,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
             .Select(h => h.GoogleEventId!)
             .ToHashSet(StringComparer.Ordinal);
 
+        // Reserve ids from ALL suggestions (incl. imported/dismissed): UserId+GoogleEventId is a full unique index, so re-inserting a known event throws 23505 — https://thomasluizon.sentry.io/issues/ORBIT-API-E
         var existingSuggestionEventIds = (await deps.SuggestionRepository.FindAsync(
-                s => s.UserId == user.Id && s.ImportedAtUtc == null && s.DismissedAtUtc == null, ct))
+                s => s.UserId == user.Id, ct))
             .Select(s => s.GoogleEventId)
             .ToHashSet(StringComparer.Ordinal);
         var reservedEventIds = new HashSet<string>(habitEventIds, StringComparer.Ordinal);

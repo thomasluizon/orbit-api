@@ -444,6 +444,47 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_Success_CreateSuggestionsSkipsEventsWithDismissedOrImportedSuggestion()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var dismissed = GoogleCalendarSyncSuggestion.Create(user.Id, "evt_dismissed", "Holiday", now, "{}", now);
+        dismissed.MarkDismissed(now);
+        var imported = GoogleCalendarSyncSuggestion.Create(user.Id, "evt_imported", "Imported", now, "{}", now);
+        imported.MarkImported(Guid.NewGuid(), now);
+        var existing = new List<GoogleCalendarSyncSuggestion> { dismissed, imported };
+
+        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var predicate = call.Arg<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>().Compile();
+                return existing.Where(predicate).ToList().AsReadOnly();
+            });
+
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_dismissed", "Holiday", null, "2026-04-10", null, null, false, null, []),
+                new("evt_imported", "Imported", null, "2026-04-11", null, null, false, null, []),
+                new("evt_new", "Brand new", null, "2026-04-12", null, null, false, null, [])
+            });
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        result.Value.NewSuggestions.Should().Be(1);
+        await _suggestionRepo.Received(1).AddAsync(
+            Arg.Is<GoogleCalendarSyncSuggestion>(s => s.GoogleEventId == "evt_new"),
+            Arg.Any<CancellationToken>());
+        await _suggestionRepo.DidNotReceive().AddAsync(
+            Arg.Is<GoogleCalendarSyncSuggestion>(s => s.GoogleEventId == "evt_dismissed" || s.GoogleEventId == "evt_imported"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_Success_PersistsRealUtcInstantForOffsetEvent()
     {
         var user = CreateEnabledProUser();
