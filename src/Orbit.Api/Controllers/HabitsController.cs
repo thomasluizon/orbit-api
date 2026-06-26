@@ -145,6 +145,22 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpGet("{id:guid}/reschedule-suggestion")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetRescheduleSuggestion(
+        Guid id,
+        [FromQuery] string language = "en",
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetRescheduleSuggestionQuery(HttpContext.GetUserId(), id, language);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

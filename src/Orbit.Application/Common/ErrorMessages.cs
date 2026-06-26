@@ -86,6 +86,8 @@ public static class ErrorMessages
     public static readonly AppError AiRetrospectiveUnavailable = new(ErrorCodes.AiUnavailable, "AI retrospective temporarily unavailable");
     public static readonly AppError AiGoalReviewUnavailable = new(ErrorCodes.AiUnavailable, "AI goal review temporarily unavailable");
     public static readonly AppError AiSummaryUnavailable = new(ErrorCodes.AiUnavailable, "AI summary temporarily unavailable");
+    public static readonly AppError AiRescheduleUnavailable = new(ErrorCodes.AiUnavailable, "AI reschedule temporarily unavailable");
+    public static readonly AppError HabitNotOverdue = new(ErrorCodes.HabitNotOverdue, "Habit is not overdue.");
     public static readonly AppError AiNoActiveConversation = new(ErrorCodes.AiNoActiveConversation, "No active conversation. Call SendWithToolsAsync first.");
     public static readonly AppError InvalidChatHistory = new(ErrorCodes.InvalidChatHistory, "Invalid chat history format");
     public static readonly AppError InvalidClientContext = new(ErrorCodes.InvalidClientContext, "Invalid client context format");
