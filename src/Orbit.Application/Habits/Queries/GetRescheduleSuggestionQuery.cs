@@ -87,5 +87,5 @@ public class GetRescheduleSuggestionQueryHandler(
     }
 
     private static string CacheKey(Guid habitId, DateOnly dueDate, string language) =>
-        $"reschedule:{habitId}:{dueDate:yyyy-MM-dd}:{language}";
+        $"reschedule:{habitId}:{dueDate:yyyy-MM-dd}:{language.ToLowerInvariant()}";
 }
