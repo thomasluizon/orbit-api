@@ -578,7 +578,7 @@ public class HabitToolsTests
     [Fact]
     public async Task GetDailySummary_Success_ReturnsSummary()
     {
-        var response = new DailySummaryResponse("You did great today!", false);
+        var response = new DailySummaryResponse("You did great today!", "Knock out one more.", false);
         _mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 

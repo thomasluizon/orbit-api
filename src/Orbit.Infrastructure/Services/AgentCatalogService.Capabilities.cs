@@ -163,6 +163,7 @@ public partial class AgentCatalogService
                     "HabitsController.GetCalendarMonth",
                     "HabitsController.GetHabitById",
                     "HabitsController.GetHabitDetail",
+                    "HabitsController.GetRescheduleSuggestion",
                     "HabitsController.GetLogs"
                 ]),
 
@@ -193,6 +194,7 @@ public partial class AgentCatalogService
                 controllerActions:
                 [
                     "HabitsController.CreateHabit",
+                    "HabitsController.SuggestSetup",
                     "HabitsController.LogHabit",
                     "HabitsController.SkipHabit",
                     "HabitsController.UpdateHabit",

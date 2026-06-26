@@ -80,6 +80,19 @@ public class PayGateService(
         return Result.Success();
     }
 
+    public async Task<Result> CanUseSmartReschedule(Guid userId, CancellationToken ct = default)
+    {
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+            return Result.Failure(ErrorMessages.UserNotFound);
+
+        var rescheduleProOnly = await appConfig.GetAsync(AppConfigKeys.SmartRescheduleProOnly, true, ct);
+        if (rescheduleProOnly && !user.HasProAccess)
+            return Result.PayGateFailure("Smart reschedule is a Pro feature. Upgrade to unlock!");
+
+        return Result.Success();
+    }
+
     public async Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
