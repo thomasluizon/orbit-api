@@ -33,12 +33,13 @@ public sealed partial class AiRescheduleSuggestionService(
         try
         {
             var payload = await aiClient.CompleteJsonAsync<RescheduleSuggestionPayload>(
+                "You suggest a realistic reschedule for a missed habit and reply with a single JSON object, nothing else.",
                 prompt,
                 temperature: 0.2,
-                cancellationToken,
+                cancellationToken: cancellationToken,
+                maxOutputTokens: MaxOutputTokens,
                 purpose: "reschedule_suggestion",
-                tier: AiModelTier.SubTask,
-                maxOutputTokens: MaxOutputTokens);
+                tier: AiModelTier.SubTask);
 
             if (payload is null)
                 return Result.Failure<RescheduleSuggestion>(ErrorMessages.AiEmptyResponse);

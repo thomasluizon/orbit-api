@@ -55,7 +55,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Test summary content"));
+            .Returns(Result.Success(new DailySummaryContent("Test summary content", "Take a short walk after lunch")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -63,6 +63,7 @@ public class GetDailySummaryQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Summary.Should().Be("Test summary content");
+        result.Value.Insight.Should().Be("Take a short walk after lunch");
         result.Value.FromCache.Should().BeFalse();
     }
 
@@ -86,7 +87,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("First call summary"));
+            .Returns(Result.Success(new DailySummaryContent("First call summary", "First call insight")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -96,6 +97,8 @@ public class GetDailySummaryQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FromCache.Should().BeTrue();
+        result.Value.Summary.Should().Be("First call summary");
+        result.Value.Insight.Should().Be("First call insight");
     }
 
     [Fact]
@@ -124,7 +127,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Summary"));
+            .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -170,7 +173,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Summary"));
+            .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -210,7 +213,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Summary"));
+            .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -293,7 +296,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Failure<string>("AI service unavailable"));
+            .Returns(Result.Failure<DailySummaryContent>("AI service unavailable"));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -324,7 +327,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Resumo em portugues"));
+            .Returns(Result.Success(new DailySummaryContent("Resumo em portugues", "Uma pequena dica")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "en");
 
@@ -366,7 +369,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Resumo"));
+            .Returns(Result.Success(new DailySummaryContent("Resumo", "Dica")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "pt-BR");
 
@@ -402,7 +405,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Summary"));
+            .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
         var query = new GetDailySummaryQuery(UserId, Today, Today, "");
 
@@ -444,7 +447,7 @@ public class GetDailySummaryQueryHandlerTests
             Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
             Arg.Any<CancellationToken>())
-            .Returns(Result.Success("Summary"));
+            .Returns(Result.Success(new DailySummaryContent("Summary", "A small nudge")));
 
         var query = new GetDailySummaryQuery(UserId, futureDate, futureDate, "en");
 

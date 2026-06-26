@@ -107,17 +107,18 @@ public sealed partial class AiCompletionClient
     }
 
     public async Task<T?> CompleteJsonAsync<T>(
-        string prompt,
+        string systemPrompt,
+        string userPrompt,
         double temperature = 0.1,
         CancellationToken cancellationToken = default,
+        int? maxOutputTokens = null,
         string purpose = "json",
-        AiModelTier tier = AiModelTier.Primary,
-        int? maxOutputTokens = null)
+        AiModelTier tier = AiModelTier.Primary)
     {
         var messages = new List<ChatMessage>
         {
-            new SystemChatMessage("You are a helpful assistant. Respond only with valid JSON."),
-            new UserChatMessage(prompt)
+            new SystemChatMessage(systemPrompt),
+            new UserChatMessage(userPrompt)
         };
 
         var options = new ChatCompletionOptions

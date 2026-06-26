@@ -194,6 +194,7 @@ public partial class AgentCatalogService
                 controllerActions:
                 [
                     "HabitsController.CreateHabit",
+                    "HabitsController.SuggestSetup",
                     "HabitsController.LogHabit",
                     "HabitsController.SkipHabit",
                     "HabitsController.UpdateHabit",
