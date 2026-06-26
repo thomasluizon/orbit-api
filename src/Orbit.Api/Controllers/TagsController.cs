@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 
@@ -102,6 +103,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     }
 
     [HttpPost("suggest")]
+    [DistributedRateLimit("tag-suggest")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
