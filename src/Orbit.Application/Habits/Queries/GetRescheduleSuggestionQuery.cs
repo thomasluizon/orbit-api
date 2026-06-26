@@ -22,7 +22,8 @@ public class GetRescheduleSuggestionQueryHandler(
     IGenericRepository<User> userRepository,
     IPayGateService payGate,
     IRescheduleSuggestionService rescheduleService,
-    IMemoryCache cache) : IRequestHandler<GetRescheduleSuggestionQuery, Result<RescheduleSuggestionResponse>>
+    IMemoryCache cache,
+    IUserDateService userDateService) : IRequestHandler<GetRescheduleSuggestionQuery, Result<RescheduleSuggestionResponse>>
 {
     private const int LogHistoryWindowDays = 60;
 
@@ -40,9 +41,7 @@ public class GetRescheduleSuggestionQueryHandler(
 
         var effectiveLanguage = ResolveLanguage(user.Language, request.Language);
 
-        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
-        var userNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, userTimeZone);
-        var userToday = DateOnly.FromDateTime(userNow);
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         var logWindowStart = userToday.AddDays(-LogHistoryWindowDays);
         var habits = await habitRepository.FindAsync(

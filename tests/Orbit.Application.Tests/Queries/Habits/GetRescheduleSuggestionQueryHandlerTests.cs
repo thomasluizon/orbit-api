@@ -18,16 +18,18 @@ public class GetRescheduleSuggestionQueryHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IRescheduleSuggestionService _rescheduleService = Substitute.For<IRescheduleSuggestionService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetRescheduleSuggestionQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid HabitId = Guid.NewGuid();
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
+    private static readonly DateOnly Today = new(2026, 4, 1);
 
     public GetRescheduleSuggestionQueryHandlerTests()
     {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _handler = new GetRescheduleSuggestionQueryHandler(
-            _habitRepo, _userRepo, _payGate, _rescheduleService, _cache);
+            _habitRepo, _userRepo, _payGate, _rescheduleService, _cache, _userDateService);
     }
 
     private static User CreateTestUser() => User.Create("Test User", "test@example.com").Value;
