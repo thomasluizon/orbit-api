@@ -17,5 +17,11 @@ public class SuggestTagsQueryValidator : AbstractValidator<SuggestTagsQuery>
 
         RuleFor(x => x.Description)
             .MaximumLength(AppConstants.MaxHabitDescriptionLength);
+
+        RuleFor(x => x.Language)
+            .NotEmpty()
+            .MaximumLength(AppConstants.MaxLanguageLength)
+            .Must(lang => AppConstants.SupportedLanguages.Contains(lang))
+            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
     }
 }
