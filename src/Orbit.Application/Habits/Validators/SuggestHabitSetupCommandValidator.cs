@@ -15,6 +15,8 @@ public class SuggestHabitSetupCommandValidator : AbstractValidator<SuggestHabitS
 
         RuleFor(x => x.Language)
             .NotEmpty()
-            .MaximumLength(AppConstants.MaxLanguageLength);
+            .MaximumLength(AppConstants.MaxLanguageLength)
+            .Must(lang => AppConstants.SupportedLanguages.Contains(lang))
+            .WithMessage($"Language must be one of: {string.Join(", ", AppConstants.SupportedLanguages)}");
     }
 }

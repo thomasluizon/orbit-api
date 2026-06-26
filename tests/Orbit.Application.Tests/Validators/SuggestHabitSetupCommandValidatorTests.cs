@@ -46,6 +46,14 @@ public class SuggestHabitSetupCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_UnsupportedLanguage_HasError()
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Language = "xx" });
+
+        result.ShouldHaveValidationErrorFor(x => x.Language);
+    }
+
+    [Fact]
     public void Validate_EmptyUserId_HasError()
     {
         var result = _validator.TestValidate(ValidCommand() with { UserId = Guid.Empty });
