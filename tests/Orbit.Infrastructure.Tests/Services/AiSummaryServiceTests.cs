@@ -1,14 +1,27 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
+using System.Net;
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using OpenAI;
+using OpenAI.Chat;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
-/// Tests the pure logic in AiSummaryService: StripMarkdownFences, BuildSummaryPrompt,
-/// and BuildHabitSection. The AI client call itself is an integration concern tested elsewhere.
+/// Tests the pure prompt/selection logic in AiSummaryService (StripMarkdownFences,
+/// BuildSummaryPrompt, BuildHabitSection, CapToSentence, SelectScheduledHabits) plus the
+/// structured-output mapping of GenerateSummaryAsync (summary + insight parsing, trimming,
+/// and empty-insight handling) against a stubbed chat transport.
 /// </summary>
 public class AiSummaryServiceTests
 {
@@ -722,6 +735,95 @@ public class AiSummaryServiceTests
 
         result.Should().NotContain("Current streak:");
         result.Should().NotContain("Streak freezes banked:");
+    }
+
+    [Fact]
+    public async Task GenerateSummaryAsync_ReturnsBothSummaryAndInsight()
+    {
+        var service = BuildSummaryService(
+            "{\"summary\":\"Nice work getting the run in.\",\"insight\":\"A little reading later could be a calm way to wind down.\"}");
+
+        var result = await InvokeGenerateSummaryAsync(service);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Summary.Should().Be("Nice work getting the run in.");
+        result.Value.Insight.Should().Be("A little reading later could be a calm way to wind down.");
+    }
+
+    [Fact]
+    public async Task GenerateSummaryAsync_TrimsInsightToSeventyChars()
+    {
+        const string longInsight =
+            "Maybe ease into a slow walk around the block and just breathe for a while before circling back to everything else today";
+        var service = BuildSummaryService(
+            $"{{\"summary\":\"Solid day so far.\",\"insight\":\"{longInsight}\"}}");
+
+        var result = await InvokeGenerateSummaryAsync(service);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Insight.Length.Should().BeLessThanOrEqualTo(70);
+        result.Value.Insight.Should().NotEndWith(" ");
+    }
+
+    [Fact]
+    public async Task GenerateSummaryAsync_EmptyInsight_StillSucceedsWithSummary()
+    {
+        var service = BuildSummaryService(
+            "{\"summary\":\"Everything is done -- enjoy the rest of the day.\",\"insight\":\"\"}");
+
+        var result = await InvokeGenerateSummaryAsync(service);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Summary.Should().NotBeEmpty();
+        result.Value.Insight.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GenerateSummaryAsync_BlankSummary_ReturnsFailure()
+    {
+        var service = BuildSummaryService("{\"summary\":\"   \",\"insight\":\"Take a breath.\"}");
+
+        var result = await InvokeGenerateSummaryAsync(service);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    private static AiSummaryService BuildSummaryService(string modelJsonContent)
+    {
+        var chatClient = new ChatClient(
+            model: "gpt-test",
+            credential: new ApiKeyCredential("test-key"),
+            options: new OpenAIClientOptions
+            {
+                Endpoint = new Uri("https://orbit.test/v1"),
+                Transport = new HttpClientPipelineTransport(
+                    new HttpClient(new JsonResponseHandler(modelJsonContent))),
+            });
+        var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance);
+        return new AiSummaryService(aiClient, NullLogger<AiSummaryService>.Instance);
+    }
+
+    private static Task<Result<DailySummaryContent>> InvokeGenerateSummaryAsync(AiSummaryService service) =>
+        service.GenerateSummaryAsync(
+            new List<Habit>(), Today, Today, Today, "en", null, 0, 0,
+            new Dictionary<Guid, DateOnly>(), CancellationToken.None);
+
+    private sealed class JsonResponseHandler(string modelJsonContent) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var escaped = JsonSerializer.Serialize(modelJsonContent);
+            var body =
+                "{\"id\":\"chatcmpl-test\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-test\","
+                + "\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":" + escaped + "},\"finish_reason\":\"stop\"}],"
+                + "\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new StringContent(body, Encoding.UTF8, "application/json"),
+            });
+        }
     }
 
     private static Habit CreateHabit(

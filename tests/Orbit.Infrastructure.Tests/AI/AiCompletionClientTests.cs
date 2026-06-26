@@ -18,7 +18,7 @@ public class AiCompletionClientTests
         var handler = new CapturingHandler();
         var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
 
-        await client.CompleteJsonAsync<Probe>("extract facts", purpose: "fact_extraction", tier: AiModelTier.SubTask);
+        await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", purpose: "fact_extraction", tier: AiModelTier.SubTask);
 
         handler.LastRequestBody.Should().NotBeNull();
         handler.LastRequestBody.Should().NotContain("temperature");
@@ -30,7 +30,7 @@ public class AiCompletionClientTests
         var handler = new CapturingHandler();
         var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
 
-        await client.CompleteJsonAsync<Probe>("extract facts", temperature: 0.1, purpose: "json", tier: AiModelTier.Primary);
+        await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", temperature: 0.1, purpose: "json", tier: AiModelTier.Primary);
 
         handler.LastRequestBody.Should().Contain("temperature");
     }
