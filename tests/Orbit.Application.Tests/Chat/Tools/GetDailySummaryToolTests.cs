@@ -28,7 +28,7 @@ public class GetDailySummaryToolTests
     [Fact]
     public async Task Success_ReturnsPayload()
     {
-        var response = new DailySummaryResponse("You completed 3 of 4 habits today.", FromCache: false);
+        var response = new DailySummaryResponse("You completed 3 of 4 habits today.", "Log your evening walk next.", FromCache: false);
         _mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
 
@@ -54,7 +54,7 @@ public class GetDailySummaryToolTests
     public async Task NoDates_DefaultsBothToUserToday()
     {
         _mediator.Send(Arg.Any<GetDailySummaryQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new DailySummaryResponse("ok", false)));
+            .Returns(Result.Success(new DailySummaryResponse("ok", "", false)));
 
         await Execute("{}");
 
