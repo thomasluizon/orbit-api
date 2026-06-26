@@ -385,7 +385,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["list_tags"],
                 mcpTools: ["list_tags"],
-                controllerActions: ["TagsController.GetTags"]),
+                controllerActions: ["TagsController.GetTags", "TagsController.SuggestTags"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsWrite,

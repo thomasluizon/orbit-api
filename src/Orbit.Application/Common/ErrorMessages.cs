@@ -85,6 +85,7 @@ public static class ErrorMessages
     public static readonly AppError AiUnavailable = new(ErrorCodes.AiUnavailable, "AI service temporarily unavailable");
     public static readonly AppError AiRetrospectiveUnavailable = new(ErrorCodes.AiUnavailable, "AI retrospective temporarily unavailable");
     public static readonly AppError AiGoalReviewUnavailable = new(ErrorCodes.AiUnavailable, "AI goal review temporarily unavailable");
+    public static readonly AppError AiTagSuggestionUnavailable = new(ErrorCodes.AiUnavailable, "AI tag suggestion temporarily unavailable");
     public static readonly AppError AiSummaryUnavailable = new(ErrorCodes.AiUnavailable, "AI summary temporarily unavailable");
     public static readonly AppError AiNoActiveConversation = new(ErrorCodes.AiNoActiveConversation, "No active conversation. Call SendWithToolsAsync first.");
     public static readonly AppError InvalidChatHistory = new(ErrorCodes.InvalidChatHistory, "Invalid chat history format");
