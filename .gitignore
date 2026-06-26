@@ -50,3 +50,6 @@ Desktop.ini
 ## Docker / Caddy
 caddy_data/
 caddy_config/.claude/worktrees/
+
+## Claude Code worktrees
+.claude/worktrees/
