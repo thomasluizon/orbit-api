@@ -401,7 +401,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["assign_tags", "create_tag", "update_tag"],
                 mcpTools: ["create_tag", "update_tag", "assign_tags"],
-                controllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags"]),
+                controllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsDelete,

@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Tags.Commands;
 using Orbit.Application.Tags.Queries;
 
@@ -17,6 +18,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     public record CreateTagRequest(string Name, string Color);
     public record UpdateTagRequest(string Name, string Color);
     public record AssignTagsRequest(IReadOnlyList<Guid> TagIds);
+    public record SuggestTagsRequest(string Title, string? Description, string? Language);
 
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -98,6 +100,26 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         var result = await mediator.Send(command, cancellationToken);
 
         return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPost("suggest")]
+    [DistributedRateLimit("tag-suggest")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> SuggestTags(
+        [FromBody] SuggestTagsRequest request,
+        CancellationToken cancellationToken)
+    {
+        var query = new SuggestTagsQuery(
+            HttpContext.GetUserId(),
+            request.Title,
+            request.Description,
+            request.Language ?? "en");
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Tag created {TagId} by user {UserId}")]

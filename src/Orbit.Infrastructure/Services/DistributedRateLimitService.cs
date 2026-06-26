@@ -18,7 +18,8 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["ai-resolve"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
             ["habit-suggest"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
             ["support"] = new(TimeSpan.FromHours(1), PermitLimit: 3, SegmentCount: 1),
-            ["uploads"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4)
+            ["uploads"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
+            ["tag-suggest"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4)
         };
 
     public async Task<DistributedRateLimitDecision> TryAcquireAsync(
