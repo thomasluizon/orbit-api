@@ -27,6 +27,7 @@ public sealed partial class AiTagSuggestionService(
         try
         {
             var completion = await aiClient.CompleteJsonAsync<TagSuggestionResult>(
+                "You suggest tags for a habit and reply with a single JSON object, nothing else.",
                 prompt,
                 cancellationToken: cancellationToken,
                 purpose: "tag_suggestion",
