@@ -90,6 +90,7 @@ public static class ErrorCodes
     public const string CannotSkipFutureDate = "CANNOT_SKIP_FUTURE_DATE";
     public const string HabitNotYetDue = "HABIT_NOT_YET_DUE";
     public const string NotScheduledOnDate = "NOT_SCHEDULED_ON_DATE";
+    public const string HabitNotOverdue = "HABIT_NOT_OVERDUE";
     public const string AllInstancesDone = "ALL_INSTANCES_DONE";
     public const string CannotLogFutureDate = "CANNOT_LOG_FUTURE_DATE";
     public const string BeyondOverdueWindow = "BEYOND_OVERDUE_WINDOW";

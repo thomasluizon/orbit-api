@@ -12,6 +12,7 @@ public static class AppConfigKeys
     public const string FreeAiMessagesPerMonth = "FreeAiMessagesPerMonth";
     public const string ProAiMessagesPerMonth = "ProAiMessagesPerMonth";
     public const string DailySummaryProOnly = "DailySummaryProOnly";
+    public const string SmartRescheduleProOnly = "SmartRescheduleProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
     public const string GoalsProOnly = "GoalsProOnly";
     public const string MinSupportedVersion = "MinSupportedVersion";

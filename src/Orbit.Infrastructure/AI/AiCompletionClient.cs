@@ -111,7 +111,8 @@ public sealed partial class AiCompletionClient
         double temperature = 0.1,
         CancellationToken cancellationToken = default,
         string purpose = "json",
-        AiModelTier tier = AiModelTier.Primary)
+        AiModelTier tier = AiModelTier.Primary,
+        int? maxOutputTokens = null)
     {
         var messages = new List<ChatMessage>
         {
@@ -125,6 +126,9 @@ public sealed partial class AiCompletionClient
         };
         if (ShouldApplyTemperature(tier, _primaryModel, _subTaskModel))
             options.Temperature = (float)temperature;
+
+        if (maxOutputTokens is int max)
+            options.MaxOutputTokenCount = max;
 
         LogCallingJsonCompletion(_logger);
 

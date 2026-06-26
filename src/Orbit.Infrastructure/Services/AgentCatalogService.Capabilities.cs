@@ -163,6 +163,7 @@ public partial class AgentCatalogService
                     "HabitsController.GetCalendarMonth",
                     "HabitsController.GetHabitById",
                     "HabitsController.GetHabitDetail",
+                    "HabitsController.GetRescheduleSuggestion",
                     "HabitsController.GetLogs"
                 ]),
 
