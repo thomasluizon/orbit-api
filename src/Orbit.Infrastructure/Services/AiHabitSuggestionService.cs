@@ -25,6 +25,7 @@ public sealed partial class AiHabitSuggestionService(
         try
         {
             var dto = await aiClient.CompleteJsonAsync<HabitSuggestionDto>(
+                "You help set up a habit and reply with a single JSON object, nothing else.",
                 prompt,
                 cancellationToken: ct,
                 purpose: "habit_suggest",
