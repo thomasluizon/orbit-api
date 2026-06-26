@@ -13,8 +13,9 @@ public sealed partial class AiSummaryService(
     ILogger<AiSummaryService> logger) : ISummaryService
 {
     private const int MaxSummaryChars = 300;
+    private const int MaxInsightChars = 70;
 
-    public async Task<Result<string>> GenerateSummaryAsync(
+    public async Task<Result<DailySummaryContent>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
         DateOnly dateFrom,
         DateOnly dateTo,
@@ -37,29 +38,32 @@ public sealed partial class AiSummaryService(
 
         try
         {
-            var text = await aiClient.CompleteTextAsync(
-                "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate the good things they have already done, you treat a slip on a habit they are trying to quit as a gentle, judgment-free moment rather than something to praise, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You write plain text only -- no markdown, bullets, headings, emoji, or JSON -- with no greeting and no sign-off, only in the language you are told to use.",
+            var content = await aiClient.CompleteJsonAsync<DailySummaryJson>(
+                "You are Astra, a perceptive, warm close friend who knows the person well. You notice and celebrate the good things they have already done, you treat a slip on a habit they are trying to quit as a gentle, judgment-free moment rather than something to praise, and you stay easy and unpushy about what is left. You never sound corporate, clinical, or like a coach reading a checklist. You reply with a single JSON object as instructed; the wording inside every field is plain language -- no markdown, bullets, headings, or emoji -- with no greeting and no sign-off, only in the language you are told to use.",
                 prompt,
                 temperature: 0.7,
                 cancellationToken,
-                maxOutputTokens: 180,
+                maxOutputTokens: 240,
                 purpose: "daily_summary");
 
-            if (string.IsNullOrWhiteSpace(text))
-                return Result.Failure<string>(ErrorMessages.AiEmptyResponse);
+            if (content is null || string.IsNullOrWhiteSpace(content.Summary))
+                return Result.Failure<DailySummaryContent>(ErrorMessages.AiEmptyResponse);
 
-            var trimmed = CapToSentence(StripMarkdownFences(text), MaxSummaryChars);
+            var summary = CapToSentence(StripMarkdownFences(content.Summary), MaxSummaryChars);
+            var insight = CapToSentence((content.Insight ?? string.Empty).Trim(), MaxInsightChars);
 
             if (logger.IsEnabled(LogLevel.Information))
-                LogDailySummaryGenerated(logger, trimmed.Length);
-            return Result.Success(trimmed);
+                LogDailySummaryGenerated(logger, summary.Length);
+            return Result.Success(new DailySummaryContent(summary, insight));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogDailySummaryFailed(logger, ex);
-            return Result.Failure<string>(ErrorMessages.AiSummaryUnavailable);
+            return Result.Failure<DailySummaryContent>(ErrorMessages.AiSummaryUnavailable);
         }
     }
+
+    private sealed record DailySummaryJson(string? Summary, string? Insight);
 
     /// <summary>
     /// Selects the habits the summary should reason about: anything logged on the viewed day
@@ -122,7 +126,7 @@ public sealed partial class AiSummaryService(
             Today's habits:
             {habitSection}
 
-            Write a short message to this person about their day.
+            Write a short message to this person about their day, plus one separate short nudge.
 
             Rules:
             - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
@@ -140,10 +144,14 @@ public sealed partial class AiSummaryService(
             - This message is shown for the WHOLE current part of the day, so it must read correctly whether they see it at the start or the end of that window
             - Treat the time of day as a broad window, not an exact moment; never imply a precise instant
             - Do NOT use phrases like "right now", "just woke up", "now that the afternoon is here", "as the day begins", "earlier today", or "upcoming later today"
-            - Do NOT use markdown, bullet points, emojis, or JSON
+            - Do NOT use markdown, bullet points, or emojis in the wording
             - Do NOT mention the date explicitly
             - Write ONLY in {languageName}, using natural, fluent, grammatically correct phrasing a native speaker would actually use
             - No greeting like "good morning", no sign-off -- just the message
+
+            Also write a separate "insight": ONE short nudge of at most 70 characters in the same warm voice -- a single specific, doable next move for the rest of the day, distinct from the message and never a restatement of it. If everything is already done, make it a brief, warm acknowledgment instead. If you genuinely have nothing to add, use an empty string. Same language rules; no markdown or emoji.
+
+            Respond with ONLY a JSON object with two string fields and nothing else: "summary" (the message above) and "insight" (the short nudge).
             """;
     }
 

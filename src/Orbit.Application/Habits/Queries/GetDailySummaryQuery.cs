@@ -8,7 +8,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
 
-public record DailySummaryResponse(string Summary, bool FromCache);
+public record DailySummaryResponse(string Summary, string Insight, bool FromCache);
 
 public record GetDailySummaryQuery(
     Guid UserId,
@@ -61,9 +61,9 @@ public class GetDailySummaryQueryHandler(
             effectiveLanguage,
             SummaryTimeBucket(currentLocalTime));
 
-        if (cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
+        if (cache.TryGetValue(cacheKey, out DailySummaryContent? cached) && cached is not null)
         {
-            return Result.Success(new DailySummaryResponse(cached, FromCache: true));
+            return Result.Success(new DailySummaryResponse(cached.Summary, cached.Insight, FromCache: true));
         }
 
         var habits = await habitRepository.FindAsync(
@@ -106,7 +106,8 @@ public class GetDailySummaryQueryHandler(
 
         cache.Set(cacheKey, summaryResult.Value, cacheOptions);
 
-        return Result.Success(new DailySummaryResponse(summaryResult.Value, FromCache: false));
+        return Result.Success(new DailySummaryResponse(
+            summaryResult.Value.Summary, summaryResult.Value.Insight, FromCache: false));
     }
 
     private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
