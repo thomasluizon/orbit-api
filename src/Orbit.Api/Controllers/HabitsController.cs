@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
@@ -184,6 +185,26 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             LogHabitCreated(logger, result.Value, HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(v => CreatedAtAction(nameof(GetHabits), new { id = v }, new { id = v }));
+    }
+
+    [HttpPost("suggest-setup")]
+    [DistributedRateLimit("habit-suggest")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> SuggestSetup(
+        [FromBody] SuggestHabitSetupRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SuggestHabitSetupCommand(
+            HttpContext.GetUserId(),
+            request.Title,
+            request.Language);
+
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
     }
 
     [HttpPost("{id:guid}/log")]

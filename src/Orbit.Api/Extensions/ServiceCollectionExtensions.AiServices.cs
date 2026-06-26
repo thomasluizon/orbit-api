@@ -23,6 +23,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
         builder.Services.AddScoped<IFactExtractionService, AiFactExtractionService>();
         builder.Services.AddScoped<ISummaryService, AiSummaryService>();
+        builder.Services.AddScoped<IHabitSuggestionService, AiHabitSuggestionService>();
         builder.Services.AddScoped<IRetrospectiveService, AiRetrospectiveService>();
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();

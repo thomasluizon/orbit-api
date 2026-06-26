@@ -131,4 +131,6 @@ public partial class HabitsController
         string? Emoji = null);
 
     public record LinkGoalsRequest(List<Guid> GoalIds);
+
+    public record SuggestHabitSetupRequest(string Title, string Language = "en");
 }
