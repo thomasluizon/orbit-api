@@ -62,6 +62,7 @@ public class GetFriendFeedQueryHandler(
         var pageRows = hasMore ? rows.Take(pageSize).ToList() : rows;
 
         var items = pageRows
+            .Where(e => actorMap.ContainsKey(e.ActorUserId))
             .Select(e =>
             {
                 actorMap.TryGetValue(e.ActorUserId, out var actor);

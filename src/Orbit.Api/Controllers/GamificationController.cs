@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
@@ -59,6 +60,9 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
         [FromQuery] string period,
         CancellationToken cancellationToken)
     {
+        if (!RetrospectivePeriodRange.IsKnownPeriod(period))
+            return BadRequest(ErrorMessages.InvalidPeriod.ToErrorBody());
+
         var userId = HttpContext.GetUserId();
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);

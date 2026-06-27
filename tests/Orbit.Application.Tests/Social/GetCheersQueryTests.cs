@@ -11,6 +11,7 @@ public class GetCheersQueryTests
 {
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Cheer> _cheerRepository = Substitute.For<IGenericRepository<Cheer>>();
+    private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
     private readonly GetCheersQueryHandler _handler;
 
     private readonly User _caller = SocialTestHelpers.OptedInUser("Caller");
@@ -19,8 +20,9 @@ public class GetCheersQueryTests
     public GetCheersQueryTests()
     {
         var guard = new SocialAccessGuard(_userRepository);
-        _handler = new GetCheersQueryHandler(guard, _cheerRepository, _userRepository);
+        _handler = new GetCheersQueryHandler(guard, _cheerRepository, _blockedUserRepository, _userRepository);
         SocialTestHelpers.StubUsers(_userRepository, _caller, _friend);
+        SocialTestHelpers.StubFind(_blockedUserRepository);
     }
 
     [Fact]
@@ -52,6 +54,23 @@ public class GetCheersQueryTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().ContainSingle(c => c.Id == sent.Id);
+    }
+
+    [Fact]
+    public async Task BlockedUser_CheersExcludedFromBothDirections()
+    {
+        var received = Cheer.Create(_friend.Id, _caller.Id, Guid.NewGuid(), "before block").Value;
+        var sent = Cheer.Create(_caller.Id, _friend.Id, Guid.NewGuid(), "before block").Value;
+        SocialTestHelpers.StubFind(_cheerRepository, received, sent);
+        SocialTestHelpers.StubFind(_blockedUserRepository, BlockedUser.Create(_caller.Id, _friend.Id).Value);
+
+        var receivedResult = await _handler.Handle(new GetCheersQuery(_caller.Id, "received"), CancellationToken.None);
+        var sentResult = await _handler.Handle(new GetCheersQuery(_caller.Id, "sent"), CancellationToken.None);
+
+        receivedResult.IsSuccess.Should().BeTrue();
+        receivedResult.Value.Items.Should().BeEmpty();
+        sentResult.IsSuccess.Should().BeTrue();
+        sentResult.Value.Items.Should().BeEmpty();
     }
 
     [Fact]

@@ -13,6 +13,8 @@ public class GetRecapQueryValidatorTests
     [Theory]
     [InlineData("week")]
     [InlineData("month")]
+    [InlineData("quarter")]
+    [InlineData("semester")]
     [InlineData("year")]
     public void Validate_AllowedPeriod_Passes(string period)
     {
@@ -22,9 +24,8 @@ public class GetRecapQueryValidatorTests
     }
 
     [Theory]
-    [InlineData("quarter")]
-    [InlineData("semester")]
     [InlineData("day")]
+    [InlineData("decade")]
     [InlineData("")]
     public void Validate_DisallowedPeriod_Fails(string period)
     {

@@ -104,6 +104,25 @@ public class GetFriendFeedQueryTests
     }
 
     [Fact]
+    public async Task Feed_DropsEventsWhoseActorIsNotVisible()
+    {
+        var friend = SocialTestHelpers.OptedInUser("Friend");
+        SocialTestHelpers.StubUsers(_userRepository, _caller, friend);
+        SocialTestHelpers.StubFind(_friendshipRepository, Accepted(_caller.Id, friend.Id));
+        SocialTestHelpers.StubFind(_blockedUserRepository);
+
+        var ghost = FriendFeedEvent.StreakMilestone(Guid.NewGuid(), 30);
+        var visible = FriendFeedEvent.StreakMilestone(friend.Id, 7);
+        StubReader(ghost, visible);
+
+        var result = await _handler.Handle(new GetFriendFeedQuery(_caller.Id, null, null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle(i => i.ActorUserId == friend.Id);
+        result.Value.Items.Should().NotContain(i => i.ActorUserId == ghost.ActorUserId);
+    }
+
+    [Fact]
     public async Task Feed_LastPage_HasNullNextCursor()
     {
         var friend = SocialTestHelpers.OptedInUser("Friend");

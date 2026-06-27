@@ -77,6 +77,7 @@ public static class ErrorMessages
     public static readonly AppError AutoSyncEnabledRequired = new(ErrorCodes.AutoSyncEnabledRequired, "Enabled is required.");
     public static readonly AppError CalendarIdsRequired = new(ErrorCodes.CalendarIdsRequired, "Calendar ids are required.");
     public static readonly AppError NoHabitsForPeriod = new(ErrorCodes.NoHabitsForPeriod, "No habits found for this period.");
+    public static readonly AppError InvalidPeriod = new(ErrorCodes.InvalidPeriod, "Period must be one of: week, month, quarter, semester, year.");
     public static readonly AppError AiSummaryDisabled = new(ErrorCodes.AiSummaryDisabled, "AI summary is disabled.");
     public static readonly AppError NoActiveGoals = new(ErrorCodes.NoActiveGoals, "No active goals found.");
     public static readonly AppError NoGoalsData = new(ErrorCodes.NoGoalsData, "No goals data provided.");

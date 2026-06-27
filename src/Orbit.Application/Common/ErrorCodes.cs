@@ -78,6 +78,7 @@ public static class ErrorCodes
     public const string AutoSyncEnabledRequired = "AUTO_SYNC_ENABLED_REQUIRED";
     public const string CalendarIdsRequired = "CALENDAR_IDS_REQUIRED";
     public const string NoHabitsForPeriod = "NO_HABITS_FOR_PERIOD";
+    public const string InvalidPeriod = "INVALID_PERIOD";
     public const string AiSummaryDisabled = "AI_SUMMARY_DISABLED";
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";
     public const string NoGoalsData = "NO_GOALS_DATA";
