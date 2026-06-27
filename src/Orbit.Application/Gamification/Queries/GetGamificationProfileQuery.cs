@@ -19,15 +19,27 @@ public record GamificationProfileResponse(
     IReadOnlyList<UserAchievementDto> UserAchievements,
     int CurrentStreak,
     int LongestStreak,
-    DateOnly? LastActiveDate);
+    DateOnly? LastActiveDate,
+    bool IsPro,
+    bool AchievementsLocked,
+    NextRewardCarrot NextReward);
 
 public record UserAchievementDto(string AchievementId, DateTime EarnedAtUtc);
+
+public record GamificationProTeaser(string Kind, bool Locked);
+
+public record NextRewardCarrot(
+    int NextLevel,
+    string NextLevelTitle,
+    int XpToNextLevel,
+    GamificationProTeaser? ProTeaser);
 
 public record GetGamificationProfileQuery(Guid UserId) : IRequest<Result<GamificationProfileResponse>>;
 
 public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
-    IGenericRepository<UserAchievement> achievementRepository) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
+    IGenericRepository<UserAchievement> achievementRepository,
+    IFeatureFlagService featureFlagService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
     public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
     {
@@ -35,15 +47,54 @@ public class GetGamificationProfileQueryHandler(
         if (user is null)
             return Result.Failure<GamificationProfileResponse>(ErrorMessages.UserNotFound);
 
-        if (!user.HasProAccess)
+        var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+        var unlocked = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
+        if (!unlocked)
             return Result.PayGateFailure<GamificationProfileResponse>("Gamification is a Pro feature. Upgrade to unlock!");
 
         var currentLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
         var xpToNext = LevelDefinitions.GetXpToNextLevel(user.TotalXp);
-        var nextLevel = currentLevel.Level < 10
-            ? LevelDefinitions.All[currentLevel.Level]
-            : currentLevel;
-        var earned = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
+        var nextLevelNumber = currentLevel.Level + 1;
+        var nextLevelXpRequired = LevelDefinitions.XpRequiredForLevel(nextLevelNumber);
+
+        var achievementsLocked = !user.HasProAccess;
+        var (achievements, userAchievements, achievementsEarned) =
+            achievementsLocked
+                ? (new List<AchievementDto>(), new List<UserAchievementDto>(), 0)
+                : await BuildAchievementsAsync(request.UserId, cancellationToken);
+
+        var proTeaser = user.HasProAccess
+            ? null
+            : new GamificationProTeaser("achievements", true);
+        var nextReward = new NextRewardCarrot(
+            nextLevelNumber,
+            LevelDefinitions.TitleForLevel(nextLevelNumber),
+            xpToNext,
+            proTeaser);
+
+        return Result.Success(new GamificationProfileResponse(
+            user.TotalXp,
+            currentLevel.Level,
+            currentLevel.Title,
+            currentLevel.XpRequired,
+            nextLevelXpRequired,
+            xpToNext,
+            achievementsEarned,
+            AchievementDefinitions.All.Count,
+            achievements,
+            userAchievements,
+            user.CurrentStreak,
+            user.LongestStreak,
+            user.LastActiveDate,
+            user.HasProAccess,
+            achievementsLocked,
+            nextReward));
+    }
+
+    private async Task<(List<AchievementDto> Achievements, List<UserAchievementDto> UserAchievements, int EarnedCount)> BuildAchievementsAsync(
+        Guid userId, CancellationToken cancellationToken)
+    {
+        var earned = await achievementRepository.FindAsync(a => a.UserId == userId, cancellationToken);
         var earnedMap = earned.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
 
         var achievements = AchievementDefinitions.All.Select(def =>
@@ -58,19 +109,6 @@ public class GetGamificationProfileQueryHandler(
         var userAchievements = earned.Select(e =>
             new UserAchievementDto(e.AchievementId, e.EarnedAtUtc)).ToList();
 
-        return Result.Success(new GamificationProfileResponse(
-            user.TotalXp,
-            currentLevel.Level,
-            currentLevel.Title,
-            currentLevel.XpRequired,
-            nextLevel.XpRequired,
-            xpToNext,
-            earned.Count,
-            AchievementDefinitions.All.Count,
-            achievements,
-            userAchievements,
-            user.CurrentStreak,
-            user.LongestStreak,
-            user.LastActiveDate));
+        return (achievements, userAchievements, earned.Count);
     }
 }

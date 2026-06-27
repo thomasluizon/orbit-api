@@ -107,6 +107,7 @@ public partial class VerifyCodeCommandHandler(
 
         user = createResult.Value;
         user.SetLanguage(language);
+        user.SeedDefaultHandle();
         await userRepository.AddAsync(user, cancellationToken);
 
         try

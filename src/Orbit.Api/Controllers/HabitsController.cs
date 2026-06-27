@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
@@ -107,6 +108,9 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         [FromQuery] string language = "en",
         CancellationToken cancellationToken = default)
     {
+        if (!RetrospectivePeriodRange.IsKnownPeriod(period))
+            return BadRequest(ErrorMessages.InvalidPeriod.ToErrorBody());
+
         var userId = HttpContext.GetUserId();
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
@@ -566,7 +570,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             IsFlexible: request.IsFlexible,
             ScheduledReminders: request.ScheduledReminders,
             ChecklistItems: request.ChecklistItems,
-            GoogleEventId: request.GoogleEventId);
+            GoogleEventId: request.GoogleEventId,
+            Tags: request.Tags);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Habit created {HabitId} by user {UserId}")]

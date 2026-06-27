@@ -31,6 +31,65 @@ public class CoreIdentitySectionTests
         result.Should().Contain("Orbit AI");
         result.Should().Contain("Habit and Goal Tracking Assistant");
     }
+
+    [Fact]
+    public void Build_SoftenedGuidance_RoutesDestructiveAndAmbiguousThroughCards()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new CoreIdentitySection().Build(ctx);
+
+        result.Should().Contain("Act directly");
+        result.Should().Contain("confirmation card");
+        result.Should().Contain("clarification card");
+        result.Should().Contain("quick-action chips");
+    }
+
+    [Fact]
+    public void Build_NoLongerActsWithoutConfirmationOnDestructiveTools()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new CoreIdentitySection().Build(ctx);
+
+        result.Should().NotContain("without asking for unnecessary confirmation");
+    }
+}
+
+public class EncouragingToneSectionTests
+{
+    [Fact]
+    public void Order_Is150()
+    {
+        new EncouragingToneSection().Order.Should().Be(150);
+    }
+
+    [Fact]
+    public void ShouldInclude_AlwaysTrue()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        new EncouragingToneSection().ShouldInclude(ctx).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_ContainsWarmEncouragingTone()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new EncouragingToneSection().Build(ctx);
+
+        result.Should().Contain("warm");
+        result.Should().Contain("streaks");
+        result.Should().Contain("non-judgmental");
+        result.Should().Contain("saccharine");
+    }
+
+    [Fact]
+    public void Build_ContainsNoEmOrEnDashes()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
+        var result = new EncouragingToneSection().Build(ctx);
+
+        result.Should().NotContain("—");
+        result.Should().NotContain("–");
+    }
 }
 
 public class GlobalRulesSectionTests

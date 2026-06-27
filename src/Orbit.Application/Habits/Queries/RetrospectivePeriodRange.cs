@@ -10,6 +10,15 @@ namespace Orbit.Application.Habits.Queries;
 /// </summary>
 public static class RetrospectivePeriodRange
 {
+    private static readonly string[] Known = ["week", "month", "quarter", "semester", "year"];
+
+    /// <summary>
+    /// True when <paramref name="period"/> is one <see cref="Resolve"/> understands (case-insensitive),
+    /// so callers can reject unknown periods at the trust boundary before resolving.
+    /// </summary>
+    public static bool IsKnownPeriod(string? period) =>
+        period is not null && Known.Contains(period, StringComparer.OrdinalIgnoreCase);
+
     public static (DateOnly DateFrom, DateOnly DateTo) Resolve(string period, DateOnly today, int weekStartDay)
     {
         var normalized = period.ToLowerInvariant();
@@ -20,7 +29,7 @@ public static class RetrospectivePeriodRange
             "quarter" => today.AddDays(-90),
             "semester" => today.AddDays(-180),
             "year" => today.AddDays(-365),
-            _ => WeekMath.WeekStart(today, weekStartDay)
+            _ => throw new ArgumentOutOfRangeException(nameof(period), period, "Unknown retrospective period.")
         };
 
         return (dateFrom, today);

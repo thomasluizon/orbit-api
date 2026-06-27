@@ -29,6 +29,7 @@ public class GetStreakInfoQueryHandler(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService,
     IUserStreakService userStreakService,
+    IFeatureFlagService featureFlagService,
     IUnitOfWork unitOfWork) : IRequestHandler<GetStreakInfoQuery, Result<StreakInfoResponse>>
 {
     public async Task<Result<StreakInfoResponse>> Handle(GetStreakInfoQuery request, CancellationToken cancellationToken)
@@ -37,7 +38,9 @@ public class GetStreakInfoQueryHandler(
         if (user is null)
             return Result.Failure<StreakInfoResponse>(ErrorMessages.UserNotFound);
 
-        if (!user.HasProAccess)
+        var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+        var unlocked = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
+        if (!unlocked)
             return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
 
         var recalculatedStreak = await userStreakService.RecalculateAsync(

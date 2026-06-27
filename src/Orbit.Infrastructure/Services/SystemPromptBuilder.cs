@@ -16,6 +16,7 @@ public class SystemPromptBuilder : ISystemPromptBuilder
         _staticSections =
         [
             new CoreIdentitySection(),
+            new EncouragingToneSection(),
             new GlobalRulesSection(),
             new StructuringStrategySection(),
             new ClarificationGuidanceSection(),

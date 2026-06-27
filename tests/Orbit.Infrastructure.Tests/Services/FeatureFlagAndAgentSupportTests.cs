@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Api.Extensions;
@@ -51,7 +52,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("disabled", false, null, "Disabled"));
         await _dbContext.SaveChangesAsync();
 
-        var service = new FeatureFlagService(_dbContext);
+        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
 
         var result = await service.GetEnabledKeysForUserAsync(user.Id);
 
@@ -61,7 +62,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     [Fact]
     public async Task FeatureFlagService_ReturnsEmptyWhenUserIsMissing()
     {
-        var service = new FeatureFlagService(_dbContext);
+        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
 
         var result = await service.GetEnabledKeysForUserAsync(Guid.NewGuid());
 

@@ -123,6 +123,7 @@ public partial class CreateHabitCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
+        await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitCreated, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
@@ -206,6 +207,22 @@ public partial class CreateHabitCommandHandler(
         }
     }
 
+    private async Task ProcessOnboardingChecklistSafeAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await gamificationService.ProcessOnboardingChecklistAsync(userId, signal, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogOnboardingChecklistFailed(logger, ex, userId);
+        }
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit creation by user {UserId}")]
     private static partial void LogGamificationHabitCreationFailed(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Onboarding checklist processing failed for user {UserId}")]
+    private static partial void LogOnboardingChecklistFailed(ILogger logger, Exception ex, Guid userId);
 }

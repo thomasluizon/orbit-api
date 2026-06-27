@@ -78,6 +78,7 @@ public static class ErrorCodes
     public const string AutoSyncEnabledRequired = "AUTO_SYNC_ENABLED_REQUIRED";
     public const string CalendarIdsRequired = "CALENDAR_IDS_REQUIRED";
     public const string NoHabitsForPeriod = "NO_HABITS_FOR_PERIOD";
+    public const string InvalidPeriod = "INVALID_PERIOD";
     public const string AiSummaryDisabled = "AI_SUMMARY_DISABLED";
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";
     public const string NoGoalsData = "NO_GOALS_DATA";
@@ -112,4 +113,13 @@ public static class ErrorCodes
     public const string AudioTranscriptionFailed = "AUDIO_TRANSCRIPTION_FAILED";
     public const string AudioTranscriptionEmpty = "AUDIO_TRANSCRIPTION_EMPTY";
     public const string UpgradeRequired = "UPGRADE_REQUIRED";
+    public const string SocialDisabled = "SOCIAL_DISABLED";
+    public const string HandleTaken = "HANDLE_TAKEN";
+    public const string FriendLimitReached = "FRIEND_LIMIT_REACHED";
+    public const string AlreadyFriends = "ALREADY_FRIENDS";
+    public const string Blocked = "BLOCKED";
+    public const string NotFriends = "NOT_FRIENDS";
+    public const string ContentRejected = "CONTENT_REJECTED";
+    public const string FriendRequestNotFound = "FRIEND_REQUEST_NOT_FOUND";
+    public const string CheerNotFound = "CHEER_NOT_FOUND";
 }

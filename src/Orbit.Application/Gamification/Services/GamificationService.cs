@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Gamification.Services;
@@ -23,6 +25,7 @@ public partial class GamificationService(
     GamificationRepositories repos,
     IPushNotificationService pushService,
     IUserDateService userDateService,
+    IFriendFeedEventEmitter friendFeedEventEmitter,
     IUnitOfWork unitOfWork,
     ILogger<GamificationService> logger) : IGamificationService
 {
@@ -164,8 +167,11 @@ public partial class GamificationService(
             AchievementChecks.TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
         }
 
-        foreach (var (entity, _) in newAchievements)
+        foreach (var (entity, definition) in newAchievements)
+        {
             await repos.AchievementRepository.AddAsync(entity, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
 
         UpdateLevel(user);
 
@@ -268,6 +274,99 @@ public partial class GamificationService(
     }
 
     /// <summary>
+    /// Advances the onboarding setup-checklist flags from a single signal and, once all three
+    /// (habit created, habit logged, Astra used) are set, marks the checklist complete. The signal
+    /// and completion flags apply to every user un-gated so the client card hides consistently;
+    /// the <see cref="AchievementDefinitions.OnboardingComplete"/> achievement is granted only to
+    /// users with Pro access (#186). Short-circuits once the checklist is already complete.
+    /// </summary>
+    public async Task ProcessOnboardingChecklistAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            var shouldSave = await ComputeOnboardingChecklistAsync(userId, signal, pushes, ct);
+            if (!shouldSave)
+                return;
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                continue;
+            }
+
+            await FlushPushesAsync(pushes, ct);
+            return;
+        }
+    }
+
+    private async Task<bool> ComputeOnboardingChecklistAsync(
+        Guid userId, OnboardingChecklistSignal signal, List<PendingPush> pushes, CancellationToken ct)
+    {
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        if (user is null || user.HasCompletedOnboardingChecklist)
+            return false;
+
+        ApplyOnboardingSignal(user, signal);
+
+        if (!(user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAstra))
+            return true;
+
+        user.CompleteOnboardingChecklist();
+
+        if (!user.HasProAccess)
+            return true;
+
+        var earned = await LoadEarnedAchievementIds(userId, ct);
+        var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
+        var previousLevel = user.Level;
+
+        AchievementChecks.CheckOnboardingChecklist(user, earned, newAchievements);
+
+        foreach (var (entity, definition) in newAchievements)
+        {
+            await repos.AchievementRepository.AddAsync(entity, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
+
+        UpdateLevel(user);
+
+        foreach (var (_, definition) in newAchievements)
+            await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
+
+        if (user.Level > previousLevel)
+        {
+            var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
+            await QueueLevelUpNotification(userId, newLevel, user.Language, pushes, ct);
+        }
+
+        return true;
+    }
+
+    private static void ApplyOnboardingSignal(User user, OnboardingChecklistSignal signal)
+    {
+        switch (signal)
+        {
+            case OnboardingChecklistSignal.HabitCreated:
+                user.MarkFirstHabitCreated();
+                break;
+            case OnboardingChecklistSignal.HabitLogged:
+                user.MarkFirstHabitLogged();
+                break;
+            case OnboardingChecklistSignal.AstraUsed:
+                user.MarkAstraUsed();
+                break;
+        }
+    }
+
+    /// <summary>
     /// Template method that handles the common gamification scaffold:
     /// load user, check Pro, load earned achievements, run domain-specific checks,
     /// persist achievements, update level, send notifications, save changes.
@@ -316,8 +415,11 @@ public partial class GamificationService(
 
         await checkAchievements(user, earned, newAchievements);
 
-        foreach (var (entity, _) in newAchievements)
+        foreach (var (entity, definition) in newAchievements)
+        {
             await repos.AchievementRepository.AddAsync(entity, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
 
         UpdateLevel(user);
 
@@ -346,17 +448,34 @@ public partial class GamificationService(
             user.SetLevel(newLevel.Level);
     }
 
+    /// <summary>
+    /// Streams a non-streak achievement into friends' feeds. Consistency (streak-tier) achievements are
+    /// skipped because the streak hook already emits a StreakMilestone for the same moment, so emitting
+    /// here too would double the feed row.
+    /// </summary>
+    private async Task EmitAchievementFeedEventAsync(
+        User user, UserAchievement entity, AchievementDefinition definition, CancellationToken ct)
+    {
+        if (definition.Category == AchievementCategory.Consistency)
+            return;
+
+        await friendFeedEventEmitter.EmitAchievementEventAsync(user, entity.AchievementId, definition.Category, ct);
+    }
+
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
     {
         ["first_orbit"] = ("Primeira Órbita", "Crie seu primeiro hábito"),
         ["liftoff"] = ("Decolagem", "Complete seu primeiro hábito"),
         ["mission_control"] = ("Controle de Missão", "Crie sua primeira meta"),
+        ["onboarding_complete"] = ("Tudo Pronto", "Conclua sua lista de configuração"),
         ["week_warrior"] = ("Guerreiro da Semana", "Alcance uma sequência de 7 dias"),
         ["fortnight_focus"] = ("Foco Quinzenal", "Alcance uma sequência de 14 dias"),
         ["monthly_master"] = ("Mestre Mensal", "Alcance uma sequência de 30 dias"),
         ["quarter_champion"] = ("Campeão Trimestral", "Alcance uma sequência de 90 dias"),
         ["centurion"] = ("Centurião", "Alcance uma sequência de 100 dias"),
         ["year_of_discipline"] = ("Ano de Disciplina", "Alcance uma sequência de 365 dias"),
+        ["half_year_hero"] = ("Herói do Semestre", "Alcance uma sequência de 180 dias"),
+        ["streak_titan"] = ("Titã da Sequência", "Alcance uma sequência de 500 dias"),
         ["getting_momentum"] = ("Ganhando Ritmo", "Complete 10 hábitos no total"),
         ["building_habits"] = ("Construindo Hábitos", "Complete 50 hábitos no total"),
         ["dedicated"] = ("Dedicado", "Complete 100 hábitos no total"),
@@ -373,6 +492,7 @@ public partial class GamificationService(
         ["night_owl"] = ("Coruja Noturna", "Complete um hábito após as 22h (10 vezes)"),
         ["comeback"] = ("Retorno", "Retome após 7+ dias de inatividade"),
         ["bad_habit_breaker"] = ("Quebrador de Maus Hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
+        ["first_cheer"] = ("Boas Energias", "Envie ou receba seu primeiro incentivo"),
     };
 
     private static readonly Dictionary<int, string> LevelTranslationsPt = new()
@@ -424,7 +544,7 @@ public partial class GamificationService(
         var title = isPt
             ? $"Subiu de nível! Agora você está no nível {newLevel.Level}"
             : $"Level Up! You're now Level {newLevel.Level}";
-        var levelTitle = isPt && LevelTranslationsPt.TryGetValue(newLevel.Level, out var ptTitle)
+        var levelTitle = isPt && LevelTranslationsPt.TryGetValue(Math.Min(newLevel.Level, LevelDefinitions.TableMaxLevel), out var ptTitle)
             ? ptTitle : newLevel.Title;
         var body = isPt
             ? $"Você alcançou {levelTitle}! Continue assim!"

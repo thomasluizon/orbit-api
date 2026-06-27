@@ -31,6 +31,15 @@ public class BulkCreateHabitsCommandValidator : AbstractValidator<BulkCreateHabi
                 .NotNull()
                 .WithMessage("Frequency quantity is required when frequency unit is set")
                 .When(h => h.FrequencyUnit is not null);
+
+            habit.RuleFor(h => h.Tags)
+                .Must(tags => tags!.Count <= AppConstants.MaxTagsPerHabit)
+                .WithMessage($"Cannot assign more than {AppConstants.MaxTagsPerHabit} tags per habit")
+                .When(h => h.Tags is not null);
+
+            habit.RuleForEach(h => h.Tags)
+                .MaximumLength(50)
+                .When(h => h.Tags is not null);
         });
     }
 }

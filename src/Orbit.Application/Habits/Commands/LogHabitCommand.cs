@@ -191,6 +191,7 @@ public partial class LogHabitCommandHandler(
 
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
+        await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
 
         if (goalSync.AnyJustCompleted)
             await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
@@ -282,6 +283,19 @@ public partial class LogHabitCommandHandler(
         }
     }
 
+    private async Task ProcessOnboardingChecklistSafeAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await services.GamificationService.ProcessOnboardingChecklistAsync(userId, signal, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogOnboardingChecklistFailed(logger, ex, userId);
+        }
+    }
+
     private async Task CheckReferralCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
     {
         try
@@ -351,6 +365,9 @@ public partial class LogHabitCommandHandler(
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
     private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Onboarding checklist processing failed for user {UserId}")]
+    private static partial void LogOnboardingChecklistFailed(ILogger logger, Exception ex, Guid userId);
 }
 
 internal record LinkedGoalSyncResult(IReadOnlyList<LinkedGoalUpdate>? Updates, bool AnyJustCompleted)

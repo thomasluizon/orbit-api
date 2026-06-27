@@ -1,5 +1,6 @@
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -11,7 +12,8 @@ public class UserStreakService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
-    IUserDateService userDateService) : IUserStreakService
+    IUserDateService userDateService,
+    IFriendFeedEventEmitter friendFeedEventEmitter) : IUserStreakService
 {
     public async Task<UserStreakState?> RecalculateAsync(
         Guid userId,
@@ -24,6 +26,7 @@ public class UserStreakService(
         if (user is null)
             return null;
 
+        var previousStreak = user.CurrentStreak;
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         var lookbackStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
@@ -33,7 +36,9 @@ public class UserStreakService(
         var hasRecurring = contributingHabits.Any(h => h.FrequencyUnit is not null);
         if (!hasRecurring)
         {
-            return CalendarFallback(user, completionDateSet, freezeDateSet, awardFreezeIfEligible);
+            var fallbackState = CalendarFallback(user, completionDateSet, freezeDateSet, awardFreezeIfEligible);
+            await friendFeedEventEmitter.EmitStreakMilestonesAsync(user, previousStreak, cancellationToken);
+            return fallbackState;
         }
 
         var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
@@ -53,6 +58,7 @@ public class UserStreakService(
                 AppConstants.MaxStreakFreezesAccumulated,
                 AppConstants.StreakDaysPerFreeze);
         }
+        await friendFeedEventEmitter.EmitStreakMilestonesAsync(user, previousStreak, cancellationToken);
         return new UserStreakState(currentStreak, longestStreak, lastActiveDate);
     }
 

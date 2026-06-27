@@ -21,7 +21,12 @@ public sealed record UserDataExport(
     IReadOnlyList<ExportedAchievement> Achievements,
     IReadOnlyList<ExportedStreakFreeze> StreakFreezes,
     IReadOnlyList<ExportedReferral> Referrals,
-    IReadOnlyList<ExportedApiKey> ApiKeys);
+    IReadOnlyList<ExportedApiKey> ApiKeys,
+    IReadOnlyList<ExportedFriendship> Friendships,
+    IReadOnlyList<ExportedCheer> Cheers,
+    IReadOnlyList<ExportedBlockedUser> BlockedUsers,
+    IReadOnlyList<ExportedReport> Reports,
+    IReadOnlyList<ExportedFriendFeedEvent> FriendFeedEvents);
 
 public sealed record ExportedAccount(
     string Name,
@@ -126,6 +131,39 @@ public sealed record ExportedReferral(
     DateTime CreatedAtUtc,
     DateTime? CompletedAtUtc,
     DateTime? RewardGrantedAtUtc);
+
+public sealed record ExportedFriendship(
+    Guid RequesterId,
+    Guid AddresseeId,
+    string Status,
+    DateTime CreatedAtUtc,
+    DateTime? RespondedAtUtc);
+
+public sealed record ExportedCheer(
+    Guid SenderId,
+    Guid RecipientId,
+    Guid HabitId,
+    string? Note,
+    DateTime CreatedAtUtc);
+
+public sealed record ExportedBlockedUser(
+    Guid BlockerId,
+    Guid BlockedId,
+    DateTime CreatedAtUtc);
+
+public sealed record ExportedReport(
+    Guid ReportedUserId,
+    string Reason,
+    string? Details,
+    Guid? CheerId,
+    string Status,
+    DateTime CreatedAtUtc);
+
+public sealed record ExportedFriendFeedEvent(
+    string Type,
+    int? Value,
+    string? AchievementId,
+    DateTime CreatedAtUtc);
 
 /// <summary>
 /// API key metadata only. The bcrypt secret hash (<c>KeyHash</c>) is intentionally never exported;

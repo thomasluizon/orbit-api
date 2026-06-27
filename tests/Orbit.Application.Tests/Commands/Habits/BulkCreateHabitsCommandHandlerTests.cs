@@ -17,6 +17,7 @@ public class BulkCreateHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<GoogleCalendarSyncSuggestion> _suggestionRepo = Substitute.For<IGenericRepository<GoogleCalendarSyncSuggestion>>();
+    private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -29,8 +30,11 @@ public class BulkCreateHabitsCommandHandlerTests
     public BulkCreateHabitsCommandHandlerTests()
     {
         _handler = new BulkCreateHabitsCommandHandler(
-            _habitRepo, _suggestionRepo, _payGate, _userDateService, _unitOfWork, _cache,
+            _habitRepo, _suggestionRepo, _tagRepo, _payGate, _userDateService, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>());
+
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Tag>().AsReadOnly());
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -240,5 +244,91 @@ public class BulkCreateHabitsCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         await _payGate.DidNotReceive().CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    private (List<Tag> AddedTags, List<Habit> AddedHabits) CaptureTagAndHabitAdds()
+    {
+        var addedTags = new List<Tag>();
+        _tagRepo.AddAsync(Arg.Any<Tag>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedTags.Add(call.Arg<Tag>());
+                return Task.CompletedTask;
+            });
+
+        var addedHabits = new List<Habit>();
+        _habitRepo.AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                addedHabits.Add(call.Arg<Habit>());
+                return Task.CompletedTask;
+            });
+
+        return (addedTags, addedHabits);
+    }
+
+    [Fact]
+    public async Task Handle_WithTags_CreatesAndAttachesNewTagsWithDefaultColor()
+    {
+        var (addedTags, addedHabits) = CaptureTagAndHabitAdds();
+
+        var items = new List<BulkHabitItem>
+        {
+            new("Run", null, FrequencyUnit.Day, 1, Tags: new List<string> { "Fitness", "Health" })
+        };
+        var command = new BulkCreateHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        addedTags.Should().HaveCount(2);
+        addedTags.Select(t => t.Name).Should().BeEquivalentTo(new[] { "Fitness", "Health" });
+        addedTags.Should().AllSatisfy(t => t.Color.Should().Be("#7c3aed"));
+        addedHabits.Should().ContainSingle();
+        addedHabits[0].Tags.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Handle_SharedTagNameAcrossItems_DedupesToSingleTagSharedByBothHabits()
+    {
+        var (addedTags, addedHabits) = CaptureTagAndHabitAdds();
+
+        var items = new List<BulkHabitItem>
+        {
+            new("Run", null, FrequencyUnit.Day, 1, Tags: new List<string> { "Health" }),
+            new("Sleep", null, FrequencyUnit.Day, 1, Tags: new List<string> { "health" })
+        };
+        var command = new BulkCreateHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        addedTags.Should().ContainSingle();
+        addedTags[0].Name.Should().Be("Health");
+        addedHabits.Should().HaveCount(2);
+        addedHabits[0].Tags.Single().Should().BeSameAs(addedHabits[1].Tags.Single());
+    }
+
+    [Fact]
+    public async Task Handle_ExistingTagName_ReusesExistingTagWithoutCreating()
+    {
+        var existingTag = Tag.Create(UserId, "Health", "#123456").Value;
+        _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Tag> { existingTag }.AsReadOnly());
+
+        var (addedTags, addedHabits) = CaptureTagAndHabitAdds();
+
+        var items = new List<BulkHabitItem>
+        {
+            new("Run", null, FrequencyUnit.Day, 1, Tags: new List<string> { "health" })
+        };
+        var command = new BulkCreateHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        addedTags.Should().BeEmpty();
+        addedHabits.Should().ContainSingle();
+        addedHabits[0].Tags.Single().Should().BeSameAs(existingTag);
     }
 }

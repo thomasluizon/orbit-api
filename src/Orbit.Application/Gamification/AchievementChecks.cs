@@ -31,6 +31,15 @@ public static class AchievementChecks
         newAchievements.Add((entity, definition));
     }
 
+    public static void CheckOnboardingChecklist(
+        User user,
+        HashSet<string> earned,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
+    {
+        if (user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAstra)
+            TryGrant(AchievementDefinitions.OnboardingComplete, user, earned, newAchievements);
+    }
+
     public static void CheckConsistencyAchievements(
         int currentStreak,
         HashSet<string> earned,
@@ -47,8 +56,12 @@ public static class AchievementChecks
             TryGrant(AchievementDefinitions.QuarterChampion, user, earned, newAchievements);
         if (currentStreak >= 100)
             TryGrant(AchievementDefinitions.Centurion, user, earned, newAchievements);
+        if (currentStreak >= 180)
+            TryGrant(AchievementDefinitions.HalfYearHero, user, earned, newAchievements);
         if (currentStreak >= 365)
             TryGrant(AchievementDefinitions.YearOfDiscipline, user, earned, newAchievements);
+        if (currentStreak >= 500)
+            TryGrant(AchievementDefinitions.StreakTitan, user, earned, newAchievements);
     }
 
     public static void CheckVolumeAchievements(

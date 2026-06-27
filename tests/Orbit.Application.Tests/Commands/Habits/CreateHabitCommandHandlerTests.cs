@@ -63,6 +63,17 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ValidCommand_FiresOnboardingHabitCreatedSignal()
+    {
+        var command = new CreateHabitCommand(UserId, "Read", null, FrequencyUnit.Day, 1);
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        await _gamificationService.Received(1).ProcessOnboardingChecklistAsync(
+            UserId, OnboardingChecklistSignal.HabitCreated, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_FirstRootHabit_AssignsPositionZero()
     {
         _habitRepo.FindAsync(

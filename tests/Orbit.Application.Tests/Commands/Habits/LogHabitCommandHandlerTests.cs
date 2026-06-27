@@ -82,6 +82,22 @@ public class LogHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SuccessfulLog_FiresOnboardingHabitLoggedSignal()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        await _gamificationService.Received(1).ProcessOnboardingChecklistAsync(
+            UserId, OnboardingChecklistSignal.HabitLogged, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ConcurrencyConflictOnLogCommit_ReloadsHabitAndRetries()
     {
         var habit = CreateTestHabit();

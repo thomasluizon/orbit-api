@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -14,6 +15,7 @@ public class GetStreakInfoQueryHandlerTests
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
+    private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GetStreakInfoQueryHandler _handler;
 
@@ -22,14 +24,29 @@ public class GetStreakInfoQueryHandlerTests
 
     public GetStreakInfoQueryHandlerTests()
     {
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
         _handler = new GetStreakInfoQueryHandler(
-            _userRepo, _streakFreezeRepo, _userDateService, _userStreakService, _unitOfWork);
+            _userRepo, _streakFreezeRepo, _userDateService, _userStreakService, _featureFlagService, _unitOfWork);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
     private static User CreateTestUser()
     {
         return User.Create("Test User", "test@example.com").Value;
+    }
+
+    private static User CreateFreeUser()
+    {
+        var user = User.Create("Test User", "test@example.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        return user;
+    }
+
+    private void EnableFreeTierFlag()
+    {
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
     }
 
     [Fact]
@@ -174,5 +191,33 @@ public class GetStreakInfoQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.FreezesAvailable.Should().Be(0);
         result.Value.FreezesUsedThisMonth.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_FlagOff_ReturnsPayGate()
+    {
+        var user = CreateFreeUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_FlagOn_ReturnsStreakInfo()
+    {
+        var user = CreateFreeUser();
+        EnableFreeTierFlag();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _streakFreezeRepo.FindAsync(
+            Arg.Any<Expression<Func<StreakFreeze, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<StreakFreeze>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetStreakInfoQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
     }
 }

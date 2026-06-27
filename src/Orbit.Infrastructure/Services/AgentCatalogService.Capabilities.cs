@@ -30,7 +30,8 @@ public partial class AgentCatalogService
             .. ApiKeyCapabilities(),
             .. SupportCapabilities(),
             .. SyncCapabilities(),
-            .. AccountAndAuthCapabilities()
+            .. AccountAndAuthCapabilities(),
+            .. SocialCapabilities()
         ];
     }
 
@@ -634,7 +635,8 @@ public partial class AgentCatalogService
                 [
                     "GamificationController.GetProfile",
                     "GamificationController.GetAchievements",
-                    "GamificationController.GetStreakInfo"
+                    "GamificationController.GetStreakInfo",
+                    "GamificationController.GetRecap"
                 ])
         ];
     }
@@ -881,6 +883,38 @@ public partial class AgentCatalogService
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.FreshConfirmation,
                 controllerActions: ["SyncController.ProcessBatch"])
+        ];
+    }
+
+    private static AgentCapability[] SocialCapabilities()
+    {
+        return
+        [
+            CreateCapability(
+                AgentCapabilityIds.SocialManage,
+                "Manage Social",
+                "Manages friendships, cheers, the friend feed, handles, blocking, and reporting. Cataloged but not exposed to the agent in this phase.",
+                "social",
+                AgentScopes.ManageSocial,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                controllerActions:
+                [
+                    "FriendsController.GetFriends",
+                    "FriendsController.GetFeed",
+                    "FriendsController.GetCheers",
+                    "FriendsController.SendRequest",
+                    "FriendsController.AcceptRequest",
+                    "FriendsController.RemoveFriend",
+                    "FriendsController.SendCheer",
+                    "FriendsController.Block",
+                    "FriendsController.Unblock",
+                    "FriendsController.Report",
+                    "ProfileController.SetHandle",
+                    "ProfileController.SetSocialOptIn"
+                ])
         ];
     }
 

@@ -24,6 +24,11 @@ public class ExportUserDataQueryHandler(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IGenericRepository<Referral> referralRepository,
     IGenericRepository<ApiKey> apiKeyRepository,
+    IGenericRepository<Friendship> friendshipRepository,
+    IGenericRepository<Cheer> cheerRepository,
+    IGenericRepository<BlockedUser> blockedUserRepository,
+    IGenericRepository<Report> reportRepository,
+    IGenericRepository<FriendFeedEvent> friendFeedEventRepository,
     IUserDateService userDateService,
     IStreakGoalReadSyncer streakGoalReadSyncer)
     : IRequestHandler<ExportUserDataQuery, Result<UserDataExport>>
@@ -60,6 +65,16 @@ public class ExportUserDataQueryHandler(
         var streakFreezes = await streakFreezeRepository.FindAsync(s => s.UserId == request.UserId, cancellationToken);
         var referrals = await referralRepository.FindAsync(r => r.ReferrerId == request.UserId, cancellationToken);
         var apiKeys = await apiKeyRepository.FindAsync(k => k.UserId == request.UserId, cancellationToken);
+        var friendships = await friendshipRepository.FindAsync(
+            f => f.RequesterId == request.UserId || f.AddresseeId == request.UserId, cancellationToken);
+        var cheers = await cheerRepository.FindAsync(
+            c => c.SenderId == request.UserId || c.RecipientId == request.UserId, cancellationToken);
+        var blockedUsers = await blockedUserRepository.FindAsync(
+            b => b.BlockerId == request.UserId, cancellationToken);
+        var reports = await reportRepository.FindAsync(
+            r => r.ReporterId == request.UserId, cancellationToken);
+        var friendFeedEvents = await friendFeedEventRepository.FindAsync(
+            e => e.ActorUserId == request.UserId, cancellationToken);
 
         var exportedAtUtc = DateTime.UtcNow;
         var export = new UserDataExport(
@@ -107,6 +122,26 @@ public class ExportUserDataQueryHandler(
             apiKeys
                 .OrderBy(k => k.CreatedAtUtc)
                 .Select(MapApiKey)
+                .ToList(),
+            friendships
+                .OrderBy(f => f.CreatedAtUtc)
+                .Select(f => new ExportedFriendship(f.RequesterId, f.AddresseeId, f.Status.ToString(), f.CreatedAtUtc, f.RespondedAtUtc))
+                .ToList(),
+            cheers
+                .OrderBy(c => c.CreatedAtUtc)
+                .Select(c => new ExportedCheer(c.SenderId, c.RecipientId, c.HabitId, c.Note, c.CreatedAtUtc))
+                .ToList(),
+            blockedUsers
+                .OrderBy(b => b.CreatedAtUtc)
+                .Select(b => new ExportedBlockedUser(b.BlockerId, b.BlockedId, b.CreatedAtUtc))
+                .ToList(),
+            reports
+                .OrderBy(r => r.CreatedAtUtc)
+                .Select(r => new ExportedReport(r.ReportedUserId, r.Reason.ToString(), r.Details, r.CheerId, r.Status.ToString(), r.CreatedAtUtc))
+                .ToList(),
+            friendFeedEvents
+                .OrderBy(e => e.CreatedAtUtc)
+                .Select(e => new ExportedFriendFeedEvent(e.Type.ToString(), e.Value, e.AchievementId, e.CreatedAtUtc))
                 .ToList());
 
         return Result.Success(export);

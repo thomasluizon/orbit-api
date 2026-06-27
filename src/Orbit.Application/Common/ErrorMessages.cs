@@ -77,6 +77,7 @@ public static class ErrorMessages
     public static readonly AppError AutoSyncEnabledRequired = new(ErrorCodes.AutoSyncEnabledRequired, "Enabled is required.");
     public static readonly AppError CalendarIdsRequired = new(ErrorCodes.CalendarIdsRequired, "Calendar ids are required.");
     public static readonly AppError NoHabitsForPeriod = new(ErrorCodes.NoHabitsForPeriod, "No habits found for this period.");
+    public static readonly AppError InvalidPeriod = new(ErrorCodes.InvalidPeriod, "Period must be one of: week, month, quarter, semester, year.");
     public static readonly AppError AiSummaryDisabled = new(ErrorCodes.AiSummaryDisabled, "AI summary is disabled.");
     public static readonly AppError NoActiveGoals = new(ErrorCodes.NoActiveGoals, "No active goals found.");
     public static readonly AppError NoGoalsData = new(ErrorCodes.NoGoalsData, "No goals data provided.");
@@ -123,4 +124,13 @@ public static class ErrorMessages
     public static readonly AppError MutationFailed = new(ErrorCodes.MutationFailed, "Mutation failed");
     public static readonly AppError BulkLogItemFailed = new(ErrorCodes.MutationFailed, "An error occurred processing this item");
     public static readonly AppError UpgradeRequired = new(ErrorCodes.UpgradeRequired, "This app version is no longer supported. Please update to continue.");
+    public static readonly AppError SocialDisabled = new(ErrorCodes.SocialDisabled, "Turn on social features to use this.");
+    public static readonly AppError HandleTaken = new(ErrorCodes.HandleTaken, "That handle is already taken.");
+    public static readonly AppError FriendLimitReached = new(ErrorCodes.FriendLimitReached, "You've reached the maximum of {0} friends.");
+    public static readonly AppError AlreadyFriends = new(ErrorCodes.AlreadyFriends, "You're already connected with this person.");
+    public static readonly AppError Blocked = new(ErrorCodes.Blocked, "This action isn't available for this user.");
+    public static readonly AppError NotFriends = new(ErrorCodes.NotFriends, "You can only do this with an accepted friend.");
+    public static readonly AppError ContentRejected = new(ErrorCodes.ContentRejected, "This note can't be sent. Please revise it and try again.");
+    public static readonly AppError FriendRequestNotFound = new(ErrorCodes.FriendRequestNotFound, "Friend request not found.");
+    public static readonly AppError CheerNotFound = new(ErrorCodes.CheerNotFound, "Cheer not found.");
 }

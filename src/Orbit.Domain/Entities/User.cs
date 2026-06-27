@@ -10,6 +10,9 @@ public partial class User : Entity
     [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
     private static partial Regex EmailRegex();
 
+    [GeneratedRegex(@"^[A-Za-z0-9_]{3,20}$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex HandleRegex();
+
     public string Name { get; private set; } = null!;
     public string Email { get; private set; } = null!;
     public string? TimeZone { get; private set; }
@@ -17,6 +20,10 @@ public partial class User : Entity
     public bool AiSummaryEnabled { get; private set; } = true;
     public bool HasCompletedOnboarding { get; private set; } = false;
     public bool HasCompletedTour { get; private set; } = false;
+    public bool HasCreatedFirstHabit { get; private set; } = false;
+    public bool HasLoggedFirstHabit { get; private set; } = false;
+    public bool HasTriedAstra { get; private set; } = false;
+    public bool HasCompletedOnboardingChecklist { get; private set; } = false;
     public string? Language { get; private set; }
     public UserPlan Plan { get; private set; } = UserPlan.Free;
     public string? StripeCustomerId { get; private set; }
@@ -45,6 +52,8 @@ public partial class User : Entity
     public int WeekStartDay { get; private set; } = 1;
     public string? ReferralCode { get; private set; }
     public Guid? ReferredByUserId { get; private set; }
+    public string? Handle { get; private set; }
+    public bool SocialOptIn { get; private set; }
     public int TotalXp { get; private set; } = 0;
     public int Level { get; private set; } = 1;
     public string? ReferralCouponId { get; private set; }
@@ -190,6 +199,14 @@ public partial class User : Entity
     }
 
     public void CompleteOnboarding() => HasCompletedOnboarding = true;
+
+    public void MarkFirstHabitCreated() => HasCreatedFirstHabit = true;
+
+    public void MarkFirstHabitLogged() => HasLoggedFirstHabit = true;
+
+    public void MarkAstraUsed() => HasTriedAstra = true;
+
+    public void CompleteOnboardingChecklist() => HasCompletedOnboardingChecklist = true;
 
     public void CompleteTour() => HasCompletedTour = true;
 
@@ -354,6 +371,24 @@ public partial class User : Entity
 
     public void SetReferralCode(string code) => ReferralCode = code;
 
+    public Result SetHandle(string handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle) || !HandleRegex().IsMatch(handle))
+            return Result.Failure(DomainErrors.InvalidHandle);
+
+        Handle = handle;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Assigns the deterministic, collision-free default handle (<c>user_</c> + the first 12 hex of
+    /// the user's id) for a freshly created account. Bypasses format validation because the result is
+    /// provably valid (17 chars, alphanumeric + underscore); the same formula backfills existing rows.
+    /// </summary>
+    public void SeedDefaultHandle() => Handle = $"user_{Id:N}"[..17];
+
+    public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
+
     public void SetReferredBy(Guid referrerUserId) => ReferredByUserId = referrerUserId;
 
     public void ExtendTrial(int days)
@@ -374,7 +409,7 @@ public partial class User : Entity
 
     public void SetLevel(int level)
     {
-        if (level < 1 || level > 10) return;
+        if (level < 1) return;
         Level = level;
     }
 

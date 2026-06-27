@@ -1,11 +1,16 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
-public class FeatureFlagService(OrbitDbContext dbContext) : IFeatureFlagService
+public class FeatureFlagService(OrbitDbContext dbContext, IMemoryCache cache) : IFeatureFlagService
 {
+    private const string EnabledFlagsCacheKey = "feature-flags:enabled";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
+
     public async Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default)
@@ -17,10 +22,7 @@ public class FeatureFlagService(OrbitDbContext dbContext) : IFeatureFlagService
         if (user is null)
             return [];
 
-        var flags = await dbContext.AppFeatureFlags
-            .AsNoTracking()
-            .Where(item => item.Enabled)
-            .ToListAsync(cancellationToken);
+        var flags = await GetEnabledFlagsAsync(cancellationToken);
 
         return flags
             .Where(flag => string.IsNullOrWhiteSpace(flag.PlanRequirement) || UserHasFeaturePlan(user, flag.PlanRequirement))
@@ -29,7 +31,24 @@ public class FeatureFlagService(OrbitDbContext dbContext) : IFeatureFlagService
             .ToList();
     }
 
-    private static bool UserHasFeaturePlan(Orbit.Domain.Entities.User user, string planRequirement)
+    private async Task<IReadOnlyList<EnabledFlag>> GetEnabledFlagsAsync(CancellationToken cancellationToken)
+    {
+        if (cache.TryGetValue(EnabledFlagsCacheKey, out IReadOnlyList<EnabledFlag>? cached) && cached is not null)
+            return cached;
+
+        var flags = await dbContext.AppFeatureFlags
+            .AsNoTracking()
+            .Where(item => item.Enabled)
+            .Select(item => new EnabledFlag(item.Key, item.PlanRequirement))
+            .ToListAsync(cancellationToken);
+
+        cache.Set(EnabledFlagsCacheKey, (IReadOnlyList<EnabledFlag>)flags, CacheTtl);
+        return flags;
+    }
+
+    private sealed record EnabledFlag(string Key, string? PlanRequirement);
+
+    private static bool UserHasFeaturePlan(User user, string planRequirement)
     {
         return planRequirement.Trim().ToLowerInvariant() switch
         {
