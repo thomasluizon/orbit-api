@@ -121,4 +121,5 @@ public static class ErrorCodes
     public const string NotFriends = "NOT_FRIENDS";
     public const string ContentRejected = "CONTENT_REJECTED";
     public const string FriendRequestNotFound = "FRIEND_REQUEST_NOT_FOUND";
+    public const string CheerNotFound = "CHEER_NOT_FOUND";
 }

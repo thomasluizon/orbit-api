@@ -23,7 +23,9 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["cheers"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),
             ["friend-requests"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
             ["reports"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),
-            ["set-handle"] = new(TimeSpan.FromHours(24), PermitLimit: 5, SegmentCount: 1)
+            ["set-handle"] = new(TimeSpan.FromHours(24), PermitLimit: 5, SegmentCount: 1),
+            ["block"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
+            ["unblock"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1)
         };
 
     public async Task<DistributedRateLimitDecision> TryAcquireAsync(

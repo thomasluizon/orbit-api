@@ -132,4 +132,5 @@ public static class ErrorMessages
     public static readonly AppError NotFriends = new(ErrorCodes.NotFriends, "You can only do this with an accepted friend.");
     public static readonly AppError ContentRejected = new(ErrorCodes.ContentRejected, "This note can't be sent. Please revise it and try again.");
     public static readonly AppError FriendRequestNotFound = new(ErrorCodes.FriendRequestNotFound, "Friend request not found.");
+    public static readonly AppError CheerNotFound = new(ErrorCodes.CheerNotFound, "Cheer not found.");
 }

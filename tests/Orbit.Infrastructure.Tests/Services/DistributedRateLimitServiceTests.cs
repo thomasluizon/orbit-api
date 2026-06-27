@@ -84,6 +84,21 @@ public class DistributedRateLimitServiceTests : IDisposable
         decision.CurrentCount.Should().Be(10);
     }
 
+    [Theory]
+    [InlineData("block")]
+    [InlineData("unblock")]
+    public async Task TryAcquireAsync_ModerationPolicy_BlocksAfterPermitLimit(string policyName)
+    {
+        DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);
+
+        for (var attempt = 0; attempt < 51; attempt++)
+            finalDecision = await _service.TryAcquireAsync(policyName, "user:blocker");
+
+        finalDecision.Allowed.Should().BeFalse();
+        finalDecision.PermitLimit.Should().Be(50);
+        finalDecision.CurrentCount.Should().Be(50);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => instant;

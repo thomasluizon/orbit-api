@@ -18,6 +18,7 @@ public record ReportUserCommand(
 public class ReportUserCommandHandler(
     SocialAccessGuard socialAccessGuard,
     IGenericRepository<User> userRepository,
+    IGenericRepository<Cheer> cheerRepository,
     IGenericRepository<Report> reportRepository,
     IUnitOfWork unitOfWork) : IRequestHandler<ReportUserCommand, Result<Guid>>
 {
@@ -30,6 +31,14 @@ public class ReportUserCommandHandler(
         var targetExists = await userRepository.AnyAsync(u => u.Id == request.ReportedUserId, cancellationToken);
         if (!targetExists)
             return Result.Failure<Guid>(ErrorMessages.UserNotFound);
+
+        if (request.CheerId.HasValue)
+        {
+            var cheer = await cheerRepository.FindOneTrackedAsync(
+                c => c.Id == request.CheerId.Value, cancellationToken: cancellationToken);
+            if (cheer is null || (cheer.SenderId != request.ReportedUserId && cheer.RecipientId != request.ReportedUserId))
+                return Result.Failure<Guid>(ErrorMessages.CheerNotFound);
+        }
 
         var createResult = Report.Create(
             request.UserId,

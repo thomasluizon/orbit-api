@@ -33,13 +33,13 @@ public class BlockUserCommandHandler(
         if (alreadyBlocked)
             return Result.Success();
 
-        var createResult = BlockedUser.Create(request.UserId, request.BlockedUserId);
-        if (createResult.IsFailure)
-            return createResult;
-
         var targetExists = await userRepository.AnyAsync(u => u.Id == request.BlockedUserId, cancellationToken);
         if (!targetExists)
             return Result.Failure(ErrorMessages.UserNotFound);
+
+        var createResult = BlockedUser.Create(request.UserId, request.BlockedUserId);
+        if (createResult.IsFailure)
+            return createResult;
 
         await blockedUserRepository.AddAsync(createResult.Value, cancellationToken);
 

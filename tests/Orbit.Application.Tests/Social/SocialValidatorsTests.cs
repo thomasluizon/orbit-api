@@ -118,4 +118,14 @@ public class SocialValidatorsTests
         var result = validator.Validate(new SetHandleCommand(UserId, handle));
         result.IsValid.Should().Be(expectedValid);
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void GetFriends_RequiresUserId(bool hasUserId)
+    {
+        var validator = new GetFriendsQueryValidator();
+        var result = validator.Validate(new GetFriendsQuery(hasUserId ? UserId : Guid.Empty));
+        result.IsValid.Should().Be(hasUserId);
+    }
 }

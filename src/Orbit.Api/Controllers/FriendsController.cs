@@ -118,6 +118,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("block")]
+    [DistributedRateLimit("block")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -135,6 +136,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpDelete("block/{blockedUserId:guid}")]
+    [DistributedRateLimit("unblock")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Unblock(Guid blockedUserId, CancellationToken cancellationToken)

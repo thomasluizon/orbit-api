@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -15,6 +14,7 @@ public class BlockReportCommandTests
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Friendship> _friendshipRepository = Substitute.For<IGenericRepository<Friendship>>();
     private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
+    private readonly IGenericRepository<Cheer> _cheerRepository = Substitute.For<IGenericRepository<Cheer>>();
     private readonly IGenericRepository<Report> _reportRepository = Substitute.For<IGenericRepository<Report>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
@@ -31,10 +31,14 @@ public class BlockReportCommandTests
         SocialTestHelpers.StubFind(_blockedUserRepository);
         SocialTestHelpers.StubFind(_friendshipRepository);
         SocialTestHelpers.StubFind(_reportRepository);
+        SocialTestHelpers.StubFind(_cheerRepository);
     }
 
     private BlockUserCommandHandler BlockHandler() =>
         new(_guard, _friendGraph, _userRepository, _blockedUserRepository, _friendshipRepository, _unitOfWork);
+
+    private ReportUserCommandHandler ReportHandler() =>
+        new(_guard, _userRepository, _cheerRepository, _reportRepository, _unitOfWork);
 
     [Fact]
     public async Task Block_CreatesRowAndRemovesFriendship()
@@ -64,13 +68,15 @@ public class BlockReportCommandTests
     }
 
     [Fact]
-    public async Task Block_UnknownTarget_ReturnsUserNotFound()
+    public async Task Block_UnknownTarget_ReturnsUserNotFound_WithoutPersisting()
     {
         SocialTestHelpers.StubUsers(_userRepository, _caller);
 
         var result = await BlockHandler().Handle(new BlockUserCommand(_caller.Id, Guid.NewGuid()), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.UserNotFound);
+        await _blockedUserRepository.DidNotReceive().AddAsync(Arg.Any<BlockedUser>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -99,11 +105,11 @@ public class BlockReportCommandTests
     [Fact]
     public async Task Report_CreatesPendingReportWithReasonAndOptionalCheer()
     {
-        var cheerId = Guid.NewGuid();
-        var handler = new ReportUserCommandHandler(_guard, _userRepository, _reportRepository, _unitOfWork);
+        var cheer = Cheer.Create(_caller.Id, _target.Id, Guid.NewGuid(), "nice").Value;
+        SocialTestHelpers.StubFind(_cheerRepository, cheer);
 
-        var result = await handler.Handle(
-            new ReportUserCommand(_caller.Id, _target.Id, ReportReason.Harassment, "abusive", cheerId),
+        var result = await ReportHandler().Handle(
+            new ReportUserCommand(_caller.Id, _target.Id, ReportReason.Harassment, "abusive", cheer.Id),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -112,18 +118,54 @@ public class BlockReportCommandTests
                                  && r.ReportedUserId == _target.Id
                                  && r.Reason == ReportReason.Harassment
                                  && r.Details == "abusive"
-                                 && r.CheerId == cheerId
+                                 && r.CheerId == cheer.Id
                                  && r.Status == ReportStatus.Pending),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Report_WithoutCheer_Succeeds()
+    {
+        var result = await ReportHandler().Handle(
+            new ReportUserCommand(_caller.Id, _target.Id, ReportReason.Spam, null, null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _reportRepository.Received(1).AddAsync(
+            Arg.Is<Report>(r => r.CheerId == null), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Report_CheerNotInvolvingReportedUser_ReturnsCheerNotFound()
+    {
+        var unrelatedCheer = Cheer.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), null).Value;
+        SocialTestHelpers.StubFind(_cheerRepository, unrelatedCheer);
+
+        var result = await ReportHandler().Handle(
+            new ReportUserCommand(_caller.Id, _target.Id, ReportReason.Harassment, null, unrelatedCheer.Id),
+            CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.CheerNotFound);
+        await _reportRepository.DidNotReceive().AddAsync(Arg.Any<Report>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Report_CheerDoesNotExist_ReturnsCheerNotFound()
+    {
+        var result = await ReportHandler().Handle(
+            new ReportUserCommand(_caller.Id, _target.Id, ReportReason.Harassment, null, Guid.NewGuid()),
+            CancellationToken.None);
+
+        result.ErrorCode.Should().Be(ErrorCodes.CheerNotFound);
+        await _reportRepository.DidNotReceive().AddAsync(Arg.Any<Report>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Report_UnknownTarget_ReturnsUserNotFound()
     {
         SocialTestHelpers.StubUsers(_userRepository, _caller);
-        var handler = new ReportUserCommandHandler(_guard, _userRepository, _reportRepository, _unitOfWork);
 
-        var result = await handler.Handle(
+        var result = await ReportHandler().Handle(
             new ReportUserCommand(_caller.Id, Guid.NewGuid(), ReportReason.Spam, null, null), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.UserNotFound);
@@ -134,9 +176,8 @@ public class BlockReportCommandTests
     {
         var optedOut = SocialTestHelpers.OptedOutUser();
         SocialTestHelpers.StubUsers(_userRepository, optedOut, _target);
-        var handler = new ReportUserCommandHandler(_guard, _userRepository, _reportRepository, _unitOfWork);
 
-        var result = await handler.Handle(
+        var result = await ReportHandler().Handle(
             new ReportUserCommand(optedOut.Id, _target.Id, ReportReason.Spam, null, null), CancellationToken.None);
 
         result.ErrorCode.Should().Be(ErrorCodes.SocialDisabled);
