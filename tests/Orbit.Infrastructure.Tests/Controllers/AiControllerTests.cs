@@ -493,6 +493,42 @@ public class AiControllerTests
         ok.Value.Should().Be(executorResponse);
     }
 
+    [Fact]
+    public async Task ResolveClarification_SuccessfulPath_DispatchesMergedArgsThroughExecutorWithoutBilling()
+    {
+        StubValidatorOutcome(isValid: true);
+        StubPendingClarification(
+            toolName: "create_habit",
+            partialArgs: "{\"title\":\"Morning habit\"}",
+            allowedValues: ["{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"]);
+        _pendingClarificationStore
+            .MarkResolvedAsync(Arg.Any<Guid>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _operationExecutor.ExecuteAsync(Arg.Any<AgentExecuteOperationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new AgentExecuteOperationResponse(new AgentOperationResult(
+                OperationId: "create_habit",
+                SourceName: "create_habit",
+                RiskClass: AgentRiskClass.Low,
+                ConfirmationRequirement: AgentConfirmationRequirement.None,
+                Status: AgentOperationStatus.Succeeded,
+                TargetName: "Morning habit")));
+
+        await _controller.ResolveClarification(
+            Guid.NewGuid(),
+            new ResolveClarificationRequest("{\"frequency_unit\":\"Day\",\"frequency_quantity\":1}"),
+            CancellationToken.None);
+
+        await _operationExecutor.Received(1).ExecuteAsync(
+            Arg.Is<AgentExecuteOperationRequest>(request =>
+                request.UserId == UserId &&
+                request.OperationId == "create_habit" &&
+                request.Surface == AgentExecutionSurface.Chat &&
+                request.ConfirmationToken == null &&
+                request.Arguments.GetProperty("title").GetString() == "Morning habit" &&
+                request.Arguments.GetProperty("frequency_unit").GetString() == "Day"),
+            Arg.Any<CancellationToken>());
+    }
+
     private void StubValidatorOutcome(bool isValid, string? propertyName = null, string? message = null)
     {
         var validationResult = isValid

@@ -151,6 +151,31 @@ public class SystemPromptBuilderTests
     }
 
     [Fact]
+    public void Build_IncludesEncouragingTone()
+    {
+        var result = BuildPrompt(Array.Empty<Habit>(), Array.Empty<UserFact>());
+
+        result.Should().Contain("Tone and Encouragement");
+        result.Should().Contain("non-judgmental");
+    }
+
+    [Fact]
+    public void BuildStatic_OrdersEncouragingToneAfterIdentityAndBeforeRules()
+    {
+        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
+
+        staticPrompt.Should().Contain("Tone and Encouragement");
+
+        var identityIndex = staticPrompt.IndexOf("Orbit AI", StringComparison.Ordinal);
+        var toneIndex = staticPrompt.IndexOf("Tone and Encouragement", StringComparison.Ordinal);
+        var rulesIndex = staticPrompt.IndexOf("Core Rules", StringComparison.Ordinal);
+
+        toneIndex.Should().BeGreaterThan(identityIndex);
+        rulesIndex.Should().BeGreaterThan(toneIndex);
+    }
+
+    [Fact]
     public void Build_IncludesSecurityRulesForUntrustedContext()
     {
         var result = BuildPrompt(Array.Empty<Habit>(), Array.Empty<UserFact>());

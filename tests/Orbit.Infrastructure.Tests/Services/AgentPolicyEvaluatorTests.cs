@@ -184,4 +184,72 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.ShadowReason.Should().Be("step_up_required");
         decision.PendingOperation.Should().BeNull();
     }
+
+    [Theory]
+    [InlineData(AgentCapabilityIds.HabitsDelete, "delete_habit")]
+    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_create_habits")]
+    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_log_habits")]
+    [InlineData(AgentCapabilityIds.HabitsBulkWrite, "bulk_skip_habits")]
+    [InlineData(AgentCapabilityIds.HabitsBulkDelete, "bulk_delete_habits")]
+    [InlineData(AgentCapabilityIds.TagsDelete, "delete_tag")]
+    public void Evaluate_DestructiveChatCapability_OnChatSurface_RequiresConfirmation(
+        string capabilityId,
+        string sourceName)
+    {
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            capabilityId,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            sourceName,
+            $"{sourceName} via chat",
+            OperationFingerprint: $"{sourceName}:{{\"id\":\"123\"}}"));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.Reason.Should().Be("confirmation_required");
+        decision.PendingOperation.Should().NotBeNull();
+        decision.PendingOperation!.CapabilityId.Should().Be(capabilityId);
+    }
+
+    [Fact]
+    public void Evaluate_GoalsDelete_OnChatSurface_RequiresConfirmation()
+    {
+        var proUser = _dbContext.Users.First(item => item.Id == _userId);
+        proUser.StartTrial(DateTime.UtcNow.AddDays(7));
+        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("goal_tracking", true, "Pro", "Goal tracking"));
+        _dbContext.SaveChanges();
+
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.GoalsDelete,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "delete_goal",
+            "delete_goal via chat",
+            OperationFingerprint: "delete_goal:{\"goalId\":\"123\"}"));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.PendingOperation.Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("create_habit")]
+    [InlineData("log_habit")]
+    public void Evaluate_LowRiskHabitWrite_OnChatSurface_IsAllowed(string sourceName)
+    {
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsWrite,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            sourceName,
+            $"{sourceName} via chat",
+            OperationFingerprint: $"{sourceName}:{{\"title\":\"Meditate\"}}"));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.Allowed);
+        decision.PendingOperation.Should().BeNull();
+    }
 }
