@@ -8,6 +8,29 @@ public class TagTests
     private static readonly Guid ValidUserId = Guid.NewGuid();
 
     [Fact]
+    public void SoftDelete_MarksDeleted()
+    {
+        var tag = Tag.Create(ValidUserId, "fitness", "#FF5733").Value;
+
+        tag.SoftDelete();
+
+        tag.IsDeleted.Should().BeTrue();
+        tag.DeletedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Restore_ClearsDeletedState()
+    {
+        var tag = Tag.Create(ValidUserId, "fitness", "#FF5733").Value;
+        tag.SoftDelete();
+
+        tag.Restore();
+
+        tag.IsDeleted.Should().BeFalse();
+        tag.DeletedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
     public void Create_ValidInput_Success()
     {
         var result = Tag.Create(ValidUserId, "fitness", "#FF5733");

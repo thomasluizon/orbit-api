@@ -188,6 +188,22 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         });
     }
 
+    [HttpPost("{id:guid}/restore")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RestoreGoal(Guid id, CancellationToken cancellationToken)
+    {
+        var command = new RestoreGoalCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(() =>
+        {
+            LogGoalRestored(logger, id, HttpContext.GetUserId());
+            return NoContent();
+        });
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Goal created {GoalId} by user {UserId}")]
     private static partial void LogGoalCreated(ILogger logger, Guid goalId, Guid userId);
 
@@ -196,5 +212,8 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Goal deleted {GoalId} by user {UserId}")]
     private static partial void LogGoalDeleted(ILogger logger, Guid goalId, Guid userId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Goal restored {GoalId} by user {UserId}")]
+    private static partial void LogGoalRestored(ILogger logger, Guid goalId, Guid userId);
 
 }

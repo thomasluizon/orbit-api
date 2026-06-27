@@ -203,7 +203,8 @@ public partial class AgentCatalogService
                     "HabitsController.MoveHabitParent",
                     "HabitsController.DuplicateHabit",
                     "HabitsController.CreateSubHabit",
-                    "HabitsController.LinkGoals"
+                    "HabitsController.LinkGoals",
+                    "HabitsController.RestoreHabit"
                 ]),
 
             CreateCapability(
@@ -350,7 +351,8 @@ public partial class AgentCatalogService
                     "GoalsController.UpdateProgress",
                     "GoalsController.UpdateStatus",
                     "GoalsController.ReorderGoals",
-                    "GoalsController.LinkHabits"
+                    "GoalsController.LinkHabits",
+                    "GoalsController.RestoreGoal"
                 ]),
 
             CreateCapability(
@@ -401,7 +403,7 @@ public partial class AgentCatalogService
                 AgentConfirmationRequirement.None,
                 chatTools: ["assign_tags", "create_tag", "update_tag"],
                 mcpTools: ["create_tag", "update_tag", "assign_tags"],
-                controllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags"]),
+                controllerActions: ["TagsController.CreateTag", "TagsController.UpdateTag", "TagsController.AssignTags", "TagsController.SuggestTags", "TagsController.RestoreTag"]),
 
             CreateCapability(
                 AgentCapabilityIds.TagsDelete,

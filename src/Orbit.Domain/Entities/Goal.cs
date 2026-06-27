@@ -60,6 +60,13 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAtUtc = null;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     private Goal() { }
 
     public record CreateGoalParams(

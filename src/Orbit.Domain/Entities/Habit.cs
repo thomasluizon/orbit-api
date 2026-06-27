@@ -433,10 +433,25 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
-    public void SoftDelete()
+    public void SoftDelete() => SoftDelete(DateTime.UtcNow);
+
+    /// <summary>
+    /// Soft-deletes the habit at a caller-supplied instant so a parent and the sub-habits cascaded
+    /// with it share one <see cref="DeletedAtUtc"/>. Restore uses that shared instant to bring back
+    /// exactly the subtree a single delete removed, without resurrecting a child deleted earlier in
+    /// an unrelated action.
+    /// </summary>
+    public void SoftDelete(DateTime deletedAtUtc)
     {
         IsDeleted = true;
-        DeletedAtUtc = DateTime.UtcNow;
+        DeletedAtUtc = deletedAtUtc;
+        UpdatedAtUtc = deletedAtUtc;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAtUtc = null;
         UpdatedAtUtc = DateTime.UtcNow;
     }
 

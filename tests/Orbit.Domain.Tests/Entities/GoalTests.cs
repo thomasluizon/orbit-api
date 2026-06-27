@@ -24,6 +24,18 @@ public class GoalTests
     }
 
     [Fact]
+    public void Restore_ClearsDeletedState()
+    {
+        var goal = CreateValidGoal();
+        goal.SoftDelete();
+
+        goal.Restore();
+
+        goal.IsDeleted.Should().BeFalse();
+        goal.DeletedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
         var result = Goal.Create(new Goal.CreateGoalParams(

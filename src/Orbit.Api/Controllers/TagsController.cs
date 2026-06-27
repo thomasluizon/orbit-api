@@ -87,6 +87,23 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
         return result.ToErrorResult();
     }
 
+    [HttpPost("{id:guid}/restore")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RestoreTag(Guid id, CancellationToken cancellationToken)
+    {
+        var command = new RestoreTagCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            LogTagRestored(logger, id, HttpContext.GetUserId());
+            return NoContent();
+        }
+        return result.ToErrorResult();
+    }
+
     [HttpPut("{habitId:guid}/assign")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -130,5 +147,8 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Tag deleted {TagId} by user {UserId}")]
     private static partial void LogTagDeleted(ILogger logger, Guid tagId, Guid userId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Tag restored {TagId} by user {UserId}")]
+    private static partial void LogTagRestored(ILogger logger, Guid tagId, Guid userId);
 
 }

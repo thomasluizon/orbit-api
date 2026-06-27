@@ -48,6 +48,13 @@ public class Tag : Entity, ITimestamped, ISoftDeletable
         UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAtUtc = null;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     public Result Update(string name, string color)
     {
         if (string.IsNullOrWhiteSpace(name))

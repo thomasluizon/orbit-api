@@ -45,6 +45,41 @@ public class HabitTests
     }
 
     [Fact]
+    public void SoftDelete_MarksDeletedWithTimestamp()
+    {
+        var habit = CreateValidHabit();
+
+        habit.SoftDelete();
+
+        habit.IsDeleted.Should().BeTrue();
+        habit.DeletedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void SoftDelete_WithInstant_UsesSuppliedTimestamp()
+    {
+        var habit = CreateValidHabit();
+        var instant = new DateTime(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        habit.SoftDelete(instant);
+
+        habit.IsDeleted.Should().BeTrue();
+        habit.DeletedAtUtc.Should().Be(instant);
+    }
+
+    [Fact]
+    public void Restore_ClearsDeletedState()
+    {
+        var habit = CreateValidHabit();
+        habit.SoftDelete();
+
+        habit.Restore();
+
+        habit.IsDeleted.Should().BeFalse();
+        habit.DeletedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
     public void Create_ValidInput_ReturnsSuccess()
     {
         var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1));
