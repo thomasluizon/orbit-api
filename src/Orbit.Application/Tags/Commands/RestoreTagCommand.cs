@@ -1,4 +1,5 @@
 using MediatR;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -8,7 +9,7 @@ namespace Orbit.Application.Tags.Commands;
 
 public record RestoreTagCommand(
     Guid UserId,
-    Guid TagId) : IRequest<Result>;
+    Guid TagId) : IRequest<Result>, IConcurrencyRetryable;
 
 public class RestoreTagCommandHandler(
     IGenericRepository<Tag> tagRepository,

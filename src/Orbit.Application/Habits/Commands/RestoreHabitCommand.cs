@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
@@ -10,7 +11,7 @@ namespace Orbit.Application.Habits.Commands;
 
 public record RestoreHabitCommand(
     Guid UserId,
-    Guid HabitId) : IRequest<Result>;
+    Guid HabitId) : IRequest<Result>, IConcurrencyRetryable;
 
 public class RestoreHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -21,7 +22,7 @@ public class RestoreHabitCommandHandler(
     public async Task<Result> Handle(RestoreHabitCommand request, CancellationToken cancellationToken)
     {
         var userHabits = await habitRepository.FindTrackedIgnoringFiltersAsync(
-            h => h.UserId == request.UserId,
+            h => h.UserId == request.UserId && h.IsDeleted,
             cancellationToken);
 
         var habit = userHabits.FirstOrDefault(h => h.Id == request.HabitId);

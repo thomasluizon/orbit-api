@@ -91,17 +91,16 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RestoreTag(Guid id, CancellationToken cancellationToken)
     {
         var command = new RestoreTagCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
+        return result.ToPayGateAwareResult(() =>
         {
             LogTagRestored(logger, id, HttpContext.GetUserId());
             return NoContent();
-        }
-        return result.ToErrorResult();
+        });
     }
 
     [HttpPut("{habitId:guid}/assign")]

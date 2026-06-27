@@ -337,18 +337,16 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RestoreHabit(Guid id, CancellationToken cancellationToken)
     {
         var command = new RestoreHabitCommand(HttpContext.GetUserId(), id);
         var result = await mediator.Send(command, cancellationToken);
-
-        if (result.IsSuccess)
+        return result.ToPayGateAwareResult(() =>
         {
             LogHabitRestored(logger, id, HttpContext.GetUserId());
             return NoContent();
-        }
-
-        return result.ToErrorResult();
+        });
     }
 
     [HttpGet("{id:guid}/logs")]
