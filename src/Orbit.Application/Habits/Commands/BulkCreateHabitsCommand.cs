@@ -34,7 +34,8 @@ public record BulkHabitItem(
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
     IReadOnlyList<ChecklistItem>? ChecklistItems = null,
     string? GoogleEventId = null,
-    string? Emoji = null);
+    string? Emoji = null,
+    IReadOnlyList<string>? Tags = null);
 
 public record BulkCreateResult(IReadOnlyList<BulkCreateItemResult> Results);
 
@@ -51,12 +52,15 @@ public enum BulkItemStatus { Success, Failed }
 public partial class BulkCreateHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
+    IGenericRepository<Tag> tagRepository,
     IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<BulkCreateHabitsCommandHandler> logger) : IRequestHandler<BulkCreateHabitsCommand, Result<BulkCreateResult>>
 {
+    private const string DefaultTagColor = "#7c3aed";
+
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
         var parentCount = request.Habits.Count;
@@ -82,12 +86,14 @@ public partial class BulkCreateHabitsCommandHandler(
             ? 0
             : existingRoots.Max(h => h.Position ?? -1) + 1;
 
+        var tagsByName = await LoadTagCacheAsync(request, cancellationToken);
+
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             for (int i = 0; i < request.Habits.Count; i++)
             {
                 var itemResult = await CreateSingleHabit(
-                    request.UserId, request.Habits[i], i, userToday, rootPositionCursor + i, ct);
+                    request.UserId, request.Habits[i], i, userToday, rootPositionCursor + i, tagsByName, ct);
                 results.Add(itemResult);
             }
 
@@ -107,7 +113,7 @@ public partial class BulkCreateHabitsCommandHandler(
 
     private async Task<BulkCreateItemResult> CreateSingleHabit(
         Guid userId, BulkHabitItem item, int index, DateOnly userToday, int rootPosition,
-        CancellationToken cancellationToken)
+        Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
     {
         try
         {
@@ -144,6 +150,8 @@ public partial class BulkCreateHabitsCommandHandler(
 
             var parentHabit = habitResult.Value;
             await habitRepository.AddAsync(parentHabit, cancellationToken);
+
+            await AttachTagsAsync(parentHabit, userId, item.Tags, tagsByName, cancellationToken);
 
             if (item.SubHabits is { Count: > 0 })
             {
@@ -194,6 +202,48 @@ public partial class BulkCreateHabitsCommandHandler(
                 Status: BulkItemStatus.Failed,
                 Title: item.Title,
                 Error: "An error occurred processing this item");
+        }
+    }
+
+    private async Task<Dictionary<string, Tag>> LoadTagCacheAsync(
+        BulkCreateHabitsCommand request, CancellationToken cancellationToken)
+    {
+        var tagsByName = new Dictionary<string, Tag>(StringComparer.OrdinalIgnoreCase);
+        if (!request.Habits.Any(h => h.Tags is { Count: > 0 }))
+            return tagsByName;
+
+        var existingTags = await tagRepository.FindTrackedAsync(t => t.UserId == request.UserId, cancellationToken);
+        foreach (var tag in existingTags)
+            tagsByName[tag.Name] = tag;
+
+        return tagsByName;
+    }
+
+    private async Task AttachTagsAsync(
+        Habit habit, Guid userId, IReadOnlyList<string>? tagNames,
+        Dictionary<string, Tag> tagsByName, CancellationToken cancellationToken)
+    {
+        if (tagNames is not { Count: > 0 })
+            return;
+
+        foreach (var rawName in tagNames)
+        {
+            var trimmed = rawName.Trim();
+            if (trimmed.Length == 0)
+                continue;
+
+            if (!tagsByName.TryGetValue(trimmed, out var tag))
+            {
+                var created = Tag.Create(userId, trimmed, DefaultTagColor);
+                if (created.IsFailure)
+                    continue;
+
+                tag = created.Value;
+                await tagRepository.AddAsync(tag, cancellationToken);
+                tagsByName[tag.Name] = tag;
+            }
+
+            habit.AddTag(tag);
         }
     }
 

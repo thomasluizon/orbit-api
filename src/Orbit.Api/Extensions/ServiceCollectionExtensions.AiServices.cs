@@ -175,6 +175,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<IAgentOperationExecutor>(),
                 sp.GetRequiredService<IPendingClarificationStore>(),
-                sp.GetRequiredService<IStreakGoalReadSyncer>()));
+                sp.GetRequiredService<IStreakGoalReadSyncer>(),
+                sp.GetRequiredService<IGamificationService>()));
     }
 }

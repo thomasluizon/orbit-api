@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Commands;
@@ -22,7 +23,25 @@ public partial class ProcessUserChatCommandHandler
                 ct => execution.UserStreakService.RecalculateAsync(userId, ct),
                 cancellationToken);
         }
+
+        await ProcessOnboardingChecklistSafeAsync(userId, OnboardingChecklistSignal.AstraUsed, cancellationToken);
     }
+
+    private async Task ProcessOnboardingChecklistSafeAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await execution.GamificationService.ProcessOnboardingChecklistAsync(userId, signal, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogOnboardingChecklistFailed(logger, ex);
+        }
+    }
+
+    [LoggerMessage(EventId = 27, Level = LogLevel.Warning, Message = "Onboarding checklist processing failed during chat turn")]
+    private static partial void LogOnboardingChecklistFailed(ILogger logger, Exception ex);
 
     private static bool RequiresStreakRecalculation(IEnumerable<ActionResult> actionResults)
     {

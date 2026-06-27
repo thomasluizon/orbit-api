@@ -31,6 +31,15 @@ public static class AchievementChecks
         newAchievements.Add((entity, definition));
     }
 
+    public static void CheckOnboardingChecklist(
+        User user,
+        HashSet<string> earned,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
+    {
+        if (user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAstra)
+            TryGrant(AchievementDefinitions.OnboardingComplete, user, earned, newAchievements);
+    }
+
     public static void CheckConsistencyAchievements(
         int currentStreak,
         HashSet<string> earned,

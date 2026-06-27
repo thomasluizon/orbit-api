@@ -842,4 +842,65 @@ public class UserTests
         awardedAgain.Should().BeFalse();
         user.StreakFreezesAccumulated.Should().Be(1);
     }
+
+    [Fact]
+    public void Create_OnboardingChecklistFlags_DefaultFalse()
+    {
+        var user = CreateValidUser();
+
+        user.HasCreatedFirstHabit.Should().BeFalse();
+        user.HasLoggedFirstHabit.Should().BeFalse();
+        user.HasTriedAstra.Should().BeFalse();
+        user.HasCompletedOnboardingChecklist.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MarkFirstHabitCreated_SetsFlagAndIsIdempotent()
+    {
+        var user = CreateValidUser();
+
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitCreated();
+
+        user.HasCreatedFirstHabit.Should().BeTrue();
+        user.HasLoggedFirstHabit.Should().BeFalse();
+        user.HasTriedAstra.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MarkFirstHabitLogged_SetsFlagAndIsIdempotent()
+    {
+        var user = CreateValidUser();
+
+        user.MarkFirstHabitLogged();
+        user.MarkFirstHabitLogged();
+
+        user.HasLoggedFirstHabit.Should().BeTrue();
+        user.HasCreatedFirstHabit.Should().BeFalse();
+        user.HasTriedAstra.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MarkAstraUsed_SetsFlagAndIsIdempotent()
+    {
+        var user = CreateValidUser();
+
+        user.MarkAstraUsed();
+        user.MarkAstraUsed();
+
+        user.HasTriedAstra.Should().BeTrue();
+        user.HasCreatedFirstHabit.Should().BeFalse();
+        user.HasLoggedFirstHabit.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CompleteOnboardingChecklist_SetsFlagAndIsIdempotent()
+    {
+        var user = CreateValidUser();
+
+        user.CompleteOnboardingChecklist();
+        user.CompleteOnboardingChecklist();
+
+        user.HasCompletedOnboardingChecklist.Should().BeTrue();
+    }
 }

@@ -566,7 +566,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
             IsFlexible: request.IsFlexible,
             ScheduledReminders: request.ScheduledReminders,
             ChecklistItems: request.ChecklistItems,
-            GoogleEventId: request.GoogleEventId);
+            GoogleEventId: request.GoogleEventId,
+            Tags: request.Tags);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Habit created {HabitId} by user {UserId}")]

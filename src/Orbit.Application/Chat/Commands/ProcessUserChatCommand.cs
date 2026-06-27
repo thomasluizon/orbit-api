@@ -87,7 +87,8 @@ public record ChatExecutionDependencies(
     IServiceScopeFactory ServiceScopeFactory,
     IAgentOperationExecutor OperationExecutor,
     IPendingClarificationStore PendingClarificationStore,
-    IStreakGoalReadSyncer StreakGoalReadSyncer);
+    IStreakGoalReadSyncer StreakGoalReadSyncer,
+    IGamificationService GamificationService);
 
 public partial class ProcessUserChatCommandHandler(
     ChatDataDependencies data,

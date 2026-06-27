@@ -76,6 +76,25 @@ public class GetProfileQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ReturnsOnboardingChecklistFlags()
+    {
+        var user = CreateTestUser();
+        user.MarkFirstHabitCreated();
+        user.MarkAstraUsed();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(20);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HasCreatedFirstHabit.Should().BeTrue();
+        result.Value.HasLoggedFirstHabit.Should().BeFalse();
+        result.Value.HasTriedAstra.Should().BeTrue();
+        result.Value.HasCompletedOnboardingChecklist.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Handle_UserWithStreak_ReturnsCurrentAndLongest()
     {
         var user = CreateTestUser();

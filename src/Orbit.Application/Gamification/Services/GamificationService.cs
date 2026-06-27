@@ -274,6 +274,99 @@ public partial class GamificationService(
     }
 
     /// <summary>
+    /// Advances the onboarding setup-checklist flags from a single signal and, once all three
+    /// (habit created, habit logged, Astra used) are set, marks the checklist complete. The signal
+    /// and completion flags apply to every user un-gated so the client card hides consistently;
+    /// the <see cref="AchievementDefinitions.OnboardingComplete"/> achievement is granted only to
+    /// users with Pro access (#186). Short-circuits once the checklist is already complete.
+    /// </summary>
+    public async Task ProcessOnboardingChecklistAsync(
+        Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            var shouldSave = await ComputeOnboardingChecklistAsync(userId, signal, pushes, ct);
+            if (!shouldSave)
+                return;
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                continue;
+            }
+
+            await FlushPushesAsync(pushes, ct);
+            return;
+        }
+    }
+
+    private async Task<bool> ComputeOnboardingChecklistAsync(
+        Guid userId, OnboardingChecklistSignal signal, List<PendingPush> pushes, CancellationToken ct)
+    {
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        if (user is null || user.HasCompletedOnboardingChecklist)
+            return false;
+
+        ApplyOnboardingSignal(user, signal);
+
+        if (!(user.HasCreatedFirstHabit && user.HasLoggedFirstHabit && user.HasTriedAstra))
+            return true;
+
+        user.CompleteOnboardingChecklist();
+
+        if (!user.HasProAccess)
+            return true;
+
+        var earned = await LoadEarnedAchievementIds(userId, ct);
+        var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
+        var previousLevel = user.Level;
+
+        AchievementChecks.CheckOnboardingChecklist(user, earned, newAchievements);
+
+        foreach (var (entity, definition) in newAchievements)
+        {
+            await repos.AchievementRepository.AddAsync(entity, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
+
+        UpdateLevel(user);
+
+        foreach (var (_, definition) in newAchievements)
+            await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
+
+        if (user.Level > previousLevel)
+        {
+            var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
+            await QueueLevelUpNotification(userId, newLevel, user.Language, pushes, ct);
+        }
+
+        return true;
+    }
+
+    private static void ApplyOnboardingSignal(User user, OnboardingChecklistSignal signal)
+    {
+        switch (signal)
+        {
+            case OnboardingChecklistSignal.HabitCreated:
+                user.MarkFirstHabitCreated();
+                break;
+            case OnboardingChecklistSignal.HabitLogged:
+                user.MarkFirstHabitLogged();
+                break;
+            case OnboardingChecklistSignal.AstraUsed:
+                user.MarkAstraUsed();
+                break;
+        }
+    }
+
+    /// <summary>
     /// Template method that handles the common gamification scaffold:
     /// load user, check Pro, load earned achievements, run domain-specific checks,
     /// persist achievements, update level, send notifications, save changes.
@@ -374,6 +467,7 @@ public partial class GamificationService(
         ["first_orbit"] = ("Primeira Órbita", "Crie seu primeiro hábito"),
         ["liftoff"] = ("Decolagem", "Complete seu primeiro hábito"),
         ["mission_control"] = ("Controle de Missão", "Crie sua primeira meta"),
+        ["onboarding_complete"] = ("Tudo Pronto", "Conclua sua lista de configuração"),
         ["week_warrior"] = ("Guerreiro da Semana", "Alcance uma sequência de 7 dias"),
         ["fortnight_focus"] = ("Foco Quinzenal", "Alcance uma sequência de 14 dias"),
         ["monthly_master"] = ("Mestre Mensal", "Alcance uma sequência de 30 dias"),

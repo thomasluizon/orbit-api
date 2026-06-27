@@ -874,4 +874,110 @@ public class GamificationServiceTests
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ProcessOnboardingChecklist_ProUserAllThreeSignals_GrantsOnboardingCompleteOnceAndCompletes()
+    {
+        var user = CreateProUser();
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitLogged();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+
+        user.HasTriedAstra.Should().BeTrue();
+        user.HasCompletedOnboardingChecklist.Should().BeTrue();
+        await _achievementRepo.Received(1).AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.OnboardingComplete),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessOnboardingChecklist_SignalMissing_DoesNotCompleteOrGrant()
+    {
+        var user = CreateProUser();
+        user.MarkFirstHabitCreated();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.HabitLogged);
+
+        user.HasLoggedFirstHabit.Should().BeTrue();
+        user.HasTriedAstra.Should().BeFalse();
+        user.HasCompletedOnboardingChecklist.Should().BeFalse();
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessOnboardingChecklist_FreeUserAllThreeSignals_CompletesButNoAchievement()
+    {
+        var user = CreateFreeUser();
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitLogged();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+
+        user.HasCompletedOnboardingChecklist.Should().BeTrue();
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessOnboardingChecklist_AlreadyComplete_EarlyOutWithoutSaving()
+    {
+        var user = CreateProUser();
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitLogged();
+        user.MarkAstraUsed();
+        user.CompleteOnboardingChecklist();
+        SetupUserLookup(user);
+
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessOnboardingChecklist_AlreadyEarnedAchievement_CompletesWithoutDoubleGrant()
+    {
+        var user = CreateProUser();
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitLogged();
+        SetupUserLookup(user);
+        SetupEarnedAchievements(AchievementDefinitions.OnboardingComplete);
+
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+
+        user.HasCompletedOnboardingChecklist.Should().BeTrue();
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.OnboardingComplete),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessOnboardingChecklist_UserNotFound_DoesNothing()
+    {
+        _userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns((User?)null);
+
+        await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
+
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }
