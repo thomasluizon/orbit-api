@@ -47,8 +47,12 @@ public static class AchievementChecks
             TryGrant(AchievementDefinitions.QuarterChampion, user, earned, newAchievements);
         if (currentStreak >= 100)
             TryGrant(AchievementDefinitions.Centurion, user, earned, newAchievements);
+        if (currentStreak >= 180)
+            TryGrant(AchievementDefinitions.HalfYearHero, user, earned, newAchievements);
         if (currentStreak >= 365)
             TryGrant(AchievementDefinitions.YearOfDiscipline, user, earned, newAchievements);
+        if (currentStreak >= 500)
+            TryGrant(AchievementDefinitions.StreakTitan, user, earned, newAchievements);
     }
 
     public static void CheckVolumeAchievements(

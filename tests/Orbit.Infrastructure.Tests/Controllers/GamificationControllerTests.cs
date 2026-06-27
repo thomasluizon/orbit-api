@@ -7,18 +7,20 @@ using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
 public class GamificationControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GamificationController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GamificationControllerTests()
     {
-        _controller = new GamificationController(_mediator);
+        _controller = new GamificationController(_mediator, _userDateService);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
@@ -106,5 +108,20 @@ public class GamificationControllerTests
 
         var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(403);
+    }
+
+    [Fact]
+    public async Task GetRecap_Success_ReturnsOk()
+    {
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 6, 20));
+        _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(1);
+        _mediator.Send(Arg.Any<GetRecapQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(RecapResponse)!));
+
+        var result = await _controller.GetRecap("week", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
     }
 }

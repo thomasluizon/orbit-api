@@ -2,8 +2,18 @@ using Orbit.Application.Gamification.Models;
 
 namespace Orbit.Application.Gamification;
 
+/// <summary>
+/// The level ladder. Levels 1–10 use the hand-tuned anchor table; levels past 10 follow the
+/// steady-climb quadratic <c>XpRequired(L) = 100·L²</c>, which is value-continuous with the table
+/// at level 10 (both equal 10,000) and grows forever, so there is no level cap. Titles past 10
+/// reuse level 10's "Legend"; the numeric level differentiates.
+/// </summary>
 public static class LevelDefinitions
 {
+    public const int TableMaxLevel = 10;
+    private const int QuadraticXpCoefficient = 100;
+    private const string LegendTitle = "Legend";
+
     private static readonly List<LevelDefinition> _all =
     [
         new(1, "Starter", 0),
@@ -20,20 +30,55 @@ public static class LevelDefinitions
 
     public static IReadOnlyList<LevelDefinition> All => _all;
 
-    public static LevelDefinition GetLevelForXp(int totalXp)
+    /// <summary>
+    /// Total XP required to reach <paramref name="level"/>. Levels at or below the anchor table use
+    /// its thresholds; past it, <c>100·level²</c> (which equals the table at level 10, so the curve
+    /// is continuous). Levels below 1 require 0 XP.
+    /// </summary>
+    public static int XpRequiredForLevel(int level)
     {
-        for (var i = _all.Count - 1; i >= 0; i--)
-        {
-            if (totalXp >= _all[i].XpRequired)
-                return _all[i];
-        }
-        return _all[0];
+        if (level <= 1) return 0;
+        if (level <= TableMaxLevel) return _all[level - 1].XpRequired;
+        return QuadraticXpCoefficient * level * level;
     }
 
-    public static int? GetXpToNextLevel(int totalXp)
+    /// <summary>
+    /// The display title for <paramref name="level"/>: the anchor table's title up to level 10,
+    /// then "Legend" for every level beyond.
+    /// </summary>
+    public static string TitleForLevel(int level)
+    {
+        if (level < 1) return _all[0].Title;
+        if (level <= TableMaxLevel) return _all[level - 1].Title;
+        return LegendTitle;
+    }
+
+    public static LevelDefinition GetLevelForXp(int totalXp)
+    {
+        if (totalXp < _all[TableMaxLevel - 1].XpRequired)
+        {
+            for (var i = _all.Count - 1; i >= 0; i--)
+            {
+                if (totalXp >= _all[i].XpRequired)
+                    return _all[i];
+            }
+            return _all[0];
+        }
+
+        var level = (int)Math.Floor(Math.Sqrt(totalXp / (double)QuadraticXpCoefficient));
+        if (level < TableMaxLevel) level = TableMaxLevel;
+        while (XpRequiredForLevel(level + 1) <= totalXp) level++;
+        while (XpRequiredForLevel(level) > totalXp) level--;
+        return new LevelDefinition(level, TitleForLevel(level), XpRequiredForLevel(level));
+    }
+
+    /// <summary>
+    /// XP remaining until the next level. With infinite levels this is never null — the curve always
+    /// has a next threshold.
+    /// </summary>
+    public static int GetXpToNextLevel(int totalXp)
     {
         var current = GetLevelForXp(totalXp);
-        if (current.Level >= 10) return null;
-        var next = _all[current.Level];        return next.XpRequired - totalXp;
+        return XpRequiredForLevel(current.Level + 1) - totalXp;
     }
 }

@@ -635,13 +635,13 @@ public class UserTests
     }
 
     [Fact]
-    public void SetLevel_AboveMaximum_NoChange()
+    public void SetLevel_PastTableMax_UpdatesLevel()
     {
         var user = CreateValidUser();
 
         user.SetLevel(11);
 
-        user.Level.Should().Be(1);
+        user.Level.Should().Be(11);
     }
 
     [Fact]

@@ -374,7 +374,7 @@ public partial class User : Entity
 
     public void SetLevel(int level)
     {
-        if (level < 1 || level > 10) return;
+        if (level < 1) return;
         Level = level;
     }
 

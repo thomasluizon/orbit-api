@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Services.Hosting;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Auto-activates a streak freeze for a Pro user who held an active streak but logged
+/// Auto-activates a streak freeze for an eligible user who held an active streak but logged
 /// nothing on their fully-elapsed local "yesterday". Inserting a <see cref="StreakFreeze"/>
 /// row for the missed date is sufficient to preserve the streak: the presence-based
 /// resolver in <see cref="UserStreakService"/> treats any date carrying a freeze as covered,
@@ -66,6 +66,10 @@ public partial class StreakFreezeAutoActivationService(
 
         if (candidates.Count == 0) return;
 
+        var gamificationFreeTierEnabled = await dbContext.AppFeatureFlags
+            .AsNoTracking()
+            .AnyAsync(f => f.Key == FeatureFlagKeys.GamificationFreeTier && f.Enabled, ct);
+
         var candidateIds = candidates.Select(u => u.Id).ToList();
 
         var earliestMissed = utcYesterday.AddDays(-MaxTimeZoneSkewDays);
@@ -85,7 +89,7 @@ public partial class StreakFreezeAutoActivationService(
         var completionsByUser = await LoadRecentCompletionsAsync(dbContext, candidateIds, monthFloor, ct);
 
         foreach (var user in candidates)
-            await ProcessUserAsync(user, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
+            await ProcessUserAsync(user, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
     }
 
     private static async Task<Dictionary<Guid, HashSet<DateOnly>>> LoadRecentCompletionsAsync(
@@ -121,6 +125,7 @@ public partial class StreakFreezeAutoActivationService(
 
     private async Task ProcessUserAsync(
         User user,
+        bool gamificationFreeTierEnabled,
         Dictionary<Guid, List<StreakFreeze>> freezesByUser,
         Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
         Dictionary<Guid, HashSet<DateOnly>> completionsByUser,
@@ -128,7 +133,7 @@ public partial class StreakFreezeAutoActivationService(
         OrbitDbContext dbContext,
         CancellationToken ct)
     {
-        if (!user.HasProAccess) return;
+        if (!user.HasProAccess && !gamificationFreeTierEnabled) return;
 
         var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
         var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));

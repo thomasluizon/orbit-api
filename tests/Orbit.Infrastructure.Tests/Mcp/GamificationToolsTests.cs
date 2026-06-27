@@ -27,7 +27,8 @@ public class GamificationToolsTests
         var profile = new GamificationProfileResponse(
             1500, 5, "Achiever", 1000, 2000, 500,
             3, 10, [], [],
-            15, 20, new DateOnly(2026, 4, 2));
+            15, 20, new DateOnly(2026, 4, 2),
+            true, false, new NextRewardCarrot(6, "Achiever", 500, null));
 
         _mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(profile));

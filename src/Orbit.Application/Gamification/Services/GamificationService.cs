@@ -357,6 +357,8 @@ public partial class GamificationService(
         ["quarter_champion"] = ("Campeão Trimestral", "Alcance uma sequência de 90 dias"),
         ["centurion"] = ("Centurião", "Alcance uma sequência de 100 dias"),
         ["year_of_discipline"] = ("Ano de Disciplina", "Alcance uma sequência de 365 dias"),
+        ["half_year_hero"] = ("Herói do Semestre", "Alcance uma sequência de 180 dias"),
+        ["streak_titan"] = ("Titã da Sequência", "Alcance uma sequência de 500 dias"),
         ["getting_momentum"] = ("Ganhando Ritmo", "Complete 10 hábitos no total"),
         ["building_habits"] = ("Construindo Hábitos", "Complete 50 hábitos no total"),
         ["dedicated"] = ("Dedicado", "Complete 100 hábitos no total"),
@@ -373,6 +375,7 @@ public partial class GamificationService(
         ["night_owl"] = ("Coruja Noturna", "Complete um hábito após as 22h (10 vezes)"),
         ["comeback"] = ("Retorno", "Retome após 7+ dias de inatividade"),
         ["bad_habit_breaker"] = ("Quebrador de Maus Hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
+        ["first_cheer"] = ("Boas Energias", "Envie ou receba seu primeiro incentivo"),
     };
 
     private static readonly Dictionary<int, string> LevelTranslationsPt = new()
@@ -424,7 +427,7 @@ public partial class GamificationService(
         var title = isPt
             ? $"Subiu de nível! Agora você está no nível {newLevel.Level}"
             : $"Level Up! You're now Level {newLevel.Level}";
-        var levelTitle = isPt && LevelTranslationsPt.TryGetValue(newLevel.Level, out var ptTitle)
+        var levelTitle = isPt && LevelTranslationsPt.TryGetValue(Math.Min(newLevel.Level, LevelDefinitions.TableMaxLevel), out var ptTitle)
             ? ptTitle : newLevel.Title;
         var body = isPt
             ? $"Você alcançou {levelTitle}! Continue assim!"

@@ -54,7 +54,7 @@ public class ProfileToolsTests
             true, true, true, true, "pt-BR", "Pro", true, false, null, null,
             5, 100, false, false, null, null, false, 1, 500, 5, "Achiever",
             0, 10, 12, 2, null, null,
-            false, GoogleCalendarAutoSyncStatus.Idle, null);
+            false, GoogleCalendarAutoSyncStatus.Idle, null, true);
 
         _mediator.Send(Arg.Any<GetProfileQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(profile));

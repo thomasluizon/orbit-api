@@ -36,7 +36,10 @@ public class LevelDefinitionsTests
     [InlineData(4000, 8, "Admiral")]
     [InlineData(6000, 9, "Elite")]
     [InlineData(10_000, 10, "Legend")]
-    [InlineData(50_000, 10, "Legend")]
+    [InlineData(12_099, 10, "Legend")]
+    [InlineData(12_100, 11, "Legend")]
+    [InlineData(40_000, 20, "Legend")]
+    [InlineData(50_000, 22, "Legend")]
     public void GetLevelForXp_ReturnsCorrectLevel(int xp, int expectedLevel, string expectedTitle)
     {
         var level = LevelDefinitions.GetLevelForXp(xp);
@@ -46,21 +49,38 @@ public class LevelDefinitionsTests
     }
 
     [Theory]
-    [InlineData(0, 100)]    [InlineData(50, 50)]    [InlineData(100, 200)]    [InlineData(250, 50)]    [InlineData(9999, 1)]    public void GetXpToNextLevel_ReturnsCorrectXpNeeded(int xp, int expectedXpToNext)
+    [InlineData(0, 100)]
+    [InlineData(50, 50)]
+    [InlineData(100, 200)]
+    [InlineData(250, 50)]
+    [InlineData(9999, 1)]
+    [InlineData(10_000, 2_100)]
+    [InlineData(12_100, 2_300)]
+    [InlineData(50_000, 2_900)]
+    public void GetXpToNextLevel_ReturnsCorrectXpNeeded(int xp, int expectedXpToNext)
     {
         var xpToNext = LevelDefinitions.GetXpToNextLevel(xp);
 
         xpToNext.Should().Be(expectedXpToNext);
     }
 
-    [Theory]
-    [InlineData(10_000)]
-    [InlineData(50_000)]
-    public void GetXpToNextLevel_AtMaxLevel_ReturnsNull(int xp)
+    [Fact]
+    public void XpCurve_IsContinuousAtLevel10()
     {
-        var xpToNext = LevelDefinitions.GetXpToNextLevel(xp);
+        LevelDefinitions.XpRequiredForLevel(10).Should().Be(10_000);
+        LevelDefinitions.All[9].XpRequired.Should().Be(10_000);
+    }
 
-        xpToNext.Should().BeNull();
+    [Fact]
+    public void XpCurve_SecondDifferenceIsConstant200_PastLevel10()
+    {
+        for (var level = 10; level <= 19; level++)
+        {
+            var increment = LevelDefinitions.XpRequiredForLevel(level + 1) - LevelDefinitions.XpRequiredForLevel(level);
+            var nextIncrement = LevelDefinitions.XpRequiredForLevel(level + 2) - LevelDefinitions.XpRequiredForLevel(level + 1);
+
+            (nextIncrement - increment).Should().Be(200);
+        }
     }
 
     [Fact]

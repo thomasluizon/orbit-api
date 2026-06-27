@@ -14,6 +14,8 @@ public static class AchievementDefinitions
     public const string QuarterChampion = "quarter_champion";
     public const string Centurion = "centurion";
     public const string YearOfDiscipline = "year_of_discipline";
+    public const string HalfYearHero = "half_year_hero";
+    public const string StreakTitan = "streak_titan";
     public const string GettingMomentum = "getting_momentum";
     public const string BuildingHabits = "building_habits";
     public const string Dedicated = "dedicated";
@@ -30,6 +32,7 @@ public static class AchievementDefinitions
     public const string NightOwl = "night_owl";
     public const string Comeback = "comeback";
     public const string BadHabitBreaker = "bad_habit_breaker";
+    public const string FirstCheer = "first_cheer";
 
     private static readonly List<AchievementDefinition> _all =
     [
@@ -42,6 +45,8 @@ public static class AchievementDefinitions
         new(QuarterChampion, "Quarter Champion", "Achieve a 90-day streak", AchievementCategory.Consistency, AchievementRarity.Epic, 250, "quarter_champion"),
         new(Centurion, "Centurion", "Achieve a 100-day streak", AchievementCategory.Consistency, AchievementRarity.Epic, 250, "centurion"),
         new(YearOfDiscipline, "Year of Discipline", "Achieve a 365-day streak", AchievementCategory.Consistency, AchievementRarity.Legendary, 500, "year_of_discipline"),
+        new(HalfYearHero, "Half-Year Hero", "Achieve a 180-day streak", AchievementCategory.Consistency, AchievementRarity.Epic, 350, "half_year_hero"),
+        new(StreakTitan, "Streak Titan", "Achieve a 500-day streak", AchievementCategory.Consistency, AchievementRarity.Legendary, 750, "streak_titan"),
         new(GettingMomentum, "Getting Momentum", "Complete 10 habits total", AchievementCategory.Volume, AchievementRarity.Common, 25, "getting_momentum"),
         new(BuildingHabits, "Building Habits", "Complete 50 habits total", AchievementCategory.Volume, AchievementRarity.Uncommon, 50, "building_habits"),
         new(Dedicated, "Dedicated", "Complete 100 habits total", AchievementCategory.Volume, AchievementRarity.Rare, 100, "dedicated"),
@@ -58,6 +63,7 @@ public static class AchievementDefinitions
         new(NightOwl, "Night Owl", "Complete a habit after 10 PM (10 times)", AchievementCategory.Special, AchievementRarity.Rare, 100, "night_owl"),
         new(Comeback, "Comeback", "Resume after 7+ days of inactivity", AchievementCategory.Special, AchievementRarity.Uncommon, 50, "comeback"),
         new(BadHabitBreaker, "Bad Habit Breaker", "Achieve a 30-day streak on a bad habit", AchievementCategory.Special, AchievementRarity.Rare, 150, "bad_habit_breaker"),
+        new(FirstCheer, "Good Vibes", "Send or receive your first cheer", AchievementCategory.Special, AchievementRarity.Common, 50, "first_cheer"),
     ];
 
     public static IReadOnlyList<AchievementDefinition> All => _all;

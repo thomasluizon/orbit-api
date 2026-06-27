@@ -42,6 +42,7 @@ public record ProfileResponse(
     bool GoogleCalendarAutoSyncEnabled,
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
+    bool CanViewGamification,
     bool Uses24HourClock = true);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
@@ -50,6 +51,7 @@ public class GetProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService,
+    IFeatureFlagService featureFlagService,
     IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
     public async Task<Result<ProfileResponse>> Handle(GetProfileQuery request, CancellationToken cancellationToken)
@@ -61,7 +63,11 @@ public class GetProfileQueryHandler(
 
         var aiMessageLimit = await payGate.GetAiMessageLimit(request.UserId, cancellationToken);
 
-        var levelTitle = LevelDefinitions.GetLevelForXp(user.TotalXp).Title;
+        var currentLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
+        var levelTitle = currentLevel.Title;
+
+        var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
+        var canViewGamification = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var windowStart = today.AddDays(-29);
@@ -93,7 +99,7 @@ public class GetProfileQueryHandler(
             user.IsLifetimePro,
             user.WeekStartDay,
             user.TotalXp,
-            user.Level,
+            currentLevel.Level,
             levelTitle,
             user.LastAdRewardLocalDate == today
                 ? user.AdRewardsClaimedToday
@@ -106,6 +112,7 @@ public class GetProfileQueryHandler(
             user.GoogleCalendarAutoSyncEnabled,
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
+            canViewGamification,
             TimeFormatResolver.Uses24HourClock(user.TimeZone)));
     }
 }

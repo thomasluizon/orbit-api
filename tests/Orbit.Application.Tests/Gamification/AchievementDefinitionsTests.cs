@@ -6,9 +6,9 @@ namespace Orbit.Application.Tests.Gamification;
 public class AchievementDefinitionsTests
 {
     [Fact]
-    public void All_Has25Achievements()
+    public void All_Has28Achievements()
     {
-        AchievementDefinitions.All.Should().HaveCount(25);
+        AchievementDefinitions.All.Should().HaveCount(28);
     }
 
     [Fact]
@@ -97,13 +97,34 @@ public class AchievementDefinitionsTests
     }
 
     [Fact]
-    public void ConsistencyCategory_Has6Achievements()
+    public void ConsistencyCategory_Has8Achievements()
     {
         var consistency = AchievementDefinitions.All
             .Where(a => a.Category == Domain.Enums.AchievementCategory.Consistency)
             .ToList();
 
-        consistency.Should().HaveCount(6);
+        consistency.Should().HaveCount(8);
+    }
+
+    [Theory]
+    [InlineData(AchievementDefinitions.HalfYearHero, "Half-Year Hero", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Epic, 350)]
+    [InlineData(AchievementDefinitions.StreakTitan, "Streak Titan", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 750)]
+    [InlineData(AchievementDefinitions.FirstCheer, "Good Vibes", Domain.Enums.AchievementCategory.Special, Domain.Enums.AchievementRarity.Common, 50)]
+    public void NewAchievements_HaveExpectedMetadata(
+        string id,
+        string expectedName,
+        Domain.Enums.AchievementCategory expectedCategory,
+        Domain.Enums.AchievementRarity expectedRarity,
+        int expectedXp)
+    {
+        var definition = AchievementDefinitions.GetById(id);
+
+        definition.Should().NotBeNull();
+        definition!.Name.Should().Be(expectedName);
+        definition.Category.Should().Be(expectedCategory);
+        definition.Rarity.Should().Be(expectedRarity);
+        definition.XpReward.Should().Be(expectedXp);
+        definition.IconKey.Should().Be(id);
     }
 
     [Fact]

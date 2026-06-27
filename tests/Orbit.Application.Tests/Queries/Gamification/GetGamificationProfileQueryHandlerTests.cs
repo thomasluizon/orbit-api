@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Domain.Entities;
@@ -12,13 +13,22 @@ public class GetGamificationProfileQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly GetGamificationProfileQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetGamificationProfileQueryHandlerTests()
     {
-        _handler = new GetGamificationProfileQueryHandler(_userRepo, _achievementRepo);
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
+        _handler = new GetGamificationProfileQueryHandler(_userRepo, _achievementRepo, _featureFlagService);
+    }
+
+    private void EnableFreeTierFlag()
+    {
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
     }
 
     private static User CreateProUser()
@@ -84,10 +94,11 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.XpToNextLevel.Should().Be(100);    }
 
     [Fact]
-    public async Task Handle_MaxLevel_XpToNextLevelIsNull()
+    public async Task Handle_AtLevel10_ReturnsInfiniteNextLevel()
     {
         var user = CreateProUser();
-        user.AddXp(10_000);        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        user.AddXp(10_000);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _achievementRepo.FindAsync(
             Arg.Any<Expression<Func<UserAchievement, bool>>>(),
@@ -99,11 +110,36 @@ public class GetGamificationProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.XpToNextLevel.Should().BeNull();
+        result.Value.Level.Should().Be(10);
+        result.Value.XpToNextLevel.Should().Be(2_100);
+        result.Value.XpForNextLevel.Should().Be(12_100);
     }
 
     [Fact]
-    public async Task Handle_FreeUser_ReturnsPayGateFailure()
+    public async Task Handle_ProUserPast10_ComputesInfiniteNextLevel()
+    {
+        var user = CreateProUser();
+        user.AddXp(15_000);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _achievementRepo.FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement>());
+
+        var query = new GetGamificationProfileQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Level.Should().Be(12);
+        result.Value.LevelTitle.Should().Be("Legend");
+        result.Value.XpToNextLevel.Should().Be(1_900);
+        result.Value.IsPro.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_FlagOff_ReturnsPayGateFailure()
     {
         var user = CreateFreeUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -114,6 +150,64 @@ public class GetGamificationProfileQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_FlagOn_ExposesXpLevelStreak_HidesAchievements()
+    {
+        var user = CreateFreeUser();
+        user.AddXp(150);
+        user.SetStreakState(5, 12, new DateOnly(2026, 6, 20));
+        EnableFreeTierFlag();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _achievementRepo.FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement> { UserAchievement.Create(UserId, AchievementDefinitions.FirstOrbit) });
+
+        var query = new GetGamificationProfileQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalXp.Should().Be(150);
+        result.Value.Level.Should().Be(2);
+        result.Value.CurrentStreak.Should().Be(5);
+        result.Value.LongestStreak.Should().Be(12);
+        result.Value.IsPro.Should().BeFalse();
+        result.Value.AchievementsLocked.Should().BeTrue();
+        result.Value.Achievements.Should().BeEmpty();
+        result.Value.AchievementsEarned.Should().Be(0);
+        result.Value.AchievementsTotal.Should().Be(AchievementDefinitions.All.Count);
+        result.Value.NextReward.ProTeaser.Should().NotBeNull();
+        result.Value.NextReward.ProTeaser!.Kind.Should().Be("achievements");
+        result.Value.NextReward.ProTeaser.Locked.Should().BeTrue();
+        result.Value.NextReward.NextLevel.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_ProUser_FlagOff_ReturnsFullProfile_WithAchievements_NoTeaser()
+    {
+        var user = CreateProUser();
+        user.AddXp(150);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        _achievementRepo.FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement> { UserAchievement.Create(UserId, AchievementDefinitions.FirstOrbit) });
+
+        var query = new GetGamificationProfileQuery(UserId);
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsPro.Should().BeTrue();
+        result.Value.AchievementsLocked.Should().BeFalse();
+        result.Value.Achievements.Should().NotBeEmpty();
+        result.Value.AchievementsEarned.Should().Be(1);
+        result.Value.NextReward.ProTeaser.Should().BeNull();
     }
 
     [Fact]

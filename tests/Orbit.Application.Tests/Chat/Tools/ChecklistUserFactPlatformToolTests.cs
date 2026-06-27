@@ -352,7 +352,10 @@ public class ChecklistUserFactPlatformToolTests
                 [],
                 7,
                 10,
-                new DateOnly(2026, 4, 14))));
+                new DateOnly(2026, 4, 14),
+                true,
+                false,
+                new NextRewardCarrot(3, "Climber", 25, null))));
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AchievementsResponse([])));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
@@ -369,7 +372,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", 0, 10, 10, 0, 1, [], [], 0, 0, null)));
+            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AchievementsResponse>("achievements_failed"));
         var tool = new GetGamificationOverviewTool(mediator);
@@ -385,7 +388,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", 0, 10, 10, 0, 1, [], [], 0, 0, null)));
+            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AchievementsResponse([])));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())

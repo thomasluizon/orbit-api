@@ -335,9 +335,58 @@ public class StreakFreezeAutoActivationServiceTests
         user.StreakFreezesAccumulated.Should().Be(0);
     }
 
+    [Fact]
+    public async Task ActivateMissedDayFreezes_FreeUser_FlagOff_DoesNotActivate()
+    {
+        var user = CreateEligibleFreeUser();
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id))
+            .Should().Be(0);
+        user.StreakFreezesAccumulated.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ActivateMissedDayFreezes_FreeUser_FlagOn_ActivatesFreeze()
+    {
+        var user = CreateEligibleFreeUser();
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.Add(user);
+        dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create(FeatureFlagKeys.GamificationFreeTier, enabled: true));
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id))
+            .Should().Be(1);
+        user.StreakFreezesAccumulated.Should().Be(0);
+    }
+
     private static User CreateEligibleProUser()
     {
         var user = User.Create($"User-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@test.com").Value;
+        var twoDaysAgo = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2);
+        user.SetStreakState(currentStreak: 10, longestStreak: 10, lastActiveDate: twoDaysAgo);
+        user.AwardStreakFreezeIfEligible();
+        return user;
+    }
+
+    private static User CreateEligibleFreeUser()
+    {
+        var user = User.Create($"User-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@test.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
         var twoDaysAgo = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-2);
         user.SetStreakState(currentStreak: 10, longestStreak: 10, lastActiveDate: twoDaysAgo);
         user.AwardStreakFreezeIfEligible();
