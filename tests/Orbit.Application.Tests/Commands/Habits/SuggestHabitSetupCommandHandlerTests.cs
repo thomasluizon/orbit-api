@@ -32,7 +32,9 @@ public class SuggestHabitSetupCommandHandlerTests
     }
 
     private static HabitSetupSuggestion SampleSuggestion() =>
-        new("R", FrequencyUnit.Day, 1, new[] { DayOfWeek.Monday }, new[] { "Warm up" });
+        new("R", FrequencyUnit.Day, 1, new[] { DayOfWeek.Monday },
+            IsFlexible: false, FlexibleTarget: null, DueTime: null,
+            SubHabits: new[] { "Warm up" }, ChecklistItems: Array.Empty<string>());
 
     private void SetupTrackedUser()
     {
