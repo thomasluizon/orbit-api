@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,6 +15,7 @@ public class UserStreakServiceTests
     private readonly IGenericRepository<HabitLog> _habitLogRepository = Substitute.For<IGenericRepository<HabitLog>>();
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepository = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
 
     private readonly UserStreakService _sut;
 
@@ -26,7 +28,8 @@ public class UserStreakServiceTests
             _habitRepository,
             _habitLogRepository,
             _streakFreezeRepository,
-            _userDateService);
+            _userDateService,
+            _feedEmitter);
     }
 
     private void SetupUser(User user, DateOnly today)

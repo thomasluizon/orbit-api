@@ -282,6 +282,7 @@ public static class AgentCapabilityIds
     public const string SyncWrite = "sync.write";
     public const string AccountManage = "account.manage";
     public const string AuthManage = "auth.manage";
+    public const string SocialManage = "social.manage";
     public const string MediaUpload = "media.upload";
 }
 
@@ -324,6 +325,7 @@ public static class AgentScopes
     public const string WriteSync = "write_sync";
     public const string ManageAccount = "manage_account";
     public const string ManageAuth = "manage_auth";
+    public const string ManageSocial = "manage_social";
     public const string UploadMedia = "upload_media";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -365,6 +367,7 @@ public static class AgentScopes
         WriteSync,
         ManageAccount,
         ManageAuth,
+        ManageSocial,
         UploadMedia
     };
 

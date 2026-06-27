@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
 
@@ -24,6 +25,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);
     public record SetColorSchemeRequest(string? ColorScheme);
+    public record SetHandleRequest(string Handle);
+    public record SetSocialOptInRequest([property: JsonRequired] bool Enabled);
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -210,6 +213,42 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         return result.ToPayGateAwareResult(() => NoContent());
     }
 
+    [HttpPut("handle")]
+    [DistributedRateLimit("set-handle")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> SetHandle(
+        [FromBody] SetHandleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetHandleCommand(HttpContext.GetUserId(), request.Handle);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogHandleChanged(logger, HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPut("social-opt-in")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetSocialOptIn(
+        [FromBody] SetSocialOptInRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetSocialOptInCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogSocialOptInChanged(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
     [HttpPost("reset")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -268,5 +307,11 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
     [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Display name changed for user {UserId}")]
     private static partial void LogNameChanged(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Information, Message = "Handle changed for user {UserId}")]
+    private static partial void LogHandleChanged(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Social opt-in {State} for user {UserId}")]
+    private static partial void LogSocialOptInChanged(ILogger logger, string state, Guid userId);
 
 }

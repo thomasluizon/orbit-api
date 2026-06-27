@@ -3,7 +3,9 @@ using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Habits.Services;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Gamification.Services;
@@ -23,6 +25,7 @@ public partial class GamificationService(
     GamificationRepositories repos,
     IPushNotificationService pushService,
     IUserDateService userDateService,
+    IFriendFeedEventEmitter friendFeedEventEmitter,
     IUnitOfWork unitOfWork,
     ILogger<GamificationService> logger) : IGamificationService
 {
@@ -164,8 +167,11 @@ public partial class GamificationService(
             AchievementChecks.TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
         }
 
-        foreach (var (entity, _) in newAchievements)
+        foreach (var (entity, definition) in newAchievements)
+        {
             await repos.AchievementRepository.AddAsync(entity, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
 
         UpdateLevel(user);
 
@@ -316,8 +322,11 @@ public partial class GamificationService(
 
         await checkAchievements(user, earned, newAchievements);
 
-        foreach (var (entity, _) in newAchievements)
+        foreach (var (entity, definition) in newAchievements)
+        {
             await repos.AchievementRepository.AddAsync(entity, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
 
         UpdateLevel(user);
 
@@ -344,6 +353,20 @@ public partial class GamificationService(
         var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
         if (newLevel.Level != user.Level)
             user.SetLevel(newLevel.Level);
+    }
+
+    /// <summary>
+    /// Streams a non-streak achievement into friends' feeds. Consistency (streak-tier) achievements are
+    /// skipped because the streak hook already emits a StreakMilestone for the same moment, so emitting
+    /// here too would double the feed row.
+    /// </summary>
+    private async Task EmitAchievementFeedEventAsync(
+        User user, UserAchievement entity, AchievementDefinition definition, CancellationToken ct)
+    {
+        if (definition.Category == AchievementCategory.Consistency)
+            return;
+
+        await friendFeedEventEmitter.EmitAchievementEventAsync(user, entity.AchievementId, definition.Category, ct);
     }
 
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()

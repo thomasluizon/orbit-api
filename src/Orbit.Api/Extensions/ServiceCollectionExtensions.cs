@@ -77,6 +77,16 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<IGamificationService, GamificationService>();
+        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialAccessGuard>();
+        builder.Services.AddScoped<Orbit.Application.Social.Services.FriendGraphService>();
+        builder.Services.AddScoped<Orbit.Application.Social.Services.IFriendFeedEventEmitter, Orbit.Application.Social.Services.FriendFeedEmitter>();
+        builder.Services.AddScoped<IFriendFeedReader, FriendFeedReader>();
+        builder.Services.AddScoped<Orbit.Application.Social.Commands.SendCheerRepositories>(sp =>
+            new Orbit.Application.Social.Commands.SendCheerRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddGoogleCalendarServices();
         builder.Services.AddSingleton(TimeProvider.System);

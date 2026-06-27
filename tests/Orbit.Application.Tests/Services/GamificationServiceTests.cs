@@ -5,6 +5,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -22,6 +23,7 @@ public class GamificationServiceTests
     private readonly IGenericRepository<Notification> _notificationRepo = Substitute.For<IGenericRepository<Notification>>();
     private readonly IPushNotificationService _pushService = Substitute.For<IPushNotificationService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly GamificationService _sut;
 
@@ -33,7 +35,7 @@ public class GamificationServiceTests
         var repos = new GamificationRepositories(
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo);
         _sut = new GamificationService(
-            repos, _pushService, _userDateService, _unitOfWork,
+            repos, _pushService, _userDateService, _feedEmitter, _unitOfWork,
             Substitute.For<ILogger<GamificationService>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

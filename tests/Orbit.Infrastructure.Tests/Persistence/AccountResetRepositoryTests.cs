@@ -203,6 +203,53 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.Notifications.IgnoreQueryFilters().CountAsync(n => n.UserId == _otherUserId)).Should().Be(2);
     }
 
+    private void SeedSocialDataForUser(Guid userId, Guid counterpartId, Guid habitId)
+    {
+        _dbContext.Friendships.Add(Friendship.Create(userId, counterpartId).Value);
+        _dbContext.Cheers.Add(Cheer.Create(userId, counterpartId, habitId, "nice").Value);
+        _dbContext.Cheers.Add(Cheer.Create(counterpartId, userId, habitId, null).Value);
+        _dbContext.BlockedUsers.Add(BlockedUser.Create(userId, counterpartId).Value);
+        _dbContext.Reports.Add(Report.Create(userId, counterpartId, ReportReason.Spam, "x", null).Value);
+        _dbContext.FriendFeedEvents.Add(FriendFeedEvent.StreakMilestone(userId, 7));
+    }
+
+    [Fact]
+    public async Task DeleteAllUserDataAsync_RemovesSocialGraphForUser_LeavesUnrelatedUsersData()
+    {
+        var unrelatedUserId = Guid.NewGuid();
+        var unrelatedCounterpartId = Guid.NewGuid();
+
+        SeedUser(_userId, "target@example.com");
+        SeedUser(_otherUserId, "other@example.com");
+        SeedUser(unrelatedUserId, "unrelated@example.com");
+        SeedUser(unrelatedCounterpartId, "unrelated-counterpart@example.com");
+
+        var cheeredHabit = Habit.Create(new HabitCreateParams(
+            _otherUserId, "Habit", FrequencyUnit.Day, 1)).Value;
+        _dbContext.Habits.Add(cheeredHabit);
+
+        SeedSocialDataForUser(_userId, _otherUserId, cheeredHabit.Id);
+        _dbContext.Friendships.Add(Friendship.Create(unrelatedUserId, unrelatedCounterpartId).Value);
+        _dbContext.FriendFeedEvents.Add(FriendFeedEvent.StreakMilestone(unrelatedUserId, 7));
+        await _dbContext.SaveChangesAsync();
+
+        await _repository.DeleteAllUserDataAsync(_userId);
+
+        (await _dbContext.Friendships.CountAsync(f => f.RequesterId == _userId || f.AddresseeId == _userId))
+            .Should().Be(0);
+        (await _dbContext.Cheers.CountAsync(c => c.SenderId == _userId || c.RecipientId == _userId))
+            .Should().Be(0);
+        (await _dbContext.BlockedUsers.CountAsync(b => b.BlockerId == _userId || b.BlockedId == _userId))
+            .Should().Be(0);
+        (await _dbContext.Reports.CountAsync(r => r.ReporterId == _userId || r.ReportedUserId == _userId))
+            .Should().Be(0);
+        (await _dbContext.FriendFeedEvents.CountAsync(e => e.ActorUserId == _userId))
+            .Should().Be(0);
+
+        (await _dbContext.Friendships.CountAsync(f => f.RequesterId == unrelatedUserId)).Should().Be(1);
+        (await _dbContext.FriendFeedEvents.CountAsync(e => e.ActorUserId == unrelatedUserId)).Should().Be(1);
+    }
+
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)
         : OrbitDbContext(options)
     {

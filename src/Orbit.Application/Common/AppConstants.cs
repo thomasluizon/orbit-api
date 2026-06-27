@@ -58,5 +58,17 @@ public static class AppConstants
     public const int MaxStreakLookbackDays = 365;
     public const int MaxSyncWindowDays = 30;
     public const int SyncCleanupMarginDays = 1;
+    public const int MaxFriends = 500;
+    public const int HandleMinLength = DomainConstants.HandleMinLength;
+    public const int HandleMaxLength = DomainConstants.HandleMaxLength;
+    public const int MaxCheerNoteLength = DomainConstants.MaxCheerNoteLength;
+    public const int MaxReportDetailsLength = DomainConstants.MaxReportDetailsLength;
+    public const int MaxCheersPerDay = 20;
+    public const int MaxFriendRequestsPerDay = 30;
+    public const int MaxReportsPerDay = 20;
+    public const int MaxSetHandlePerDay = 5;
+    public const int FriendFeedPageSize = 30;
+    public const int MaxFriendFeedPageSize = 50;
+    public static readonly int[] StreakMilestoneTiers = [7, 14, 30, 90, 100, 365];
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

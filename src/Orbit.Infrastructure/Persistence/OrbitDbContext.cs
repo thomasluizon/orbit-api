@@ -56,6 +56,11 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
+    public DbSet<Cheer> Cheers => Set<Cheer>();
+    public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
+    public DbSet<Report> Reports => Set<Report>();
+    public DbSet<FriendFeedEvent> FriendFeedEvents => Set<FriendFeedEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -102,6 +107,11 @@ public class OrbitDbContext : DbContext
         ConfigureChecklistTemplateEntity(modelBuilder);
         ConfigureAppFeatureFlagEntity(modelBuilder);
         ConfigureContentBlockEntity(modelBuilder);
+        ConfigureFriendshipEntity(modelBuilder);
+        ConfigureCheerEntity(modelBuilder);
+        ConfigureBlockedUserEntity(modelBuilder);
+        ConfigureReportEntity(modelBuilder);
+        ConfigureFriendFeedEventEntity(modelBuilder);
     }
 
     /// <summary>
@@ -437,6 +447,75 @@ public class OrbitDbContext : DbContext
         });
     }
 
+    private static void ConfigureFriendshipEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Friendship>(entity =>
+        {
+            entity.HasIndex(f => f.RequesterId);
+            entity.HasIndex(f => f.AddresseeId);
+            entity.Property(f => f.Status).HasConversion<string>().HasMaxLength(32);
+            entity.HasOne<User>().WithMany().HasForeignKey(f => f.RequesterId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(f => f.AddresseeId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureCheerEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Cheer>(entity =>
+        {
+            entity.HasIndex(c => c.RecipientId);
+            entity.HasIndex(c => new { c.SenderId, c.CreatedAtUtc });
+            entity.HasIndex(c => c.HabitId);
+            entity.Property(c => c.Note).HasMaxLength(DomainConstants.MaxCheerNoteLength);
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.SenderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.RecipientId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Habit>().WithMany().HasForeignKey(c => c.HabitId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureBlockedUserEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<BlockedUser>(entity =>
+        {
+            entity.HasIndex(b => new { b.BlockerId, b.BlockedId }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockerId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(b => b.BlockedId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureReportEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Report>(entity =>
+        {
+            entity.HasIndex(r => r.ReportedUserId);
+            entity.HasIndex(r => r.Status);
+            entity.Property(r => r.Reason).HasConversion<string>().HasMaxLength(32);
+            entity.Property(r => r.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(r => r.Details).HasMaxLength(DomainConstants.MaxReportDetailsLength);
+            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReportedUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Cheer>().WithMany().HasForeignKey(r => r.CheerId).OnDelete(DeleteBehavior.SetNull);
+        });
+    }
+
+    private static void ConfigureFriendFeedEventEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<FriendFeedEvent>(entity =>
+        {
+            entity.HasIndex(e => new { e.ActorUserId, e.CreatedAtUtc, e.Id })
+                .IsDescending(false, true, true);
+            entity.HasIndex(e => new { e.ActorUserId, e.AchievementId })
+                .IsUnique()
+                .HasFilter("\"AchievementId\" IS NOT NULL");
+            entity.HasIndex(e => new { e.ActorUserId, e.Type, e.Value })
+                .IsUnique()
+                .HasFilter("\"AchievementId\" IS NULL");
+            entity.Property(e => e.Type).HasConversion<string>().HasMaxLength(32);
+            entity.Property(e => e.AchievementId).HasMaxLength(50);
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
     private static void ConfigureUserEntity(ModelBuilder modelBuilder, NullableEncryptionValueConverter? nullableEncConverter)
     {
         modelBuilder.Entity<User>(entity =>
@@ -444,6 +523,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
+
+            entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
 
             entity.Property(u => u.GoogleCalendarAutoSyncStatus)
                 .HasConversion<string>()
