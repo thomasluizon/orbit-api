@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
@@ -80,5 +81,28 @@ public class DeleteHabitCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("You don't have permission to delete this habit.");
         habit.IsDeleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_HabitWithSubHabits_CascadeSoftDeletesSubtreeWithSharedTimestamp()
+    {
+        var parent = CreateTestHabit();
+        var child = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: parent.Id)).Value;
+        var grandchild = Habit.Create(new HabitCreateParams(
+            UserId, "Grandchild", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: child.Id)).Value;
+
+        _habitRepo.GetByIdAsync(parent.Id, Arg.Any<CancellationToken>()).Returns(parent);
+        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent, child, grandchild });
+
+        var result = await _handler.Handle(new DeleteHabitCommand(UserId, parent.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        parent.IsDeleted.Should().BeTrue();
+        child.IsDeleted.Should().BeTrue();
+        grandchild.IsDeleted.Should().BeTrue();
+        child.DeletedAtUtc.Should().Be(parent.DeletedAtUtc);
+        grandchild.DeletedAtUtc.Should().Be(parent.DeletedAtUtc);
     }
 }

@@ -337,6 +337,22 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         return result.ToErrorResult();
     }
 
+    [HttpPost("{id:guid}/restore")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> RestoreHabit(Guid id, CancellationToken cancellationToken)
+    {
+        var command = new RestoreHabitCommand(HttpContext.GetUserId(), id);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(() =>
+        {
+            LogHabitRestored(logger, id, HttpContext.GetUserId());
+            return NoContent();
+        });
+    }
+
     [HttpGet("{id:guid}/logs")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -594,5 +610,8 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Linked {Count} goals to habit {HabitId} by user {UserId}")]
     private static partial void LogLinkedGoalsToHabit(ILogger logger, int count, Guid habitId, Guid userId);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information, Message = "Habit restored {HabitId} by user {UserId}")]
+    private static partial void LogHabitRestored(ILogger logger, Guid habitId, Guid userId);
 
 }

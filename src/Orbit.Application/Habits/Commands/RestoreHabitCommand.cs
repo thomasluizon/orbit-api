@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
@@ -8,34 +9,32 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
-public record DeleteHabitCommand(
+public record RestoreHabitCommand(
     Guid UserId,
-    Guid HabitId) : IRequest<Result>;
+    Guid HabitId) : IRequest<Result>, IConcurrencyRetryable;
 
-public class DeleteHabitCommandHandler(
+public class RestoreHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUserStreakService userStreakService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache) : IRequestHandler<DeleteHabitCommand, Result>
+    IMemoryCache cache) : IRequestHandler<RestoreHabitCommand, Result>
 {
-    public async Task<Result> Handle(DeleteHabitCommand request, CancellationToken cancellationToken)
+    public async Task<Result> Handle(RestoreHabitCommand request, CancellationToken cancellationToken)
     {
-        var habit = await habitRepository.GetByIdAsync(request.HabitId, cancellationToken);
+        var userHabits = await habitRepository.FindTrackedIgnoringFiltersAsync(
+            h => h.UserId == request.UserId && h.IsDeleted,
+            cancellationToken);
 
-        if (habit is null)
+        var habit = userHabits.FirstOrDefault(h => h.Id == request.HabitId);
+        if (habit is null || !habit.IsDeleted)
             return Result.Failure(ErrorMessages.HabitNotFound);
 
-        if (habit.UserId != request.UserId)
-            return Result.Failure(ErrorMessages.NoPermission);
-
-        var userHabits = await habitRepository.FindTrackedAsync(
-            h => h.UserId == request.UserId,
-            cancellationToken);
         var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
+        var cascadeDeletedAtUtc = habit.DeletedAtUtc;
 
-        var deletedAtUtc = DateTime.UtcNow;
         foreach (var inSubtree in HabitHierarchy.SelfAndDescendants(habit, childrenByParentId))
-            inSubtree.SoftDelete(deletedAtUtc);
+            if (inSubtree.IsDeleted && inSubtree.DeletedAtUtc == cascadeDeletedAtUtc)
+                inSubtree.Restore();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await ConcurrencyRetry.SaveWithRetryAsync(
