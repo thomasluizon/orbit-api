@@ -32,17 +32,15 @@ public class CalendarControllerTests
     }
 
     [Fact]
-    public async Task GetEvents_Success_ReturnsOk()
+    public async Task GetEvents_Success_ReturnsOkAndDoesNotTriggerAutoSync()
     {
         _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new List<CalendarEventItem>()));
 
-        _mediator.Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new CalendarAutoSyncResult(0, 0, Domain.Enums.GoogleCalendarAutoSyncStatus.Idle)));
-
         var result = await _controller.GetEvents(CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
+        await _mediator.DidNotReceive().Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -54,20 +52,6 @@ public class CalendarControllerTests
         var result = await _controller.GetEvents(CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
-    }
-
-    [Fact]
-    public async Task GetEvents_Success_OpportunisticSyncFails_StillReturnsOk()
-    {
-        _mediator.Send(Arg.Any<GetCalendarEventsQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new List<CalendarEventItem>()));
-
-        _mediator.Send(Arg.Any<RunCalendarAutoSyncCommand>(), Arg.Any<CancellationToken>())
-            .Returns<Result<CalendarAutoSyncResult>>(x => throw new InvalidOperationException("Sync exploded"));
-
-        var result = await _controller.GetEvents(CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
