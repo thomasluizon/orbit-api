@@ -1,7 +1,11 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Calendar.Commands;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
@@ -45,6 +49,15 @@ public class RunCalendarAutoSyncCommandHandlerTests
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
         _notificationRepo.AnyAsync(Arg.Any<Expression<Func<Notification, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(false);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var ct = call.ArgAt<CancellationToken>(1);
+                return operation(ct);
+            });
     }
 
     private static User CreateEnabledProUser(string timeZone = "UTC")
@@ -613,6 +626,57 @@ public class RunCalendarAutoSyncCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _tokenService.Received(1).TryRefreshAsync(user, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UniqueViolationOnSave_SwallowedAsNoOpAndUserStillMarkedSynced()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Event", null, "2026-04-10", null, null, false, null, [])
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var result = await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.NewSuggestions.Should().Be(0);
+        user.GoogleCalendarLastSyncedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrencyConflictThenSuccess_RetryResolvesToSuccess()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Event", null, "2026-04-10", null, null, false, null, [])
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => throw new DbUpdateConcurrencyException("conflict"), _ => 0);
+
+        var behavior = new ConcurrencyRetryBehavior<RunCalendarAutoSyncCommand, Result<CalendarAutoSyncResult>>(_unitOfWork);
+        var command = new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true);
+
+        var result = await behavior.Handle(command, ct => _handler.Handle(command, ct), default);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    private sealed class FakeUniqueViolationException : DbException
+    {
+        public override string SqlState => "23505";
     }
 }
 

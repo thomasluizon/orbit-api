@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
@@ -68,5 +69,23 @@ public class SetColorSchemeCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("User not found.");
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrencyConflictThenSuccess_ResolvesToSuccessAndKeepsLastWrite()
+    {
+        var user = User.Create("Test User", "test@example.com").Value;
+        SetupUserFound(user);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => throw new DbUpdateConcurrencyException("conflict"), _ => 1);
+
+        var command = new SetColorSchemeCommand(UserId, "purple");
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.ColorScheme.Should().Be("purple");
+        await _userRepo.Received(1).ReloadAsync(user, Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

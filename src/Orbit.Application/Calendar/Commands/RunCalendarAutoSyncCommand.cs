@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Calendar.Queries;
@@ -101,6 +102,19 @@ public partial class RunCalendarAutoSyncCommandHandler(
     private async Task<Result<CalendarAutoSyncResult>> FetchAndProcess(
         User user, string accessToken, DateTime utcNow, CancellationToken ct)
     {
+        Result<CalendarAutoSyncResult> outcome = default!;
+        await deps.UnitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+        {
+            await deps.UnitOfWork.AcquireAdvisoryLockAsync($"calendar-sync:{user.Id}", transactionToken);
+            outcome = await FetchAndProcessLocked(user, accessToken, utcNow, transactionToken);
+        }, ct);
+
+        return outcome;
+    }
+
+    private async Task<Result<CalendarAutoSyncResult>> FetchAndProcessLocked(
+        User user, string accessToken, DateTime utcNow, CancellationToken ct)
+    {
         List<CalendarEventItem> fetched;
         try
         {
@@ -132,7 +146,15 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
 
         user.MarkCalendarSyncSuccess(utcNow);
-        await deps.UnitOfWork.SaveChangesAsync(ct);
+
+        try
+        {
+            await deps.UnitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        {
+            return Result.Success(new CalendarAutoSyncResult(0, reconciled, GoogleCalendarAutoSyncStatus.Idle));
+        }
 
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
     }

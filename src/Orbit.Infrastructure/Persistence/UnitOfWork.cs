@@ -42,6 +42,19 @@ public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisp
         });
     }
 
+    public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(key);
+
+        if (context.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) != true)
+            return Task.CompletedTask;
+
+        return context.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock(hashtext({0}))",
+            [key],
+            cancellationToken);
+    }
+
     public void DiscardChanges()
     {
         foreach (var entry in context.ChangeTracker.Entries().ToList())

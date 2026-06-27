@@ -1,5 +1,4 @@
 using MediatR;
-using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -7,7 +6,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Profile.Commands;
 
-public record SetColorSchemeCommand(Guid UserId, string? ColorScheme) : IRequest<Result>, IConcurrencyRetryable;
+public record SetColorSchemeCommand(Guid UserId, string? ColorScheme) : IRequest<Result>;
 
 public class SetColorSchemeCommandHandler(
     IGenericRepository<User> userRepository,
@@ -20,19 +19,14 @@ public class SetColorSchemeCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck;
 
-        var user = await userRepository.FindOneTrackedAsync(
-            u => u.Id == request.UserId,
-            cancellationToken: cancellationToken);
+        var result = await ConcurrencyRetry.ExecuteAsync(
+            userRepository,
+            unitOfWork,
+            ct => userRepository.FindOneTrackedAsync(u => u.Id == request.UserId, cancellationToken: ct),
+            user => Task.FromResult(user.SetColorScheme(request.ColorScheme)),
+            ErrorMessages.UserNotFound,
+            cancellationToken);
 
-        if (user is null)
-            return Result.Failure(ErrorMessages.UserNotFound);
-
-        var result = user.SetColorScheme(request.ColorScheme);
-        if (!result.IsSuccess)
-            return result;
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return Result.Success();
+        return result.IsSuccess ? Result.Success() : result.PropagateError();
     }
 }

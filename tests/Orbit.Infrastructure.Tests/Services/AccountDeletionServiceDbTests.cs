@@ -65,10 +65,35 @@ public class AccountDeletionServiceDbTests : IDisposable
         remaining[0].FrozenDate.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-89)));
     }
 
+    [Fact]
+    public async Task RunAsync_DeletesOnlyPastDueDeactivatedUsers_PerUserScope()
+    {
+        var pastDue = Guid.NewGuid();
+        var futureDated = Guid.NewGuid();
+        var active = Guid.NewGuid();
+        SeedDeactivatedUser(pastDue, "pastdue@example.com", DateTime.UtcNow.AddDays(-1));
+        SeedDeactivatedUser(futureDated, "future@example.com", DateTime.UtcNow.AddDays(30));
+        SeedUser(active, "active@example.com");
+        await _dbContext.SaveChangesAsync();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        var remaining = await _dbContext.Users.Select(u => u.Id).ToListAsync();
+        remaining.Should().BeEquivalentTo(new[] { futureDated, active });
+    }
+
     private void SeedUser(Guid userId, string email)
     {
         var user = User.Create("Test User", email).Value;
         typeof(User).GetProperty("Id")!.SetValue(user, userId);
+        _dbContext.Users.Add(user);
+    }
+
+    private void SeedDeactivatedUser(Guid userId, string email, DateTime scheduledDeletion)
+    {
+        var user = User.Create("Test User", email).Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, userId);
+        user.Deactivate(scheduledDeletion);
         _dbContext.Users.Add(user);
     }
 

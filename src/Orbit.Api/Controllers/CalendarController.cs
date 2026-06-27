@@ -19,27 +19,12 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetEvents(CancellationToken cancellationToken)
     {
-        var userId = HttpContext.GetUserId();
-        var query = new GetCalendarEventsQuery(userId);
+        var query = new GetCalendarEventsQuery(HttpContext.GetUserId());
         var result = await mediator.Send(query, cancellationToken);
 
-        if (result.IsSuccess)
-        {
-            try
-            {
-                await mediator.Send(new RunCalendarAutoSyncCommand(userId, IsOpportunistic: true), cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                if (logger.IsEnabled(LogLevel.Warning))
-                    LogOpportunisticSyncFailed(logger, ex, userId);
-            }
-
-            return Ok(result.Value);
-        }
-
-        if (logger.IsEnabled(LogLevel.Warning))
+        if (result.IsFailure && logger.IsEnabled(LogLevel.Warning))
             LogFailedToFetchCalendarEvents(logger, result.Error);
+
         return result.ToPayGateAwareResult(value => Ok(value));
     }
 
@@ -143,7 +128,4 @@ public partial class CalendarController(IMediator mediator, ILogger<CalendarCont
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Failed to fetch calendar events: {Error}")]
     private static partial void LogFailedToFetchCalendarEvents(ILogger logger, string? error);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Opportunistic calendar auto-sync failed for user {UserId}")]
-    private static partial void LogOpportunisticSyncFailed(ILogger logger, Exception ex, Guid userId);
 }

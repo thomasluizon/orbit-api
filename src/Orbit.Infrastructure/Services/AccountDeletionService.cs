@@ -58,41 +58,52 @@ public partial class AccountDeletionService(
 
     private async Task ProcessScheduledDeletions(CancellationToken ct)
     {
-        using var scope = scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var userIds = await GetUsersScheduledForDeletionAsync(ct);
 
-        var usersToDelete = await dbContext.Users
-            .Where(u => u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
-            .ToListAsync(ct);
-
-        if (usersToDelete.Count == 0)
+        if (userIds.Count == 0)
             return;
 
         if (logger.IsEnabled(LogLevel.Information))
-            LogProcessingDeletions(logger, usersToDelete.Count);
+            LogProcessingDeletions(logger, userIds.Count);
 
-        foreach (var userId in usersToDelete.Select(user => user.Id))
+        foreach (var userId in userIds)
+            await DeleteUserAccountAsync(userId, ct);
+    }
+
+    private async Task<IReadOnlyList<Guid>> GetUsersScheduledForDeletionAsync(CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+
+        return await dbContext.Users
+            .Where(u => u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+    }
+
+    private async Task DeleteUserAccountAsync(Guid userId, CancellationToken ct)
+    {
+        try
         {
-            try
+            using var scope = scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+
+            var userToDelete = await dbContext.Users.FindAsync([userId], ct);
+            if (userToDelete is not null)
             {
-                using var deleteScope = scopeFactory.CreateScope();
-                var deleteContext = deleteScope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-                var userToDelete = await deleteContext.Users.FindAsync([userId], ct);
-                if (userToDelete is not null)
-                {
-                    var resetRepository = deleteScope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
-                    await resetRepository.DeleteAllUserDataAsync(userId, ct);
-                    deleteContext.Users.Remove(userToDelete);
-                    await deleteContext.SaveChangesAsync(ct);
-                }
-                if (logger.IsEnabled(LogLevel.Information))
-                    LogAccountDeleted(logger, userId);
+                var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
+                await resetRepository.DeleteAllUserDataAsync(userId, ct);
+                dbContext.Users.Remove(userToDelete);
+                await dbContext.SaveChangesAsync(ct);
             }
-            catch (Exception ex)
-            {
-                if (logger.IsEnabled(LogLevel.Error))
-                    LogAccountDeletionFailed(logger, ex, userId);
-            }
+
+            if (logger.IsEnabled(LogLevel.Information))
+                LogAccountDeleted(logger, userId);
+        }
+        catch (Exception ex)
+        {
+            if (logger.IsEnabled(LogLevel.Error))
+                LogAccountDeletionFailed(logger, ex, userId);
         }
     }
 
