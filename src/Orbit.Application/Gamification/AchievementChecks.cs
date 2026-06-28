@@ -6,9 +6,9 @@ namespace Orbit.Application.Gamification;
 
 /// <summary>
 /// Pure achievement-evaluation rules shared by <see cref="Services.GamificationService"/>: given the
-/// already-loaded user, earned-achievement set, and habit context, each check grants any newly
-/// qualifying achievement into <c>newAchievements</c> (and updates the user's XP via
-/// <see cref="TryGrant"/>). No I/O, no injected dependencies — every input is passed in.
+/// already-loaded user, earned-achievement set, and habit context, each check records any newly
+/// qualifying achievement into <c>newAchievements</c>. The caller awards each achievement's XP through
+/// the audited funnel when persisting. No I/O, no injected dependencies — every input is passed in.
 /// </summary>
 public static class AchievementChecks
 {
@@ -26,7 +26,6 @@ public static class AchievementChecks
         if (definition is null) return;
 
         var entity = UserAchievement.Create(user.Id, achievementId);
-        user.AddXp(definition.XpReward);
         earned.Add(achievementId);
         newAchievements.Add((entity, definition));
     }

@@ -165,7 +165,8 @@ public partial class AgentCatalogService
                     "HabitsController.GetHabitById",
                     "HabitsController.GetHabitDetail",
                     "HabitsController.GetRescheduleSuggestion",
-                    "HabitsController.GetLogs"
+                    "HabitsController.GetLogs",
+                    "HabitsController.GetTrends"
                 ]),
 
             CreateCapability(
@@ -328,7 +329,8 @@ public partial class AgentCatalogService
                     "GoalsController.GetGoalById",
                     "GoalsController.GetGoalDetail",
                     "GoalsController.GetGoalMetrics",
-                    "GoalsController.GetGoalReview"
+                    "GoalsController.GetGoalReview",
+                    "GoalsController.GetGoalProgressHistory"
                 ]),
 
             CreateCapability(
@@ -638,7 +640,9 @@ public partial class AgentCatalogService
                     "GamificationController.GetProfile",
                     "GamificationController.GetAchievements",
                     "GamificationController.GetStreakInfo",
-                    "GamificationController.GetRecap"
+                    "GamificationController.GetRecap",
+                    "GamificationController.GetStreakHistory",
+                    "GamificationController.GetXpHistory"
                 ])
         ];
     }

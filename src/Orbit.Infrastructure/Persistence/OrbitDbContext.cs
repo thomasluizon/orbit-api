@@ -42,6 +42,7 @@ public class OrbitDbContext : DbContext
     public DbSet<Referral> Referrals => Set<Referral>();
     public DbSet<UserAchievement> UserAchievements => Set<UserAchievement>();
     public DbSet<StreakFreeze> StreakFreezes => Set<StreakFreeze>();
+    public DbSet<XpAwardLog> XpAwardLogs => Set<XpAwardLog>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<PendingAgentOperationState> PendingAgentOperations => Set<PendingAgentOperationState>();
@@ -96,6 +97,7 @@ public class OrbitDbContext : DbContext
         ConfigureReferralEntity(modelBuilder);
         ConfigureUserAchievementEntity(modelBuilder);
         ConfigureStreakFreezeEntity(modelBuilder);
+        ConfigureXpAwardLogEntity(modelBuilder);
         ConfigureUserSessionEntity(modelBuilder);
         ConfigureApiKeyEntity(modelBuilder);
         ConfigurePendingAgentOperationEntity(modelBuilder);
@@ -258,6 +260,16 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(sf => new { sf.UserId, sf.UsedOnDate }).IsUnique();
             entity.HasOne<User>().WithMany().HasForeignKey(sf => sf.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureXpAwardLogEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<XpAwardLog>(entity =>
+        {
+            entity.HasIndex(x => new { x.UserId, x.AwardedAtUtc });
+            entity.Property(x => x.Source).HasConversion<string>().HasMaxLength(32);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

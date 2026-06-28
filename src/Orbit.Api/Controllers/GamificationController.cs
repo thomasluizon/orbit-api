@@ -73,4 +73,36 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
 
         return result.ToPayGateAwareResult(v => Ok(v));
     }
+
+    [HttpGet("streak-history")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetStreakHistory(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetStreakHistoryQuery(HttpContext.GetUserId(), dateFrom, dateTo);
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+    [HttpGet("xp-history")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetXpHistory(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetXpHistoryQuery(HttpContext.GetUserId(), dateFrom, dateTo);
+        var result = await mediator.Send(query, cancellationToken);
+
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
 }

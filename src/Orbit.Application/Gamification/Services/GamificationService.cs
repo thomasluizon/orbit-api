@@ -26,6 +26,7 @@ public partial class GamificationService(
     IPushNotificationService pushService,
     IUserDateService userDateService,
     IFriendFeedEventEmitter friendFeedEventEmitter,
+    IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     ILogger<GamificationService> logger) : IGamificationService
 {
@@ -158,7 +159,7 @@ public partial class GamificationService(
 
         var xpEarned = habit.IsBadHabit
             ? 0
-            : AwardLoggedHabitXpAndAchievements(user, habit, earned, context, today, newAchievements, metrics.CurrentStreak);
+            : await AwardLoggedHabitXpAndAchievementsAsync(user, habit, earned, context, today, newAchievements, metrics.CurrentStreak, ct);
 
         if (habit.IsBadHabit
             && !earned.Contains(AchievementDefinitions.BadHabitBreaker)
@@ -167,11 +168,7 @@ public partial class GamificationService(
             AchievementChecks.TryGrant(AchievementDefinitions.BadHabitBreaker, user, earned, newAchievements);
         }
 
-        foreach (var (entity, definition) in newAchievements)
-        {
-            await repos.AchievementRepository.AddAsync(entity, ct);
-            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
-        }
+        await PersistNewAchievementsAsync(user, newAchievements, ct);
 
         UpdateLevel(user);
 
@@ -195,12 +192,17 @@ public partial class GamificationService(
     /// not progress, so it earns no XP and no generic achievements (only <c>BadHabitBreaker</c>,
     /// evaluated separately, rewards a sustained abstinence streak). Returns the XP awarded.
     /// </summary>
-    private static int AwardLoggedHabitXpAndAchievements(
+    private async Task<int> AwardLoggedHabitXpAndAchievementsAsync(
         User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
-        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements, int currentStreak)
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements, int currentStreak,
+        CancellationToken ct)
     {
         var xp = 10 + currentStreak;
-        user.AddXp(xp);
+        var habitLogId = habit.Logs
+            .Where(l => l.Date == today && l.Value > 0)
+            .Select(l => (Guid?)l.Id)
+            .FirstOrDefault();
+        await AwardXpAsync(user, xp, XpAwardSource.HabitLog, habitLogId, awardedAtUtc: DateTime.UtcNow, ct);
 
         if (!earned.Contains(AchievementDefinitions.Liftoff) && context.TotalLogCount == 1)
             AchievementChecks.TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
@@ -257,7 +259,7 @@ public partial class GamificationService(
     {
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
-            user.AddXp(100);
+            await AwardXpAsync(user, 100, XpAwardSource.GoalCompleted, sourceId: null, awardedAtUtc: DateTime.UtcNow, ct);
 
             var completedGoals = await repos.GoalRepository.CountAsync(
                 g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
@@ -330,11 +332,7 @@ public partial class GamificationService(
 
         AchievementChecks.CheckOnboardingChecklist(user, earned, newAchievements);
 
-        foreach (var (entity, definition) in newAchievements)
-        {
-            await repos.AchievementRepository.AddAsync(entity, ct);
-            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
-        }
+        await PersistNewAchievementsAsync(user, newAchievements, ct);
 
         UpdateLevel(user);
 
@@ -415,11 +413,7 @@ public partial class GamificationService(
 
         await checkAchievements(user, earned, newAchievements);
 
-        foreach (var (entity, definition) in newAchievements)
-        {
-            await repos.AchievementRepository.AddAsync(entity, ct);
-            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
-        }
+        await PersistNewAchievementsAsync(user, newAchievements, ct);
 
         UpdateLevel(user);
 
@@ -446,6 +440,23 @@ public partial class GamificationService(
         var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
         if (newLevel.Level != user.Level)
             user.SetLevel(newLevel.Level);
+    }
+
+    private Task AwardXpAsync(
+        User user, int amount, XpAwardSource source, Guid? sourceId, DateTime awardedAtUtc, CancellationToken ct)
+        => xpAwarder.AwardAsync(user, amount, source, sourceId, awardedAtUtc, ct);
+
+    private async Task PersistNewAchievementsAsync(
+        User user,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements,
+        CancellationToken ct)
+    {
+        foreach (var (entity, definition) in newAchievements)
+        {
+            await repos.AchievementRepository.AddAsync(entity, ct);
+            await AwardXpAsync(user, definition.XpReward, XpAwardSource.Achievement, entity.Id, awardedAtUtc: DateTime.UtcNow, ct);
+            await EmitAchievementFeedEventAsync(user, entity, definition, ct);
+        }
     }
 
     /// <summary>

@@ -158,6 +158,23 @@ public partial class GoalsController(IMediator mediator, ILogger<GoalsController
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpGet("{id:guid}/progress-history")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetGoalProgressHistory(
+        Guid id,
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetGoalProgressHistoryQuery(HttpContext.GetUserId(), id, dateFrom, dateTo);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
     [HttpGet("review")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
