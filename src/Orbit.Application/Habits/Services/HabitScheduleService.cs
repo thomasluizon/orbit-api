@@ -129,6 +129,92 @@ public static class HabitScheduleService
     }
 
     /// <summary>
+    /// The streak value, and most recent contributing date, as of <paramref name="anchor"/> — the single
+    /// schedule-aware streak rule shared by the live recalculation engine and the streak-history series.
+    /// Walks <paramref name="from"/>..<paramref name="anchor"/> forward over <paramref name="expectedDates"/>:
+    /// non-scheduled days are skipped (they never break or extend a streak), a scheduled completion extends
+    /// it, a scheduled freeze bridges it without extending, and a scheduled day that is neither resets it.
+    /// An unresolved scheduled <paramref name="anchor"/> reports the streak carried into it (the day is not
+    /// yet missed) without breaking, mirroring the live engine's "today not done yet" allowance.
+    /// </summary>
+    public static (int Streak, DateOnly? LastActiveDate) ComputeStreakAsOf(
+        HashSet<DateOnly> expectedDates,
+        HashSet<DateOnly> completionDates,
+        HashSet<DateOnly> freezeDates,
+        DateOnly from,
+        DateOnly anchor)
+    {
+        var run = new StreakRun();
+        for (var date = from; date <= anchor; date = date.AddDays(1))
+            run.Advance(date, expectedDates, completionDates, freezeDates, isAnchor: date == anchor);
+        return (run.Streak, run.LastActiveDate);
+    }
+
+    /// <summary>
+    /// The day-by-day streak series over [<paramref name="from"/>, <paramref name="to"/>], each point being the
+    /// streak as if that day were today. Uses the same forward walk as <see cref="ComputeStreakAsOf"/> seeded from
+    /// <paramref name="seedFrom"/> (a lookback before <paramref name="from"/>) so the streak entering the window is
+    /// correct, then emits only the in-window days. The value on <paramref name="to"/> equals the user's live
+    /// current streak for the same inputs.
+    /// </summary>
+    public static List<(DateOnly Date, int Streak)> BuildStreakSeries(
+        HashSet<DateOnly> expectedDates,
+        HashSet<DateOnly> completionDates,
+        HashSet<DateOnly> freezeDates,
+        DateOnly seedFrom,
+        DateOnly from,
+        DateOnly to)
+    {
+        var points = new List<(DateOnly Date, int Streak)>();
+        var run = new StreakRun();
+        for (var date = seedFrom; date <= to; date = date.AddDays(1))
+        {
+            var streak = run.Advance(date, expectedDates, completionDates, freezeDates, isAnchor: date == to);
+            if (date >= from)
+                points.Add((date, streak));
+        }
+        return points;
+    }
+
+    private sealed class StreakRun
+    {
+        public int Streak { get; private set; }
+        public DateOnly? LastActiveDate { get; private set; }
+
+        public int Advance(
+            DateOnly date,
+            HashSet<DateOnly> expectedDates,
+            HashSet<DateOnly> completionDates,
+            HashSet<DateOnly> freezeDates,
+            bool isAnchor)
+        {
+            if (!expectedDates.Contains(date))
+                return Streak;
+
+            if (completionDates.Contains(date))
+            {
+                Streak++;
+                LastActiveDate = date;
+                return Streak;
+            }
+
+            if (freezeDates.Contains(date))
+            {
+                LastActiveDate = date;
+                return Streak;
+            }
+
+            var carried = Streak;
+            if (!isAnchor)
+            {
+                Streak = 0;
+                LastActiveDate = null;
+            }
+            return carried;
+        }
+    }
+
+    /// <summary>
     /// Like <see cref="IsHabitDueOnDate"/> but uses a provided creation date as the
     /// earliest anchor instead of DueDate. DueDate is still used for frequency modulo
     /// alignment but does NOT gate historical dates.
