@@ -45,8 +45,8 @@ public class UserStreakService(
         var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
             contributingHabits, lookbackStart, userToday, userTimeZone);
 
-        var currentStreak = ComputeCurrentStreak(
-            expectedDates, completionDateSet, freezeDateSet, userToday, lookbackStart, out var lastActiveDate);
+        var (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
+            expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
 
         var longestStreak = ComputeLongestStreak(expectedDates, completionDateSet, freezeDateSet);
         if (currentStreak > longestStreak) longestStreak = currentStreak;
@@ -91,50 +91,6 @@ public class UserStreakService(
             .ToList();
 
         return (completionDateSet, freezeDateSet, contributingHabits);
-    }
-
-    private static int ComputeCurrentStreak(
-        HashSet<DateOnly> expectedDates,
-        HashSet<DateOnly> completionDateSet,
-        HashSet<DateOnly> freezeDateSet,
-        DateOnly userToday,
-        DateOnly lookbackStart,
-        out DateOnly? lastActiveDate)
-    {
-        var currentStreak = 0;
-        lastActiveDate = null;
-
-        var cursor = userToday;
-        if (!completionDateSet.Contains(cursor))
-            cursor = cursor.AddDays(-1);
-
-        while (cursor >= lookbackStart)
-        {
-            if (!expectedDates.Contains(cursor))
-            {
-                cursor = cursor.AddDays(-1);
-                continue;
-            }
-
-            if (completionDateSet.Contains(cursor))
-            {
-                currentStreak++;
-                lastActiveDate ??= cursor;
-                cursor = cursor.AddDays(-1);
-                continue;
-            }
-
-            if (freezeDateSet.Contains(cursor))
-            {
-                lastActiveDate ??= cursor;
-                cursor = cursor.AddDays(-1);
-                continue;
-            }
-
-            break;
-        }
-
-        return currentStreak;
     }
 
     private static int ComputeLongestStreak(

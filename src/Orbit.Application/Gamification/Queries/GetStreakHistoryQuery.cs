@@ -1,6 +1,6 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -17,14 +17,16 @@ public record GetStreakHistoryQuery(
     DateOnly DateTo) : IRequest<Result<StreakHistoryResponse>>;
 
 /// <summary>
-/// Recomputes the user's day-by-day streak across a date range from habit completions and streak
-/// freezes: a day maintains the streak when it has at least one completion or a freeze, otherwise the
-/// streak resets. Seeds from a lookback before the range so the streak entering the window is correct.
-/// Pro-gated like the streak/gamification surfaces.
+/// Day-by-day streak series for the requested range, computed with the same schedule-aware engine that
+/// produces <see cref="User.CurrentStreak"/>: only scheduled (expected) days can break or extend a streak,
+/// off-days are skipped rather than reset, and freezes bridge missed days. The value on DateTo equals the
+/// user's live current streak. Seeds from a lookback before the range so the streak entering the window is
+/// correct. Pro-gated like the streak/gamification surfaces.
 /// </summary>
 public class GetStreakHistoryQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
+    IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IFeatureFlagService featureFlagService) : IRequestHandler<GetStreakHistoryQuery, Result<StreakHistoryResponse>>
 {
@@ -39,33 +41,39 @@ public class GetStreakHistoryQueryHandler(
         if (!unlocked)
             return Result.PayGateFailure<StreakHistoryResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
 
-        var windowStart = request.DateFrom.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var seedFrom = request.DateFrom.AddDays(-AppConstants.MaxStreakLookbackDays);
 
-        var habits = await habitRepository.FindAsync(
-            h => h.UserId == request.UserId && !h.IsBadHabit,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= windowStart && l.Date <= request.DateTo)),
-            cancellationToken);
-
-        var activeDates = habits
-            .SelectMany(h => h.Logs)
-            .Where(l => l.Value > 0)
-            .Select(l => l.Date)
+        var allHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
+        var streakEligibleHabitIds = allHabits
+            .Where(h => !h.IsDeleted && !h.IsBadHabit)
+            .Select(h => h.Id)
             .ToHashSet();
 
-        var freezes = await streakFreezeRepository.FindAsync(
-            sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart && sf.UsedOnDate <= request.DateTo,
-            cancellationToken);
-        var frozenDates = freezes.Select(sf => sf.UsedOnDate).ToHashSet();
+        var completionDates = streakEligibleHabitIds.Count == 0
+            ? new HashSet<DateOnly>()
+            : (await habitLogRepository.FindAsync(
+                l => streakEligibleHabitIds.Contains(l.HabitId) && l.Value > 0
+                    && l.Date >= seedFrom && l.Date <= request.DateTo,
+                cancellationToken))
+                .Select(log => log.Date)
+                .ToHashSet();
 
-        var points = new List<StreakHistoryPoint>();
-        var streak = 0;
-        for (var date = windowStart; date <= request.DateTo; date = date.AddDays(1))
-        {
-            var maintained = activeDates.Contains(date) || frozenDates.Contains(date);
-            streak = maintained ? streak + 1 : 0;
-            if (date >= request.DateFrom)
-                points.Add(new StreakHistoryPoint(date, streak));
-        }
+        var freezeDates = (await streakFreezeRepository.FindAsync(
+            sf => sf.UserId == request.UserId && sf.UsedOnDate >= seedFrom && sf.UsedOnDate <= request.DateTo,
+            cancellationToken))
+            .Select(freeze => freeze.UsedOnDate)
+            .ToHashSet();
+
+        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone, userId: user.Id);
+        var expectedDates = HabitScheduleService.GetUnionScheduledDatesForStreak(
+            allHabits, seedFrom, request.DateTo, userTimeZone);
+
+        var series = HabitScheduleService.BuildStreakSeries(
+            expectedDates, completionDates, freezeDates, seedFrom, request.DateFrom, request.DateTo);
+
+        var points = series
+            .Select(point => new StreakHistoryPoint(point.Date, point.Streak))
+            .ToList();
 
         return Result.Success(new StreakHistoryResponse(points));
     }
