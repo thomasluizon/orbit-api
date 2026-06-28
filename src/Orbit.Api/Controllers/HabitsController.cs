@@ -77,6 +77,21 @@ public partial class HabitsController(IMediator mediator, ILogger<HabitsControll
         return result.ToPayGateAwareResult(v => Ok(v));
     }
 
+    [HttpGet("trends")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetTrends(
+        [FromQuery] DateOnly dateFrom,
+        [FromQuery] DateOnly dateTo,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetHabitsCompletionTrendsQuery(HttpContext.GetUserId(), dateFrom, dateTo);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
     [HttpGet("summary")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

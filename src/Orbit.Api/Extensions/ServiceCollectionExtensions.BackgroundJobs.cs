@@ -18,6 +18,7 @@ public static partial class ServiceCollectionExtensions
             .Get<BackgroundJobSettings>()?.UseDurableQueue ?? false;
 
         builder.Services.AddHostedService<DataEncryptionMigrationService>();
+        builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
         if (useDurableQueue)
             AddDurableRecurringJobs(builder);

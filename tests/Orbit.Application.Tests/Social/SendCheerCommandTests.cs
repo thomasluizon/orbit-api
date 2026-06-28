@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Commands;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
@@ -19,6 +20,7 @@ public class SendCheerCommandTests
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Cheer> _cheerRepository = Substitute.For<IGenericRepository<Cheer>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -35,7 +37,7 @@ public class SendCheerCommandTests
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
         var repos = new SendCheerRepositories(_userRepository, _habitRepository, _cheerRepository, _achievementRepository);
         _handler = new SendCheerCommandHandler(
-            guard, friendGraph, repos, _moderation, _push, _unitOfWork,
+            guard, friendGraph, repos, _moderation, _push, new XpAwarder(_xpAwardLogRepository), _unitOfWork,
             Substitute.For<ILogger<SendCheerCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _sender, _recipient);

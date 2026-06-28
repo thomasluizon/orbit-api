@@ -6,6 +6,7 @@ using Orbit.Application.Gamification.Models;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Social.Commands;
@@ -25,6 +26,7 @@ public partial class SendCheerCommandHandler(
     SendCheerRepositories repositories,
     IContentModerationService contentModerationService,
     IPushNotificationService pushNotificationService,
+    IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     ILogger<SendCheerCommandHandler> logger) : IRequestHandler<SendCheerCommand, Result<Guid>>
 {
@@ -108,6 +110,9 @@ public partial class SendCheerCommandHandler(
             return;
 
         await repositories.Achievements.AddAsync(newAchievements[0].Entity, cancellationToken);
+        await xpAwarder.AwardAsync(
+            sender, newAchievements[0].Definition.XpReward, XpAwardSource.Achievement,
+            newAchievements[0].Entity.Id, awardedAtUtc: DateTime.UtcNow, cancellationToken);
 
         var newLevel = LevelDefinitions.GetLevelForXp(sender.TotalXp);
         if (newLevel.Level != sender.Level)
