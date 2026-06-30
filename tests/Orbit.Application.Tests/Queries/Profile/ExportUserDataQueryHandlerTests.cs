@@ -115,6 +115,7 @@ public class ExportUserDataQueryHandlerTests
         result.Value.Account.Email.Should().Be("test@example.com");
         result.Value.Account.Plan.Should().Be("free");
         result.Value.Settings.AiMemoryEnabled.Should().Be(user.AiMemoryEnabled);
+        result.Value.Settings.ProactiveAstraEnabled.Should().Be(user.ProactiveAstraEnabled);
         result.Value.Habits.Should().BeEmpty();
         result.Value.Goals.Should().BeEmpty();
         result.Value.Tags.Should().BeEmpty();

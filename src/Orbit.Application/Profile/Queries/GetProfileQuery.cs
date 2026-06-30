@@ -52,7 +52,8 @@ public record ProfileResponse(
     string? Handle,
     bool SocialOptIn,
     bool Uses24HourClock = true,
-    PublicProfileSettings? PublicProfile = null);
+    PublicProfileSettings? PublicProfile = null,
+    bool ProactiveAstraEnabled = false);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -139,6 +140,7 @@ public class GetProfileQueryHandler(
             user.Handle,
             user.SocialOptIn,
             TimeFormatResolver.Uses24HourClock(user.TimeZone),
-            publicProfile));
+            publicProfile,
+            user.ProactiveAstraEnabled));
     }
 }

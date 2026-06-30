@@ -41,7 +41,8 @@ public sealed record ExportedSettings(
     string? ThemePreference,
     string? ColorScheme,
     bool AiMemoryEnabled,
-    bool AiSummaryEnabled);
+    bool AiSummaryEnabled,
+    bool ProactiveAstraEnabled);
 
 public sealed record ExportedHabit(
     Guid Id,

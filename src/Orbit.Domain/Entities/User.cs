@@ -18,6 +18,7 @@ public partial class User : Entity
     public string? TimeZone { get; private set; }
     public bool AiMemoryEnabled { get; private set; } = true;
     public bool AiSummaryEnabled { get; private set; } = true;
+    public bool ProactiveAstraEnabled { get; private set; } = false;
     public bool HasCompletedOnboarding { get; private set; } = false;
     public bool HasCompletedTour { get; private set; } = false;
     public bool HasCreatedFirstHabit { get; private set; } = false;
@@ -145,6 +146,8 @@ public partial class User : Entity
     public void SetAiMemory(bool enabled) => AiMemoryEnabled = enabled;
 
     public void SetAiSummary(bool enabled) => AiSummaryEnabled = enabled;
+
+    public void SetProactiveAstraEnabled(bool enabled) => ProactiveAstraEnabled = enabled;
 
     public void SetLanguage(string? language) => Language = language;
 

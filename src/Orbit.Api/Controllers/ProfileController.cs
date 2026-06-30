@@ -21,6 +21,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetNameRequest(string Name);
     public record SetAiMemoryRequest([property: JsonRequired] bool Enabled);
     public record SetAiSummaryRequest([property: JsonRequired] bool Enabled);
+    public record SetProactiveAstraEnabledRequest([property: JsonRequired] bool Enabled);
     public record SetLanguageRequest(string Language);
     public record SetWeekStartDayRequest([property: JsonRequired] int WeekStartDay);
     public record SetThemePreferenceRequest(string? ThemePreference);
@@ -115,6 +116,23 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
         if (result.IsSuccess)
             LogAiSummaryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPut("proactive-astra")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetProactiveAstra(
+        [FromBody] SetProactiveAstraEnabledRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetProactiveAstraEnabledCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogProactiveAstraToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -347,5 +365,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Public profile {State} for user {UserId}")]
     private static partial void LogPublicProfileUpdated(ILogger logger, string state, Guid userId);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Proactive Astra check-ins {State} for user {UserId}")]
+    private static partial void LogProactiveAstraToggled(ILogger logger, string state, Guid userId);
 
 }
