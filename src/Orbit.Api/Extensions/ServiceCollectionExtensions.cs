@@ -89,6 +89,13 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+        builder.Services.AddScoped<Orbit.Application.Accountability.Services.AccountabilityPairService>();
+        builder.Services.AddScoped<Orbit.Application.Accountability.Commands.AccountabilityRepositories>(sp =>
+            new Orbit.Application.Accountability.Commands.AccountabilityRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddGoogleCalendarServices();
         builder.Services.AddSingleton(TimeProvider.System);
