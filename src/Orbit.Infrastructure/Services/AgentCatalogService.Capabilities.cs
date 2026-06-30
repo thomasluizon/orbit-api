@@ -921,6 +921,8 @@ public partial class AgentCatalogService
                     "FriendsController.Report",
                     "ProfileController.SetHandle",
                     "ProfileController.SetSocialOptIn",
+                    "ProfileController.UpdatePublicProfile",
+                    "PublicProfileController.GetPublicProfile",
                     "AccountabilityController.GetPairs",
                     "AccountabilityController.Invite",
                     "AccountabilityController.Accept",

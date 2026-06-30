@@ -12,8 +12,8 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260630185306_AddAccountabilityBuddies")]
-    partial class AddAccountabilityBuddies
+    [Migration("20260630190153_AddAiUsageDaily")]
+    partial class AddAiUsageDaily
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -53,106 +53,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("HabitTags");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityCheckIn", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("Date")
-                        .HasColumnType("date");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("PairId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PairId", "CreatedAtUtc");
-
-                    b.HasIndex("PairId", "UserId", "Date")
-                        .IsUnique();
-
-                    b.ToTable("AccountabilityCheckIns");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPair", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("AcceptedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("AddresseeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Cadence")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("EndedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RequesterId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AddresseeId");
-
-                    b.HasIndex("RequesterId");
-
-                    b.ToTable("AccountabilityPairs");
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPairHabit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("HabitId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PairId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HabitId");
-
-                    b.HasIndex("PairId", "UserId", "HabitId")
-                        .IsUnique();
-
-                    b.ToTable("AccountabilityPairHabits");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.AgentAuditLog", b =>
@@ -322,6 +222,51 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("AiFactExtractionBatches");
+                });
+
+            modelBuilder.Entity("Orbit.Domain.Entities.AiUsageDaily", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("CachedTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Calls")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CompletionTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("CostUsd")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("PromptTokens")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("TotalTokens")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date", "Model", "Purpose")
+                        .IsUnique();
+
+                    b.ToTable("AiUsageDaily");
                 });
 
             modelBuilder.Entity("Orbit.Domain.Entities.ApiKey", b =>
@@ -1981,45 +1926,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasOne("Orbit.Domain.Entities.Tag", null)
                         .WithMany()
                         .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityCheckIn", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.AccountabilityPair", null)
-                        .WithMany()
-                        .HasForeignKey("PairId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPair", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("AddresseeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RequesterId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Orbit.Domain.Entities.AccountabilityPairHabit", b =>
-                {
-                    b.HasOne("Orbit.Domain.Entities.Habit", null)
-                        .WithMany()
-                        .HasForeignKey("HabitId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Orbit.Domain.Entities.AccountabilityPair", null)
-                        .WithMany()
-                        .HasForeignKey("PairId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

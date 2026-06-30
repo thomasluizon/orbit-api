@@ -1,6 +1,8 @@
 using MediatR;
+using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
+using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -47,7 +49,8 @@ public record ProfileResponse(
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
     bool CanViewGamification,
-    bool Uses24HourClock = true);
+    bool Uses24HourClock = true,
+    PublicProfileSettings? PublicProfile = null);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -56,7 +59,8 @@ public class GetProfileQueryHandler(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService,
     IFeatureFlagService featureFlagService,
-    IPayGateService payGate) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
+    IPayGateService payGate,
+    IOptions<FrontendSettings> frontendSettings) : IRequestHandler<GetProfileQuery, Result<ProfileResponse>>
 {
     public async Task<Result<ProfileResponse>> Handle(GetProfileQuery request, CancellationToken cancellationToken)
     {
@@ -79,6 +83,15 @@ public class GetProfileQueryHandler(
             sf => sf.UserId == request.UserId && sf.UsedOnDate >= windowStart,
             cancellationToken);
         var freezesAvailable = Math.Max(0, AppConstants.MaxStreakFreezesPerMonth - recentFreezes.Count);
+
+        var publicProfile = new PublicProfileSettings(
+            user.PublicProfileSlug is not null,
+            user.PublicProfileSlug,
+            user.PublicProfileSlug is null ? null : $"{frontendSettings.Value.BaseUrl}/u/{user.PublicProfileSlug}",
+            user.PublicProfileShowStreak,
+            user.PublicProfileShowLevel,
+            user.PublicProfileShowAchievements,
+            user.PublicProfileShowTopHabits);
 
         return Result.Success(new ProfileResponse(
             user.Name,
@@ -121,6 +134,7 @@ public class GetProfileQueryHandler(
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
             canViewGamification,
-            TimeFormatResolver.Uses24HourClock(user.TimeZone)));
+            TimeFormatResolver.Uses24HourClock(user.TimeZone),
+            publicProfile));
     }
 }

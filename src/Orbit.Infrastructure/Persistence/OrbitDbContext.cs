@@ -57,6 +57,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
+    public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<Cheer> Cheers => Set<Cheer>();
     public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
@@ -94,6 +95,7 @@ public class OrbitDbContext : DbContext
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureAiFactExtractionBatchEntity(modelBuilder);
+        ConfigureAiUsageDailyEntity(modelBuilder);
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -226,6 +228,17 @@ public class OrbitDbContext : DbContext
             entity.Property(b => b.OutputFileId).HasMaxLength(255);
             entity.Property(b => b.Status).HasConversion<string>().HasMaxLength(32);
             entity.HasOne<User>().WithMany().HasForeignKey(b => b.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureAiUsageDailyEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AiUsageDaily>(entity =>
+        {
+            entity.HasIndex(u => new { u.Date, u.Model, u.Purpose }).IsUnique();
+            entity.Property(u => u.Model).HasMaxLength(64);
+            entity.Property(u => u.Purpose).HasMaxLength(64);
+            entity.Property(u => u.CostUsd).HasColumnType("numeric");
         });
     }
 
@@ -576,8 +589,10 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
+            entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
+            entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 
             entity.Property(u => u.GoogleCalendarAutoSyncStatus)
                 .HasConversion<string>()

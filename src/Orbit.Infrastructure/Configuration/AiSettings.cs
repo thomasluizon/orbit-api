@@ -10,4 +10,15 @@ public sealed class AiSettings
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
     public int NetworkTimeoutSeconds { get; init; } = 15;
     public int MaxRetries { get; init; } = 2;
+    public Dictionary<string, AiModelPrice> Pricing { get; init; } = new();
+}
+
+/// <summary>
+/// Per-model OpenAI prices in USD per 1,000,000 tokens, used to convert token counts into dollar cost.
+/// </summary>
+public sealed class AiModelPrice
+{
+    public decimal InputPerMillionUsd { get; init; }
+    public decimal CachedInputPerMillionUsd { get; init; }
+    public decimal OutputPerMillionUsd { get; init; }
 }
