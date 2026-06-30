@@ -22,7 +22,7 @@
     </PackageReference>
     <PackageReference Include="ModelContextProtocol" Version="1.4.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.16.5" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.6" />
     <PackageReference Include="Sentry.AspNetCore" Version="6.6.0" />
   </ItemGroup>
 
