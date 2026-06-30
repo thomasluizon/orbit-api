@@ -106,7 +106,8 @@ public partial class CalendarAutoSyncService(
             }
         }
 
-        LogTickCompleted(logger, succeeded, userIds.Count);
+        if (succeeded > 0)
+            LogTickCompleted(logger, succeeded, userIds.Count);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "CalendarAutoSyncService started")]
@@ -118,7 +119,7 @@ public partial class CalendarAutoSyncService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in calendar auto-sync tick")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "CalendarAutoSync tick processing {Count} users")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "CalendarAutoSync tick processing {Count} users")]
     private static partial void LogTickStarted(ILogger logger, int count);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "CalendarAutoSync tick finished: {Succeeded}/{Total} succeeded")]
