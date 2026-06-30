@@ -36,11 +36,15 @@ public static class ResultActionResultExtensions
         [ErrorCodes.HandleTaken] = StatusCodes.Status409Conflict,
         [ErrorCodes.AlreadyFriends] = StatusCodes.Status409Conflict,
         [ErrorCodes.FriendLimitReached] = StatusCodes.Status409Conflict,
+        [ErrorCodes.AlreadyPaired] = StatusCodes.Status409Conflict,
+        [ErrorCodes.PairLimitReached] = StatusCodes.Status409Conflict,
+        [ErrorCodes.AlreadyCheckedIn] = StatusCodes.Status409Conflict,
 
         [ErrorCodes.SocialDisabled] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Blocked] = StatusCodes.Status403Forbidden,
 
         [ErrorCodes.FriendRequestNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.PairNotFound] = StatusCodes.Status404NotFound,
 
         [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
     };

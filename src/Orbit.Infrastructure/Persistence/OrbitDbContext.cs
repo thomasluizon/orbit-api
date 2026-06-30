@@ -63,6 +63,9 @@ public class OrbitDbContext : DbContext
     public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<FriendFeedEvent> FriendFeedEvents => Set<FriendFeedEvent>();
+    public DbSet<AccountabilityPair> AccountabilityPairs => Set<AccountabilityPair>();
+    public DbSet<AccountabilityPairHabit> AccountabilityPairHabits => Set<AccountabilityPairHabit>();
+    public DbSet<AccountabilityCheckIn> AccountabilityCheckIns => Set<AccountabilityCheckIn>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,6 +119,9 @@ public class OrbitDbContext : DbContext
         ConfigureBlockedUserEntity(modelBuilder);
         ConfigureReportEntity(modelBuilder);
         ConfigureFriendFeedEventEntity(modelBuilder);
+        ConfigureAccountabilityPairEntity(modelBuilder);
+        ConfigureAccountabilityPairHabitEntity(modelBuilder);
+        ConfigureAccountabilityCheckInEntity(modelBuilder);
     }
 
     /// <summary>
@@ -520,6 +526,41 @@ public class OrbitDbContext : DbContext
             entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReportedUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Cheer>().WithMany().HasForeignKey(r => r.CheerId).OnDelete(DeleteBehavior.SetNull);
+        });
+    }
+
+    private static void ConfigureAccountabilityPairEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountabilityPair>(entity =>
+        {
+            entity.HasIndex(p => p.RequesterId);
+            entity.HasIndex(p => p.AddresseeId);
+            entity.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(p => p.Cadence).HasConversion<string>().HasMaxLength(32);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.RequesterId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.AddresseeId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureAccountabilityPairHabitEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountabilityPairHabit>(entity =>
+        {
+            entity.HasIndex(ph => new { ph.PairId, ph.UserId, ph.HabitId }).IsUnique();
+            entity.HasIndex(ph => ph.HabitId);
+            entity.HasOne<AccountabilityPair>().WithMany().HasForeignKey(ph => ph.PairId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Habit>().WithMany().HasForeignKey(ph => ph.HabitId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureAccountabilityCheckInEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountabilityCheckIn>(entity =>
+        {
+            entity.HasIndex(c => new { c.PairId, c.UserId, c.Date }).IsUnique();
+            entity.HasIndex(c => new { c.PairId, c.CreatedAtUtc });
+            entity.Property(c => c.Note).HasMaxLength(DomainConstants.MaxAccountabilityNoteLength);
+            entity.HasOne<AccountabilityPair>().WithMany().HasForeignKey(c => c.PairId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

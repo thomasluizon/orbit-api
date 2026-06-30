@@ -122,4 +122,8 @@ public static class ErrorCodes
     public const string ContentRejected = "CONTENT_REJECTED";
     public const string FriendRequestNotFound = "FRIEND_REQUEST_NOT_FOUND";
     public const string CheerNotFound = "CHEER_NOT_FOUND";
+    public const string PairNotFound = "PAIR_NOT_FOUND";
+    public const string PairLimitReached = "PAIR_LIMIT_REACHED";
+    public const string AlreadyPaired = "ALREADY_PAIRED";
+    public const string AlreadyCheckedIn = "ALREADY_CHECKED_IN";
 }
