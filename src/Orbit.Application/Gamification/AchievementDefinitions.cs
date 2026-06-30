@@ -34,6 +34,16 @@ public static class AchievementDefinitions
     public const string Comeback = "comeback";
     public const string BadHabitBreaker = "bad_habit_breaker";
     public const string FirstCheer = "first_cheer";
+    public const string FirstFriend = "first_friend";
+    public const string SquadGoals = "squad_goals";
+    public const string Cheerleader = "cheerleader";
+    public const string ShowOff = "show_off";
+    public const string YearInReview = "year_in_review";
+    public const string TeamPlayer = "team_player";
+    public const string MissionAccomplished = "mission_accomplished";
+    public const string BattleBuddy = "battle_buddy";
+    public const string StreakImmortal = "streak_immortal";
+    public const string Unstoppable = "unstoppable";
 
     private static readonly List<AchievementDefinition> _all =
     [
@@ -66,6 +76,16 @@ public static class AchievementDefinitions
         new(Comeback, "Comeback", "Resume after 7+ days of inactivity", AchievementCategory.Special, AchievementRarity.Uncommon, 50, "comeback"),
         new(BadHabitBreaker, "Bad Habit Breaker", "Achieve a 30-day streak on a bad habit", AchievementCategory.Special, AchievementRarity.Rare, 150, "bad_habit_breaker"),
         new(FirstCheer, "Good Vibes", "Send or receive your first cheer", AchievementCategory.Special, AchievementRarity.Common, 50, "first_cheer"),
+        new(FirstFriend, "First Friend", "Add your first friend", AchievementCategory.Social, AchievementRarity.Common, 50, "first_friend"),
+        new(SquadGoals, "Squad Goals", "Reach 5 friends", AchievementCategory.Social, AchievementRarity.Rare, 150, "squad_goals"),
+        new(Cheerleader, "Cheerleader", "Send 25 cheers", AchievementCategory.Social, AchievementRarity.Rare, 150, "cheerleader"),
+        new(ShowOff, "Show Off", "Share your first card", AchievementCategory.Sharing, AchievementRarity.Uncommon, 75, "show_off"),
+        new(YearInReview, "Year in Review", "View your first Wrapped", AchievementCategory.Sharing, AchievementRarity.Uncommon, 75, "year_in_review"),
+        new(TeamPlayer, "Team Player", "Join your first cooperative challenge", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "team_player"),
+        new(MissionAccomplished, "Mission Accomplished", "Complete a cooperative challenge", AchievementCategory.Together, AchievementRarity.Rare, 150, "mission_accomplished"),
+        new(BattleBuddy, "Battle Buddy", "Start a 1:1 accountability pair", AchievementCategory.Together, AchievementRarity.Uncommon, 75, "battle_buddy"),
+        new(StreakImmortal, "Streak Immortal", "Achieve a 1000-day streak", AchievementCategory.Consistency, AchievementRarity.Legendary, 1500, "streak_immortal"),
+        new(Unstoppable, "Unstoppable", "Complete 2500 habits total", AchievementCategory.Volume, AchievementRarity.Legendary, 1000, "unstoppable"),
     ];
 
     public static IReadOnlyList<AchievementDefinition> All => _all;
