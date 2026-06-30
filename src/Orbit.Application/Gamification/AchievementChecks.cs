@@ -61,6 +61,8 @@ public static class AchievementChecks
             TryGrant(AchievementDefinitions.YearOfDiscipline, user, earned, newAchievements);
         if (currentStreak >= 500)
             TryGrant(AchievementDefinitions.StreakTitan, user, earned, newAchievements);
+        if (currentStreak >= 1000)
+            TryGrant(AchievementDefinitions.StreakImmortal, user, earned, newAchievements);
     }
 
     public static void CheckVolumeAchievements(
@@ -79,6 +81,8 @@ public static class AchievementChecks
             TryGrant(AchievementDefinitions.Relentless, user, earned, newAchievements);
         if (totalCompletions >= 1000)
             TryGrant(AchievementDefinitions.LegendaryVolume, user, earned, newAchievements);
+        if (totalCompletions >= 2500)
+            TryGrant(AchievementDefinitions.Unstoppable, user, earned, newAchievements);
     }
 
     public static void CheckPerfectDay(
