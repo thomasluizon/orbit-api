@@ -28,6 +28,7 @@ public partial class GamificationService(
     IFriendFeedEventEmitter friendFeedEventEmitter,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
+    IFeatureFlagService featureFlagService,
     ILogger<GamificationService> logger) : IGamificationService
 {
     private const int AchievementLogWindowDays = 400;
@@ -79,7 +80,8 @@ public partial class GamificationService(
         Guid userId, IReadOnlyList<Guid> habitIds, List<PendingPush> pushes, CancellationToken ct)
     {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return new HabitsLoggedOutcome([], ShouldSave: false);
+        if (user is null || !await IsGamificationUnlockedAsync(user, ct))
+            return new HabitsLoggedOutcome([], ShouldSave: false);
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
@@ -162,6 +164,7 @@ public partial class GamificationService(
             : await AwardLoggedHabitXpAndAchievementsAsync(user, habit, earned, context, today, newAchievements, metrics.CurrentStreak, ct);
 
         if (habit.IsBadHabit
+            && user.HasProAccess
             && !earned.Contains(AchievementDefinitions.BadHabitBreaker)
             && metrics.CurrentStreak >= 30)
         {
@@ -190,7 +193,9 @@ public partial class GamificationService(
     /// Grants the base + streak XP and runs every generic completion achievement check for a good
     /// habit log. Bad-habit logs never reach this — logging a habit you are trying to quit is a slip,
     /// not progress, so it earns no XP and no generic achievements (only <c>BadHabitBreaker</c>,
-    /// evaluated separately, rewards a sustained abstinence streak). Returns the XP awarded.
+    /// evaluated separately, rewards a sustained abstinence streak). XP is awarded whenever gamification
+    /// is unlocked (free tier included); the achievement checks run only for Pro users — free users earn
+    /// XP and level up, but the achievement catalog stays Pro-gated. Returns the XP awarded.
     /// </summary>
     private async Task<int> AwardLoggedHabitXpAndAchievementsAsync(
         User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
@@ -203,6 +208,9 @@ public partial class GamificationService(
             .Select(l => (Guid?)l.Id)
             .FirstOrDefault();
         await AwardXpAsync(user, xp, XpAwardSource.HabitLog, habitLogId, awardedAtUtc: DateTime.UtcNow, ct);
+
+        if (!user.HasProAccess)
+            return xp;
 
         if (!earned.Contains(AchievementDefinitions.Liftoff) && context.TotalLogCount == 1)
             AchievementChecks.TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
@@ -232,6 +240,8 @@ public partial class GamificationService(
     {
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
+            if (!user.HasProAccess) return;
+
             if (!earned.Contains(AchievementDefinitions.FirstOrbit))
             {
                 var habitCount = await repos.HabitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
@@ -245,6 +255,8 @@ public partial class GamificationService(
     {
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
+            if (!user.HasProAccess) return;
+
             var goalCount = await repos.GoalRepository.CountAsync(g => g.UserId == userId, ct);
 
             if (!earned.Contains(AchievementDefinitions.MissionControl) && goalCount == 1)
@@ -260,6 +272,8 @@ public partial class GamificationService(
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
             await AwardXpAsync(user, 100, XpAwardSource.GoalCompleted, sourceId: null, awardedAtUtc: DateTime.UtcNow, ct);
+
+            if (!user.HasProAccess) return;
 
             var completedGoals = await repos.GoalRepository.CountAsync(
                 g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
@@ -364,6 +378,70 @@ public partial class GamificationService(
         }
     }
 
+    public async Task<IReadOnlyList<string>> TryGrantAchievementsAsync(
+        Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            var granted = await ComputeGrantAchievementsAsync(userId, achievementIds, pushes, ct);
+            if (granted.Count == 0)
+                return granted;
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                continue;
+            }
+
+            await FlushPushesAsync(pushes, ct);
+            return granted;
+        }
+    }
+
+    /// <summary>
+    /// Idempotently grants the requested achievements to the loaded user, reusing the audited
+    /// persist + XP + level + notification funnel. Returns the ids newly granted this call (empty when the
+    /// user is missing or every id was already earned). Deliberately ungated on Pro — event-driven
+    /// social/sharing achievements are earned by free users, while the catalog display stays Pro-gated.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ComputeGrantAchievementsAsync(
+        Guid userId, IReadOnlyList<string> achievementIds, List<PendingPush> pushes, CancellationToken ct)
+    {
+        var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+        if (user is null) return [];
+
+        var earned = await LoadEarnedAchievementIds(userId, ct);
+        var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
+        var previousLevel = user.Level;
+
+        foreach (var achievementId in achievementIds)
+            AchievementChecks.TryGrant(achievementId, user, earned, newAchievements);
+
+        if (newAchievements.Count == 0) return [];
+
+        await PersistNewAchievementsAsync(user, newAchievements, ct);
+
+        UpdateLevel(user);
+
+        foreach (var (_, definition) in newAchievements)
+            await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
+
+        if (user.Level > previousLevel)
+        {
+            var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
+            await QueueLevelUpNotification(userId, newLevel, user.Language, pushes, ct);
+        }
+
+        return newAchievements.Select(a => a.Definition.Id).ToList();
+    }
+
     /// <summary>
     /// Template method that handles the common gamification scaffold:
     /// load user, check Pro, load earned achievements, run domain-specific checks,
@@ -405,7 +483,7 @@ public partial class GamificationService(
         CancellationToken ct)
     {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null || !user.HasProAccess) return false;
+        if (user is null || !await IsGamificationUnlockedAsync(user, ct)) return false;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
@@ -433,6 +511,18 @@ public partial class GamificationService(
     {
         var earned = await repos.AchievementRepository.FindAsync(a => a.UserId == userId, ct);
         return earned.Select(a => a.AchievementId).ToHashSet();
+    }
+
+    /// <summary>
+    /// Whether gamification earning (streak, XP, levels) is active for the user: always for Pro, and for
+    /// free users once the <see cref="FeatureFlagKeys.GamificationFreeTier"/> flag is enabled. Achievement
+    /// awards remain Pro-gated independently of this predicate.
+    /// </summary>
+    private async Task<bool> IsGamificationUnlockedAsync(User user, CancellationToken ct)
+    {
+        if (user.HasProAccess) return true;
+        var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(user.Id, ct);
+        return enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
     }
 
     private static void UpdateLevel(User user)
@@ -504,6 +594,16 @@ public partial class GamificationService(
         ["comeback"] = ("Retorno", "Retome após 7+ dias de inatividade"),
         ["bad_habit_breaker"] = ("Quebrador de Maus Hábitos", "Resista a um mau hábito por 30 dias consecutivos"),
         ["first_cheer"] = ("Boas Energias", "Envie ou receba seu primeiro incentivo"),
+        ["first_friend"] = ("Primeiro Amigo", "Adicione seu primeiro amigo"),
+        ["squad_goals"] = ("Esquadrão Completo", "Alcance 5 amigos"),
+        ["cheerleader"] = ("Líder de Torcida", "Envie 25 incentivos"),
+        ["show_off"] = ("Exibido", "Compartilhe seu primeiro card"),
+        ["year_in_review"] = ("Retrospectiva", "Veja sua primeira Retrospectiva"),
+        ["team_player"] = ("Espírito de Equipe", "Entre no seu primeiro desafio cooperativo"),
+        ["mission_accomplished"] = ("Missão Cumprida", "Complete um desafio cooperativo"),
+        ["battle_buddy"] = ("Parceiro de Batalha", "Inicie uma dupla de responsabilidade"),
+        ["streak_immortal"] = ("Sequência Imortal", "Alcance uma sequência de 1000 dias"),
+        ["unstoppable"] = ("Imbatível", "Complete 2500 hábitos no total"),
     };
 
     private static readonly Dictionary<int, string> LevelTranslationsPt = new()
