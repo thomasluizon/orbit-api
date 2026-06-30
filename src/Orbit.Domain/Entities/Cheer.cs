@@ -6,13 +6,13 @@ public class Cheer : Entity
 {
     public Guid SenderId { get; private set; }
     public Guid RecipientId { get; private set; }
-    public Guid HabitId { get; private set; }
+    public Guid? HabitId { get; private set; }
     public string? Note { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
     private Cheer() { }
 
-    public static Result<Cheer> Create(Guid senderId, Guid recipientId, Guid habitId, string? note)
+    public static Result<Cheer> Create(Guid senderId, Guid recipientId, Guid? habitId, string? note)
     {
         if (senderId == recipientId)
             return Result.Failure<Cheer>(DomainErrors.CannotCheerSelf);

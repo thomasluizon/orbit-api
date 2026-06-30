@@ -506,7 +506,7 @@ public class OrbitDbContext : DbContext
             entity.Property(c => c.Note).HasMaxLength(DomainConstants.MaxCheerNoteLength);
             entity.HasOne<User>().WithMany().HasForeignKey(c => c.SenderId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(c => c.RecipientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<Habit>().WithMany().HasForeignKey(c => c.HabitId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Habit>().WithMany().HasForeignKey(c => c.HabitId).IsRequired(false).OnDelete(DeleteBehavior.SetNull);
         });
     }
 

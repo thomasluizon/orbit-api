@@ -177,4 +177,33 @@ public class SendCheerCommandTests
         result.IsSuccess.Should().BeTrue();
         await _achievementRepository.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task NullHabitId_PersistsGeneralCheerAndSkipsHabitOwnershipCheck()
+    {
+        _habitRepository.AnyAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _handler.Handle(
+            new SendCheerCommand(_sender.Id, _recipient.Id, null, "You've got this!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cheerRepository.Received(1).AddAsync(
+            Arg.Is<Cheer>(c => c.SenderId == _sender.Id && c.RecipientId == _recipient.Id && c.HabitId == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TenthSentCheer_PersistsCheerAndEvaluatesCheerleaderThreshold()
+    {
+        _cheerRepository.CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(CheerleaderThreshold - 1);
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cheerRepository.Received(1).AddAsync(Arg.Any<Cheer>(), Arg.Any<CancellationToken>());
+        await _cheerRepository.Received().CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    private const int CheerleaderThreshold = 10;
 }

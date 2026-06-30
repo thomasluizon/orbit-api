@@ -49,6 +49,8 @@ public record ProfileResponse(
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
     bool CanViewGamification,
+    string? Handle,
+    bool SocialOptIn,
     bool Uses24HourClock = true,
     PublicProfileSettings? PublicProfile = null);
 
@@ -134,6 +136,8 @@ public class GetProfileQueryHandler(
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
             canViewGamification,
+            user.Handle,
+            user.SocialOptIn,
             TimeFormatResolver.Uses24HourClock(user.TimeZone),
             publicProfile));
     }

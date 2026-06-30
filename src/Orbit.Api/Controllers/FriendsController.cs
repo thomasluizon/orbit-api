@@ -15,7 +15,7 @@ namespace Orbit.Api.Controllers;
 public partial class FriendsController(IMediator mediator, ILogger<FriendsController> logger) : ControllerBase
 {
     public record SendFriendRequestBody(string? Handle, string? ReferralCode);
-    public record SendCheerBody(Guid RecipientId, Guid HabitId, string? Note);
+    public record SendCheerBody(Guid RecipientId, Guid? HabitId, string? Note);
     public record BlockUserBody(Guid BlockedUserId);
     public record ReportUserBody(Guid ReportedUserId, ReportReason Reason, string? Details, Guid? CheerId);
 

@@ -1,7 +1,9 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Commands;
 using Orbit.Application.Social.Queries;
 using Orbit.Application.Social.Services;
@@ -16,6 +18,8 @@ public class FriendshipCommandsTests
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Friendship> _friendshipRepository = Substitute.For<IGenericRepository<Friendship>>();
     private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
+    private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPushNotificationService _pushNotificationService = Substitute.For<IPushNotificationService>();
 
@@ -26,13 +30,15 @@ public class FriendshipCommandsTests
     {
         _guard = new SocialAccessGuard(_userRepository);
         _friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
+        SocialTestHelpers.StubFind(_achievementRepository);
     }
 
     private SendFriendRequestCommandHandler SendHandler() =>
         new(_guard, _friendGraph, _friendshipRepository, _unitOfWork);
 
     private AcceptFriendRequestCommandHandler AcceptHandler() =>
-        new(_guard, _friendshipRepository, _userRepository, _unitOfWork, _pushNotificationService,
+        new(_guard, _friendshipRepository, _userRepository, _achievementRepository,
+            new XpAwarder(_xpAwardLogRepository), _unitOfWork, _pushNotificationService,
             Substitute.For<ILogger<AcceptFriendRequestCommandHandler>>());
 
     [Fact]
@@ -226,6 +232,44 @@ public class FriendshipCommandsTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("FRIENDSHIP_NOT_PENDING");
+    }
+
+    [Fact]
+    public async Task Accept_FirstAcceptedFriendship_EvaluatesFriendCountAwardsForBothParties()
+    {
+        var caller = SocialTestHelpers.OptedInUser();
+        var requester = SocialTestHelpers.OptedInUser();
+        var friendship = Friendship.Create(requester.Id, caller.Id).Value;
+        SocialTestHelpers.StubUsers(_userRepository, caller, requester);
+        SocialTestHelpers.StubFind(_friendshipRepository, friendship);
+
+        var result = await AcceptHandler().Handle(
+            new AcceptFriendRequestCommand(caller.Id, friendship.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        friendship.Status.Should().Be(FriendshipStatus.Accepted);
+        await _friendshipRepository.Received(2).CountAsync(
+            Arg.Any<Expression<Func<Friendship, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Accept_AtSquadGoalsThreshold_EvaluatesAwardsAndSucceeds()
+    {
+        var caller = SocialTestHelpers.OptedInUser();
+        var requester = SocialTestHelpers.OptedInUser();
+        var friendship = Friendship.Create(requester.Id, caller.Id).Value;
+        SocialTestHelpers.StubUsers(_userRepository, caller, requester);
+        SocialTestHelpers.StubFind(_friendshipRepository, friendship);
+        _friendshipRepository.CountAsync(
+                Arg.Any<Expression<Func<Friendship, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(5);
+
+        var result = await AcceptHandler().Handle(
+            new AcceptFriendRequestCommand(caller.Id, friendship.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _achievementRepository.Received().FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
