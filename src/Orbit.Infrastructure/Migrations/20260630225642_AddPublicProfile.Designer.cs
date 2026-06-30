@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    [Migration("20260630223251_AddPublicProfile")]
+    [Migration("20260630225642_AddPublicProfile")]
     partial class AddPublicProfile
     {
         /// <inheritdoc />
