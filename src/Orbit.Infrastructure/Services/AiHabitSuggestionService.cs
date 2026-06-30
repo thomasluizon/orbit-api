@@ -21,7 +21,7 @@ public sealed partial class AiHabitSuggestionService(
     {
         var prompt = BuildPrompt(title, language);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingSuggestion(logger, language);
 
         try
@@ -168,7 +168,7 @@ public sealed partial class AiHabitSuggestionService(
         string? DueTime = null,
         IReadOnlyList<string>? ChecklistItems = null);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating habit setup suggestion (language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating habit setup suggestion (language: {Language})...")]
     private static partial void LogGeneratingSuggestion(ILogger logger, string language);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "AI API call failed for habit setup suggestion")]
