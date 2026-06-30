@@ -28,6 +28,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["set-handle"] = new(TimeSpan.FromHours(24), PermitLimit: 5, SegmentCount: 1),
             ["block"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
             ["unblock"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
+            ["challenges"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
             ["public-profile"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4)
         };
 

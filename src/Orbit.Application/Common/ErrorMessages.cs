@@ -133,6 +133,12 @@ public static class ErrorMessages
     public static readonly AppError ContentRejected = new(ErrorCodes.ContentRejected, "This note can't be sent. Please revise it and try again.");
     public static readonly AppError FriendRequestNotFound = new(ErrorCodes.FriendRequestNotFound, "Friend request not found.");
     public static readonly AppError CheerNotFound = new(ErrorCodes.CheerNotFound, "Cheer not found.");
+    public static readonly AppError ChallengeNotFound = new(ErrorCodes.ChallengeNotFound, "Challenge not found.");
+    public static readonly AppError ChallengeFull = new(ErrorCodes.ChallengeFull, "This challenge has reached its participant limit of {0}.");
+    public static readonly AppError AlreadyJoinedChallenge = new(ErrorCodes.AlreadyJoinedChallenge, "You have already joined this challenge.");
+    public static readonly AppError NotChallengeParticipant = new(ErrorCodes.NotChallengeParticipant, "You are not a participant in this challenge.");
+    public static readonly AppError InvalidJoinCode = new(ErrorCodes.InvalidJoinCode, "Invalid join code.");
+    public static readonly AppError ChallengeClosed = new(ErrorCodes.ChallengeClosed, "This challenge is no longer accepting participants.");
     public static readonly AppError PairNotFound = new(ErrorCodes.PairNotFound, "Accountability pair not found.");
     public static readonly AppError PairLimitReached = new(ErrorCodes.PairLimitReached, "You've reached the maximum of {0} accountability pairs.");
     public static readonly AppError AlreadyPaired = new(ErrorCodes.AlreadyPaired, "You already have an accountability pair with this person.");

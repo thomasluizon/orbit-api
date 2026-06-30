@@ -42,9 +42,16 @@ public static class ResultActionResultExtensions
 
         [ErrorCodes.SocialDisabled] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Blocked] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.NotChallengeParticipant] = StatusCodes.Status403Forbidden,
 
         [ErrorCodes.FriendRequestNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.ChallengeNotFound] = StatusCodes.Status404NotFound,
+        [ErrorCodes.InvalidJoinCode] = StatusCodes.Status404NotFound,
         [ErrorCodes.PairNotFound] = StatusCodes.Status404NotFound,
+
+        [ErrorCodes.ChallengeFull] = StatusCodes.Status409Conflict,
+        [ErrorCodes.AlreadyJoinedChallenge] = StatusCodes.Status409Conflict,
+        [ErrorCodes.ChallengeClosed] = StatusCodes.Status409Conflict,
 
         [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
     };

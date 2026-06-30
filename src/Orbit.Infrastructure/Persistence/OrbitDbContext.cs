@@ -63,6 +63,9 @@ public class OrbitDbContext : DbContext
     public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
     public DbSet<Report> Reports => Set<Report>();
     public DbSet<FriendFeedEvent> FriendFeedEvents => Set<FriendFeedEvent>();
+    public DbSet<Challenge> Challenges => Set<Challenge>();
+    public DbSet<ChallengeParticipant> ChallengeParticipants => Set<ChallengeParticipant>();
+    public DbSet<ChallengeParticipantHabit> ChallengeParticipantHabits => Set<ChallengeParticipantHabit>();
     public DbSet<AccountabilityPair> AccountabilityPairs => Set<AccountabilityPair>();
     public DbSet<AccountabilityPairHabit> AccountabilityPairHabits => Set<AccountabilityPairHabit>();
     public DbSet<AccountabilityCheckIn> AccountabilityCheckIns => Set<AccountabilityCheckIn>();
@@ -119,6 +122,9 @@ public class OrbitDbContext : DbContext
         ConfigureBlockedUserEntity(modelBuilder);
         ConfigureReportEntity(modelBuilder);
         ConfigureFriendFeedEventEntity(modelBuilder);
+        ConfigureChallengeEntity(modelBuilder);
+        ConfigureChallengeParticipantEntity(modelBuilder);
+        ConfigureChallengeParticipantHabitEntity(modelBuilder);
         ConfigureAccountabilityPairEntity(modelBuilder);
         ConfigureAccountabilityPairHabitEntity(modelBuilder);
         ConfigureAccountabilityCheckInEntity(modelBuilder);
@@ -579,6 +585,52 @@ public class OrbitDbContext : DbContext
             entity.Property(e => e.Type).HasConversion<string>().HasMaxLength(32);
             entity.Property(e => e.AchievementId).HasMaxLength(50);
             entity.HasOne<User>().WithMany().HasForeignKey(e => e.ActorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureChallengeEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Challenge>(entity =>
+        {
+            entity.HasIndex(c => c.CreatorId);
+            entity.HasIndex(c => c.JoinCode).IsUnique();
+            entity.HasQueryFilter(c => !c.IsDeleted);
+            entity.Property(c => c.Type).HasConversion<string>().HasMaxLength(32);
+            entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(32);
+            entity.Property(c => c.JoinCode).HasMaxLength(16);
+            entity.Property(c => c.Title).HasMaxLength(Orbit.Application.Common.AppConstants.MaxChallengeTitleLength);
+            entity.Property(c => c.Description).HasMaxLength(Orbit.Application.Common.AppConstants.MaxChallengeDescriptionLength);
+            entity.HasOne<User>().WithMany().HasForeignKey(c => c.CreatorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(c => c.Participants)
+                .WithOne()
+                .HasForeignKey(p => p.ChallengeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureChallengeParticipantEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ChallengeParticipant>(entity =>
+        {
+            entity.HasIndex(p => new { p.ChallengeId, p.UserId })
+                .IsUnique()
+                .HasFilter("\"LeftAtUtc\" IS NULL");
+            entity.HasIndex(p => p.UserId);
+            entity.HasOne<User>().WithMany().HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(p => p.LinkedHabits)
+                .WithOne()
+                .HasForeignKey(h => h.ChallengeParticipantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureChallengeParticipantHabitEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ChallengeParticipantHabit>(entity =>
+        {
+            entity.HasIndex(h => new { h.ChallengeParticipantId, h.HabitId }).IsUnique();
+            entity.HasIndex(h => h.HabitId);
+            entity.HasOne<Habit>().WithMany().HasForeignKey(h => h.HabitId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
