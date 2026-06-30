@@ -11,7 +11,7 @@ public record CheerDto(
     Guid Id,
     Guid SenderId,
     Guid RecipientId,
-    Guid HabitId,
+    Guid? HabitId,
     string? Note,
     DateTime CreatedAtUtc,
     string SenderHandle,

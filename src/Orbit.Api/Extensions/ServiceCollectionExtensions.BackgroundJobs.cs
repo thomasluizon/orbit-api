@@ -44,6 +44,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<PlayNotificationCleanupService>();
         builder.Services.AddHostedService<CalendarAutoSyncService>();
         builder.Services.AddHostedService<OpenAiBatchPollerService>();
+        builder.Services.AddHostedService<AiUsageSummaryService>();
     }
 
     private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
@@ -77,6 +78,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<PlayNotificationCleanupService>(builder);
         AddScheduledJob<CalendarAutoSyncService>(builder);
         AddScheduledJob<OpenAiBatchPollerService>(builder);
+        AddScheduledJob<AiUsageSummaryService>(builder);
 
         builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
     }

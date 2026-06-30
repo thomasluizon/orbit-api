@@ -122,4 +122,14 @@ public static class ErrorCodes
     public const string ContentRejected = "CONTENT_REJECTED";
     public const string FriendRequestNotFound = "FRIEND_REQUEST_NOT_FOUND";
     public const string CheerNotFound = "CHEER_NOT_FOUND";
+    public const string ChallengeNotFound = "CHALLENGE_NOT_FOUND";
+    public const string ChallengeFull = "CHALLENGE_FULL";
+    public const string AlreadyJoinedChallenge = "ALREADY_JOINED_CHALLENGE";
+    public const string NotChallengeParticipant = "NOT_CHALLENGE_PARTICIPANT";
+    public const string InvalidJoinCode = "INVALID_JOIN_CODE";
+    public const string ChallengeClosed = "CHALLENGE_CLOSED";
+    public const string PairNotFound = "PAIR_NOT_FOUND";
+    public const string PairLimitReached = "PAIR_LIMIT_REACHED";
+    public const string AlreadyPaired = "ALREADY_PAIRED";
+    public const string AlreadyCheckedIn = "ALREADY_CHECKED_IN";
 }

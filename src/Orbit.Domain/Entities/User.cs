@@ -69,6 +69,11 @@ public partial class User : Entity
     public int LastFreezeAwardStreak { get; private set; } = 0;
     public string? ThemePreference { get; private set; }
     public string? ColorScheme { get; private set; }
+    public string? PublicProfileSlug { get; private set; }
+    public bool PublicProfileShowStreak { get; private set; } = true;
+    public bool PublicProfileShowLevel { get; private set; } = true;
+    public bool PublicProfileShowAchievements { get; private set; } = true;
+    public bool PublicProfileShowTopHabits { get; private set; } = false;
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -391,6 +396,24 @@ public partial class User : Entity
     public void SeedDefaultHandle() => Handle = $"user_{Id:N}"[..17];
 
     public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
+
+    /// <summary>
+    /// Sets (or clears, when null) the opaque token that addresses the user's public shareable
+    /// profile at <c>/u/{slug}</c>. A null slug means the public profile is disabled.
+    /// </summary>
+    public void SetPublicProfileSlug(string? slug) => PublicProfileSlug = slug;
+
+    /// <summary>
+    /// Sets which fields the public profile exposes. Each flag gates one section of the no-auth
+    /// projection; a field whose flag is false is omitted server-side, never just hidden client-side.
+    /// </summary>
+    public void SetPublicProfileVisibility(bool showStreak, bool showLevel, bool showAchievements, bool showTopHabits)
+    {
+        PublicProfileShowStreak = showStreak;
+        PublicProfileShowLevel = showLevel;
+        PublicProfileShowAchievements = showAchievements;
+        PublicProfileShowTopHabits = showTopHabits;
+    }
 
     public void SetReferredBy(Guid referrerUserId) => ReferredByUserId = referrerUserId;
 
