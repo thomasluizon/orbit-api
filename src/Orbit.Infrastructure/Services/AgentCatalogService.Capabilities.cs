@@ -920,7 +920,9 @@ public partial class AgentCatalogService
                     "FriendsController.Unblock",
                     "FriendsController.Report",
                     "ProfileController.SetHandle",
-                    "ProfileController.SetSocialOptIn"
+                    "ProfileController.SetSocialOptIn",
+                    "ProfileController.UpdatePublicProfile",
+                    "PublicProfileController.GetPublicProfile"
                 ])
         ];
     }

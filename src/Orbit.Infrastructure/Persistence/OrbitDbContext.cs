@@ -548,8 +548,10 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
+            entity.HasIndex(u => u.PublicProfileSlug).IsUnique().HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
+            entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 
             entity.Property(u => u.GoogleCalendarAutoSyncStatus)
                 .HasConversion<string>()
