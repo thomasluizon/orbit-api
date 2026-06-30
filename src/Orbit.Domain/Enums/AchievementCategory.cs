@@ -7,5 +7,8 @@ public enum AchievementCategory
     Volume,
     Goals,
     Perfection,
-    Special
+    Special,
+    Social,
+    Sharing,
+    Together
 }
