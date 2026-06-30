@@ -142,7 +142,7 @@ public sealed record ExportedFriendship(
 public sealed record ExportedCheer(
     Guid SenderId,
     Guid RecipientId,
-    Guid HabitId,
+    Guid? HabitId,
     string? Note,
     DateTime CreatedAtUtc);
 
