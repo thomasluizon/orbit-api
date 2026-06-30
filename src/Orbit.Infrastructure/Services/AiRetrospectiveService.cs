@@ -27,7 +27,7 @@ public sealed partial class AiRetrospectiveService(
 
         var prompt = BuildRetrospectivePrompt(habits, dateFrom, dateTo, period, language);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingRetrospective(logger, period, dateFrom, dateTo, language);
 
         try
@@ -45,7 +45,7 @@ public sealed partial class AiRetrospectiveService(
             var trimmed = AiSummaryService.StripMarkdownFences(text);
             var narrative = ParseNarrative(trimmed, language);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogRetrospectiveGenerated(logger, trimmed.Length);
             return Result.Success(narrative);
         }
@@ -241,10 +241,10 @@ public sealed partial class AiRetrospectiveService(
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating retrospective (period: {Period}, from: {From}, to: {To}, language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating retrospective (period: {Period}, from: {From}, to: {To}, language: {Language})...")]
     private static partial void LogGeneratingRetrospective(ILogger logger, string period, DateOnly from, DateOnly to, string language);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Retrospective generated successfully ({Length} chars)")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Retrospective generated successfully ({Length} chars)")]
     private static partial void LogRetrospectiveGenerated(ILogger logger, int length);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for retrospective")]

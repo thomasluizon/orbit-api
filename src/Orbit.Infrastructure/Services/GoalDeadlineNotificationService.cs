@@ -149,7 +149,7 @@ public partial class GoalDeadlineNotificationService(
             if (!await TryRecordAndSendAsync(goal, body, notificationKey, pushService, dbContext, ct))
                 return;
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogSentDeadlineNotification(logger, daysBefore, goal.Id, goal.UserId);
 
             return;
@@ -170,7 +170,7 @@ public partial class GoalDeadlineNotificationService(
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
         {
             DetachPendingEntries(dbContext);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogDeadlineAlreadySent(logger, goal.Id);
             return false;
         }
@@ -215,10 +215,10 @@ public partial class GoalDeadlineNotificationService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in goal deadline notification service")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sent deadline notification ({Days}d before) for goal {GoalId} to user {UserId}")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Sent deadline notification ({Days}d before) for goal {GoalId} to user {UserId}")]
     private static partial void LogSentDeadlineNotification(ILogger logger, int days, Guid goalId, Guid userId);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Deadline notification already recorded for goal {GoalId}; skipping push")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Deadline notification already recorded for goal {GoalId}; skipping push")]
     private static partial void LogDeadlineAlreadySent(ILogger logger, Guid goalId);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to record deadline notification for goal {GoalId} (user {UserId}); skipping push")]

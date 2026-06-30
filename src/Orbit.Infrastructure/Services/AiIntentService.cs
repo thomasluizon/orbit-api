@@ -403,16 +403,16 @@ public sealed partial class AiIntentService(
             usage.TotalTokenCount);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API with tools...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API with tools...")]
     private static partial void LogCallingAiWithTools(ILogger logger);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI API responded in {ElapsedMs}ms")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "AI API responded in {ElapsedMs}ms")]
     private static partial void LogAiApiResponded(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "AI returned {Count} tool call(s): {Names}")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "AI returned {Count} tool call(s): {Names}")]
     private static partial void LogAiReturnedToolCalls(ILogger logger, int count, string names);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "AI returned text response (length: {Length} chars)")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "AI returned text response (length: {Length} chars)")]
     private static partial void LogAiReturnedTextResponse(ILogger logger, int length);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to deserialize AI function-calling response")]
@@ -421,13 +421,13 @@ public sealed partial class AiIntentService(
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "AI API call failed")]
     private static partial void LogAiApiCallFailed(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "First content token after {ElapsedMs}ms")]
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "First content token after {ElapsedMs}ms")]
     private static partial void LogFirstContentToken(ILogger logger, long elapsedMs);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "AI response truncated (finish_reason=length); output may be incomplete")]
     private static partial void LogResponseTruncated(ILogger logger);
 
-    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "AI token usage ({Phase}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "AI token usage ({Phase}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
     private static partial void LogAiTokenUsage(ILogger logger, string phase, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "History overflow summary failed; falling back to truncation")]

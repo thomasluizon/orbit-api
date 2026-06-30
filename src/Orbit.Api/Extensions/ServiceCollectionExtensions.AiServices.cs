@@ -18,6 +18,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
+        builder.Services.AddSingleton<IAiUsageRecorder, AiUsageRecorder>();
         builder.Services.AddSingleton<IAiBatchClient, AiBatchClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
@@ -122,6 +123,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IUserDateService>(),
                 sp.GetRequiredService<IUserStreakService>(),
                 sp.GetRequiredService<IGamificationService>(),
+                sp.GetRequiredService<Orbit.Application.Challenges.Services.IChallengeProgressService>(),
                 sp.GetRequiredService<MediatR.IMediator>()));
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.BulkLogServices>(sp =>
             new Orbit.Application.Habits.Commands.BulkLogServices(

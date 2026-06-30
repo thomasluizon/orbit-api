@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using OpenAI;
 using OpenAI.Chat;
 using Orbit.Domain.Common;
@@ -799,7 +800,7 @@ public class AiSummaryServiceTests
                 Transport = new HttpClientPipelineTransport(
                     new HttpClient(new JsonResponseHandler(modelJsonContent))),
             });
-        var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         return new AiSummaryService(aiClient, NullLogger<AiSummaryService>.Instance);
     }
 

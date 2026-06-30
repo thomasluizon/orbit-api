@@ -22,10 +22,14 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["tag-suggest"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
             ["cheers"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),
             ["friend-requests"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
+            ["accountability-invites"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
+            ["accountability-checkins"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
             ["reports"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),
             ["set-handle"] = new(TimeSpan.FromHours(24), PermitLimit: 5, SegmentCount: 1),
             ["block"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
-            ["unblock"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1)
+            ["unblock"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
+            ["challenges"] = new(TimeSpan.FromHours(24), PermitLimit: 50, SegmentCount: 1),
+            ["public-profile"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4)
         };
 
     public async Task<DistributedRateLimitDecision> TryAcquireAsync(

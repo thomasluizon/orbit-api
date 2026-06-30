@@ -4,8 +4,10 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using OpenAI;
 using OpenAI.Chat;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
 
 namespace Orbit.Infrastructure.Tests.AI;
@@ -16,7 +18,7 @@ public class AiCompletionClientTests
     public async Task CompleteJsonAsync_SubTaskTier_OmitsTemperature()
     {
         var handler = new CapturingHandler();
-        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
 
         await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", purpose: "fact_extraction", tier: AiModelTier.SubTask);
 
@@ -28,7 +30,7 @@ public class AiCompletionClientTests
     public async Task CompleteJsonAsync_PrimaryTier_SendsTemperature()
     {
         var handler = new CapturingHandler();
-        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
 
         await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", temperature: 0.1, purpose: "json", tier: AiModelTier.Primary);
 

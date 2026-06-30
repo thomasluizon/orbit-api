@@ -144,7 +144,7 @@ public partial class SlipAlertSchedulerService(
 
         await ctx.PushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogSentSlipAlert(logger, habit.Id, habit.UserId);
     }
 
@@ -183,7 +183,7 @@ public partial class SlipAlertSchedulerService(
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
         {
             DetachPendingEntries(dbContext);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogSlipAlertAlreadySent(logger, habit.Id);
             return false;
         }
@@ -207,9 +207,9 @@ public partial class SlipAlertSchedulerService(
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to generate slip alert message for habit {HabitId}")]
     private static partial void LogSlipAlertMessageFailed(ILogger logger, Guid habitId);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Sent slip alert for habit {HabitId} to user {UserId}")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Sent slip alert for habit {HabitId} to user {UserId}")]
     private static partial void LogSentSlipAlert(ILogger logger, Guid habitId, Guid userId);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Slip alert already recorded for habit {HabitId}; skipping push")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Slip alert already recorded for habit {HabitId}; skipping push")]
     private static partial void LogSlipAlertAlreadySent(ILogger logger, Guid habitId);
 }

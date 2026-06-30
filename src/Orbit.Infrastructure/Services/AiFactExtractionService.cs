@@ -38,7 +38,7 @@ public sealed partial class AiFactExtractionService(
             await batchRepository.AddAsync(tracking, cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogBatchSubmitted(logger, batchId, userId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -146,7 +146,7 @@ public sealed partial class AiFactExtractionService(
             """;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Submitted fact-extraction batch {BatchId} for user {UserId}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Submitted fact-extraction batch {BatchId} for user {UserId}")]
     private static partial void LogBatchSubmitted(ILogger logger, string batchId, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Fact-extraction batch submit failed - non-critical error")]
