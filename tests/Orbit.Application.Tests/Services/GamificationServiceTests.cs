@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Services;
@@ -26,6 +27,7 @@ public class GamificationServiceTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly GamificationService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -37,10 +39,18 @@ public class GamificationServiceTests
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo);
         _sut = new GamificationService(
             repos, _pushService, _userDateService, _feedEmitter, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
-            Substitute.For<ILogger<GamificationService>>());
+            _featureFlagService, Substitute.For<ILogger<GamificationService>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new List<string>());
+    }
+
+    private void EnableFreeTierFlag()
+    {
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new List<string> { FeatureFlagKeys.GamificationFreeTier });
     }
 
     private static User CreateProUser()
@@ -979,6 +989,104 @@ public class GamificationServiceTests
 
         await _sut.ProcessOnboardingChecklistAsync(UserId, OnboardingChecklistSignal.AstraUsed);
 
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitLogged_FreeUserWithFlag_EarnsXpButNoAchievements()
+    {
+        var user = CreateFreeUser();
+        var initialXp = user.TotalXp;
+        EnableFreeTierFlag();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var habit = CreateTestHabit();
+        habit.Log(Today);
+        SetupHabitWithLogs(habit);
+        SetupUserHabits(habit);
+        SetupHabitLogs();
+
+        var result = await _sut.ProcessHabitLogged(UserId, habit.Id);
+
+        result.Should().NotBeNull();
+        result!.XpEarned.Should().Be(10 + 1);
+        result.NewAchievementIds.Should().BeEmpty();
+        user.TotalXp.Should().Be(initialXp + 10 + 1);
+        await _achievementRepo.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_FreeUserWithFlag_EarnsXpAndSaves()
+    {
+        var user = CreateFreeUser();
+        var initialXp = user.TotalXp;
+        EnableFreeTierFlag();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var habit = CreateTestHabit();
+        habit.Log(Today);
+        SetupUserHabits(habit);
+
+        var results = await _sut.ProcessHabitsLogged(UserId, [habit.Id]);
+
+        results.Should().ContainSingle();
+        results[0].XpEarned.Should().Be(10 + 1);
+        results[0].NewAchievementIds.Should().BeEmpty();
+        user.TotalXp.Should().Be(initialXp + 10 + 1);
+        await _achievementRepo.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessGoalCompleted_FreeUserWithFlag_Earns100XpButNoAchievement()
+    {
+        var user = CreateFreeUser();
+        var initialXp = user.TotalXp;
+        EnableFreeTierFlag();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        await _sut.ProcessGoalCompleted(UserId);
+
+        user.TotalXp.Should().Be(initialXp + 100);
+        await _achievementRepo.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryGrantAchievementsAsync_FreeUserNewAchievement_GrantsAwardsXpAndNotifies()
+    {
+        var user = CreateFreeUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var granted = await _sut.TryGrantAchievementsAsync(UserId, [AchievementDefinitions.ShowOff]);
+
+        granted.Should().ContainSingle().Which.Should().Be(AchievementDefinitions.ShowOff);
+        await _achievementRepo.Received(1).AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.ShowOff),
+            Arg.Any<CancellationToken>());
+        user.TotalXp.Should().Be(75);
+        await _notificationRepo.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.Title.Contains("Achievement Unlocked")),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryGrantAchievementsAsync_AlreadyEarned_IdempotentNoSave()
+    {
+        var user = CreateFreeUser();
+        SetupUserLookup(user);
+        SetupEarnedAchievements(AchievementDefinitions.ShowOff);
+
+        var granted = await _sut.TryGrantAchievementsAsync(UserId, [AchievementDefinitions.ShowOff]);
+
+        granted.Should().BeEmpty();
+        await _achievementRepo.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
