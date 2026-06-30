@@ -135,7 +135,7 @@ public partial class ReminderSchedulerService(
             if (!await TryRecordAndSendAsync(habit, sentReminder, notification, minutesText, pushService, dbContext, ct))
                 continue;
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogSentReminder(logger, minutesBefore, habit.Id, habit.UserId);
         }
     }
@@ -216,7 +216,7 @@ public partial class ReminderSchedulerService(
             if (!await TryRecordAndSendAsync(habit, sentReminder, notification, text, pushService, dbContext, ct))
                 continue;
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogSentScheduledReminder(logger, sr.When, sr.Time, habit.Id, habit.UserId);
         }
     }
@@ -245,7 +245,7 @@ public partial class ReminderSchedulerService(
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
         {
             DetachPendingEntries(dbContext);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogReminderAlreadySent(logger, habit.Id);
             return false;
         }
@@ -306,13 +306,13 @@ public partial class ReminderSchedulerService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in reminder scheduler")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Sent reminder ({Minutes}min) for habit {HabitId} to user {UserId}")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Sent reminder ({Minutes}min) for habit {HabitId} to user {UserId}")]
     private static partial void LogSentReminder(ILogger logger, int minutes, Guid habitId, Guid userId);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Sent scheduled reminder ({When} at {Time}) for habit {HabitId} to user {UserId}")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Sent scheduled reminder ({When} at {Time}) for habit {HabitId} to user {UserId}")]
     private static partial void LogSentScheduledReminder(ILogger logger, Orbit.Domain.Enums.ScheduledReminderWhen when, TimeOnly time, Guid habitId, Guid userId);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Reminder already recorded for habit {HabitId}; skipping push")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Reminder already recorded for habit {HabitId}; skipping push")]
     private static partial void LogReminderAlreadySent(ILogger logger, Guid habitId);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to record reminder for habit {HabitId} (user {UserId}); skipping push")]

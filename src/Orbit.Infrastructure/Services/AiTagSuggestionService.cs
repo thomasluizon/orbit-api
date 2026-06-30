@@ -21,7 +21,7 @@ public sealed partial class AiTagSuggestionService(
     {
         var prompt = BuildPrompt(title, description, existingTagNames, language);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingTagSuggestions(logger, language);
 
         try
@@ -41,7 +41,7 @@ public sealed partial class AiTagSuggestionService(
             if (cleaned is null || cleaned.Count == 0)
                 return Result.Failure<IReadOnlyList<string>>(ErrorMessages.AiEmptyResponse);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogTagSuggestionsGenerated(logger, cleaned.Count);
 
             return Result.Success<IReadOnlyList<string>>(cleaned);
@@ -84,10 +84,10 @@ public sealed partial class AiTagSuggestionService(
             """;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating tag suggestions (language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating tag suggestions (language: {Language})...")]
     private static partial void LogGeneratingTagSuggestions(ILogger logger, string language);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Tag suggestions generated ({Count} tags)")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Tag suggestions generated ({Count} tags)")]
     private static partial void LogTagSuggestionsGenerated(ILogger logger, int count);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for tag suggestion")]

@@ -6,8 +6,10 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using OpenAI;
 using OpenAI.Chat;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
 using Orbit.Infrastructure.Services;
@@ -141,7 +143,7 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_WithUserId_SetsEndUserIdForCacheRouting()
     {
         var handler = new JsonHandler(BufferedCompletion);
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
@@ -154,7 +156,7 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_HistoryWithinWindow_DoesNotSummarize()
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync("hello", "system", [], Guid.NewGuid(), history: BuildHistory(40));
@@ -166,7 +168,7 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_HistoryOverflowsWindow_SummarizesOlderMessages()
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync("hello", "system", [], Guid.NewGuid(), history: BuildHistory(50));
@@ -187,14 +189,14 @@ public class AiIntentServiceStreamingTests
 
     private static (AiIntentService Service, CollectingSink Sink) BuildService(HttpMessageHandler handler)
     {
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
         return (service, new CollectingSink());
     }
 
     private static (AiIntentService Service, RecordingLogger Logger) BuildServiceWithRecordingLogger(HttpMessageHandler handler)
     {
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var logger = new RecordingLogger();
         var service = new AiIntentService(aiClient, logger);
         return (service, logger);

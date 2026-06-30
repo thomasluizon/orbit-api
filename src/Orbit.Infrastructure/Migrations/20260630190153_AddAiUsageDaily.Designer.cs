@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260630190153_AddAiUsageDaily")]
+    partial class AddAiUsageDaily
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1696,22 +1699,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("PlayPurchaseToken")
                         .HasColumnType("text");
 
-                    b.Property<bool>("PublicProfileShowAchievements")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PublicProfileShowLevel")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PublicProfileShowStreak")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("PublicProfileShowTopHabits")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("PublicProfileSlug")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
                     b.Property<string>("ReferralCode")
                         .HasColumnType("text");
 
@@ -1771,10 +1758,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.HasIndex("PlayPurchaseToken")
                         .IsUnique()
                         .HasFilter("\"PlayPurchaseToken\" IS NOT NULL");
-
-                    b.HasIndex("PublicProfileSlug")
-                        .IsUnique()
-                        .HasFilter("\"PublicProfileSlug\" IS NOT NULL");
 
                     b.HasIndex("ReferralCode")
                         .IsUnique()

@@ -102,7 +102,7 @@ public partial class PushNotificationService(
                     fme.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
                     fme.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch))
                 {
-                    if (logger.IsEnabled(LogLevel.Information))
+                    if (logger.IsEnabled(LogLevel.Debug))
                         LogFcmTokenStale(logger, tokenPreview);
                     staleSubscriptions.Add(sub);
                 }
@@ -130,7 +130,7 @@ public partial class PushNotificationService(
                 Data = new Dictionary<string, string> { ["url"] = url ?? "/" }
             };
             await FirebaseMessaging.DefaultInstance!.SendAsync(message, ct);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmPushSent(logger, tokenPreview);
         }
         catch (FirebaseMessagingException ex) when (
@@ -138,7 +138,7 @@ public partial class PushNotificationService(
             ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
             ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
         {
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmTokenStale(logger, tokenPreview);
             staleSubscriptions.Add(sub);
         }
@@ -188,13 +188,13 @@ public partial class PushNotificationService(
                 }
             };
             await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogWebPushSent(logger, sub.Endpoint);
         }
         catch (PushServiceClientException ex)
             when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
         {
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogWebPushSubscriptionGone(logger, sub.Endpoint);
             staleSubscriptions.Add(sub);
         }
@@ -212,19 +212,19 @@ public partial class PushNotificationService(
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).")]
     private static partial void LogFcmNotInitialized(ILogger logger, int count);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "FCM push sent to {Token}")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "FCM push sent to {Token}")]
     private static partial void LogFcmPushSent(ILogger logger, string token);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "FCM token {Token} is stale, removing")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "FCM token {Token} is stale, removing")]
     private static partial void LogFcmTokenStale(ILogger logger, string token);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to send FCM push to {Token}")]
     private static partial void LogFcmPushFailed(ILogger logger, Exception ex, string token);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Web push sent to {Endpoint}")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Web push sent to {Endpoint}")]
     private static partial void LogWebPushSent(ILogger logger, string endpoint);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Web push subscription {Endpoint} is gone, removing")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Web push subscription {Endpoint} is gone, removing")]
     private static partial void LogWebPushSubscriptionGone(ILogger logger, string endpoint);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to send web push to {Endpoint}: {Status} {Message}")]

@@ -57,6 +57,7 @@ public class OrbitDbContext : DbContext
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
+    public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<Cheer> Cheers => Set<Cheer>();
     public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
@@ -91,6 +92,7 @@ public class OrbitDbContext : DbContext
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
         ConfigureAiFactExtractionBatchEntity(modelBuilder);
+        ConfigureAiUsageDailyEntity(modelBuilder);
         ConfigureNotificationEntity(modelBuilder);
         ConfigureGoalEntity(modelBuilder, encConverter, nullableEncConverter);
         ConfigureGoalProgressLogEntity(modelBuilder, nullableEncConverter);
@@ -220,6 +222,17 @@ public class OrbitDbContext : DbContext
             entity.Property(b => b.OutputFileId).HasMaxLength(255);
             entity.Property(b => b.Status).HasConversion<string>().HasMaxLength(32);
             entity.HasOne<User>().WithMany().HasForeignKey(b => b.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureAiUsageDailyEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AiUsageDaily>(entity =>
+        {
+            entity.HasIndex(u => new { u.Date, u.Model, u.Purpose }).IsUnique();
+            entity.Property(u => u.Model).HasMaxLength(64);
+            entity.Property(u => u.Purpose).HasMaxLength(64);
+            entity.Property(u => u.CostUsd).HasColumnType("numeric");
         });
     }
 

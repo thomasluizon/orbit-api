@@ -202,25 +202,25 @@ public partial class ProcessUserChatCommandHandler(
         && results.CalledToolNames.All(name => name == DescribeFeatureToolName)
         && results.OperationResults.All(operation => operation.Status == AgentOperationStatus.Succeeded);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Processing chat message: '{Message}'")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Processing chat message: '{Message}'")]
     private static partial void LogProcessingChatMessage(ILogger logger, string message);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Context loaded in {ElapsedMs}ms (Habits: {HabitCount}, Facts: {FactCount})")]
     private static partial void LogContextLoaded(ILogger logger, long elapsedMs, int habitCount, int factCount);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Calling AI intent service with {ToolCount} tools...")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Calling AI intent service with {ToolCount} tools...")]
     private static partial void LogCallingAiIntentService(ILogger logger, int toolCount);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "AI intent service completed in {ElapsedMs}ms")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "AI intent service completed in {ElapsedMs}ms")]
     private static partial void LogAiIntentServiceCompleted(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Tool-calling iteration {Iteration}, {CallCount} calls")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "Tool-calling iteration {Iteration}, {CallCount} calls")]
     private static partial void LogToolCallingIteration(ILogger logger, int iteration, int callCount);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Unknown tool requested: {Name}")]
     private static partial void LogUnknownToolRequested(ILogger logger, string name);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Tool {Name} succeeded: {EntityName}")]
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Tool {Name} succeeded: {EntityName}")]
     private static partial void LogToolSucceeded(ILogger logger, string name, string? entityName);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Tool {Name} failed: {Error}")]
@@ -232,31 +232,31 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "ContinueWithToolResultsAsync failed: {Error}")]
     private static partial void LogContinueWithToolResultsFailed(ILogger logger, string? error);
 
-    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Tool execution completed in {ElapsedMs}ms ({Iterations} iterations, {ActionCount} actions)")]
+    [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "Tool execution completed in {ElapsedMs}ms ({Iterations} iterations, {ActionCount} actions)")]
     private static partial void LogToolExecutionCompleted(ILogger logger, long elapsedMs, int iterations, int actionCount);
 
-    [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Changes saved in {ElapsedMs}ms")]
+    [LoggerMessage(EventId = 12, Level = LogLevel.Debug, Message = "Changes saved in {ElapsedMs}ms")]
     private static partial void LogChangesSaved(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "TOTAL request processing time: {ElapsedMs}ms")]
+    [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "TOTAL request processing time: {ElapsedMs}ms")]
     private static partial void LogTotalRequestProcessingTime(ILogger logger, long elapsedMs);
 
-    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "   Context loading: {DbMs}ms")]
+    [LoggerMessage(EventId = 15, Level = LogLevel.Debug, Message = "   Context loading: {DbMs}ms")]
     private static partial void LogContextLoadingTime(ILogger logger, long dbMs);
 
-    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "   AI service: {AiMs}ms")]
+    [LoggerMessage(EventId = 16, Level = LogLevel.Debug, Message = "   AI service: {AiMs}ms")]
     private static partial void LogAiServiceTime(ILogger logger, long aiMs);
 
-    [LoggerMessage(EventId = 17, Level = LogLevel.Information, Message = "   Tool execution: {ActionsMs}ms ({Iterations} iterations)")]
+    [LoggerMessage(EventId = 17, Level = LogLevel.Debug, Message = "   Tool execution: {ActionsMs}ms ({Iterations} iterations)")]
     private static partial void LogToolExecutionTime(ILogger logger, long actionsMs, int iterations);
 
-    [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "   Save changes: {SaveMs}ms")]
+    [LoggerMessage(EventId = 18, Level = LogLevel.Debug, Message = "   Save changes: {SaveMs}ms")]
     private static partial void LogSaveChangesTime(ILogger logger, long saveMs);
 
-    [LoggerMessage(EventId = 19, Level = LogLevel.Information, Message = "Fetching context from database...")]
+    [LoggerMessage(EventId = 19, Level = LogLevel.Debug, Message = "Fetching context from database...")]
     private static partial void LogFetchingContext(ILogger logger);
 
-    [LoggerMessage(EventId = 20, Level = LogLevel.Information, Message = "Saving changes to database...")]
+    [LoggerMessage(EventId = 20, Level = LogLevel.Debug, Message = "Saving changes to database...")]
     private static partial void LogSavingChanges(ILogger logger);
 
     [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Background message counter increment failed")]

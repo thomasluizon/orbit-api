@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
+using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.AI;
@@ -16,6 +17,7 @@ public sealed partial class AiCompletionClient
     private readonly string _primaryModel;
     private readonly string _subTaskModel;
     private readonly ILogger<AiCompletionClient> _logger;
+    private readonly IAiUsageRecorder _usageRecorder;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -23,9 +25,13 @@ public sealed partial class AiCompletionClient
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public AiCompletionClient(IOptions<AiSettings> options, ILogger<AiCompletionClient> logger)
+    public AiCompletionClient(
+        IOptions<AiSettings> options,
+        ILogger<AiCompletionClient> logger,
+        IAiUsageRecorder usageRecorder)
     {
         _logger = logger;
+        _usageRecorder = usageRecorder;
         var settings = options.Value;
 
         var clientOptions = new OpenAIClientOptions
@@ -56,13 +62,17 @@ public sealed partial class AiCompletionClient
     internal static bool ShouldApplyTemperature(AiModelTier tier, string primaryModel, string subTaskModel)
         => tier == AiModelTier.Primary || subTaskModel == primaryModel;
 
-    internal AiCompletionClient(ChatClient chatClient, ILogger<AiCompletionClient> logger)
+    internal AiCompletionClient(
+        ChatClient chatClient,
+        ILogger<AiCompletionClient> logger,
+        IAiUsageRecorder usageRecorder)
     {
         _chatClient = chatClient;
         _subTaskChatClient = chatClient;
         _primaryModel = "primary-test";
         _subTaskModel = "subtask-test";
         _logger = logger;
+        _usageRecorder = usageRecorder;
     }
 
     /// <summary>
@@ -97,7 +107,7 @@ public sealed partial class AiCompletionClient
         var client = tier == AiModelTier.SubTask ? _subTaskChatClient : _chatClient;
         var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
         var completion = await client.CompleteChatAsync(messages, options, cancellationToken);
-        LogCompletionUsage(completion.Value.Usage, purpose, model);
+        await RecordUsageAsync(completion.Value.Usage, purpose, model, cancellationToken);
         var text = completion.Value.Content.FirstOrDefault()?.Text;
 
         if (!string.IsNullOrWhiteSpace(text))
@@ -136,7 +146,7 @@ public sealed partial class AiCompletionClient
         var client = tier == AiModelTier.SubTask ? _subTaskChatClient : _chatClient;
         var model = tier == AiModelTier.SubTask ? _subTaskModel : _primaryModel;
         var completion = await client.CompleteChatAsync(messages, options, cancellationToken);
-        LogCompletionUsage(completion.Value.Usage, purpose, model);
+        await RecordUsageAsync(completion.Value.Usage, purpose, model, cancellationToken);
         var text = completion.Value.Content.FirstOrDefault()?.Text;
 
         if (string.IsNullOrWhiteSpace(text))
@@ -150,37 +160,49 @@ public sealed partial class AiCompletionClient
         return JsonSerializer.Deserialize<T>(text, JsonOptions);
     }
 
-    private void LogCompletionUsage(ChatTokenUsage? usage, string purpose, string model)
+    private async Task RecordUsageAsync(
+        ChatTokenUsage? usage, string purpose, string model, CancellationToken cancellationToken)
     {
         if (usage is null)
             return;
+
+        var cachedTokens = usage.InputTokenDetails?.CachedTokenCount ?? 0;
 
         LogAiTokenUsage(
             _logger,
             purpose,
             model,
-            usage.InputTokenDetails?.CachedTokenCount ?? 0,
+            cachedTokens,
             usage.InputTokenCount,
             usage.OutputTokenCount,
             usage.TotalTokenCount);
+
+        await _usageRecorder.RecordAsync(
+            purpose,
+            model,
+            cachedTokens,
+            usage.InputTokenCount,
+            usage.OutputTokenCount,
+            usage.TotalTokenCount,
+            cancellationToken);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Calling AI API for text completion...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API for text completion...")]
     private static partial void LogCallingTextCompletion(ILogger logger);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "AI text completion successful ({Length} chars)")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "AI text completion successful ({Length} chars)")]
     private static partial void LogTextCompletionSuccessful(ILogger logger, int length);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Calling AI API for JSON completion...")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Calling AI API for JSON completion...")]
     private static partial void LogCallingJsonCompletion(ILogger logger);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "AI returned empty response for JSON completion")]
     private static partial void LogEmptyJsonResponse(ILogger logger);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "AI JSON completion successful ({Length} chars)")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "AI JSON completion successful ({Length} chars)")]
     private static partial void LogJsonCompletionSuccessful(ILogger logger, int length);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "AI token usage ({Purpose} via {Model}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "AI token usage ({Purpose} via {Model}): cached={CachedTokens}, prompt={PromptTokens}, completion={CompletionTokens}, total={TotalTokens}")]
     private static partial void LogAiTokenUsage(ILogger logger, string purpose, string model, int cachedTokens, int promptTokens, int completionTokens, int totalTokens);
 
 }
