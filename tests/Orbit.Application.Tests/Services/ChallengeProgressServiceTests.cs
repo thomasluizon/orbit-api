@@ -80,14 +80,15 @@ public class ChallengeProgressServiceTests
     }
 
     [Fact]
-    public async Task LogReachingTarget_MissionAccomplishedNoOpsWhileAchievementUndefined()
+    public async Task LogReachingTarget_GrantsMissionAccomplished()
     {
         BuildTrackedChallenge(target: 1);
         StubLogs(HabitLog.Create(_habitId, Today, 1));
 
         await _service.EvaluateOnHabitLoggedAsync(_user.Id, _habitId, CancellationToken.None);
 
-        await _achievementRepository.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
+        await _achievementRepository.Received().AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == "mission_accomplished"), Arg.Any<CancellationToken>());
     }
 
     [Fact]

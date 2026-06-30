@@ -22,11 +22,6 @@ public class ChallengeProgressService(
     IUnitOfWork unitOfWork,
     IUserDateService userDateService) : IChallengeProgressService
 {
-    /// <summary>
-    /// The mission_accomplished achievement definition ships in #196 (not yet on main); passing the
-    /// conventional string id keeps AchievementChecks.TryGrant a no-op until that definition lands.
-    /// https://github.com/thomasluizon/orbit-ui-mobile/issues/196
-    /// </summary>
     private const string MissionAccomplishedAchievementId = "mission_accomplished";
 
     public async Task EvaluateOnHabitLoggedAsync(Guid userId, Guid habitId, CancellationToken cancellationToken = default)

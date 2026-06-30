@@ -79,12 +79,13 @@ public class JoinChallengeCommandHandlerTests
     }
 
     [Fact]
-    public async Task ValidJoin_TeamPlayerAwardNoOpsWhileAchievementUndefined()
+    public async Task ValidJoin_GrantsTeamPlayer()
     {
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _achievementRepository.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
+        await _achievementRepository.Received().AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == "team_player"), Arg.Any<CancellationToken>());
     }
 
     [Fact]

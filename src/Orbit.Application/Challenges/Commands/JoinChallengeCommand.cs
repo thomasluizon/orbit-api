@@ -25,11 +25,6 @@ public class JoinChallengeCommandHandler(
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork) : IRequestHandler<JoinChallengeCommand, Result>
 {
-    /// <summary>
-    /// The team_player achievement definition ships in #196 (not yet on main); passing the conventional
-    /// string id keeps AchievementChecks.TryGrant a no-op until that definition lands, then auto-activates.
-    /// https://github.com/thomasluizon/orbit-ui-mobile/issues/196
-    /// </summary>
     private const string TeamPlayerAchievementId = "team_player";
 
     public async Task<Result> Handle(JoinChallengeCommand request, CancellationToken cancellationToken)
