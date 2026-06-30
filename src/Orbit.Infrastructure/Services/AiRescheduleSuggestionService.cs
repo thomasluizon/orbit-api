@@ -27,7 +27,7 @@ public sealed partial class AiRescheduleSuggestionService(
     {
         var prompt = BuildPrompt(habit, userToday, language);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingReschedule(logger, habit.Id, language);
 
         try
@@ -48,7 +48,7 @@ public sealed partial class AiRescheduleSuggestionService(
             if (suggestion.IsFailure)
                 return suggestion;
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogRescheduleGenerated(logger, habit.Id);
             return suggestion;
         }
@@ -219,10 +219,10 @@ public sealed partial class AiRescheduleSuggestionService(
         IReadOnlyList<string>? Days,
         string? Rationale);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating reschedule suggestion (habit: {HabitId}, language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating reschedule suggestion (habit: {HabitId}, language: {Language})...")]
     private static partial void LogGeneratingReschedule(ILogger logger, Guid habitId, string language);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Reschedule suggestion generated (habit: {HabitId})")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Reschedule suggestion generated (habit: {HabitId})")]
     private static partial void LogRescheduleGenerated(ILogger logger, Guid habitId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for reschedule suggestion")]

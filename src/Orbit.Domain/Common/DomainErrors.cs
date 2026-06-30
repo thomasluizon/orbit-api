@@ -15,6 +15,9 @@ public static class DomainErrors
     public static readonly AppError FriendshipNotPending = new("FRIENDSHIP_NOT_PENDING", "This friend request is no longer pending.");
     public static readonly AppError CannotCheerSelf = new("CANNOT_CHEER_SELF", "You cannot cheer yourself.");
     public static readonly AppError CheerNoteTooLong = new("CHEER_NOTE_TOO_LONG", "Cheer note must be at most {0} characters.");
+    public static readonly AppError CannotPairSelf = new("CANNOT_PAIR_SELF", "You cannot pair with yourself.");
+    public static readonly AppError PairNotPending = new("PAIR_NOT_PENDING", "This accountability invite is no longer pending.");
+    public static readonly AppError AccountabilityNoteTooLong = new("ACCOUNTABILITY_NOTE_TOO_LONG", "Check-in note must be at most {0} characters.");
     public static readonly AppError CannotBlockSelf = new("CANNOT_BLOCK_SELF", "You cannot block yourself.");
     public static readonly AppError CannotReportSelf = new("CANNOT_REPORT_SELF", "You cannot report yourself.");
     public static readonly AppError ReportDetailsTooLong = new("REPORT_DETAILS_TOO_LONG", "Report details must be at most {0} characters.");

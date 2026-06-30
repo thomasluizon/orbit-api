@@ -33,7 +33,7 @@ public sealed partial class AiSummaryService(
             scheduledHabits, dateFrom, dateTo, userToday, language, currentLocalTime,
             currentStreak, streakFreezesAccumulated, lastBadHabitSlipDates);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingDailySummary(logger, dateFrom, language);
 
         try
@@ -52,7 +52,7 @@ public sealed partial class AiSummaryService(
             var summary = CapToSentence(StripMarkdownFences(content.Summary), MaxSummaryChars);
             var insight = CapToSentence((content.Insight ?? string.Empty).Trim(), MaxInsightChars);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogDailySummaryGenerated(logger, summary.Length);
             return Result.Success(new DailySummaryContent(summary, insight));
         }
@@ -359,10 +359,10 @@ public sealed partial class AiSummaryService(
         return text[..maxChars].TrimEnd();
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating daily summary (date: {Date}, language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating daily summary (date: {Date}, language: {Language})...")]
     private static partial void LogGeneratingDailySummary(ILogger logger, DateOnly date, string language);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Daily summary generated successfully ({Length} chars)")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Daily summary generated successfully ({Length} chars)")]
     private static partial void LogDailySummaryGenerated(ILogger logger, int length);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for daily summary")]

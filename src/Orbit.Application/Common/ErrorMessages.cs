@@ -139,4 +139,8 @@ public static class ErrorMessages
     public static readonly AppError NotChallengeParticipant = new(ErrorCodes.NotChallengeParticipant, "You are not a participant in this challenge.");
     public static readonly AppError InvalidJoinCode = new(ErrorCodes.InvalidJoinCode, "Invalid join code.");
     public static readonly AppError ChallengeClosed = new(ErrorCodes.ChallengeClosed, "This challenge is no longer accepting participants.");
+    public static readonly AppError PairNotFound = new(ErrorCodes.PairNotFound, "Accountability pair not found.");
+    public static readonly AppError PairLimitReached = new(ErrorCodes.PairLimitReached, "You've reached the maximum of {0} accountability pairs.");
+    public static readonly AppError AlreadyPaired = new(ErrorCodes.AlreadyPaired, "You already have an accountability pair with this person.");
+    public static readonly AppError AlreadyCheckedIn = new(ErrorCodes.AlreadyCheckedIn, "You've already checked in for today.");
 }

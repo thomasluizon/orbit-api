@@ -27,6 +27,13 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetColorSchemeRequest(string? ColorScheme);
     public record SetHandleRequest(string Handle);
     public record SetSocialOptInRequest([property: JsonRequired] bool Enabled);
+    public record UpdatePublicProfileRequest(
+        [property: JsonRequired] bool Enabled,
+        bool ShowStreak,
+        bool ShowLevel,
+        bool ShowAchievements,
+        bool ShowTopHabits,
+        bool Regenerate);
 
     private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -249,6 +256,30 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         return result.ToPayGateAwareResult(() => NoContent());
     }
 
+    [HttpPut("public")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdatePublicProfile(
+        [FromBody] UpdatePublicProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdatePublicProfileCommand(
+            HttpContext.GetUserId(),
+            request.Enabled,
+            request.ShowStreak,
+            request.ShowLevel,
+            request.ShowAchievements,
+            request.ShowTopHabits,
+            request.Regenerate);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogPublicProfileUpdated(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
     [HttpPost("reset")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -313,5 +344,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
     [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Social opt-in {State} for user {UserId}")]
     private static partial void LogSocialOptInChanged(ILogger logger, string state, Guid userId);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Public profile {State} for user {UserId}")]
+    private static partial void LogPublicProfileUpdated(ILogger logger, string state, Guid userId);
 
 }

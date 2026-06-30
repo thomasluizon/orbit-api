@@ -900,7 +900,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.SocialManage,
                 "Manage Social",
-                "Manages friendships, cheers, the friend feed, handles, blocking, reporting, and cooperative challenges. Cataloged but not exposed to the agent in this phase.",
+                "Manages friendships, cheers, the friend feed, handles, blocking, reporting, accountability buddies, and cooperative challenges. Cataloged but not exposed to the agent in this phase.",
                 "social",
                 AgentScopes.ManageSocial,
                 AgentRiskClass.Low,
@@ -924,7 +924,16 @@ public partial class AgentCatalogService
                     "ChallengesController.Leave",
                     "ChallengesController.GetDetail",
                     "ProfileController.SetHandle",
-                    "ProfileController.SetSocialOptIn"
+                    "ProfileController.SetSocialOptIn",
+                    "ProfileController.UpdatePublicProfile",
+                    "PublicProfileController.GetPublicProfile",
+                    "AccountabilityController.GetPairs",
+                    "AccountabilityController.Invite",
+                    "AccountabilityController.Accept",
+                    "AccountabilityController.End",
+                    "AccountabilityController.SetHabits",
+                    "AccountabilityController.GetCheckIns",
+                    "AccountabilityController.CheckIn"
                 ])
         ];
     }

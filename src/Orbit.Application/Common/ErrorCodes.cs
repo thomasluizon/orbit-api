@@ -128,4 +128,8 @@ public static class ErrorCodes
     public const string NotChallengeParticipant = "NOT_CHALLENGE_PARTICIPANT";
     public const string InvalidJoinCode = "INVALID_JOIN_CODE";
     public const string ChallengeClosed = "CHALLENGE_CLOSED";
+    public const string PairNotFound = "PAIR_NOT_FOUND";
+    public const string PairLimitReached = "PAIR_LIMIT_REACHED";
+    public const string AlreadyPaired = "ALREADY_PAIRED";
+    public const string AlreadyCheckedIn = "ALREADY_CHECKED_IN";
 }

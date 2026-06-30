@@ -65,6 +65,9 @@ public static class AppConstants
     public const int MaxReportDetailsLength = DomainConstants.MaxReportDetailsLength;
     public const int MaxCheersPerDay = 20;
     public const int MaxFriendRequestsPerDay = 30;
+    public const int MaxAccountabilityPairs = 20;
+    public const int MaxAccountabilityNoteLength = DomainConstants.MaxAccountabilityNoteLength;
+    public const int MaxAccountabilityHabitsPerUser = 10;
     public const int MaxReportsPerDay = 20;
     public const int MaxSetHandlePerDay = 5;
     public const int FriendFeedPageSize = 30;

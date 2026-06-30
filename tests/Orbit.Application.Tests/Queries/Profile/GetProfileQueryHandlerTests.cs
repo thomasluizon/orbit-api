@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Queries;
@@ -24,7 +25,13 @@ public class GetProfileQueryHandlerTests
     {
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<string>());
-        _handler = new GetProfileQueryHandler(_userRepo, _streakFreezeRepo, _userDateService, _featureFlagService, _payGate);
+        _handler = new GetProfileQueryHandler(
+            _userRepo,
+            _streakFreezeRepo,
+            _userDateService,
+            _featureFlagService,
+            _payGate,
+            Options.Create(new FrontendSettings()));
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 

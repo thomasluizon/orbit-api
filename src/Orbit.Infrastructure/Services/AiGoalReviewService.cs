@@ -33,7 +33,7 @@ public sealed partial class AiGoalReviewService(
             - Plain text only
             """;
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingGoalReview(logger, language);
 
         try
@@ -50,7 +50,7 @@ public sealed partial class AiGoalReviewService(
 
             var trimmed = AiSummaryService.StripMarkdownFences(text);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogGoalReviewGenerated(logger, trimmed.Length);
             return Result.Success(trimmed);
         }
@@ -61,10 +61,10 @@ public sealed partial class AiGoalReviewService(
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating goal review (language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating goal review (language: {Language})...")]
     private static partial void LogGeneratingGoalReview(ILogger logger, string language);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Goal review generated successfully ({Length} chars)")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Goal review generated successfully ({Length} chars)")]
     private static partial void LogGoalReviewGenerated(ILogger logger, int length);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for goal review")]

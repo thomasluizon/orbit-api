@@ -19,7 +19,8 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["SyncCleanup"] = TimeSpan.FromHours(48),
         ["PlayNotificationCleanup"] = TimeSpan.FromHours(48),
         ["CalendarAutoSync"] = TimeSpan.FromMinutes(45),
-        ["OpenAiBatchPoller"] = TimeSpan.FromMinutes(10)
+        ["OpenAiBatchPoller"] = TimeSpan.FromMinutes(10),
+        ["AiUsageSummary"] = TimeSpan.FromMinutes(180)
     };
 
     public static void RecordTick(string serviceName)

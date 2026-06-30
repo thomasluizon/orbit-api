@@ -18,6 +18,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<AgentPlatformSettings>(
             builder.Configuration.GetSection(AgentPlatformSettings.SectionName));
         builder.Services.AddSingleton<AiCompletionClient>();
+        builder.Services.AddSingleton<IAiUsageRecorder, AiUsageRecorder>();
         builder.Services.AddSingleton<IAiBatchClient, AiBatchClient>();
         builder.Services.AddScoped<IAudioTranscriptionService, AudioTranscriptionService>();
         builder.Services.AddScoped<IAiIntentService, AiIntentService>();
