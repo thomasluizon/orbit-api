@@ -114,7 +114,7 @@ public class AcceptAccountabilityPairCommandTests
     }
 
     [Fact]
-    public async Task BattleBuddyAward_DormantUntilDefinitionShips_GrantsNothingYet()
+    public async Task BattleBuddyAward_GrantsToBothParticipants()
     {
         var requesterXpBefore = _requester.TotalXp;
         var addresseeXpBefore = _addressee.TotalXp;
@@ -122,8 +122,9 @@ public class AcceptAccountabilityPairCommandTests
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _achievementRepository.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
-        _requester.TotalXp.Should().Be(requesterXpBefore);
-        _addressee.TotalXp.Should().Be(addresseeXpBefore);
+        await _achievementRepository.Received(2).AddAsync(
+            Arg.Is<UserAchievement>(a => a.AchievementId == "battle_buddy"), Arg.Any<CancellationToken>());
+        _requester.TotalXp.Should().BeGreaterThan(requesterXpBefore);
+        _addressee.TotalXp.Should().BeGreaterThan(addresseeXpBefore);
     }
 }

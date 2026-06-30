@@ -66,10 +66,7 @@ public partial class AcceptAccountabilityPairCommandHandler(
     }
 
     /// <summary>
-    /// Grants the Battle Buddy achievement (idempotently) to one participant when a pair is accepted.
-    /// The achievement definition is owned by #196 (https://github.com/thomasluizon/orbit-ui-mobile/issues/196)
-    /// and is not yet on main; granting by its string id is a guarded no-op until that definition ships,
-    /// after which it awards automatically with no change here.
+    /// Idempotently grants the Battle Buddy achievement (and its XP reward) to a pair participant on accept.
     /// </summary>
     private async Task AwardBattleBuddyAsync(User user, CancellationToken cancellationToken)
     {
