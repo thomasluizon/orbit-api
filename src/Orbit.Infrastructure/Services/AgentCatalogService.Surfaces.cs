@@ -78,11 +78,11 @@ public partial class AgentCatalogService
             new AppSurface(
                 "ai-settings",
                 "AI Settings",
-                "Controls AI memory and daily AI summary behavior.",
-                ["Open Profile AI settings.", "Review AI memory and summary toggles.", "Enable or disable the AI features you want."],
+                "Controls AI memory, daily AI summary, and proactive Astra check-in behavior.",
+                ["Open Profile AI settings.", "Review AI memory, summary, and proactive check-in toggles.", "Enable or disable the AI features you want."],
                 ["AI memory controls whether compact facts may be stored.", "Settings are enforced on the backend, not by prompt text."],
-                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfileAiMemoryWrite, AgentCapabilityIds.ProfileAiSummaryWrite, AgentCapabilityIds.UserFactsRead, AgentCapabilityIds.UserFactsDelete],
-                ["ProfileController.SetAiMemory", "ProfileController.SetAiSummary"]),
+                [AgentCapabilityIds.ProfileReadBasic, AgentCapabilityIds.ProfileAiMemoryWrite, AgentCapabilityIds.ProfileAiSummaryWrite, AgentCapabilityIds.ProfileProactiveAstraWrite, AgentCapabilityIds.UserFactsRead, AgentCapabilityIds.UserFactsDelete],
+                ["ProfileController.SetAiMemory", "ProfileController.SetAiSummary", "ProfileController.SetProactiveAstra"]),
 
             new AppSurface(
                 "notifications",

@@ -510,7 +510,20 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["ai_summary"],
                 chatTools: ["set_ai_summary"],
                 mcpTools: ["set_ai_summary"],
-                controllerActions: ["ProfileController.SetAiSummary"])
+                controllerActions: ["ProfileController.SetAiSummary"]),
+
+            CreateCapability(
+                AgentCapabilityIds.ProfileProactiveAstraWrite,
+                "Write Proactive Astra Settings",
+                "Updates whether Astra sends proactive check-in pushes when the user falls behind.",
+                "profile",
+                AgentScopes.WriteAiSettings,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                controllerActions: ["ProfileController.SetProactiveAstra"])
         ];
     }
 

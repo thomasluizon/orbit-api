@@ -12,6 +12,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["ReminderScheduler"] = TimeSpan.FromMinutes(3),
         ["GoalDeadlineNotification"] = TimeSpan.FromMinutes(90),
         ["SlipAlertScheduler"] = TimeSpan.FromMinutes(15),
+        ["ProactiveCheckinScheduler"] = TimeSpan.FromMinutes(180),
         ["HabitDueDateAdvancement"] = TimeSpan.FromMinutes(90),
         ["StreakGoalSync"] = TimeSpan.FromMinutes(90),
         ["StreakFreezeAutoActivation"] = TimeSpan.FromMinutes(180),

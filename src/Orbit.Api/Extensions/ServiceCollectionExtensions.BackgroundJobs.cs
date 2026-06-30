@@ -13,6 +13,7 @@ public static partial class ServiceCollectionExtensions
     private static void AddBackgroundServices(WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
+        builder.Services.AddScoped<IProactiveCheckinMessageService, AiProactiveCheckinMessageService>();
 
         var useDurableQueue = builder.Configuration.GetSection(BackgroundJobSettings.SectionName)
             .Get<BackgroundJobSettings>()?.UseDurableQueue ?? false;
@@ -34,6 +35,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<ReminderSchedulerService>();
         builder.Services.AddHostedService<GoalDeadlineNotificationService>();
         builder.Services.AddHostedService<SlipAlertSchedulerService>();
+        builder.Services.AddHostedService<ProactiveCheckinSchedulerService>();
         builder.Services.AddHostedService<AccountDeletionService>();
         builder.Services.AddHostedService<HabitDueDateAdvancementService>();
         builder.Services.AddHostedService<StreakGoalSyncService>();
@@ -66,6 +68,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<ReminderSchedulerService>(builder);
         AddScheduledJob<GoalDeadlineNotificationService>(builder);
         AddScheduledJob<SlipAlertSchedulerService>(builder);
+        AddScheduledJob<ProactiveCheckinSchedulerService>(builder);
         AddScheduledJob<AccountDeletionService>(builder);
         AddScheduledJob<HabitDueDateAdvancementService>(builder);
         AddScheduledJob<StreakGoalSyncService>(builder);

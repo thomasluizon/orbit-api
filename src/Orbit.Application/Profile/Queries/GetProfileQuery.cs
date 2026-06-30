@@ -47,7 +47,8 @@ public record ProfileResponse(
     GoogleCalendarAutoSyncStatus GoogleCalendarAutoSyncStatus,
     DateTime? GoogleCalendarLastSyncedAt,
     bool CanViewGamification,
-    bool Uses24HourClock = true);
+    bool Uses24HourClock = true,
+    bool ProactiveAstraEnabled = false);
 
 public record GetProfileQuery(Guid UserId) : IRequest<Result<ProfileResponse>>;
 
@@ -121,6 +122,7 @@ public class GetProfileQueryHandler(
             user.GoogleCalendarAutoSyncStatus ?? GoogleCalendarAutoSyncStatus.Idle,
             user.GoogleCalendarLastSyncedAt,
             canViewGamification,
-            TimeFormatResolver.Uses24HourClock(user.TimeZone)));
+            TimeFormatResolver.Uses24HourClock(user.TimeZone),
+            user.ProactiveAstraEnabled));
     }
 }

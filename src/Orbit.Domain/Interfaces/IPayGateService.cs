@@ -85,6 +85,11 @@ public interface IPayGateService
     Task<Result> CanManageAiSummary(Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// Checks if the user can manage proactive Astra check-ins (Pro-only feature).
+    /// </summary>
+    Task<Result> CanManageProactiveAstra(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Checks if the user can manage premium color schemes (Pro-only feature).
     /// </summary>
     Task<Result> CanManagePremiumColors(Guid userId, CancellationToken ct = default);

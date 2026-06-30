@@ -261,6 +261,7 @@ public static class AgentCapabilityIds
     public const string ProfileAiSettingsWrite = "profile.ai-settings.write";
     public const string ProfileAiMemoryWrite = "profile.ai-memory.write";
     public const string ProfileAiSummaryWrite = "profile.ai-summary.write";
+    public const string ProfileProactiveAstraWrite = "profile.proactive-astra.write";
     public const string NotificationsRead = "notifications.read";
     public const string NotificationsWrite = "notifications.write";
     public const string NotificationsDelete = "notifications.delete";

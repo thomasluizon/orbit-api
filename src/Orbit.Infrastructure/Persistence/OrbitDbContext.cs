@@ -35,6 +35,7 @@ public class OrbitDbContext : DbContext
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<SentReminder> SentReminders => Set<SentReminder>();
     public DbSet<SentSlipAlert> SentSlipAlerts => Set<SentSlipAlert>();
+    public DbSet<SentProactiveCheckin> SentProactiveCheckins => Set<SentProactiveCheckin>();
     public DbSet<SentStreakFreezeAlert> SentStreakFreezeAlerts => Set<SentStreakFreezeAlert>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Goal> Goals => Set<Goal>();
@@ -87,6 +88,7 @@ public class OrbitDbContext : DbContext
         ConfigurePushSubscriptionEntity(modelBuilder);
         ConfigureSentReminderEntity(modelBuilder);
         ConfigureSentSlipAlertEntity(modelBuilder);
+        ConfigureSentProactiveCheckinEntity(modelBuilder);
         ConfigureSentStreakFreezeAlertEntity(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
@@ -179,6 +181,14 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<SentSlipAlert>(entity =>
         {
             entity.HasIndex(a => new { a.HabitId, a.WeekStart }).IsUnique();
+        });
+    }
+
+    private static void ConfigureSentProactiveCheckinEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SentProactiveCheckin>(entity =>
+        {
+            entity.HasIndex(a => new { a.UserId, a.Date }).IsUnique();
         });
     }
 
