@@ -6,9 +6,9 @@ namespace Orbit.Application.Tests.Gamification;
 public class AchievementDefinitionsTests
 {
     [Fact]
-    public void All_Has29Achievements()
+    public void All_Has39Achievements()
     {
-        AchievementDefinitions.All.Should().HaveCount(29);
+        AchievementDefinitions.All.Should().HaveCount(39);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class AchievementDefinitionsTests
     {
         var categories = AchievementDefinitions.All.Select(a => a.Category).Distinct().ToList();
 
-        categories.Should().HaveCount(6);
+        categories.Should().HaveCount(9);
     }
 
     [Fact]
@@ -97,13 +97,43 @@ public class AchievementDefinitionsTests
     }
 
     [Fact]
-    public void ConsistencyCategory_Has8Achievements()
+    public void ConsistencyCategory_Has9Achievements()
     {
         var consistency = AchievementDefinitions.All
             .Where(a => a.Category == Domain.Enums.AchievementCategory.Consistency)
             .ToList();
 
-        consistency.Should().HaveCount(8);
+        consistency.Should().HaveCount(9);
+    }
+
+    [Fact]
+    public void SocialCategory_Has3Achievements()
+    {
+        var social = AchievementDefinitions.All
+            .Where(a => a.Category == Domain.Enums.AchievementCategory.Social)
+            .ToList();
+
+        social.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void SharingCategory_Has2Achievements()
+    {
+        var sharing = AchievementDefinitions.All
+            .Where(a => a.Category == Domain.Enums.AchievementCategory.Sharing)
+            .ToList();
+
+        sharing.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void TogetherCategory_Has3Achievements()
+    {
+        var together = AchievementDefinitions.All
+            .Where(a => a.Category == Domain.Enums.AchievementCategory.Together)
+            .ToList();
+
+        together.Should().HaveCount(3);
     }
 
     [Theory]
@@ -111,6 +141,16 @@ public class AchievementDefinitionsTests
     [InlineData(AchievementDefinitions.StreakTitan, "Streak Titan", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 750)]
     [InlineData(AchievementDefinitions.FirstCheer, "Good Vibes", Domain.Enums.AchievementCategory.Special, Domain.Enums.AchievementRarity.Common, 50)]
     [InlineData(AchievementDefinitions.OnboardingComplete, "All Systems Go", Domain.Enums.AchievementCategory.GettingStarted, Domain.Enums.AchievementRarity.Common, 50)]
+    [InlineData(AchievementDefinitions.FirstFriend, "First Friend", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Common, 50)]
+    [InlineData(AchievementDefinitions.SquadGoals, "Squad Goals", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Rare, 150)]
+    [InlineData(AchievementDefinitions.Cheerleader, "Cheerleader", Domain.Enums.AchievementCategory.Social, Domain.Enums.AchievementRarity.Rare, 150)]
+    [InlineData(AchievementDefinitions.ShowOff, "Show Off", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.YearInReview, "Year in Review", Domain.Enums.AchievementCategory.Sharing, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.TeamPlayer, "Team Player", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.MissionAccomplished, "Mission Accomplished", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Rare, 150)]
+    [InlineData(AchievementDefinitions.BattleBuddy, "Battle Buddy", Domain.Enums.AchievementCategory.Together, Domain.Enums.AchievementRarity.Uncommon, 75)]
+    [InlineData(AchievementDefinitions.StreakImmortal, "Streak Immortal", Domain.Enums.AchievementCategory.Consistency, Domain.Enums.AchievementRarity.Legendary, 1500)]
+    [InlineData(AchievementDefinitions.Unstoppable, "Unstoppable", Domain.Enums.AchievementCategory.Volume, Domain.Enums.AchievementRarity.Legendary, 1000)]
     public void NewAchievements_HaveExpectedMetadata(
         string id,
         string expectedName,
@@ -129,13 +169,13 @@ public class AchievementDefinitionsTests
     }
 
     [Fact]
-    public void VolumeCategory_Has5Achievements()
+    public void VolumeCategory_Has6Achievements()
     {
         var volume = AchievementDefinitions.All
             .Where(a => a.Category == Domain.Enums.AchievementCategory.Volume)
             .ToList();
 
-        volume.Should().HaveCount(5);
+        volume.Should().HaveCount(6);
     }
 
     [Fact]

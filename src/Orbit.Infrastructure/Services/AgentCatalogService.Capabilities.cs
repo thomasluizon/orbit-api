@@ -655,7 +655,8 @@ public partial class AgentCatalogService
                     "GamificationController.GetStreakInfo",
                     "GamificationController.GetRecap",
                     "GamificationController.GetStreakHistory",
-                    "GamificationController.GetXpHistory"
+                    "GamificationController.GetXpHistory",
+                    "AchievementsController.ReportEvent"
                 ])
         ];
     }
