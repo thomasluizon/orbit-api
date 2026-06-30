@@ -79,4 +79,9 @@ public static class DomainErrors
     public static readonly AppError GoalAlreadyCompleted = new("GOAL_ALREADY_COMPLETED", "Goal is already completed.");
     public static readonly AppError GoalAlreadyAbandoned = new("GOAL_ALREADY_ABANDONED", "Goal is already abandoned.");
     public static readonly AppError GoalAlreadyActive = new("GOAL_ALREADY_ACTIVE", "Goal is already active.");
+
+    public static readonly AppError ChallengeTargetRequired = new("CHALLENGE_TARGET_REQUIRED", "A goal challenge must have a target count greater than 0.");
+    public static readonly AppError ChallengeTargetNotAllowed = new("CHALLENGE_TARGET_NOT_ALLOWED", "A streak challenge cannot have a target count.");
+    public static readonly AppError ChallengePeriodInvalid = new("CHALLENGE_PERIOD_INVALID", "Challenge end date must be on or after the start date.");
+    public static readonly AppError ChallengeJoinCodeRequired = new("CHALLENGE_JOIN_CODE_REQUIRED", "Join code is required.");
 }
