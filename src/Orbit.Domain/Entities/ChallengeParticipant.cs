@@ -34,6 +34,13 @@ public class ChallengeParticipant : Entity
         _linkedHabits.Add(ChallengeParticipantHabit.Create(Id, habitId));
     }
 
+    internal void ReplaceLinkedHabits(IReadOnlyList<Guid> habitIds)
+    {
+        _linkedHabits.Clear();
+        foreach (var habitId in habitIds)
+            LinkHabit(habitId);
+    }
+
     internal void Leave()
     {
         LeftAtUtc ??= DateTime.UtcNow;

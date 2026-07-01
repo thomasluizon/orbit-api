@@ -55,13 +55,7 @@ public class GetChallengeDetailQueryHandler(
         var windowEnd = challenge.PeriodEndUtc ?? today;
         var lastDay = windowEnd < today ? windowEnd : today;
 
-        var activeParticipants = challenge.GetActiveParticipants();
-        var contributingHabitSets = activeParticipants
-            .Select(p => (IReadOnlyCollection<Guid>)p.LinkedHabits.Select(h => h.HabitId).ToList())
-            .Where(set => set.Count > 0)
-            .ToList();
-        var contributingHabitIds = contributingHabitSets.SelectMany(set => set).Distinct().ToList();
-
+        var contributingHabitIds = ChallengeProgressCalculator.GetContributingHabitIds(challenge);
         var logs = contributingHabitIds.Count > 0
             ? await habitLogRepository.FindAsync(
                 l => contributingHabitIds.Contains(l.HabitId)
@@ -70,8 +64,9 @@ public class GetChallengeDetailQueryHandler(
                 cancellationToken)
             : [];
 
-        var (currentProgress, isComplete) = ComputeProgress(challenge, contributingHabitIds, contributingHabitSets, logs, lastDay, today);
+        var (currentProgress, isComplete) = ChallengeProgressCalculator.ComputeProgress(challenge, logs, lastDay, today);
 
+        var activeParticipants = challenge.GetActiveParticipants();
         var participants = await BuildParticipantRosterAsync(activeParticipants, cancellationToken);
         var yourLinkedHabitIds = challenge.Participants
             .Where(p => p.UserId == request.UserId && p.IsActive)
@@ -95,28 +90,6 @@ public class GetChallengeDetailQueryHandler(
             challenge.CreatedAtUtc,
             participants,
             yourLinkedHabitIds));
-    }
-
-    private static (int CurrentProgress, bool IsComplete) ComputeProgress(
-        Challenge challenge,
-        IReadOnlyCollection<Guid> contributingHabitIds,
-        IReadOnlyList<IReadOnlyCollection<Guid>> contributingHabitSets,
-        IReadOnlyCollection<HabitLog> logs,
-        DateOnly lastDay,
-        DateOnly today)
-    {
-        if (challenge.Type == ChallengeType.CoopGoal)
-        {
-            var count = ChallengeProgressCalculator.CalculateCoopGoalProgress(
-                contributingHabitIds, logs, challenge.PeriodStartUtc, lastDay);
-            var reachedTarget = challenge.TargetCount.HasValue && count >= challenge.TargetCount.Value;
-            var windowEnded = challenge.PeriodEndUtc.HasValue && today > challenge.PeriodEndUtc.Value;
-            return (count, challenge.Status == ChallengeStatus.Completed || reachedTarget || windowEnded);
-        }
-
-        var streak = ChallengeProgressCalculator.CalculateSharedStreak(
-            contributingHabitSets, logs, challenge.PeriodStartUtc, lastDay, today);
-        return (streak, false);
     }
 
     private async Task<IReadOnlyList<ChallengeParticipantResponse>> BuildParticipantRosterAsync(
