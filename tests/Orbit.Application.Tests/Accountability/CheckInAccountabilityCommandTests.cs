@@ -22,6 +22,7 @@ public class CheckInAccountabilityCommandTests
     private readonly IGenericRepository<AccountabilityCheckIn> _checkInRepository = Substitute.For<IGenericRepository<AccountabilityCheckIn>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
@@ -39,8 +40,10 @@ public class CheckInAccountabilityCommandTests
         var friendGraph = new FriendGraphService(_userRepository, Substitute.For<IGenericRepository<Friendship>>(), _blockedUserRepository);
         var pairService = new AccountabilityPairService(_pairRepository, _pairHabitRepository, _habitRepository);
         var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository, _achievementRepository);
+        var dispatcher = new SocialNotificationDispatcher(
+            _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new CheckInAccountabilityCommandHandler(
-            guard, pairService, friendGraph, repositories, _moderation, _userDateService, _push, _unitOfWork,
+            guard, pairService, friendGraph, repositories, dispatcher, _moderation, _userDateService, _unitOfWork,
             Substitute.For<ILogger<CheckInAccountabilityCommandHandler>>());
 
         _pair = AccountabilityPair.Create(_caller.Id, _buddy.Id, AccountabilityCadence.Daily).Value;
@@ -68,8 +71,11 @@ public class CheckInAccountabilityCommandTests
             Arg.Is<AccountabilityCheckIn>(c =>
                 c.PairId == _pair.Id && c.UserId == _caller.Id && c.Date == new DateOnly(2026, 6, 30)),
             Arg.Any<CancellationToken>());
+        await _notificationRepository.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == "/social?tab=buddies"),
+            Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
     }
 
     [Fact]

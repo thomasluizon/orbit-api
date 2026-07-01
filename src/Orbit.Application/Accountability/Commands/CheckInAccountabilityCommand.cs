@@ -17,12 +17,14 @@ public partial class CheckInAccountabilityCommandHandler(
     AccountabilityPairService accountabilityPairService,
     FriendGraphService friendGraphService,
     AccountabilityRepositories repositories,
+    SocialNotificationDispatcher notificationDispatcher,
     IContentModerationService contentModerationService,
     IUserDateService userDateService,
-    IPushNotificationService pushNotificationService,
     IUnitOfWork unitOfWork,
     ILogger<CheckInAccountabilityCommandHandler> logger) : IRequestHandler<CheckInAccountabilityCommand, Result<Guid>>
 {
+    private const string BuddyNotificationUrl = "/social?tab=buddies";
+
     public async Task<Result<Guid>> Handle(CheckInAccountabilityCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -57,9 +59,17 @@ public partial class CheckInAccountabilityCommandHandler(
             return createResult.PropagateError<Guid>();
 
         await repositories.CheckIns.AddAsync(createResult.Value, cancellationToken);
+
+        var buddy = await repositories.Users.FindOneTrackedAsync(
+            u => u.Id == buddyId,
+            cancellationToken: cancellationToken);
+        var notification = BuildBuddyNotification(buddy, checker);
+        if (notification is not null)
+            await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyBuddyAsync(buddyId, checker, cancellationToken);
+        if (notification is not null)
+            await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }
@@ -85,13 +95,10 @@ public partial class CheckInAccountabilityCommandHandler(
         return Result.Success();
     }
 
-    private async Task NotifyBuddyAsync(Guid buddyId, User checker, CancellationToken cancellationToken)
+    private static Notification? BuildBuddyNotification(User? buddy, User checker)
     {
-        var buddy = await repositories.Users.FindOneTrackedAsync(
-            u => u.Id == buddyId,
-            cancellationToken: cancellationToken);
         if (buddy is null || !buddy.SocialOptIn)
-            return;
+            return null;
 
         var isPortuguese = LocaleHelper.IsPortuguese(buddy.Language);
         var title = isPortuguese ? "Novo check-in" : "New check-in";
@@ -99,19 +106,9 @@ public partial class CheckInAccountabilityCommandHandler(
             ? $"{checker.Name} fez check-in com você."
             : $"{checker.Name} checked in with you.";
 
-        try
-        {
-            await pushNotificationService.SendToUserAsync(buddyId, title, body, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, buddyId);
-        }
+        return Notification.Create(buddy.Id, title, body, BuddyNotificationUrl);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Check-in note moderation unavailable for user {UserId}; allowing note (fail open)")]
     private static partial void LogModerationUnavailable(ILogger logger, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Accountability check-in push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

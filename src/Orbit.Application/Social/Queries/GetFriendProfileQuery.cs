@@ -45,7 +45,7 @@ public class GetFriendProfileQueryHandler(
             return Result.Failure<FriendProfileView>(ErrorMessages.UserNotFound);
 
         var level = LevelDefinitions.GetLevelForXp(friend.TotalXp).Level;
-        var achievements = await BuildAchievementsAsync(friend.Id, cancellationToken);
+        var achievements = await PublicAchievementsBuilder.BuildAsync(achievementRepository, friend.Id, cancellationToken);
 
         return Result.Success(new FriendProfileView(
             friend.Id,
@@ -54,17 +54,5 @@ public class GetFriendProfileQueryHandler(
             friend.CurrentStreak,
             level,
             achievements));
-    }
-
-    private async Task<IReadOnlyList<PublicAchievement>> BuildAchievementsAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var earned = await achievementRepository.FindAsync(a => a.UserId == userId, cancellationToken);
-
-        return earned
-            .OrderByDescending(a => a.EarnedAtUtc)
-            .Select(a => AchievementDefinitions.GetById(a.AchievementId))
-            .Where(def => def is not null)
-            .Select(def => new PublicAchievement(def!.Name, def.IconKey, def.Rarity.ToString()))
-            .ToList();
     }
 }

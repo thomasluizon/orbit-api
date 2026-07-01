@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
@@ -10,14 +9,12 @@ namespace Orbit.Application.Social.Commands;
 
 public record SendFriendRequestCommand(Guid UserId, string? Handle, string? ReferralCode) : IRequest<Result<Guid>>;
 
-public partial class SendFriendRequestCommandHandler(
+public class SendFriendRequestCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     IGenericRepository<Friendship> friendshipRepository,
-    IGenericRepository<Notification> notificationRepository,
-    IUnitOfWork unitOfWork,
-    IPushNotificationService pushNotificationService,
-    ILogger<SendFriendRequestCommandHandler> logger) : IRequestHandler<SendFriendRequestCommand, Result<Guid>>
+    SocialNotificationDispatcher notificationDispatcher,
+    IUnitOfWork unitOfWork) : IRequestHandler<SendFriendRequestCommand, Result<Guid>>
 {
     private const string RequestNotificationUrl = "/social?tab=friends";
 
@@ -50,10 +47,10 @@ public partial class SendFriendRequestCommandHandler(
         await friendshipRepository.AddAsync(createResult.Value, cancellationToken);
 
         var notification = BuildRequestNotification(target, requester);
-        await notificationRepository.AddAsync(notification, cancellationToken);
+        await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await PushTargetAsync(target, notification, cancellationToken);
+        await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }
@@ -68,20 +65,4 @@ public partial class SendFriendRequestCommandHandler(
 
         return Notification.Create(target.Id, title, body, RequestNotificationUrl);
     }
-
-    private async Task PushTargetAsync(User target, Notification notification, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await pushNotificationService.SendToUserAsync(
-                target.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, target.Id);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Friend-request push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

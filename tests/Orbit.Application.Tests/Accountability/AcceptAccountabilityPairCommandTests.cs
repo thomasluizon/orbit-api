@@ -23,6 +23,7 @@ public class AcceptAccountabilityPairCommandTests
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
+    private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
@@ -38,9 +39,10 @@ public class AcceptAccountabilityPairCommandTests
         var guard = new SocialAccessGuard(_userRepository);
         var pairService = new AccountabilityPairService(_pairRepository, _pairHabitRepository, _habitRepository);
         var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository, _achievementRepository);
+        var dispatcher = new SocialNotificationDispatcher(
+            _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new AcceptAccountabilityPairCommandHandler(
-            guard, pairService, repositories, new XpAwarder(_xpAwardLogRepository), _push, _unitOfWork,
-            Substitute.For<ILogger<AcceptAccountabilityPairCommandHandler>>());
+            guard, pairService, repositories, dispatcher, new XpAwarder(_xpAwardLogRepository), _unitOfWork);
 
         _pair = AccountabilityPair.Create(_requester.Id, _addressee.Id, AccountabilityCadence.Daily).Value;
 
@@ -65,8 +67,11 @@ public class AcceptAccountabilityPairCommandTests
         await _pairHabitRepository.Received(1).AddAsync(
             Arg.Is<AccountabilityPairHabit>(ph => ph.UserId == _addressee.Id && ph.HabitId == _habitId),
             Arg.Any<CancellationToken>());
+        await _notificationRepository.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.UserId == _requester.Id && n.Url == "/social?tab=buddies"),
+            Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _requester.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            _requester.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

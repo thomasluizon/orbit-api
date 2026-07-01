@@ -48,7 +48,7 @@ public class GetPublicProfileQueryHandler(
         var currentLevel = user.PublicProfileShowLevel ? LevelDefinitions.GetLevelForXp(user.TotalXp) : null;
 
         var achievements = user.PublicProfileShowAchievements
-            ? await BuildAchievementsAsync(user.Id, cancellationToken)
+            ? await PublicAchievementsBuilder.BuildAsync(achievementRepository, user.Id, cancellationToken)
             : null;
 
         var topHabits = user.PublicProfileShowTopHabits
@@ -65,18 +65,6 @@ public class GetPublicProfileQueryHandler(
             currentLevel?.Title,
             achievements,
             topHabits));
-    }
-
-    private async Task<IReadOnlyList<PublicAchievement>> BuildAchievementsAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var earned = await achievementRepository.FindAsync(a => a.UserId == userId, cancellationToken);
-
-        return earned
-            .OrderByDescending(a => a.EarnedAtUtc)
-            .Select(a => AchievementDefinitions.GetById(a.AchievementId))
-            .Where(def => def is not null)
-            .Select(def => new PublicAchievement(def!.Name, def.IconKey, def.Rarity.ToString()))
-            .ToList();
     }
 
     private async Task<IReadOnlyList<string>> BuildTopHabitsAsync(Guid userId, CancellationToken cancellationToken)

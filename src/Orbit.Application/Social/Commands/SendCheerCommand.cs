@@ -16,8 +16,7 @@ public record SendCheerRepositories(
     IGenericRepository<User> Users,
     IGenericRepository<Habit> Habits,
     IGenericRepository<Cheer> Cheers,
-    IGenericRepository<UserAchievement> Achievements,
-    IGenericRepository<Notification> Notifications);
+    IGenericRepository<UserAchievement> Achievements);
 
 public record SendCheerCommand(Guid UserId, Guid RecipientId, Guid? HabitId, string? Note) : IRequest<Result<Guid>>;
 
@@ -25,8 +24,8 @@ public partial class SendCheerCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     SendCheerRepositories repositories,
+    SocialNotificationDispatcher notificationDispatcher,
     IContentModerationService contentModerationService,
-    IPushNotificationService pushNotificationService,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     ILogger<SendCheerCommandHandler> logger) : IRequestHandler<SendCheerCommand, Result<Guid>>
@@ -77,10 +76,10 @@ public partial class SendCheerCommandHandler(
         await AwardCheerleaderAsync(sender, cancellationToken);
 
         var notification = BuildRecipientNotification(recipient, sender);
-        await repositories.Notifications.AddAsync(notification, cancellationToken);
+        await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await PushRecipientAsync(recipient, notification, cancellationToken);
+        await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }
@@ -162,22 +161,6 @@ public partial class SendCheerCommandHandler(
         return Notification.Create(recipient.Id, title, body, RecipientNotificationUrl);
     }
 
-    private async Task PushRecipientAsync(User recipient, Notification notification, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await pushNotificationService.SendToUserAsync(
-                recipient.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, recipient.Id);
-        }
-    }
-
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Cheer note moderation unavailable for sender {UserId}; allowing note (fail open)")]
     private static partial void LogModerationUnavailable(ILogger logger, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Cheer push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

@@ -36,9 +36,11 @@ public class SendCheerCommandTests
     {
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
-        var repos = new SendCheerRepositories(_userRepository, _habitRepository, _cheerRepository, _achievementRepository, _notificationRepository);
+        var repos = new SendCheerRepositories(_userRepository, _habitRepository, _cheerRepository, _achievementRepository);
+        var dispatcher = new SocialNotificationDispatcher(
+            _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new SendCheerCommandHandler(
-            guard, friendGraph, repos, _moderation, _push, new XpAwarder(_xpAwardLogRepository), _unitOfWork,
+            guard, friendGraph, repos, dispatcher, _moderation, new XpAwarder(_xpAwardLogRepository), _unitOfWork,
             Substitute.For<ILogger<SendCheerCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _sender, _recipient);

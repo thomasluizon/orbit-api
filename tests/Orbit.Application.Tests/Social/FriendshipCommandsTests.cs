@@ -34,14 +34,16 @@ public class FriendshipCommandsTests
         SocialTestHelpers.StubFind(_achievementRepository);
     }
 
+    private SocialNotificationDispatcher Dispatcher() =>
+        new(_notificationRepository, _pushNotificationService,
+            Substitute.For<ILogger<SocialNotificationDispatcher>>());
+
     private SendFriendRequestCommandHandler SendHandler() =>
-        new(_guard, _friendGraph, _friendshipRepository, _notificationRepository, _unitOfWork,
-            _pushNotificationService, Substitute.For<ILogger<SendFriendRequestCommandHandler>>());
+        new(_guard, _friendGraph, _friendshipRepository, Dispatcher(), _unitOfWork);
 
     private AcceptFriendRequestCommandHandler AcceptHandler() =>
-        new(_guard, _friendshipRepository, _userRepository, _achievementRepository, _notificationRepository,
-            new XpAwarder(_xpAwardLogRepository), _unitOfWork, _pushNotificationService,
-            Substitute.For<ILogger<AcceptFriendRequestCommandHandler>>());
+        new(_guard, _friendshipRepository, _userRepository, _achievementRepository, Dispatcher(),
+            new XpAwarder(_xpAwardLogRepository), _unitOfWork);
 
     [Fact]
     public async Task SendRequest_ValidHandle_CreatesPendingFriendship()

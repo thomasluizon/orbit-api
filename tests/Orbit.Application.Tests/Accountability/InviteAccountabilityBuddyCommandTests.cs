@@ -39,9 +39,10 @@ public class InviteAccountabilityBuddyCommandTests
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
         var pairService = new AccountabilityPairService(_pairRepository, _pairHabitRepository, _habitRepository);
         var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository, _achievementRepository);
+        var dispatcher = new SocialNotificationDispatcher(
+            _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new InviteAccountabilityBuddyCommandHandler(
-            guard, friendGraph, pairService, repositories, _notificationRepository, _push, _unitOfWork,
-            Substitute.For<ILogger<InviteAccountabilityBuddyCommandHandler>>());
+            guard, friendGraph, pairService, repositories, dispatcher, _unitOfWork);
 
         SocialTestHelpers.StubUsers(_userRepository, _caller, _buddy);
         AccountabilityTestHelpers.StubFind(_friendshipRepository, AcceptedFriendship());

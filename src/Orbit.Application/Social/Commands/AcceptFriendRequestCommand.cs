@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
@@ -13,16 +12,14 @@ namespace Orbit.Application.Social.Commands;
 
 public record AcceptFriendRequestCommand(Guid UserId, Guid FriendshipId) : IRequest<Result>;
 
-public partial class AcceptFriendRequestCommandHandler(
+public class AcceptFriendRequestCommandHandler(
     SocialAccessGuard socialAccessGuard,
     IGenericRepository<Friendship> friendshipRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
-    IGenericRepository<Notification> notificationRepository,
+    SocialNotificationDispatcher notificationDispatcher,
     IXpAwarder xpAwarder,
-    IUnitOfWork unitOfWork,
-    IPushNotificationService pushNotificationService,
-    ILogger<AcceptFriendRequestCommandHandler> logger) : IRequestHandler<AcceptFriendRequestCommand, Result>
+    IUnitOfWork unitOfWork) : IRequestHandler<AcceptFriendRequestCommand, Result>
 {
     private const string FirstFriendAchievementId = "first_friend";
     private const string SquadGoalsAchievementId = "squad_goals";
@@ -59,10 +56,11 @@ public partial class AcceptFriendRequestCommandHandler(
 
         var notification = BuildRequesterNotification(requester, accepter);
         if (notification is not null)
-            await notificationRepository.AddAsync(notification, cancellationToken);
+            await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await PushRequesterAsync(requester, notification, cancellationToken);
+        if (notification is not null)
+            await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success();
     }
@@ -125,23 +123,4 @@ public partial class AcceptFriendRequestCommandHandler(
 
         return Notification.Create(requester.Id, title, body, FriendNotificationUrl);
     }
-
-    private async Task PushRequesterAsync(User? requester, Notification? notification, CancellationToken cancellationToken)
-    {
-        if (requester is null || notification is null)
-            return;
-
-        try
-        {
-            await pushNotificationService.SendToUserAsync(
-                requester.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, requester.Id);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Friend-accepted push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

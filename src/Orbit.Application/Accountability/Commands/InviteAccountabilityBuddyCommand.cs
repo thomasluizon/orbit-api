@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Accountability.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Social.Services;
@@ -16,15 +15,13 @@ public record InviteAccountabilityBuddyCommand(
     AccountabilityCadence Cadence,
     IReadOnlyList<Guid> HabitIds) : IRequest<Result<Guid>>;
 
-public partial class InviteAccountabilityBuddyCommandHandler(
+public class InviteAccountabilityBuddyCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     AccountabilityPairService accountabilityPairService,
     AccountabilityRepositories repositories,
-    IGenericRepository<Notification> notificationRepository,
-    IPushNotificationService pushNotificationService,
-    IUnitOfWork unitOfWork,
-    ILogger<InviteAccountabilityBuddyCommandHandler> logger) : IRequestHandler<InviteAccountabilityBuddyCommand, Result<Guid>>
+    SocialNotificationDispatcher notificationDispatcher,
+    IUnitOfWork unitOfWork) : IRequestHandler<InviteAccountabilityBuddyCommand, Result<Guid>>
 {
     private const string BuddyNotificationUrl = "/social?tab=buddies";
 
@@ -69,10 +66,10 @@ public partial class InviteAccountabilityBuddyCommandHandler(
             return linkResult.PropagateError<Guid>();
 
         var notification = BuildBuddyNotification(buddy, requester);
-        await notificationRepository.AddAsync(notification, cancellationToken);
+        await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await PushBuddyAsync(buddy, notification, cancellationToken);
+        await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(pair.Id);
     }
@@ -87,20 +84,4 @@ public partial class InviteAccountabilityBuddyCommandHandler(
 
         return Notification.Create(buddy.Id, title, body, BuddyNotificationUrl);
     }
-
-    private async Task PushBuddyAsync(User buddy, Notification notification, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await pushNotificationService.SendToUserAsync(
-                buddy.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, buddy.Id);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Accountability invite push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }
