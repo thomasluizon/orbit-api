@@ -923,6 +923,7 @@ public partial class AgentCatalogService
                 controllerActions:
                 [
                     "FriendsController.GetFriends",
+                    "FriendsController.GetFriendProfile",
                     "FriendsController.GetFeed",
                     "FriendsController.GetCheers",
                     "FriendsController.SendRequest",

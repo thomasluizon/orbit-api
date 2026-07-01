@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Accountability.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
@@ -17,16 +16,16 @@ public record AcceptAccountabilityPairCommand(
     Guid PairId,
     IReadOnlyList<Guid> HabitIds) : IRequest<Result>;
 
-public partial class AcceptAccountabilityPairCommandHandler(
+public class AcceptAccountabilityPairCommandHandler(
     SocialAccessGuard socialAccessGuard,
     AccountabilityPairService accountabilityPairService,
     AccountabilityRepositories repositories,
+    SocialNotificationDispatcher notificationDispatcher,
     IXpAwarder xpAwarder,
-    IPushNotificationService pushNotificationService,
-    IUnitOfWork unitOfWork,
-    ILogger<AcceptAccountabilityPairCommandHandler> logger) : IRequestHandler<AcceptAccountabilityPairCommand, Result>
+    IUnitOfWork unitOfWork) : IRequestHandler<AcceptAccountabilityPairCommand, Result>
 {
     private const string BattleBuddyAchievementId = "battle_buddy";
+    private const string BuddyNotificationUrl = "/social?tab=buddies";
 
     public async Task<Result> Handle(AcceptAccountabilityPairCommand request, CancellationToken cancellationToken)
     {
@@ -58,9 +57,13 @@ public partial class AcceptAccountabilityPairCommandHandler(
         if (requester is not null)
             await AwardBattleBuddyAsync(requester, cancellationToken);
 
+        var notification = BuildRequesterNotification(requester, accepter);
+        if (notification is not null)
+            await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyRequesterAsync(requester, accepter, cancellationToken);
+        if (notification is not null)
+            await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success();
     }
@@ -93,10 +96,10 @@ public partial class AcceptAccountabilityPairCommandHandler(
             user.SetLevel(newLevel.Level);
     }
 
-    private async Task NotifyRequesterAsync(User? requester, User accepter, CancellationToken cancellationToken)
+    private static Notification? BuildRequesterNotification(User? requester, User accepter)
     {
         if (requester is null || !requester.SocialOptIn)
-            return;
+            return null;
 
         var isPortuguese = LocaleHelper.IsPortuguese(requester.Language);
         var title = isPortuguese ? "Parceria aceita" : "Accountability invite accepted";
@@ -104,16 +107,6 @@ public partial class AcceptAccountabilityPairCommandHandler(
             ? $"{accepter.Name} aceitou seu convite de parceria."
             : $"{accepter.Name} accepted your accountability invite.";
 
-        try
-        {
-            await pushNotificationService.SendToUserAsync(requester.Id, title, body, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, requester.Id);
-        }
+        return Notification.Create(requester.Id, title, body, BuddyNotificationUrl);
     }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Accountability accept push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

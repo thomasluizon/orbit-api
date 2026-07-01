@@ -81,6 +81,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Gamification.Backfill.XpAwardLogBackfillService>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialAccessGuard>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.FriendGraphService>();
+        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialNotificationDispatcher>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.IFriendFeedEventEmitter, Orbit.Application.Social.Services.FriendFeedEmitter>();
         builder.Services.AddScoped<IFriendFeedReader, FriendFeedReader>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.IChallengeProgressService, Orbit.Application.Challenges.Services.ChallengeProgressService>();

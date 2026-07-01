@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Models;
@@ -13,19 +12,19 @@ namespace Orbit.Application.Social.Commands;
 
 public record AcceptFriendRequestCommand(Guid UserId, Guid FriendshipId) : IRequest<Result>;
 
-public partial class AcceptFriendRequestCommandHandler(
+public class AcceptFriendRequestCommandHandler(
     SocialAccessGuard socialAccessGuard,
     IGenericRepository<Friendship> friendshipRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
+    SocialNotificationDispatcher notificationDispatcher,
     IXpAwarder xpAwarder,
-    IUnitOfWork unitOfWork,
-    IPushNotificationService pushNotificationService,
-    ILogger<AcceptFriendRequestCommandHandler> logger) : IRequestHandler<AcceptFriendRequestCommand, Result>
+    IUnitOfWork unitOfWork) : IRequestHandler<AcceptFriendRequestCommand, Result>
 {
     private const string FirstFriendAchievementId = "first_friend";
     private const string SquadGoalsAchievementId = "squad_goals";
     private const int SquadGoalsThreshold = 5;
+    private const string FriendNotificationUrl = "/social?tab=friends";
 
     public async Task<Result> Handle(AcceptFriendRequestCommand request, CancellationToken cancellationToken)
     {
@@ -54,9 +53,14 @@ public partial class AcceptFriendRequestCommandHandler(
         await AwardFriendCountAchievementsAsync(accepter, cancellationToken);
         if (requester is not null)
             await AwardFriendCountAchievementsAsync(requester, cancellationToken);
+
+        var notification = BuildRequesterNotification(requester, accepter);
+        if (notification is not null)
+            await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyRequesterAsync(requester, accepter, cancellationToken);
+        if (notification is not null)
+            await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success();
     }
@@ -106,10 +110,10 @@ public partial class AcceptFriendRequestCommandHandler(
             user.SetLevel(newLevel.Level);
     }
 
-    private async Task NotifyRequesterAsync(User? requester, User accepter, CancellationToken cancellationToken)
+    private static Notification? BuildRequesterNotification(User? requester, User accepter)
     {
         if (requester is null || !requester.SocialOptIn)
-            return;
+            return null;
 
         var isPortuguese = LocaleHelper.IsPortuguese(requester.Language);
         var title = isPortuguese ? "Pedido de amizade aceito" : "Friend request accepted";
@@ -117,16 +121,6 @@ public partial class AcceptFriendRequestCommandHandler(
             ? $"{accepter.Name} aceitou seu pedido de amizade."
             : $"{accepter.Name} accepted your friend request.";
 
-        try
-        {
-            await pushNotificationService.SendToUserAsync(requester.Id, title, body, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, requester.Id);
-        }
+        return Notification.Create(requester.Id, title, body, FriendNotificationUrl);
     }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Friend-accepted push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Accountability.Services;
 using Orbit.Application.Common;
 using Orbit.Application.Social.Services;
@@ -16,15 +15,16 @@ public record InviteAccountabilityBuddyCommand(
     AccountabilityCadence Cadence,
     IReadOnlyList<Guid> HabitIds) : IRequest<Result<Guid>>;
 
-public partial class InviteAccountabilityBuddyCommandHandler(
+public class InviteAccountabilityBuddyCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     AccountabilityPairService accountabilityPairService,
     AccountabilityRepositories repositories,
-    IPushNotificationService pushNotificationService,
-    IUnitOfWork unitOfWork,
-    ILogger<InviteAccountabilityBuddyCommandHandler> logger) : IRequestHandler<InviteAccountabilityBuddyCommand, Result<Guid>>
+    SocialNotificationDispatcher notificationDispatcher,
+    IUnitOfWork unitOfWork) : IRequestHandler<InviteAccountabilityBuddyCommand, Result<Guid>>
 {
+    private const string BuddyNotificationUrl = "/social?tab=buddies";
+
     public async Task<Result<Guid>> Handle(InviteAccountabilityBuddyCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -65,14 +65,16 @@ public partial class InviteAccountabilityBuddyCommandHandler(
         if (linkResult.IsFailure)
             return linkResult.PropagateError<Guid>();
 
+        var notification = BuildBuddyNotification(buddy, requester);
+        await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyBuddyAsync(buddy, requester, cancellationToken);
+        await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(pair.Id);
     }
 
-    private async Task NotifyBuddyAsync(User buddy, User requester, CancellationToken cancellationToken)
+    private static Notification BuildBuddyNotification(User buddy, User requester)
     {
         var isPortuguese = LocaleHelper.IsPortuguese(buddy.Language);
         var title = isPortuguese ? "Novo convite de parceria" : "New accountability invite";
@@ -80,16 +82,6 @@ public partial class InviteAccountabilityBuddyCommandHandler(
             ? $"{requester.Name} quer ser seu parceiro de responsabilidade."
             : $"{requester.Name} wants to be your accountability buddy.";
 
-        try
-        {
-            await pushNotificationService.SendToUserAsync(buddy.Id, title, body, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, buddy.Id);
-        }
+        return Notification.Create(buddy.Id, title, body, BuddyNotificationUrl);
     }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Accountability invite push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }

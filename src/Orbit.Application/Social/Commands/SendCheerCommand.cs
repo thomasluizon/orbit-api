@@ -24,14 +24,15 @@ public partial class SendCheerCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     SendCheerRepositories repositories,
+    SocialNotificationDispatcher notificationDispatcher,
     IContentModerationService contentModerationService,
-    IPushNotificationService pushNotificationService,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     ILogger<SendCheerCommandHandler> logger) : IRequestHandler<SendCheerCommand, Result<Guid>>
 {
     private const string CheerleaderAchievementId = "cheerleader";
     private const int CheerleaderThreshold = 10;
+    private const string RecipientNotificationUrl = "/social?tab=feed";
 
     public async Task<Result<Guid>> Handle(SendCheerCommand request, CancellationToken cancellationToken)
     {
@@ -73,9 +74,12 @@ public partial class SendCheerCommandHandler(
         await repositories.Cheers.AddAsync(createResult.Value, cancellationToken);
         await AwardFirstCheerAsync(sender, cancellationToken);
         await AwardCheerleaderAsync(sender, cancellationToken);
+
+        var notification = BuildRecipientNotification(recipient, sender);
+        await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyRecipientAsync(recipient, sender, cancellationToken);
+        await notificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }
@@ -146,7 +150,7 @@ public partial class SendCheerCommandHandler(
             sender.SetLevel(newLevel.Level);
     }
 
-    private async Task NotifyRecipientAsync(User recipient, User sender, CancellationToken cancellationToken)
+    private static Notification BuildRecipientNotification(User recipient, User sender)
     {
         var isPortuguese = LocaleHelper.IsPortuguese(recipient.Language);
         var title = isPortuguese ? "Novo incentivo" : "New cheer";
@@ -154,19 +158,9 @@ public partial class SendCheerCommandHandler(
             ? $"{sender.Name} torceu por você!"
             : $"{sender.Name} cheered you on!";
 
-        try
-        {
-            await pushNotificationService.SendToUserAsync(recipient.Id, title, body, cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogPushNotificationFailed(logger, ex, recipient.Id);
-        }
+        return Notification.Create(recipient.Id, title, body, RecipientNotificationUrl);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Cheer note moderation unavailable for sender {UserId}; allowing note (fail open)")]
     private static partial void LogModerationUnavailable(ILogger logger, Guid userId);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Cheer push failed for user {UserId}")]
-    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 }
