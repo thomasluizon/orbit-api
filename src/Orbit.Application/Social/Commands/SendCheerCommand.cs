@@ -16,7 +16,8 @@ public record SendCheerRepositories(
     IGenericRepository<User> Users,
     IGenericRepository<Habit> Habits,
     IGenericRepository<Cheer> Cheers,
-    IGenericRepository<UserAchievement> Achievements);
+    IGenericRepository<UserAchievement> Achievements,
+    IGenericRepository<Notification> Notifications);
 
 public record SendCheerCommand(Guid UserId, Guid RecipientId, Guid? HabitId, string? Note) : IRequest<Result<Guid>>;
 
@@ -32,6 +33,7 @@ public partial class SendCheerCommandHandler(
 {
     private const string CheerleaderAchievementId = "cheerleader";
     private const int CheerleaderThreshold = 10;
+    private const string RecipientNotificationUrl = "/social?tab=feed";
 
     public async Task<Result<Guid>> Handle(SendCheerCommand request, CancellationToken cancellationToken)
     {
@@ -73,9 +75,12 @@ public partial class SendCheerCommandHandler(
         await repositories.Cheers.AddAsync(createResult.Value, cancellationToken);
         await AwardFirstCheerAsync(sender, cancellationToken);
         await AwardCheerleaderAsync(sender, cancellationToken);
+
+        var notification = BuildRecipientNotification(recipient, sender);
+        await repositories.Notifications.AddAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyRecipientAsync(recipient, sender, cancellationToken);
+        await PushRecipientAsync(recipient, notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }
@@ -146,7 +151,7 @@ public partial class SendCheerCommandHandler(
             sender.SetLevel(newLevel.Level);
     }
 
-    private async Task NotifyRecipientAsync(User recipient, User sender, CancellationToken cancellationToken)
+    private static Notification BuildRecipientNotification(User recipient, User sender)
     {
         var isPortuguese = LocaleHelper.IsPortuguese(recipient.Language);
         var title = isPortuguese ? "Novo incentivo" : "New cheer";
@@ -154,9 +159,15 @@ public partial class SendCheerCommandHandler(
             ? $"{sender.Name} torceu por você!"
             : $"{sender.Name} cheered you on!";
 
+        return Notification.Create(recipient.Id, title, body, RecipientNotificationUrl);
+    }
+
+    private async Task PushRecipientAsync(User recipient, Notification notification, CancellationToken cancellationToken)
+    {
         try
         {
-            await pushNotificationService.SendToUserAsync(recipient.Id, title, body, cancellationToken: cancellationToken);
+            await pushNotificationService.SendToUserAsync(
+                recipient.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
         }
         catch (Exception ex)
         {

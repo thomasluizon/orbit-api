@@ -18,6 +18,7 @@ public partial class AcceptFriendRequestCommandHandler(
     IGenericRepository<Friendship> friendshipRepository,
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
+    IGenericRepository<Notification> notificationRepository,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     IPushNotificationService pushNotificationService,
@@ -26,6 +27,7 @@ public partial class AcceptFriendRequestCommandHandler(
     private const string FirstFriendAchievementId = "first_friend";
     private const string SquadGoalsAchievementId = "squad_goals";
     private const int SquadGoalsThreshold = 5;
+    private const string FriendNotificationUrl = "/social?tab=friends";
 
     public async Task<Result> Handle(AcceptFriendRequestCommand request, CancellationToken cancellationToken)
     {
@@ -54,9 +56,13 @@ public partial class AcceptFriendRequestCommandHandler(
         await AwardFriendCountAchievementsAsync(accepter, cancellationToken);
         if (requester is not null)
             await AwardFriendCountAchievementsAsync(requester, cancellationToken);
+
+        var notification = BuildRequesterNotification(requester, accepter);
+        if (notification is not null)
+            await notificationRepository.AddAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyRequesterAsync(requester, accepter, cancellationToken);
+        await PushRequesterAsync(requester, notification, cancellationToken);
 
         return Result.Success();
     }
@@ -106,10 +112,10 @@ public partial class AcceptFriendRequestCommandHandler(
             user.SetLevel(newLevel.Level);
     }
 
-    private async Task NotifyRequesterAsync(User? requester, User accepter, CancellationToken cancellationToken)
+    private static Notification? BuildRequesterNotification(User? requester, User accepter)
     {
         if (requester is null || !requester.SocialOptIn)
-            return;
+            return null;
 
         var isPortuguese = LocaleHelper.IsPortuguese(requester.Language);
         var title = isPortuguese ? "Pedido de amizade aceito" : "Friend request accepted";
@@ -117,9 +123,18 @@ public partial class AcceptFriendRequestCommandHandler(
             ? $"{accepter.Name} aceitou seu pedido de amizade."
             : $"{accepter.Name} accepted your friend request.";
 
+        return Notification.Create(requester.Id, title, body, FriendNotificationUrl);
+    }
+
+    private async Task PushRequesterAsync(User? requester, Notification? notification, CancellationToken cancellationToken)
+    {
+        if (requester is null || notification is null)
+            return;
+
         try
         {
-            await pushNotificationService.SendToUserAsync(requester.Id, title, body, cancellationToken: cancellationToken);
+            await pushNotificationService.SendToUserAsync(
+                requester.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
         }
         catch (Exception ex)
         {

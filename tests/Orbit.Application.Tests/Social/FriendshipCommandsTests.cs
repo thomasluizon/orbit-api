@@ -19,6 +19,7 @@ public class FriendshipCommandsTests
     private readonly IGenericRepository<Friendship> _friendshipRepository = Substitute.For<IGenericRepository<Friendship>>();
     private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IPushNotificationService _pushNotificationService = Substitute.For<IPushNotificationService>();
@@ -34,10 +35,11 @@ public class FriendshipCommandsTests
     }
 
     private SendFriendRequestCommandHandler SendHandler() =>
-        new(_guard, _friendGraph, _friendshipRepository, _unitOfWork);
+        new(_guard, _friendGraph, _friendshipRepository, _notificationRepository, _unitOfWork,
+            _pushNotificationService, Substitute.For<ILogger<SendFriendRequestCommandHandler>>());
 
     private AcceptFriendRequestCommandHandler AcceptHandler() =>
-        new(_guard, _friendshipRepository, _userRepository, _achievementRepository,
+        new(_guard, _friendshipRepository, _userRepository, _achievementRepository, _notificationRepository,
             new XpAwarder(_xpAwardLogRepository), _unitOfWork, _pushNotificationService,
             Substitute.For<ILogger<AcceptFriendRequestCommandHandler>>());
 
@@ -58,6 +60,11 @@ public class FriendshipCommandsTests
         await _friendshipRepository.Received(1).AddAsync(
             Arg.Is<Friendship>(f => f.RequesterId == caller.Id && f.AddresseeId == target.Id && f.Status == FriendshipStatus.Pending),
             Arg.Any<CancellationToken>());
+        await _notificationRepository.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.UserId == target.Id && n.Url == "/social?tab=friends"),
+            Arg.Any<CancellationToken>());
+        await _pushNotificationService.Received(1).SendToUserAsync(
+            target.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=friends", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -184,8 +191,11 @@ public class FriendshipCommandsTests
         result.IsSuccess.Should().BeTrue();
         friendship.Status.Should().Be(FriendshipStatus.Accepted);
         friendship.RespondedAtUtc.Should().NotBeNull();
+        await _notificationRepository.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.UserId == requester.Id && n.Url == "/social?tab=friends"),
+            Arg.Any<CancellationToken>());
         await _pushNotificationService.Received(1).SendToUserAsync(
-            requester.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            requester.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=friends", Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -97,7 +97,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
         builder.Services.AddScoped<Orbit.Application.Accountability.Services.AccountabilityPairService>();
         builder.Services.AddScoped<Orbit.Application.Accountability.Commands.AccountabilityRepositories>(sp =>
             new Orbit.Application.Accountability.Commands.AccountabilityRepositories(

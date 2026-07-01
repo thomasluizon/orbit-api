@@ -23,6 +23,7 @@ public class InviteAccountabilityBuddyCommandTests
     private readonly IGenericRepository<AccountabilityCheckIn> _checkInRepository = Substitute.For<IGenericRepository<AccountabilityCheckIn>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
@@ -39,7 +40,7 @@ public class InviteAccountabilityBuddyCommandTests
         var pairService = new AccountabilityPairService(_pairRepository, _pairHabitRepository, _habitRepository);
         var repositories = new AccountabilityRepositories(_userRepository, _pairRepository, _checkInRepository, _achievementRepository);
         _handler = new InviteAccountabilityBuddyCommandHandler(
-            guard, friendGraph, pairService, repositories, _push, _unitOfWork,
+            guard, friendGraph, pairService, repositories, _notificationRepository, _push, _unitOfWork,
             Substitute.For<ILogger<InviteAccountabilityBuddyCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _caller, _buddy);
@@ -74,8 +75,11 @@ public class InviteAccountabilityBuddyCommandTests
         await _pairHabitRepository.Received(1).AddAsync(
             Arg.Is<AccountabilityPairHabit>(ph => ph.UserId == _caller.Id && ph.HabitId == _habitId),
             Arg.Any<CancellationToken>());
+        await _notificationRepository.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == "/social?tab=buddies"),
+            Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

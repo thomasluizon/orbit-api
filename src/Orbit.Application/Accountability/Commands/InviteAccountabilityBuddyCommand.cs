@@ -21,10 +21,13 @@ public partial class InviteAccountabilityBuddyCommandHandler(
     FriendGraphService friendGraphService,
     AccountabilityPairService accountabilityPairService,
     AccountabilityRepositories repositories,
+    IGenericRepository<Notification> notificationRepository,
     IPushNotificationService pushNotificationService,
     IUnitOfWork unitOfWork,
     ILogger<InviteAccountabilityBuddyCommandHandler> logger) : IRequestHandler<InviteAccountabilityBuddyCommand, Result<Guid>>
 {
+    private const string BuddyNotificationUrl = "/social?tab=buddies";
+
     public async Task<Result<Guid>> Handle(InviteAccountabilityBuddyCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -65,14 +68,16 @@ public partial class InviteAccountabilityBuddyCommandHandler(
         if (linkResult.IsFailure)
             return linkResult.PropagateError<Guid>();
 
+        var notification = BuildBuddyNotification(buddy, requester);
+        await notificationRepository.AddAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await NotifyBuddyAsync(buddy, requester, cancellationToken);
+        await PushBuddyAsync(buddy, notification, cancellationToken);
 
         return Result.Success(pair.Id);
     }
 
-    private async Task NotifyBuddyAsync(User buddy, User requester, CancellationToken cancellationToken)
+    private static Notification BuildBuddyNotification(User buddy, User requester)
     {
         var isPortuguese = LocaleHelper.IsPortuguese(buddy.Language);
         var title = isPortuguese ? "Novo convite de parceria" : "New accountability invite";
@@ -80,9 +85,15 @@ public partial class InviteAccountabilityBuddyCommandHandler(
             ? $"{requester.Name} quer ser seu parceiro de responsabilidade."
             : $"{requester.Name} wants to be your accountability buddy.";
 
+        return Notification.Create(buddy.Id, title, body, BuddyNotificationUrl);
+    }
+
+    private async Task PushBuddyAsync(User buddy, Notification notification, CancellationToken cancellationToken)
+    {
         try
         {
-            await pushNotificationService.SendToUserAsync(buddy.Id, title, body, cancellationToken: cancellationToken);
+            await pushNotificationService.SendToUserAsync(
+                buddy.Id, notification.Title, notification.Body, notification.Url, cancellationToken);
         }
         catch (Exception ex)
         {
