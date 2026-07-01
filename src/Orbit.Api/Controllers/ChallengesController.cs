@@ -26,6 +26,8 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
 
     public record JoinChallengeBody(string Code, IReadOnlyList<Guid>? LinkedHabitIds);
 
+    public record SetChallengeHabitsBody(IReadOnlyList<Guid>? HabitIds);
+
     [HttpPost]
     [DistributedRateLimit("challenges")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -86,6 +88,29 @@ public partial class ChallengesController(IMediator mediator, ILogger<Challenges
         var command = new LeaveChallengeCommand(HttpContext.GetUserId(), challengeId);
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPut("{challengeId:guid}/habits")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetHabits(
+        Guid challengeId,
+        [FromBody] SetChallengeHabitsBody body,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetChallengeHabitsCommand(HttpContext.GetUserId(), challengeId, body.HabitIds ?? []);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMine(CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetUserChallengesQuery(HttpContext.GetUserId()), cancellationToken);
+        return result.ToPayGateAwareResult(Ok);
     }
 
     [HttpGet("{challengeId:guid}")]

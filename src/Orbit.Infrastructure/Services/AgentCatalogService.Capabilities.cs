@@ -936,6 +936,8 @@ public partial class AgentCatalogService
                     "ChallengesController.Join",
                     "ChallengesController.Leave",
                     "ChallengesController.GetDetail",
+                    "ChallengesController.GetMine",
+                    "ChallengesController.SetHabits",
                     "ProfileController.SetHandle",
                     "ProfileController.SetSocialOptIn",
                     "ProfileController.UpdatePublicProfile",

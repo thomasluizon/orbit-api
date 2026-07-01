@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
@@ -20,12 +21,15 @@ public record CreateChallengeCommand(
     IReadOnlyList<Guid> LinkedHabitIds,
     IReadOnlyList<Guid> InvitedFriendUserIds) : IRequest<Result<Guid>>;
 
-public class CreateChallengeCommandHandler(
+public partial class CreateChallengeCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     IGenericRepository<Challenge> challengeRepository,
     IGenericRepository<Habit> habitRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateChallengeCommand, Result<Guid>>
+    IGenericRepository<User> userRepository,
+    IPushNotificationService pushNotificationService,
+    IUnitOfWork unitOfWork,
+    ILogger<CreateChallengeCommandHandler> logger) : IRequestHandler<CreateChallengeCommand, Result<Guid>>
 {
     private const string JoinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private const int JoinCodeLength = 8;
@@ -35,6 +39,7 @@ public class CreateChallengeCommandHandler(
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
         if (access.IsFailure)
             return access.PropagateError<Guid>();
+        var requester = access.Value;
 
         var ownedHabits = await VerifyOwnedHabitsAsync(request.UserId, request.LinkedHabitIds, cancellationToken);
         if (ownedHabits.IsFailure)
@@ -74,8 +79,38 @@ public class CreateChallengeCommandHandler(
         await challengeRepository.AddAsync(challenge, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await NotifyInvitedFriendsAsync(requester, invitedFriendIds, cancellationToken);
+
         return Result.Success(challenge.Id);
     }
+
+    private async Task NotifyInvitedFriendsAsync(User requester, IReadOnlyList<Guid> invitedFriendIds, CancellationToken cancellationToken)
+    {
+        if (invitedFriendIds.Count == 0)
+            return;
+
+        var invitedUsers = await userRepository.FindAsync(u => invitedFriendIds.Contains(u.Id), cancellationToken);
+        foreach (var user in invitedUsers)
+        {
+            var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
+            var title = isPortuguese ? "Novo desafio em grupo" : "New group challenge";
+            var body = isPortuguese
+                ? $"{requester.Name} convidou você para um desafio."
+                : $"{requester.Name} invited you to a challenge.";
+
+            try
+            {
+                await pushNotificationService.SendToUserAsync(user.Id, title, body, cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                LogPushNotificationFailed(logger, ex, user.Id);
+            }
+        }
+    }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Challenge invite push failed for user {UserId}")]
+    private static partial void LogPushNotificationFailed(ILogger logger, Exception ex, Guid userId);
 
     private async Task<Result> VerifyOwnedHabitsAsync(Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken cancellationToken)
     {

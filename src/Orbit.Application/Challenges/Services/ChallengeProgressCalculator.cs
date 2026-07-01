@@ -1,4 +1,5 @@
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Challenges.Services;
 
@@ -60,4 +61,34 @@ public static class ChallengeProgressCalculator
 
         return streak;
     }
+
+    internal static IReadOnlyList<Guid> GetContributingHabitIds(Challenge challenge) =>
+        GetContributingHabitSets(challenge).SelectMany(set => set).Distinct().ToList();
+
+    internal static (int CurrentProgress, bool IsComplete) ComputeProgress(
+        Challenge challenge,
+        IReadOnlyCollection<HabitLog> logs,
+        DateOnly lastDay,
+        DateOnly today)
+    {
+        var contributingHabitSets = GetContributingHabitSets(challenge);
+
+        if (challenge.Type == ChallengeType.CoopGoal)
+        {
+            var contributingHabitIds = contributingHabitSets.SelectMany(set => set).Distinct().ToList();
+            var count = CalculateCoopGoalProgress(contributingHabitIds, logs, challenge.PeriodStartUtc, lastDay);
+            var reachedTarget = challenge.TargetCount.HasValue && count >= challenge.TargetCount.Value;
+            var windowEnded = challenge.PeriodEndUtc.HasValue && today > challenge.PeriodEndUtc.Value;
+            return (count, challenge.Status == ChallengeStatus.Completed || reachedTarget || windowEnded);
+        }
+
+        var streak = CalculateSharedStreak(contributingHabitSets, logs, challenge.PeriodStartUtc, lastDay, today);
+        return (streak, false);
+    }
+
+    private static List<IReadOnlyCollection<Guid>> GetContributingHabitSets(Challenge challenge) =>
+        challenge.GetActiveParticipants()
+            .Select(p => (IReadOnlyCollection<Guid>)p.LinkedHabits.Select(h => h.HabitId).ToList())
+            .Where(set => set.Count > 0)
+            .ToList();
 }

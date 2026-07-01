@@ -99,6 +99,22 @@ public class Challenge : Entity, ITimestamped, ISoftDeletable
     }
 
     /// <summary>
+    /// Replaces an active participant's own linked-habit set, whose logs feed the shared progress.
+    /// Returns false when the user is not an active participant so the caller can surface a uniform
+    /// not-a-participant failure.
+    /// </summary>
+    public bool TrySetParticipantHabits(Guid userId, IReadOnlyList<Guid> habitIds)
+    {
+        var participant = _participants.Find(p => p.UserId == userId && p.IsActive);
+        if (participant is null)
+            return false;
+
+        participant.ReplaceLinkedHabits(habitIds);
+        UpdatedAtUtc = DateTime.UtcNow;
+        return true;
+    }
+
+    /// <summary>
     /// Transitions an active challenge to completed, returning true only on the Active to Completed
     /// transition so callers fire the Mission Accomplished award exactly once.
     /// </summary>

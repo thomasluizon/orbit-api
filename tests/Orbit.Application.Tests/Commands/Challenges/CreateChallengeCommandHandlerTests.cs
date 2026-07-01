@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Challenges.Commands;
 using Orbit.Application.Common;
@@ -18,6 +19,7 @@ public class CreateChallengeCommandHandlerTests
     private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
     private readonly IGenericRepository<Challenge> _challengeRepository = Substitute.For<IGenericRepository<Challenge>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
     private readonly CreateChallengeCommandHandler _handler;
@@ -33,7 +35,9 @@ public class CreateChallengeCommandHandlerTests
     {
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
-        _handler = new CreateChallengeCommandHandler(guard, friendGraph, _challengeRepository, _habitRepository, _unitOfWork);
+        _handler = new CreateChallengeCommandHandler(
+            guard, friendGraph, _challengeRepository, _habitRepository, _userRepository,
+            _push, _unitOfWork, Substitute.For<ILogger<CreateChallengeCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _creator, _friend);
         SocialTestHelpers.StubFind(_friendshipRepository, AcceptedFriendship());
@@ -66,6 +70,39 @@ public class CreateChallengeCommandHandlerTests
                 && c.Participants.Any(p => p.UserId == _creator.Id && p.LinkedHabits.Count == 1)
                 && c.Participants.Any(p => p.UserId == _friend.Id)),
             Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ValidCommand_PushesEachInvitedFriendOnce()
+    {
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _push.Received(1).SendToUserAsync(
+            _friend.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NoInvitedFriends_DoesNotPush()
+    {
+        var result = await _handler.Handle(Command(invited: []), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _push.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PushThrows_ChallengeStillCreated()
+    {
+        _push.SendToUserAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("push down")));
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _challengeRepository.Received(1).AddAsync(Arg.Any<Challenge>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
