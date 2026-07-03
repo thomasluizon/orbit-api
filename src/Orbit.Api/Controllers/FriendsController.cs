@@ -40,6 +40,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpGet("invite-preview")]
+    [DistributedRateLimit("invite-preview")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -22,6 +22,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             ["tag-suggest"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
             ["cheers"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),
             ["friend-requests"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
+            ["invite-preview"] = new(TimeSpan.FromMinutes(1), PermitLimit: 15, SegmentCount: 4),
             ["accountability-invites"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
             ["accountability-checkins"] = new(TimeSpan.FromHours(24), PermitLimit: 30, SegmentCount: 1),
             ["reports"] = new(TimeSpan.FromHours(24), PermitLimit: 20, SegmentCount: 1),

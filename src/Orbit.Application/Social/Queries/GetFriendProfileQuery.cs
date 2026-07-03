@@ -55,7 +55,8 @@ public class GetFriendProfileQueryHandler(
         if (access.IsFailure)
             return access.PropagateError<FriendProfileView>();
 
-        if (!await friendGraphService.AreAcceptedFriendsAsync(request.UserId, request.FriendUserId, cancellationToken))
+        var friendship = await friendGraphService.FindFriendshipAsync(request.UserId, request.FriendUserId, cancellationToken);
+        if (friendship is null || friendship.Status != FriendshipStatus.Accepted)
             return Result.Failure<FriendProfileView>(ErrorMessages.UserNotFound);
 
         var matches = await userRepository.FindAsync(u => u.Id == request.FriendUserId, cancellationToken);
@@ -74,8 +75,6 @@ public class GetFriendProfileQueryHandler(
         var friendToday = await userDateService.GetUserTodayAsync(friend.Id, cancellationToken);
         var weeklyActivity = BuildWeeklyActivity(friendHabits, friendToday);
         var topHabits = TopHabitsBuilder.Build(friendHabits);
-
-        var friendship = await friendGraphService.FindFriendshipAsync(request.UserId, request.FriendUserId, cancellationToken);
 
         var isAccountabilityPartner = await accountabilityPairRepository.AnyAsync(
             p => p.Status == AccountabilityPairStatus.Accepted
