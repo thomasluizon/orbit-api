@@ -93,6 +93,28 @@ public class ResendEmailServiceTests
     }
 
     [Fact]
+    public async Task SendVerificationCodeAsync_ClientCancellation_RethrowsInsteadOfSwallowing()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        _handler.ExceptionToThrow = new OperationCanceledException(cts.Token);
+
+        var act = () => _sut.SendVerificationCodeAsync("user@test.com", "123456", "en", cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_TimeoutNotClientCancellation_DoesNotThrow()
+    {
+        _handler.ExceptionToThrow = new TaskCanceledException("Resend timed out");
+
+        var act = () => _sut.SendVerificationCodeAsync("user@test.com", "123456");
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
     public async Task SendWelcomeEmailAsync_SuccessfulResponse_SendsEmail()
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -56,8 +57,8 @@ public sealed partial class AiHabitSuggestionService(
             - "isFlexible": true ONLY for a "do it N times per period" goal with no fixed weekdays (for example "a few times a week"); otherwise false.
             - "flexibleTarget": when "isFlexible" is true, the positive integer count per period (for example 4 with "frequencyUnit" "Week" means "4x per week"); otherwise null.
             - "dueTime": a 24-hour "HH:mm" time when the title implies a time of day; otherwise null.
-            - "subHabits": an array of up to {MaxSuggestedSubHabits} separately-trackable child habits, ONLY when the habit is a routine of distinct activities; otherwise an empty array.
-            - "checklistItems": an array of up to {MaxSuggestedChecklistItems} tick-off steps or items for a single activity, ONLY when the habit benefits from a checklist; otherwise an empty array.
+            - "subHabits": an array of up to {MaxSuggestedSubHabits} plain-string titles of separately-trackable child habits, ONLY when the habit is a routine of distinct activities; otherwise an empty array. Each element MUST be a string, never an object.
+            - "checklistItems": an array of up to {MaxSuggestedChecklistItems} plain-string tick-off steps or items for a single activity, ONLY when the habit benefits from a checklist; otherwise an empty array. Each element MUST be a string, never an object.
 
             Reason about intent:
             - ONE-TIME vs RECURRING: a project, errand, or deadline done once is one-time, so "frequencyUnit" is null -- for example "change the gta 6 voice", "buy a birthday gift", "file taxes". A repeated behavior recurs -- for example "meditate" (daily), "go to the gym" (a weekly rhythm), "call mom" (weekly).
@@ -161,12 +162,12 @@ public sealed partial class AiHabitSuggestionService(
         string? Emoji,
         string? FrequencyUnit,
         int? FrequencyQuantity,
-        IReadOnlyList<string>? Days,
-        IReadOnlyList<string>? SubHabits,
+        [property: JsonConverter(typeof(TolerantStringListConverter))] IReadOnlyList<string>? Days,
+        [property: JsonConverter(typeof(TolerantStringListConverter))] IReadOnlyList<string>? SubHabits,
         bool IsFlexible = false,
         int? FlexibleTarget = null,
         string? DueTime = null,
-        IReadOnlyList<string>? ChecklistItems = null);
+        [property: JsonConverter(typeof(TolerantStringListConverter))] IReadOnlyList<string>? ChecklistItems = null);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating habit setup suggestion (language: {Language})...")]
     private static partial void LogGeneratingSuggestion(ILogger logger, string language);
