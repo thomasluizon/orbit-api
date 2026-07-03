@@ -143,7 +143,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         if (newSuggestions > 0 && IsInQuietHours(user, utcNow)
             && !await HasRecentSuggestionNotification(user.Id, utcNow, ct))
         {
-            await CreateSuggestionNotification(user.Id, newSuggestions, ct);
+            await CreateSuggestionNotification(user, newSuggestions, ct);
         }
 
         user.MarkCalendarSyncSuccess(utcNow);
@@ -258,10 +258,13 @@ public partial class RunCalendarAutoSyncCommandHandler(
     {
         user.MarkCalendarSyncReconnectRequired(errorCode);
 
+        var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
         var notification = Notification.Create(
             user.Id,
-            "Google Calendar disconnected",
-            "Auto-sync paused. Reconnect to resume.",
+            isPortuguese ? "Google Calendar desconectado" : "Google Calendar disconnected",
+            isPortuguese
+                ? "A sincronização automática está pausada. Reconecte para retomar."
+                : "Auto-sync paused. Reconnect to resume.",
             url: "/calendar-sync");
         await deps.NotificationRepository.AddAsync(notification, ct);
 
@@ -278,15 +281,19 @@ public partial class RunCalendarAutoSyncCommandHandler(
             ct);
     }
 
-    private async Task CreateSuggestionNotification(Guid userId, int count, CancellationToken ct)
+    private async Task CreateSuggestionNotification(User user, int count, CancellationToken ct)
     {
-        var title = count == 1
-            ? "1 new calendar event"
-            : $"{count} new calendar events";
+        var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
+        var title = isPortuguese
+            ? (count == 1 ? "1 novo evento do calendário" : $"{count} novos eventos do calendário")
+            : (count == 1 ? "1 new calendar event" : $"{count} new calendar events");
+        var body = isPortuguese
+            ? "Toque para revisar e importar"
+            : "Tap to review and import";
         var notification = Notification.Create(
-            userId,
+            user.Id,
             title,
-            "Tap to review and import",
+            body,
             url: "/calendar-sync?mode=review");
         await deps.NotificationRepository.AddAsync(notification, ct);
     }
