@@ -7,7 +7,9 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Behaviors;
 
 namespace Orbit.Application.Tests.Queries.Calendar;
 
@@ -234,6 +236,59 @@ public class GetCalendarEventsQueryHandlerTests
         result.Error.Should().Be("Google Calendar connection expired. Please reconnect.");
         user.GoogleAccessToken.Should().BeNull();
         user.GoogleRefreshToken.Should().BeNull();
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_GoogleApiTransientError_ReturnsFetchFailedWithoutMarkingReconnect()
+    {
+        var user = CreateTestUser();
+        user.SetGoogleTokens("access-token", null);
+
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
+            .Returns("access-token");
+        _eventFetcher.FetchAsync(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyCollection<string>?>(),
+                Arg.Any<DateTime?>(),
+                Arg.Any<CancellationToken>())
+            .Returns<Task<List<CalendarEventItem>>>(_ => throw new CalendarProviderException(
+                CalendarFetchErrorKind.Transient,
+                "backendError",
+                "transient failure",
+                new InvalidOperationException("stub")));
+
+        var result = await _handler.Handle(new GetCalendarEventsQuery(UserId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ErrorMessages.CalendarFetchFailed.Message);
+        user.GoogleAccessToken.Should().Be("access-token");
+        user.GoogleRefreshToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_TokenWriteConcurrencyConflict_AbsorbedByRetryBehavior()
+    {
+        var user = CreateTestUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>())
+            .Returns("valid-access-token");
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+        _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
+        _eventFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>());
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => throw new DbUpdateConcurrencyException("conflict"), _ => 0);
+
+        var behavior = new ConcurrencyRetryBehavior<GetCalendarEventsQuery, Result<List<CalendarEventItem>>>(_unitOfWork);
+        var query = new GetCalendarEventsQuery(UserId);
+
+        var result = await behavior.Handle(query, ct => _handler.Handle(query, ct), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

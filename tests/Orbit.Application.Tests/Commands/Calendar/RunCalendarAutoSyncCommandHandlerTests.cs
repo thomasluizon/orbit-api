@@ -651,6 +651,51 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_UniqueViolationButNoNewSuggestions_Propagates()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var existingHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Standup", FrequencyUnit.Day, 1, GoogleEventId: "evt_a")).Value;
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { existingHabit }.AsReadOnly());
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Standup", null, "2026-04-10", null, null, false, null, [])
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var act = () => _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task Handle_NonUniqueDbUpdateExceptionOnSave_Propagates()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Event", null, "2026-04-10", null, null, false, null, [])
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("fk violation", new InvalidOperationException("not a unique violation")));
+
+        var act = () => _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
     public async Task Handle_ConcurrencyConflictThenSuccess_RetryResolvesToSuccess()
     {
         var user = CreateEnabledProUser();

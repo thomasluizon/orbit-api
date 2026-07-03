@@ -241,6 +241,8 @@ public static partial class ServiceCollectionExtensions
             options.TracesSampleRate = sentrySettings.TracesSampleRate;
             options.EnableLogs = sentrySettings.EnableLogs;
             options.SendDefaultPii = false;
+            options.AddExceptionFilterForType<FluentValidation.ValidationException>();
+            options.AddExceptionFilterForType<OperationCanceledException>();
             options.SetBeforeSend(ScrubSensitiveData);
         });
 

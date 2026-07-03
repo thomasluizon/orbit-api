@@ -170,16 +170,16 @@ public class CreateSubHabitCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_DescriptionOver2000Chars_HasError()
+    public void Validate_DescriptionOverMaxLength_HasError()
     {
-        var result = _validator.TestValidate(ValidCommand() with { Description = new string('a', 2001) });
+        var result = _validator.TestValidate(ValidCommand() with { Description = new string('a', AppConstants.MaxHabitDescriptionLength + 1) });
         result.ShouldHaveValidationErrorFor(x => x.Description);
     }
 
     [Fact]
-    public void Validate_DescriptionExactly2000Chars_NoError()
+    public void Validate_DescriptionExactlyMaxLength_NoError()
     {
-        var result = _validator.TestValidate(ValidCommand() with { Description = new string('a', 2000) });
+        var result = _validator.TestValidate(ValidCommand() with { Description = new string('a', AppConstants.MaxHabitDescriptionLength) });
         result.ShouldNotHaveValidationErrorFor(x => x.Description);
     }
 }

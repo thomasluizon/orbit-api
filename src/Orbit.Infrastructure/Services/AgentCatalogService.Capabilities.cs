@@ -924,6 +924,7 @@ public partial class AgentCatalogService
                 [
                     "FriendsController.GetFriends",
                     "FriendsController.GetFriendProfile",
+                    "FriendsController.GetInvitePreview",
                     "FriendsController.GetFeed",
                     "FriendsController.GetCheers",
                     "FriendsController.SendRequest",

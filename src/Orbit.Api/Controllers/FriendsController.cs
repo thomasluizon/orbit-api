@@ -39,6 +39,20 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
         return result.ToPayGateAwareResult(value => Ok(value));
     }
 
+    [HttpGet("invite-preview")]
+    [DistributedRateLimit("invite-preview")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetInvitePreview(
+        [FromQuery] string? code,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetInvitePreviewQuery(HttpContext.GetUserId(), code ?? string.Empty);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
     [HttpGet("feed")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

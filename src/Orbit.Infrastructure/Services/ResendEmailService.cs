@@ -157,6 +157,10 @@ public partial class ResendEmailService(
                     LogEmailFailed(logger, to, response.StatusCode, body);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             LogEmailSendException(logger, ex, to);

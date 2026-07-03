@@ -7,11 +7,20 @@ namespace Orbit.Api.Middleware;
 internal sealed partial class UnhandledExceptionHandler(
     ILogger<UnhandledExceptionHandler> logger) : IExceptionHandler
 {
+    private const int ClientClosedRequestStatusCode = 499;
+
     public async ValueTask<bool> TryHandleAsync(
         HttpContext httpContext,
         Exception exception,
         CancellationToken cancellationToken)
     {
+        if (exception is OperationCanceledException && httpContext.RequestAborted.IsCancellationRequested)
+        {
+            if (!httpContext.Response.HasStarted)
+                httpContext.Response.StatusCode = ClientClosedRequestStatusCode;
+            return true;
+        }
+
         var requestId = httpContext.GetRequestId();
         var method = httpContext.Request.Method;
         var path = httpContext.Request.Path.ToString();
