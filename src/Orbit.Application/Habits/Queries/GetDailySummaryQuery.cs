@@ -8,6 +8,11 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Queries;
 
+/// <summary>
+/// The daily-summary payload returned to clients. <paramref name="Insight"/> is retained on the
+/// contract only for legacy mobile clients (pre-July-2026 builds) that still parse and render a
+/// nudge chip; it is always mapped empty regardless of cache contents and is no longer generated.
+/// </summary>
 public record DailySummaryResponse(string Summary, string Insight, bool FromCache);
 
 public record GetDailySummaryQuery(
@@ -63,7 +68,7 @@ public class GetDailySummaryQueryHandler(
 
         if (cache.TryGetValue(cacheKey, out DailySummaryContent? cached) && cached is not null)
         {
-            return Result.Success(new DailySummaryResponse(cached.Summary, cached.Insight, FromCache: true));
+            return Result.Success(new DailySummaryResponse(cached.Summary, string.Empty, FromCache: true));
         }
 
         var habits = await habitRepository.FindAsync(
@@ -107,7 +112,7 @@ public class GetDailySummaryQueryHandler(
         cache.Set(cacheKey, summaryResult.Value, cacheOptions);
 
         return Result.Success(new DailySummaryResponse(
-            summaryResult.Value.Summary, summaryResult.Value.Insight, FromCache: false));
+            summaryResult.Value.Summary, string.Empty, FromCache: false));
     }
 
     private static bool HasSkipLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>

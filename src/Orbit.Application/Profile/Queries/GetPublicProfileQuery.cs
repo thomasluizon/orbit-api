@@ -33,8 +33,6 @@ public class GetPublicProfileQueryHandler(
     IGenericRepository<UserAchievement> achievementRepository,
     IGenericRepository<Habit> habitRepository) : IRequestHandler<GetPublicProfileQuery, Result<PublicProfileView>>
 {
-    private const int TopHabitsCount = 3;
-
     public async Task<Result<PublicProfileView>> Handle(GetPublicProfileQuery request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Slug))
@@ -74,13 +72,6 @@ public class GetPublicProfileQueryHandler(
             q => q.Include(h => h.Logs.Where(l => l.Value > 0)),
             cancellationToken);
 
-        return habits
-            .Select(h => new { h.Title, CompletionCount = h.Logs.Count })
-            .Where(h => h.CompletionCount > 0)
-            .OrderByDescending(h => h.CompletionCount)
-            .ThenBy(h => h.Title, StringComparer.OrdinalIgnoreCase)
-            .Take(TopHabitsCount)
-            .Select(h => h.Title)
-            .ToList();
+        return TopHabitsBuilder.Build(habits).Select(h => h.Title).ToList();
     }
 }
