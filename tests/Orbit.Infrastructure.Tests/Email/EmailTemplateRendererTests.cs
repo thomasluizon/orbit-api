@@ -46,6 +46,16 @@ public class EmailTemplateRendererTests
         ["footer"] = "The Orbit Team",
     };
 
+    private static Dictionary<string, string> WaitlistConfirmationTokens() => new()
+    {
+        ["heading"] = "Confirm your waitlist spot",
+        ["intro"] = "You're almost on the list.",
+        ["cta"] = "Confirm my spot",
+        ["confirmUrl"] = "https://api.useorbit.org/api/waitlist/confirm?token=abc.def",
+        ["warning"] = "If you didn't sign up for the Orbit waitlist, ignore this email.",
+        ["footer"] = "The Orbit Team",
+    };
+
     private static Dictionary<string, string> SupportTokens() => new()
     {
         ["fromName"] = "John",
@@ -140,6 +150,7 @@ public class EmailTemplateRendererTests
     [InlineData("VerificationCode")]
     [InlineData("Welcome")]
     [InlineData("AccountDeletion")]
+    [InlineData("WaitlistConfirmation")]
     [InlineData("Support")]
     public void AllEmbeddedTemplates_LoadAndRenderWithoutLeftoverTokens(string emailName)
     {
@@ -148,6 +159,7 @@ public class EmailTemplateRendererTests
             "VerificationCode" => VerificationCodeTokens(),
             "Welcome" => WelcomeTokens(),
             "AccountDeletion" => AccountDeletionTokens(),
+            "WaitlistConfirmation" => WaitlistConfirmationTokens(),
             _ => SupportTokens(),
         };
 

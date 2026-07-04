@@ -99,26 +99,30 @@ public sealed partial class DistributedRateLimitFilter(
         if (context.User.Identity?.IsAuthenticated == true)
             return $"user:{context.GetUserId()}";
 
-        if (TryResolveAuthEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
+        if (TryResolveEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
             return emailPartitionKey;
 
         return $"ip:{context.GetClientIpAddress() ?? "unknown"}";
     }
 
+    private static readonly HashSet<string> EmailPartitionedPolicies =
+        new(StringComparer.OrdinalIgnoreCase) { "auth", "waitlist" };
+
     /// <summary>
-    /// For unauthenticated requests under the <c>auth</c> policy, partitions by the request's
-    /// normalized email so OTP flows can't be throttled by a shared proxy IP or bypassed by
-    /// rotating forwarded-IP headers. Returns false when the policy isn't <c>auth</c> or no
-    /// email-bearing argument is present, so the caller can fall back to IP-based partitioning.
+    /// For unauthenticated requests under an email-partitioned policy (<c>auth</c>, <c>waitlist</c>),
+    /// partitions by the request's normalized email so OTP and waitlist flows can't be throttled by
+    /// a shared proxy IP or bypassed by rotating forwarded-IP headers. The key is prefixed with the
+    /// policy name so each policy keeps its own bucket. Returns false when the policy isn't email
+    /// partitioned or no email-bearing argument is present, so the caller falls back to IP partitioning.
     /// </summary>
-    public static bool TryResolveAuthEmailPartitionKey(
+    public static bool TryResolveEmailPartitionKey(
         string policyName,
         IEnumerable<object?> actionArguments,
         out string partitionKey)
     {
         partitionKey = string.Empty;
 
-        if (!string.Equals(policyName, "auth", StringComparison.OrdinalIgnoreCase))
+        if (!EmailPartitionedPolicies.Contains(policyName))
             return false;
 
         foreach (var argument in actionArguments)
@@ -136,7 +140,7 @@ public sealed partial class DistributedRateLimitFilter(
             if (emailProperty.GetValue(argument) is not string rawEmail || string.IsNullOrWhiteSpace(rawEmail))
                 continue;
 
-            partitionKey = $"auth:email:{rawEmail.Trim().ToLowerInvariant()}";
+            partitionKey = $"{policyName.ToLowerInvariant()}:email:{rawEmail.Trim().ToLowerInvariant()}";
             return true;
         }
 

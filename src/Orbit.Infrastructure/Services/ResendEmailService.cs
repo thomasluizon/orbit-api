@@ -80,6 +80,28 @@ public partial class ResendEmailService(
         await SendEmailAsync(toEmail, copy.Subject, html, text, cancellationToken);
     }
 
+    public async Task SendWaitlistConfirmationAsync(string toEmail, string confirmUrl, string language = "en", CancellationToken cancellationToken = default)
+    {
+        var isPtBr = LocaleHelper.IsPortuguese(language);
+        var copy = EmailCopy.WaitlistConfirmation(isPtBr);
+
+        var tokens = new Dictionary<string, string>
+        {
+            ["heading"] = copy.Heading,
+            ["intro"] = copy.Intro,
+            ["cta"] = copy.Cta,
+            ["confirmUrl"] = confirmUrl,
+            ["warning"] = copy.Warning,
+            ["footer"] = copy.Footer,
+        };
+
+        var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: true);
+        var html = EmailTemplateRenderer.RenderHtml("WaitlistConfirmation", layout, tokens);
+        var text = EmailTemplateRenderer.RenderText("WaitlistConfirmation", tokens);
+
+        await SendEmailAsync(toEmail, copy.Subject, html, text, cancellationToken);
+    }
+
     public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)
     {
         const string supportFooter = "Reply directly to respond to the user.";

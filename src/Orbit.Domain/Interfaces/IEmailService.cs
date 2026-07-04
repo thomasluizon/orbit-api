@@ -6,4 +6,5 @@ public interface IEmailService
     Task SendVerificationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default);
     Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default);
     Task SendAccountDeletionCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default);
+    Task SendWaitlistConfirmationAsync(string toEmail, string confirmUrl, string language = "en", CancellationToken cancellationToken = default);
 }
