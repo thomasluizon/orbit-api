@@ -42,7 +42,7 @@ Verify: `k6 version`.
 
 Use a **dedicated throwaway account**, never a real user.
 
-- **Non-prod target** (local / staging): the `TEST_ACCOUNTS` env var (`email:code` pairs) makes the email code static, so the script can log in itself. Pass `TEST_EMAIL` + `TEST_CODE`. This bypass is **disabled when `ASPNETCORE_ENVIRONMENT=Production`**, so it does not work against prod.
+- **Non-prod target** (local): the `TEST_ACCOUNTS` env var (`email:code` pairs) makes the email code static, so the script can log in itself. Pass `TEST_EMAIL` + `TEST_CODE`. This bypass is **disabled when `ASPNETCORE_ENVIRONMENT=Production`**, so it does not work against prod.
 - **Prod target:** the static-code bypass is off, and hammering `verify-code` would spam Resend and hit the 10/min auth limit. Instead, **log in once manually** (app or a single `verify-code` call with a real emailed code), copy the returned `token`, and pass it as `ACCESS_TOKEN`. The script reuses it directly.
   - The access token is a stateless JWT with a finite TTL (config-driven). Keep runs short (the defaults are 2–3 min) so the token can't expire mid-run; re-bootstrap if you run longer.
   - Do **not** try to drive load through `/api/auth/refresh`: refresh **rotates** (the presented refresh token is invalidated and a new one issued), so it can be used exactly once and is incompatible with reuse across virtual users.

@@ -25,7 +25,7 @@ This subagent only reviews orbit-api code. For frontend security concerns (XSS, 
 ### Stripe (`src/Orbit.Api/Controllers/SubscriptionController.cs`, `src/Orbit.Infrastructure/Services/*Stripe*.cs`)
 
 1. **Webhook signature verification** — every Stripe webhook MUST call `EventUtility.ConstructEvent(json, signature, WebhookSecret)`. Reject if `WebhookSecret` is null/empty.
-2. **API key set globally** — `StripeConfiguration.ApiKey` should be set once in `Program.cs`, NEVER per-request.
+2. **API key set globally** — `StripeConfiguration.ApiKey` should be set once at startup in `src/Orbit.Api/Extensions/ServiceCollectionExtensions.Infrastructure.cs`, NEVER per-request.
 3. **Checkout interval whitelist** — validate against allowed values, don't accept arbitrary strings.
 
 ### JWT (`src/Orbit.Infrastructure/Services/JwtTokenService.cs`)
