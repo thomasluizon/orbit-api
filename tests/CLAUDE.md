@@ -21,7 +21,7 @@ Orbit.Infrastructure.Tests/ - services, prompt sections, controllers, MCP tools
 
 The auth flow normally requires a code emailed via Resend. Env-controlled test accounts bypass this:
 
-- `TEST_ACCOUNTS` — comma-separated `email:code` pairs (reviewer flows, e.g. Play review, and QA runs).
+- `TEST_ACCOUNTS` — comma-separated `email:code` pairs (reviewer flows, e.g. Play review, and local runs).
 
 When `SendCodeCommand` matches one of these emails, the verification code is NOT randomized; it's the static code from the pair. Inert in production — the handler skips the bypass when `ASPNETCORE_ENVIRONMENT` is `Production`.
 
