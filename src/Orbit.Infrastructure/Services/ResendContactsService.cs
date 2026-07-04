@@ -1,24 +1,17 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
 
-public sealed partial class ResendAudienceService(
+public sealed partial class ResendContactsService(
     IHttpClientFactory httpClientFactory,
-    IOptions<ResendSettings> options,
-    ILogger<ResendAudienceService> logger) : IMarketingAudienceService
+    ILogger<ResendContactsService> logger) : IMarketingContactsService
 {
-    private readonly ResendSettings _settings = options.Value;
-
     public async Task AddContactAsync(string email, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.AudienceId))
-            throw new InvalidOperationException("Resend:AudienceId is not configured.");
-
         var client = httpClientFactory.CreateClient("Resend");
 
         var content = new StringContent(
@@ -26,12 +19,9 @@ public sealed partial class ResendAudienceService(
             Encoding.UTF8,
             "application/json");
 
-        var response = await client.PostAsync(
-            $"/audiences/{_settings.AudienceId}/contacts",
-            content,
-            cancellationToken);
+        var response = await client.PostAsync("/contacts", content, cancellationToken);
 
-        if (response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Conflict)
         {
             if (logger.IsEnabled(LogLevel.Information))
                 LogContactAdded(logger, email);
@@ -42,7 +32,7 @@ public sealed partial class ResendAudienceService(
         LogContactAddFailed(logger, email, response.StatusCode, body);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Waitlist contact added to audience for {Email}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Waitlist contact added for {Email}")]
     private static partial void LogContactAdded(ILogger logger, string email);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Waitlist contact add failed for {Email} status={Status} body={Body}")]

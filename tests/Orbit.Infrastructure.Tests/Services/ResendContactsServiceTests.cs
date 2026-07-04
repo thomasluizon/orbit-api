@@ -2,73 +2,67 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using NSubstitute;
-using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
-public class ResendAudienceServiceTests
+public class ResendContactsServiceTests
 {
     private readonly FakeHttpMessageHandler _handler = new();
 
-    private ResendAudienceService BuildService(string audienceId)
+    private ResendContactsService BuildService()
     {
-        var settings = Options.Create(new ResendSettings
-        {
-            ApiKey = "re_test_key",
-            FromEmail = "noreply@useorbit.org",
-            AudienceId = audienceId
-        });
-
         var httpClient = new HttpClient(_handler) { BaseAddress = new Uri("https://api.resend.com") };
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient("Resend").Returns(httpClient);
 
-        return new ResendAudienceService(
+        return new ResendContactsService(
             factory,
-            settings,
-            new NullLoggerFactory().CreateLogger<ResendAudienceService>());
+            new NullLoggerFactory().CreateLogger<ResendContactsService>());
     }
 
     [Fact]
-    public async Task AddContactAsync_PostsToAudienceContactsEndpointWithEmail()
+    public async Task AddContactAsync_PostsToContactsEndpointWithEmail()
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.Created);
-        var service = BuildService("aud_123");
+        var service = BuildService();
 
         await service.AddContactAsync("User@Test.com");
 
         _handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
-        _handler.LastRequest.RequestUri!.PathAndQuery.Should().Be("/audiences/aud_123/contacts");
+        _handler.LastRequest.RequestUri!.PathAndQuery.Should().Be("/contacts");
         _handler.LastRequestBody.Should().Contain("\"email\":\"User@Test.com\"");
         _handler.LastRequestBody.Should().Contain("\"unsubscribed\":false");
     }
 
     [Fact]
-    public async Task AddContactAsync_ApiFailure_DoesNotThrow()
+    public async Task AddContactAsync_DuplicateEmailConflict_IsTreatedAsBenignSuccess()
     {
-        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.Conflict)
         {
             Content = new StringContent("Contact already exists")
         };
-        var service = BuildService("aud_123");
+        var service = BuildService();
 
         var act = () => service.AddContactAsync("user@test.com");
 
         await act.Should().NotThrowAsync();
+        _handler.LastRequest!.RequestUri!.PathAndQuery.Should().Be("/contacts");
     }
 
     [Fact]
-    public async Task AddContactAsync_MissingAudienceId_ThrowsLoudly()
+    public async Task AddContactAsync_ApiFailure_DoesNotThrow()
     {
-        var service = BuildService("");
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("Server error")
+        };
+        var service = BuildService();
 
         var act = () => service.AddContactAsync("user@test.com");
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*AudienceId*");
-        _handler.LastRequest.Should().BeNull();
+        await act.Should().NotThrowAsync();
     }
 
     private sealed class FakeHttpMessageHandler : HttpMessageHandler

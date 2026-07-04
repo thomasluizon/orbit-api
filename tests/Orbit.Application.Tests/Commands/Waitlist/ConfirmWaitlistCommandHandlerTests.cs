@@ -8,12 +8,12 @@ namespace Orbit.Application.Tests.Commands.Waitlist;
 public class ConfirmWaitlistCommandHandlerTests
 {
     private readonly IWaitlistConfirmationTokenService _tokenService = Substitute.For<IWaitlistConfirmationTokenService>();
-    private readonly IMarketingAudienceService _audienceService = Substitute.For<IMarketingAudienceService>();
+    private readonly IMarketingContactsService _contactsService = Substitute.For<IMarketingContactsService>();
     private readonly ConfirmWaitlistCommandHandler _handler;
 
     public ConfirmWaitlistCommandHandlerTests()
     {
-        _handler = new ConfirmWaitlistCommandHandler(_tokenService, _audienceService);
+        _handler = new ConfirmWaitlistCommandHandler(_tokenService, _contactsService);
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class ConfirmWaitlistCommandHandlerTests
         var result = await _handler.Handle(new ConfirmWaitlistCommand("good-token"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _audienceService.Received(1).AddContactAsync("user@test.com", Arg.Any<CancellationToken>());
+        await _contactsService.Received(1).AddContactAsync("user@test.com", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -44,6 +44,6 @@ public class ConfirmWaitlistCommandHandlerTests
         var result = await _handler.Handle(new ConfirmWaitlistCommand("bad-token"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        await _audienceService.DidNotReceive().AddContactAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _contactsService.DidNotReceive().AddContactAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }
