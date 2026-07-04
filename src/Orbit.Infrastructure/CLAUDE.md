@@ -26,7 +26,7 @@ AI/                       - top-level AI service entry points
 
 ## AI services (OpenAI)
 
-- `OpenAI .NET SDK 2.8.0`, model `gpt-4.1-mini` by default.
+- `OpenAI .NET SDK 2.12.0`, model `gpt-4.1-mini` by default.
 - Prompts composed from `Services/Prompts/Sections/*` — dynamic sections (HabitCountSection, TodayDateSection, RoutinePatternsSection) compose at runtime based on user state.
 - Structured output via JSON schema — define the response type, the SDK enforces shape.
 - Cache results in `IMemoryCache` keyed by user + date + version. Invalidate via `CacheInvalidationHelper` in Application (never directly here).

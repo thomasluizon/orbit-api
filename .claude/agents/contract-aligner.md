@@ -7,7 +7,7 @@ model: sonnet
 
 # Contract aligner
 
-The TypeScript Zod schemas in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\types\` and the .NET DTOs in `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\Common\DTOs\` (or feature-local DTOs) MUST match. The endpoint paths in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\api\endpoints.ts` MUST match the controller routes in `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Api\Controllers\`.
+The TypeScript Zod schemas in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\types\` and the .NET DTOs — which are feature-local under `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\` (records/classes in each feature's folder or its `Models\` subfolder, e.g. `Subscriptions\SubscriptionDtos.cs`, `Auth\Models\LoginResponse.cs`, plus the request/response records declared alongside their commands and queries) — MUST match. The endpoint paths in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\api\endpoints.ts` MUST match the controller routes in `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Api\Controllers\`.
 
 This subagent detects drift between them. The Zod side lives in the sibling
 `orbit-ui-mobile` repo, referenced above by absolute path. If that checkout is absent
@@ -27,7 +27,7 @@ For each shared type referenced by an edited file, find its API counterpart and 
 1. **List the surface area:**
    - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\types\*.ts` → extract Zod schema field names + types.
    - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\api\endpoints.ts` → extract path tree.
-   - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\**\DTOs\*.cs` → extract record/class field names + types.
+   - Read the feature-local DTO/model files under `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\` (e.g. `*Dtos.cs`, `**\Models\*.cs`, and the request/response records defined with their commands/queries) → extract record/class field names + types.
    - Read `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Api\Controllers\*.cs` → extract `[HttpGet/Post/Put/Delete/Patch("...")]` route attributes.
 2. **For each Zod schema with a matching name in DTOs:**
    - Field names: do they match? Casing convention (PascalCase C# vs camelCase TS) is expected — System.Text.Json default camelCases.
@@ -70,6 +70,5 @@ Contract alignment: FAIL
 
 - During `/pr-review` of a PR that touches both repos.
 - When the user explicitly asks to verify the API contract.
-- When `add-api-endpoint` skill completes (final verification step).
 
 Do NOT invoke for purely internal handler changes that don't touch DTOs or routes.

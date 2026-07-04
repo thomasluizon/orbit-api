@@ -25,10 +25,10 @@ This subagent only reviews orbit-api code. For frontend security concerns (XSS, 
 ### Stripe (`src/Orbit.Api/Controllers/SubscriptionController.cs`, `src/Orbit.Infrastructure/Services/*Stripe*.cs`)
 
 1. **Webhook signature verification** — every Stripe webhook MUST call `EventUtility.ConstructEvent(json, signature, WebhookSecret)`. Reject if `WebhookSecret` is null/empty.
-2. **API key set globally** — `StripeConfiguration.ApiKey` should be set once in `Program.cs`, NEVER per-request.
+2. **API key set globally** — `StripeConfiguration.ApiKey` should be set once at startup in `src/Orbit.Api/Extensions/ServiceCollectionExtensions.Infrastructure.cs`, NEVER per-request.
 3. **Checkout interval whitelist** — validate against allowed values, don't accept arbitrary strings.
 
-### JWT (`src/Orbit.Infrastructure/Services/TokenService.cs`)
+### JWT (`src/Orbit.Infrastructure/Services/JwtTokenService.cs`)
 
 1. **Secret rotation** — verify the secret comes from configuration, not hardcoded.
 2. **Algorithm pinning** — HS256 only; reject `none` and asymmetric algorithms in verification.
@@ -63,7 +63,7 @@ Security review of orbit-api:
 CRITICAL (3):
 - src/Orbit.Api/Controllers/HabitsController.cs:42 — action PUT /api/habits/{id}/admin-override has no [Authorize] AND no [AllowAnonymous]; defaults aren't enough if action-level decoration is expected. Add [Authorize(Roles = "Admin")].
 - src/Orbit.Api/Controllers/SubscriptionController.cs:91 — webhook handler accepts body without calling EventUtility.ConstructEvent. Add signature verification before any processing.
-- src/Orbit.Infrastructure/Services/TokenService.cs:23 — JWT secret read from `appsettings.json` fallback "DEV_SECRET". Must throw if env-var is missing in non-dev.
+- src/Orbit.Infrastructure/Services/JwtTokenService.cs:23 — JWT secret read from `appsettings.json` fallback "DEV_SECRET". Must throw if env-var is missing in non-dev.
 
 HIGH (2):
 - ...

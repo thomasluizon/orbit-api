@@ -1,6 +1,6 @@
 # Orbit API
 
-The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API for habit management, AI chat, push notifications, and subscription billing. Built with Clean Architecture and CQRS.
+The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API for habit management, an AI agent (chat + MCP tools), gamification, goals, calendar sync, social/accountability, push notifications, and subscription billing. Built with Clean Architecture and CQRS.
 
 **Live:** [api.useorbit.org](https://api.useorbit.org) | **App:** [app.useorbit.org](https://app.useorbit.org) | **Landing:** [useorbit.org](https://useorbit.org)
 
@@ -12,12 +12,14 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 | Database | [PostgreSQL](https://www.postgresql.org) via [EF Core 10](https://learn.microsoft.com/ef/core) (Npgsql) |
 | CQRS | [MediatR 14](https://github.com/jbogard/MediatR) |
 | Validation | [FluentValidation 12](https://docs.fluentvalidation.net) |
-| Auth | JWT Bearer + [Supabase Auth](https://supabase.com/auth) (Google OAuth) |
-| AI | [Gemini 2.5 Flash](https://ai.google.dev) (primary), [Ollama](https://ollama.com) phi3.5:3.8b (fallback) |
-| Email | [Resend](https://resend.com) (verification codes) |
-| Push | [Firebase Admin SDK 3.5](https://firebase.google.com/docs/admin/setup) (FCM) + [WebPush](https://github.com/nichelaboratory/Lib.Net.Http.WebPush) (VAPID) |
-| Payments | [Stripe](https://stripe.com) (checkout sessions, webhooks) |
-| Password Hashing | BCrypt |
+| Auth | JWT Bearer + email verification codes + Google OAuth ([Supabase](https://supabase.com) tokens) |
+| AI | [OpenAI](https://platform.openai.com) — `gpt-4.1-mini` (primary), `gpt-5.4-nano` (sub-tasks), via the OpenAI .NET SDK |
+| Email | [Resend](https://resend.com) (verification codes, contacts) |
+| Push | [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup) (FCM, native Android) + [WebPush](https://github.com/nichelaboratory/Lib.Net.Http.WebPush) (VAPID, browsers) |
+| Payments | [Stripe](https://stripe.com) (web) + Google Play Billing (native Android) |
+| Storage | [Supabase](https://supabase.com) object storage (`uploads` bucket) |
+| Password/Token Hashing | BCrypt |
+| Observability | [Sentry](https://sentry.io) |
 | API Docs | [Scalar](https://scalar.com) (dev only) |
 | Testing | [xUnit](https://xunit.net) + FluentAssertions |
 | Containerization | Docker (multi-stage build) |
@@ -28,18 +30,22 @@ The backend for **Orbit** -- an AI-powered habit tracker. Provides a REST API fo
 - **Smart Scheduling** -- Server-side frequency calculations (daily, weekly, monthly, yearly, every N days) with day-of-week filtering and overdue detection
 - **Completion Logging** -- Toggle completion per day with optional notes, full log history
 - **Metrics** -- Current/longest streaks, weekly/monthly completion rates
-- **AI Chat** -- Multi-turn conversation with Gemini for creating habits, logging completions, analyzing progress, suggesting breakdowns, assigning tags, and smart rescheduling. Supports image upload
-- **AI Daily Summary** -- Cached, timezone-aware daily summaries invalidated on habit changes
+- **AI Agent** -- Multi-turn OpenAI-backed chat that creates habits, logs completions, analyzes progress, suggests breakdowns, assigns tags, and reschedules. Exposed to external clients as MCP tools with per-tool ownership/policy scoping and audit logging. Supports image upload
+- **AI Assists** -- Cached daily summaries, retrospectives, fact extraction, goal review, habit/tag/reschedule suggestions, proactive check-ins, slip alerts, and batched usage summaries
+- **Gamification** -- XP, levels, streaks, streak freezes, and achievements
+- **Goals** -- Goal tracking with deadlines and AI-assisted review
+- **Calendar** -- Google Calendar auto-sync of scheduled habits
+- **Social & Accountability** -- Friends, public profiles, accountability partners, challenges, and referrals
+- **Checklist Templates** -- Reusable habit/checklist templates
 - **Tags** -- Colored tags for habit organization
 - **User Facts** -- Personal context facts that enhance AI responses (soft-deleted)
-- **Push Notifications** -- Dual delivery: FCM for native Android, VAPID Web Push for browsers. Background scheduler checks due habits every minute
+- **Push Notifications** -- Dual delivery: FCM for native Android, VAPID Web Push for browsers, plus background schedulers for reminders, goal deadlines, slip alerts, and check-ins
 - **Email Verification** -- Passwordless code-based login via Resend
-- **Google OAuth** -- Via Supabase Auth access tokens
-- **Subscription Billing** -- Stripe checkout sessions with webhook processing
+- **Subscription Billing** -- Stripe (web) and Google Play Billing (native) with webhook / RTDN processing; backend is the source of truth for entitlements
+- **Waitlist** -- Signed-token waitlist confirmation flow
+- **Sync** -- Batched pull/mutation sync endpoints for clients
 - **Timezone Support** -- All user-facing dates use timezone-aware "today" based on user profile
-- **Pagination** -- All list endpoints paginated with `PaginatedResponse<T>`
-- **Bulk Operations** -- Bulk create and delete habits
-- **Notifications** -- In-app notification system with read/unread tracking
+- **Pagination** -- List endpoints paginated with `PaginatedResponse<T>`
 
 ## Prerequisites
 
@@ -56,7 +62,7 @@ cd orbit-api
 
 # Copy environment config
 cp .env.example .env
-# Edit .env with your database credentials and API keys
+# Edit .env / appsettings.Development.json with your database credentials and API keys
 
 # Apply database migrations
 dotnet ef database update --project src/Orbit.Infrastructure --startup-project src/Orbit.Api
@@ -67,21 +73,23 @@ dotnet run --project src/Orbit.Api
 
 The API runs at `http://localhost:5000`. API docs available at `/scalar` in development.
 
-### Environment Variables
+### Configuration
 
-| Variable | Description |
-|----------|-------------|
-| `POSTGRES_USER` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | PostgreSQL password |
-| `AI_PROVIDER` | `Gemini` or `Ollama` |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `GEMINI_MODEL` | Gemini model name (e.g., `gemini-2.5-flash`) |
-| `CORS_ORIGIN` | Allowed frontend origin |
-| `JWT_SECRET_KEY` | 64-char random string for JWT signing |
-| `JWT_ISSUER` | JWT issuer claim |
-| `JWT_AUDIENCE` | JWT audience claim |
+Settings are bound from `appsettings.json`, with secrets overridden in `appsettings.Development.json` locally and environment variables in production. Key sections:
 
-Additional env vars for Supabase, Firebase, Stripe, VAPID, and Resend are configured in the hosting dashboard.
+| Section | Purpose |
+|---------|---------|
+| `ConnectionStrings:DefaultConnection` / `SessionConnection` | PostgreSQL (direct + session pooler) |
+| `AI:ApiKey` / `AI:Model` / `AI:SubTaskModel` / `AI:BaseUrl` | OpenAI credentials and models (`BaseUrl` defaults to `https://api.openai.com/v1`) |
+| `Jwt:SecretKey` / `Issuer` / `Audience` | JWT signing and claims |
+| `Supabase:Url` / `AnonKey` / `SecretKey` / `Bucket` | Supabase auth tokens + object storage |
+| `Resend:ApiKey` / `FromEmail` | Transactional email |
+| `Vapid:PublicKey` / `PrivateKey` / `Subject` | Web Push (VAPID) |
+| `Encryption:Key` | At-rest field encryption |
+| `Google:ClientId` / `ClientSecret` | Google OAuth + Calendar |
+| `Stripe:SecretKey` / `WebhookSecret` / price IDs | Stripe billing |
+| `Cors:AllowedOrigins` / `LandingOrigins` | Allowed frontend origins |
+| `Sentry:Dsn` / `Environment` | Error monitoring |
 
 ## Architecture
 
@@ -90,46 +98,33 @@ Clean Architecture with four layers:
 ```
 src/
   Orbit.Api/              # Presentation layer
-    Controllers/          #   10 controllers (Auth, Chat, Config, Habits,
-                          #   Notification, Profile, Subscription,
-                          #   Support, Tags, UserFacts)
+    Controllers/          #   26 controllers (see below)
     Extensions/           #   PayGate-aware IActionResult helpers
-    Middleware/            #   Security headers, validation exception handler
+    Middleware/           #   Security headers, unhandled/validation exception handlers
     Program.cs            #   DI configuration, middleware pipeline
 
   Orbit.Application/      # Application layer (CQRS)
-    Common/               #   PaginatedResponse<T>, ErrorMessages, AppConstants,
-                          #   CacheInvalidationHelper, PayGateService
-    Habits/
-      Commands/           #   Create, Update, Delete, Log, BulkCreate, BulkDelete,
-                          #   Reorder, Duplicate, MoveToParent, CreateSubHabit
-      Queries/            #   GetHabitSchedule (paginated), GetById, GetLogs, GetMetrics
-      Services/           #   HabitScheduleService (frequency/schedule calculations)
-      Validators/         #   SharedHabitRules, Create/Update/Log validators
-    Chat/Commands/        #   ProcessUserChat (multi-turn AI orchestration)
-    Tags/                 #   CRUD commands and queries
-    UserFacts/            #   CRUD with soft delete
-    Auth/                 #   SendCode, VerifyCode, GoogleAuth
-    Profile/              #   Get, Update, Timezone, Onboarding, AI toggles
-    Notification/         #   List, Read, Delete, Subscribe, Unsubscribe, TestPush
-    Support/              #   SendSupportEmail
-    Subscription/         #   CreateCheckout, HandleWebhook
+    Common/               #   PaginatedResponse<T>, ErrorMessages, AppConstants, PayGateService, ...
+    Habits/               #   Commands / Queries / Validators / Services (HabitScheduleService)
+    Chat/                 #   AI chat orchestration
+    Goals/ Gamification/  #   Goals, XP/streaks/achievements
+    Calendar/             #   Google Calendar sync
+    Accountability/ Social/ Challenges/ Referrals/   # Social graph
+    ChecklistTemplates/ Tags/ UserFacts/ Uploads/    # Content
+    Auth/ Profile/ ApiKeys/ Subscriptions/ Support/ Notifications/ Waitlist/
+    Behaviors/            #   MediatR pipeline (ValidationBehavior, ...)
 
   Orbit.Domain/           # Domain layer (zero dependencies)
-    Entities/             #   User, Habit, HabitLog, Tag, UserFact, Notification,
-                          #   PushSubscription, SentReminder, AppConfig
-    Enums/                #   HabitFrequency, AiActionType, FrequencyUnit, etc.
-    Interfaces/           #   IGenericRepository<T>, IUnitOfWork, IAiIntentService,
-                          #   IUserDateService, IPushNotificationService, etc.
-    Common/               #   Entity base class, Result<T> pattern
-    Models/               #   AiAction, AiActionPlan (records)
+    Entities/ Enums/ Interfaces/ Common/ Models/     # Entities, Result<T>, repository/service contracts
 
   Orbit.Infrastructure/   # Infrastructure layer
     Persistence/          #   OrbitDbContext, GenericRepository<T>, UnitOfWork
-    Services/             #   GeminiAiService, OllamaAiService, ResendEmailService,
-                          #   PushNotificationService, ReminderSchedulerService,
-                          #   JwtService, UserDateService
-    Migrations/           #   20+ EF Core migrations
+    Services/             #   AI (AiIntentService, AiSummaryService, OpenAiBatchPollerService, ...),
+                          #   Agent/MCP (AgentCatalogService, AgentOperationExecutor, AgentPolicyEvaluator, ...),
+                          #   billing (StripeBillingService, GooglePlayBillingService),
+                          #   push + schedulers (PushNotificationService, ReminderSchedulerService, ...),
+                          #   auth (JwtTokenService, GoogleTokenService), UserDateService, EncryptionService
+    Migrations/           #   EF Core migrations
 
 tests/
   Orbit.Domain.Tests/         # xUnit + FluentAssertions
@@ -137,84 +132,27 @@ tests/
   Orbit.Infrastructure.Tests/ # xUnit + FluentAssertions
 ```
 
+### Controllers
+
+`Accountability`, `Achievements`, `Ai`, `ApiKeys`, `Auth`, `Calendar`, `Challenges`, `Chat`, `ChecklistTemplates`, `Config`, `Friends`, `Gamification`, `Goals`, `Habits`, `Notification`, `OAuth`, `Profile`, `PublicProfile`, `Referral`, `Subscription`, `Support`, `Sync`, `Tags`, `Uploads`, `UserFacts`, `Waitlist`.
+
 ### Key Patterns
 
-- **Result\<T\>** -- All handlers return `Result<T>` instead of throwing exceptions
-- **CQRS** -- Strict command/query separation via MediatR
+- **Result\<T\>** -- Handlers return `Result<T>` instead of throwing for expected failures
+- **CQRS** -- Command/query separation via MediatR, one folder per feature
 - **Factory methods** -- Entities created via `Entity.Create()` static methods
 - **Generic repository + Unit of Work** -- Abstracted data access
-- **PayGate** -- Subscription-gated features with `PayGateService` and propagation helpers
-- **Validation pipeline** -- `ValidationBehavior<TRequest, TResponse>` in MediatR pipeline
+- **PayGate** -- Subscription-gated features via `PayGateService` and `Result` propagation helpers
+- **Validation pipeline** -- `ValidationBehavior<TRequest, TResponse>` in the MediatR pipeline
 - **Cache invalidation** -- AI summary cache cleared on any habit mutation
-
-## API Endpoints
-
-### Habits
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/habits?dateFrom=&dateTo=&includeOverdue=&search=&frequencyUnit=&isCompleted=&page=&pageSize=` | Paginated list with `scheduledDates[]` and `isOverdue` |
-| GET | `/api/habits/{id}` | Habit detail with anchor date |
-| POST | `/api/habits` | Create habit |
-| PUT | `/api/habits/{id}` | Update habit |
-| DELETE | `/api/habits/{id}` | Delete habit |
-| POST | `/api/habits/{id}/log` | Toggle completion for today |
-| GET | `/api/habits/{id}/logs` | Completion log history |
-| GET | `/api/habits/{id}/metrics` | Streaks and completion rates |
-| POST | `/api/habits/bulk` | Bulk create |
-| DELETE | `/api/habits/bulk` | Bulk delete |
-| PUT | `/api/habits/reorder` | Reorder positions |
-| PUT | `/api/habits/{id}/parent` | Move to new parent |
-| POST | `/api/habits/{parentId}/sub-habits` | Create sub-habit |
-| POST | `/api/habits/{id}/duplicate` | Duplicate habit |
-| GET | `/api/habits/summary` | AI-generated daily summary (cached) |
-
-### Auth
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/send-code` | Send email verification code |
-| POST | `/api/auth/verify-code` | Verify code and get JWT |
-| POST | `/api/auth/google` | Google OAuth via Supabase token |
-
-### Profile
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/profile` | Get user profile |
-| PUT | `/api/profile` | Update profile |
-| PUT | `/api/profile/timezone` | Set timezone |
-| PUT | `/api/profile/onboarding` | Mark onboarding complete |
-| PUT | `/api/profile/ai-memory` | Toggle AI memory |
-| PUT | `/api/profile/ai-summary` | Toggle daily summary |
-
-### Chat, Tags, User Facts, Notifications, Subscription
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/chat` | AI chat (multipart, supports images) |
-| GET/POST | `/api/tags` | List / create tags |
-| PUT/DELETE | `/api/tags/{id}` | Update / delete tag |
-| GET/POST | `/api/user-facts` | List / create user facts |
-| PUT/DELETE | `/api/user-facts/{id}` | Update / delete user fact |
-| GET | `/api/notification` | List notifications (last 50 + unread count) |
-| PUT | `/api/notification/{id}/read` | Mark as read |
-| PUT | `/api/notification/read-all` | Mark all as read |
-| DELETE | `/api/notification/{id}` | Delete notification |
-| POST | `/api/notification/subscribe` | Register push subscription |
-| POST | `/api/notification/unsubscribe` | Remove push subscription |
-| POST | `/api/notification/test-push` | Send test push notification |
-| POST | `/api/subscription/checkout` | Create Stripe checkout session |
-| POST | `/api/subscription/webhook` | Stripe webhook handler |
-| GET | `/health` | Health check |
 
 ## Push Notifications
 
-Dual delivery system via `PushNotificationService`:
+Dual delivery via `PushNotificationService`:
 
 - **FCM** -- Firebase Admin SDK for native Android. Subscriptions with `p256dh == "fcm"` route through Firebase
-- **Web Push** -- VAPID-based for browsers. Uses `Lib.Net.Http.WebPush`
-- **Scheduler** -- `ReminderSchedulerService` (BackgroundService) runs every minute, checks habits with `ReminderEnabled && DueTime != null`, sends push + creates in-app notification. `SentReminder` table prevents duplicates
+- **Web Push** -- VAPID-based for browsers, via `Lib.Net.Http.WebPush`
+- **Schedulers** -- Background services (`ReminderSchedulerService`, `GoalDeadlineNotificationService`, `SlipAlertSchedulerService`, `ProactiveCheckinSchedulerService`) send push + create in-app notifications; a `SentReminder` record prevents duplicates
 
 ## Testing
 
@@ -223,7 +161,7 @@ Dual delivery system via `PushNotificationService`:
 dotnet test
 ```
 
-Tests use xUnit with FluentAssertions. Unit tests only — there is no integration suite.
+Tests use xUnit with FluentAssertions. Unit tests only — there is no integration or E2E suite.
 
 ## Deployment
 
@@ -234,7 +172,8 @@ Tests use xUnit with FluentAssertions. Unit tests only — there is no integrati
 | Domain | `api.useorbit.org` |
 | Push | Firebase project `orbit-11d4a` (FCM) |
 | Email | [Resend](https://resend.com) |
-| Payments | [Stripe](https://stripe.com) |
+| Payments | [Stripe](https://stripe.com) + Google Play Billing |
+| Monitoring | [Sentry](https://sentry.io) |
 
 ### Docker
 
@@ -249,7 +188,7 @@ The Dockerfile uses a multi-stage build (SDK for build, ASP.NET runtime for prod
 
 | Repo | Description |
 |------|-------------|
-| [orbit-ui](https://github.com/thomasluizon/orbit-ui) | Nuxt 4 frontend (web + Android) |
+| [orbit-ui-mobile](https://github.com/thomasluizon/orbit-ui-mobile) | Turborepo frontend — `apps/web` (Next.js 16) + `apps/mobile` (Expo, Android) + `packages/shared` |
 | [orbit-landing-page](https://github.com/thomasluizon/orbit-landing-page) | Marketing landing page |
 
 ## License
