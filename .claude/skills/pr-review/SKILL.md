@@ -98,11 +98,13 @@ Go dimension-by-dimension through `rubric.md` against the diff. For each, emit f
 in the rubric's finding template, tagged with a severity from the ladder. Honor the
 gates: skip a dimension whose surface the diff never touches (mark N/A — do not invent
 findings), and only run the UI dimension (DESIGN.md / AI-slop, #8) when `apps/*` UI
-files changed, the backend hard rules (#13) only when `orbit-api` changed.
+files changed, the backend hard rules (#13) only when `orbit-api` changed, and
+FEATURES.md parity (#14) only when the diff changes the user-facing feature surface.
 
 The dimensions, in order: Correctness · Dead/stale code · SOLID/clean-arch · Comment
 policy · No-workaround · Type safety · No `console.log` · DESIGN.md/AI-slop ·
-Parity · i18n · Contract drift + backward-compat · Security · Backend hard rules.
+Parity · i18n · Contract drift + backward-compat · Security · Backend hard rules ·
+FEATURES.md parity.
 
 Focus on changed code, not pre-existing issues — unless a pre-existing issue is Critical.
 
