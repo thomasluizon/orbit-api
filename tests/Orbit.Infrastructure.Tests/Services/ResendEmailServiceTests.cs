@@ -21,7 +21,7 @@ public class ResendEmailServiceTests
         {
             ApiKey = "re_test_key",
             FromEmail = "noreply@useorbit.org",
-            SupportEmail = "support@useorbit.org"
+            SupportEmail = "contact@useorbit.org"
         });
 
         var frontendSettings = Options.Create(new FrontendSettings
