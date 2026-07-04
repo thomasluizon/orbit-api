@@ -43,6 +43,14 @@ If you're launched from `orbit-ui-mobile`, do the consumer edits in the same ses
 
 C# LSP (OmniSharp/Roslyn) is wired into Claude Code via the **mobile repo's** `.mcp.json` (sessions are almost always launched from there). When launched directly from orbit-api, no LSP — fall back to grep/glob/read.
 
+## opencode compatibility
+
+The workflow is tool-agnostic between Claude Code and opencode; `.claude/` stays the single source of truth.
+
+- opencode reads this `CLAUDE.md` natively (fallback when no `AGENTS.md` exists) and discovers `.claude/skills/**` as-is. **Never create an `AGENTS.md`** — it would shadow this file and fork the rules.
+- `opencode.json` (committed) loads the scoped `tests/CLAUDE.md`.
+- `.opencode/agents/*.md` are thin pointers to the matching `.claude/agents/*.md` bodies. Edit behavior in `.claude/agents/` only; when adding a new agent, create both the body and its pointer.
+
 ## Git workflow
 
 Branch protection on `main`: no direct pushes, no force pushes, no branch deletion. Branches: `feature/xxx`, `fix/xxx`, `chore/xxx`. **Squash merge only.** Never reuse a branch after its PR is squash-merged.
