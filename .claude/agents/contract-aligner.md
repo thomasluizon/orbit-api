@@ -70,6 +70,5 @@ Contract alignment: FAIL
 
 - During `/pr-review` of a PR that touches both repos.
 - When the user explicitly asks to verify the API contract.
-- When `add-api-endpoint` skill completes (final verification step).
 
 Do NOT invoke for purely internal handler changes that don't touch DTOs or routes.
