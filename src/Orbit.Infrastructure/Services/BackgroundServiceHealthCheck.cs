@@ -12,6 +12,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["ReminderScheduler"] = TimeSpan.FromMinutes(3),
         ["GoalDeadlineNotification"] = TimeSpan.FromMinutes(90),
         ["SlipAlertScheduler"] = TimeSpan.FromMinutes(15),
+        ["ProactiveCheckinScheduler"] = TimeSpan.FromMinutes(180),
         ["HabitDueDateAdvancement"] = TimeSpan.FromMinutes(90),
         ["StreakGoalSync"] = TimeSpan.FromMinutes(90),
         ["StreakFreezeAutoActivation"] = TimeSpan.FromMinutes(180),
@@ -19,7 +20,8 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         ["SyncCleanup"] = TimeSpan.FromHours(48),
         ["PlayNotificationCleanup"] = TimeSpan.FromHours(48),
         ["CalendarAutoSync"] = TimeSpan.FromMinutes(45),
-        ["OpenAiBatchPoller"] = TimeSpan.FromMinutes(10)
+        ["OpenAiBatchPoller"] = TimeSpan.FromMinutes(10),
+        ["AiUsageSummary"] = TimeSpan.FromMinutes(180)
     };
 
     public static void RecordTick(string serviceName)

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Services;
@@ -7,6 +8,61 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AiHabitSuggestionServiceTests
 {
+    private static readonly JsonSerializerOptions DeserializeOptions = new() { PropertyNameCaseInsensitive = true };
+
+    private static Dto Deserialize(string json) => JsonSerializer.Deserialize<Dto>(json, DeserializeOptions)!;
+
+    [Fact]
+    public void Deserialize_SubHabitsAsStrings_ParsesEachString()
+    {
+        var dto = Deserialize("""{"subHabits":["Brush teeth","Shower"]}""");
+
+        dto.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth", "Shower" });
+    }
+
+    [Fact]
+    public void Deserialize_SubHabitsAsObjects_ExtractsTitle()
+    {
+        var dto = Deserialize("""{"subHabits":[{"title":"Brush teeth"},{"title":"Shower"}]}""");
+
+        dto.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth", "Shower" });
+    }
+
+    [Fact]
+    public void Deserialize_ChecklistItemsAsObjects_ExtractsName()
+    {
+        var dto = Deserialize("""{"checklistItems":[{"name":"Cheese"},{"name":"Bread"}]}""");
+
+        dto.ChecklistItems.Should().BeEquivalentTo(new[] { "Cheese", "Bread" });
+    }
+
+    [Fact]
+    public void Deserialize_MixedAndGarbageElements_KeepsUsableSkipsRest()
+    {
+        var dto = Deserialize("""{"subHabits":["Warm up",{"title":"Cardio"},42,null,{"foo":1},["nested"],{"activity":"Cool down"}]}""");
+
+        dto.SubHabits.Should().Equal("Warm up", "Cardio", "Cool down");
+    }
+
+    [Fact]
+    public void Deserialize_SubHabitsNotAnArray_YieldsEmptyList()
+    {
+        var dto = Deserialize("""{"subHabits":"just a string"}""");
+
+        dto.SubHabits.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Deserialize_ObjectSubHabits_ThenMapSuggestion_Succeeds()
+    {
+        var dto = Deserialize("""{"emoji":"🧼","frequencyUnit":"Day","frequencyQuantity":1,"subHabits":[{"title":"Brush teeth"},{"title":"Make bed"}]}""");
+
+        var result = AiHabitSuggestionService.MapSuggestion(dto);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth", "Make bed" });
+    }
+
     [Fact]
     public void BuildPrompt_English_ContainsTitleAndVocabulary()
     {

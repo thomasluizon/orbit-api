@@ -298,6 +298,27 @@ options are enforced server-side.
 - **Tests**: every new command/query handler, validator, and service has a unit test
   (unit only — no integration or E2E suite exists).
 
+### 14. FEATURES.md parity (feature inventory)
+
+> Reference: `FEATURES.md` at the orbit-ui-mobile repo root — the code-derived feature
+> inventory (#378). **Gated: only when the diff changes the user-facing feature surface.**
+
+- Triggers: a feature added, materially changed, or removed — new screen/route/tab, new
+  or removed Astra (`IAiTool`) or MCP (`[McpServerTool]`) tool, plan-gating change
+  (`PayGateService` / `AppConstants`), platform-availability change, or locale-specific
+  behavior change. Pure refactors, bugfixes, and visual polish with no behavior change
+  are N/A.
+- The same PR updates `FEATURES.md` — row added, edited, or removed, with the Gating /
+  Platform / Locale columns still accurate, and the stated tool counts corrected when
+  tools are added or removed. A missing update is **High** (same bar as a missing
+  web↔mobile mirror); a gating or platform claim the diff makes stale is **High** too.
+- Headline-set features (Astra, MCP, social, core tracker) also surface in the in-app
+  feature guide (`onboarding.featureGuide.*`) — if the change makes the guide wrong or
+  incomplete, flag it (**Medium**).
+- In the orbit-api repo the file is not in the checkout: do not verify — emit the
+  finding as "FEATURES.md update required in thomasluizon/orbit-ui-mobile" (**High**)
+  so it lands in the paired frontend PR.
+
 ---
 
 ## Self-review note

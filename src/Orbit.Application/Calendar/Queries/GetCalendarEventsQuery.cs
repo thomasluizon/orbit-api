@@ -65,13 +65,15 @@ public partial class GetCalendarEventsQueryHandler(
         }
         catch (CalendarProviderException ex)
         {
-            LogGoogleCalendarApiError(logger, ex, request.UserId);
             if (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
             {
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogGoogleCalendarReconnectRequired(logger, request.UserId, ex.RawErrorCode);
                 user.MarkCalendarSyncReconnectRequired(ex.RawErrorCode ?? "reconnect_required");
                 await unitOfWork.SaveChangesAsync(cancellationToken);
                 return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarReconnectRequired);
             }
+            LogGoogleCalendarApiError(logger, ex, request.UserId);
             return Result.Failure<List<CalendarEventItem>>(ErrorMessages.CalendarFetchFailed);
         }
     }
@@ -125,4 +127,7 @@ public partial class GetCalendarEventsQueryHandler(
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Google Calendar API error for user {UserId}")]
     private static partial void LogGoogleCalendarApiError(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Google Calendar reconnect required for user {UserId} (code: {ErrorCode})")]
+    private static partial void LogGoogleCalendarReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 }

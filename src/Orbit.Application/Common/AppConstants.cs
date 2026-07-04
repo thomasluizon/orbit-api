@@ -6,7 +6,7 @@ public static class AppConstants
 {
     public const int MaxSubHabits = 20;
     public const int MaxHabitTitleLength = 200;
-    public const int MaxHabitDescriptionLength = 2000;
+    public const int MaxHabitDescriptionLength = 10000;
     public const int MaxHabitEmojiLength = DomainConstants.MaxHabitEmojiLength;
     public const int MaxChecklistItemTextLength = 500;
     public const int MaxHabitDepth = 5;
@@ -65,10 +65,17 @@ public static class AppConstants
     public const int MaxReportDetailsLength = DomainConstants.MaxReportDetailsLength;
     public const int MaxCheersPerDay = 20;
     public const int MaxFriendRequestsPerDay = 30;
+    public const int MaxAccountabilityPairs = 20;
+    public const int MaxAccountabilityNoteLength = DomainConstants.MaxAccountabilityNoteLength;
+    public const int MaxAccountabilityHabitsPerUser = 10;
     public const int MaxReportsPerDay = 20;
     public const int MaxSetHandlePerDay = 5;
     public const int FriendFeedPageSize = 30;
     public const int MaxFriendFeedPageSize = 50;
+    public const int MaxChallengeParticipants = DomainConstants.MaxChallengeParticipants;
+    public const int MaxChallengeTitleLength = 200;
+    public const int MaxChallengeDescriptionLength = 2000;
+    public const int MaxHabitsPerChallengeParticipant = 20;
     public static readonly int[] StreakMilestoneTiers = [7, 14, 30, 90, 100, 365];
     public static readonly string[] SupportedLanguages = ["en", "pt-BR"];
 }

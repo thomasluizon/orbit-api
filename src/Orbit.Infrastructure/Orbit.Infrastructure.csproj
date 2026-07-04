@@ -10,15 +10,15 @@
     <PackageReference Include="FileSignatures" Version="7.2.1" />
     <PackageReference Include="FirebaseAdmin" Version="3.5.0" />
     <PackageReference Include="Hangfire.Core" Version="1.8.23" />
-    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.74.0.4165" />
+    <PackageReference Include="Google.Apis.AndroidPublisher.v3" Version="1.75.0.4193" />
     <PackageReference Include="Google.Apis.Calendar.v3" Version="1.75.0.4182" />
-    <PackageReference Include="MediatR" Version="14.1.0" />
+    <PackageReference Include="MediatR" Version="14.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
-    <PackageReference Include="OpenAI" Version="2.11.0" />
-    <PackageReference Include="Stripe.net" Version="50.4.1" />
+    <PackageReference Include="OpenAI" Version="2.12.0" />
+    <PackageReference Include="Stripe.net" Version="52.1.0" />
     <PackageReference Include="Lib.Net.Http.WebPush" Version="3.3.1" />
   </ItemGroup>
 

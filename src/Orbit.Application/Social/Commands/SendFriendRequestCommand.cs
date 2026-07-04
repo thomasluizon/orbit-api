@@ -13,13 +13,17 @@ public class SendFriendRequestCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     IGenericRepository<Friendship> friendshipRepository,
+    SocialNotificationDispatcher notificationDispatcher,
     IUnitOfWork unitOfWork) : IRequestHandler<SendFriendRequestCommand, Result<Guid>>
 {
+    private const string RequestNotificationUrl = "/social?tab=friends";
+
     public async Task<Result<Guid>> Handle(SendFriendRequestCommand request, CancellationToken cancellationToken)
     {
         var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
         if (access.IsFailure)
             return access.PropagateError<Guid>();
+        var requester = access.Value;
 
         var target = await friendGraphService.ResolveTargetAsync(request.Handle, request.ReferralCode, cancellationToken);
         if (target is null || target.Id == request.UserId || !target.SocialOptIn)
@@ -41,8 +45,24 @@ public class SendFriendRequestCommandHandler(
             return createResult.PropagateError<Guid>();
 
         await friendshipRepository.AddAsync(createResult.Value, cancellationToken);
+
+        var notification = BuildRequestNotification(target, requester);
+        await notificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await notificationDispatcher.PushAsync(notification, cancellationToken);
+
         return Result.Success(createResult.Value.Id);
+    }
+
+    private static Notification BuildRequestNotification(User target, User requester)
+    {
+        var isPortuguese = LocaleHelper.IsPortuguese(target.Language);
+        var title = isPortuguese ? "Novo pedido de amizade" : "New friend request";
+        var body = isPortuguese
+            ? $"{requester.Name} quer ser seu amigo."
+            : $"{requester.Name} wants to be your friend.";
+
+        return Notification.Create(target.Id, title, body, RequestNotificationUrl);
     }
 }

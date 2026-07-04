@@ -63,7 +63,7 @@ public class GetDailySummaryQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Summary.Should().Be("Test summary content");
-        result.Value.Insight.Should().Be("Take a short walk after lunch");
+        result.Value.Insight.Should().BeEmpty();
         result.Value.FromCache.Should().BeFalse();
     }
 
@@ -98,7 +98,7 @@ public class GetDailySummaryQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.FromCache.Should().BeTrue();
         result.Value.Summary.Should().Be("First call summary");
-        result.Value.Insight.Should().Be("First call insight");
+        result.Value.Insight.Should().BeEmpty();
     }
 
     [Fact]

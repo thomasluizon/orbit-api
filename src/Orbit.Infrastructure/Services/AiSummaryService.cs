@@ -13,7 +13,6 @@ public sealed partial class AiSummaryService(
     ILogger<AiSummaryService> logger) : ISummaryService
 {
     private const int MaxSummaryChars = 300;
-    private const int MaxInsightChars = 70;
 
     public async Task<Result<DailySummaryContent>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
@@ -33,7 +32,7 @@ public sealed partial class AiSummaryService(
             scheduledHabits, dateFrom, dateTo, userToday, language, currentLocalTime,
             currentStreak, streakFreezesAccumulated, lastBadHabitSlipDates);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogGeneratingDailySummary(logger, dateFrom, language);
 
         try
@@ -50,11 +49,10 @@ public sealed partial class AiSummaryService(
                 return Result.Failure<DailySummaryContent>(ErrorMessages.AiEmptyResponse);
 
             var summary = CapToSentence(StripMarkdownFences(content.Summary), MaxSummaryChars);
-            var insight = CapToSentence((content.Insight ?? string.Empty).Trim(), MaxInsightChars);
 
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogDailySummaryGenerated(logger, summary.Length);
-            return Result.Success(new DailySummaryContent(summary, insight));
+            return Result.Success(new DailySummaryContent(summary, string.Empty));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -63,7 +61,7 @@ public sealed partial class AiSummaryService(
         }
     }
 
-    private sealed record DailySummaryJson(string? Summary, string? Insight);
+    private sealed record DailySummaryJson(string? Summary);
 
     /// <summary>
     /// Selects the habits the summary should reason about: anything logged on the viewed day
@@ -126,7 +124,7 @@ public sealed partial class AiSummaryService(
             Today's habits:
             {habitSection}
 
-            Write a short message to this person about their day, plus one separate short nudge.
+            Write a short message to this person about their day.
 
             Rules:
             - LEAD with a specific, genuine acknowledgment of what they have ALREADY completed today -- name the activity naturally, don't just say "good job"
@@ -149,9 +147,7 @@ public sealed partial class AiSummaryService(
             - Write ONLY in {languageName}, using natural, fluent, grammatically correct phrasing a native speaker would actually use
             - No greeting like "good morning", no sign-off -- just the message
 
-            Also write a separate "insight": ONE short nudge of at most 70 characters in the same warm voice -- a single specific, doable next move for the rest of the day, distinct from the message and never a restatement of it. If everything is already done, make it a brief, warm acknowledgment instead. If you genuinely have nothing to add, use an empty string. Same language rules; no markdown or emoji.
-
-            Respond with ONLY a JSON object with two string fields and nothing else: "summary" (the message above) and "insight" (the short nudge).
+            Respond with ONLY a JSON object with one string field and nothing else: "summary" (the message above).
             """;
     }
 
@@ -359,10 +355,10 @@ public sealed partial class AiSummaryService(
         return text[..maxChars].TrimEnd();
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Generating daily summary (date: {Date}, language: {Language})...")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Generating daily summary (date: {Date}, language: {Language})...")]
     private static partial void LogGeneratingDailySummary(ILogger logger, DateOnly date, string language);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Daily summary generated successfully ({Length} chars)")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Daily summary generated successfully ({Length} chars)")]
     private static partial void LogDailySummaryGenerated(ILogger logger, int length);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "AI API call failed for daily summary")]

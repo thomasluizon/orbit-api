@@ -510,7 +510,20 @@ public partial class AgentCatalogService
                 featureFlagKeys: ["ai_summary"],
                 chatTools: ["set_ai_summary"],
                 mcpTools: ["set_ai_summary"],
-                controllerActions: ["ProfileController.SetAiSummary"])
+                controllerActions: ["ProfileController.SetAiSummary"]),
+
+            CreateCapability(
+                AgentCapabilityIds.ProfileProactiveAstraWrite,
+                "Write Proactive Astra Settings",
+                "Updates whether Astra sends proactive check-in pushes when the user falls behind.",
+                "profile",
+                AgentScopes.WriteAiSettings,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                planRequirement: "Pro",
+                controllerActions: ["ProfileController.SetProactiveAstra"])
         ];
     }
 
@@ -642,7 +655,8 @@ public partial class AgentCatalogService
                     "GamificationController.GetStreakInfo",
                     "GamificationController.GetRecap",
                     "GamificationController.GetStreakHistory",
-                    "GamificationController.GetXpHistory"
+                    "GamificationController.GetXpHistory",
+                    "AchievementsController.ReportEvent"
                 ])
         ];
     }
@@ -899,7 +913,7 @@ public partial class AgentCatalogService
             CreateCapability(
                 AgentCapabilityIds.SocialManage,
                 "Manage Social",
-                "Manages friendships, cheers, the friend feed, handles, blocking, and reporting. Cataloged but not exposed to the agent in this phase.",
+                "Manages friendships, cheers, the friend feed, handles, blocking, reporting, accountability buddies, and cooperative challenges. Cataloged but not exposed to the agent in this phase.",
                 "social",
                 AgentScopes.ManageSocial,
                 AgentRiskClass.Low,
@@ -909,6 +923,8 @@ public partial class AgentCatalogService
                 controllerActions:
                 [
                     "FriendsController.GetFriends",
+                    "FriendsController.GetFriendProfile",
+                    "FriendsController.GetInvitePreview",
                     "FriendsController.GetFeed",
                     "FriendsController.GetCheers",
                     "FriendsController.SendRequest",
@@ -918,8 +934,23 @@ public partial class AgentCatalogService
                     "FriendsController.Block",
                     "FriendsController.Unblock",
                     "FriendsController.Report",
+                    "ChallengesController.Create",
+                    "ChallengesController.Join",
+                    "ChallengesController.Leave",
+                    "ChallengesController.GetDetail",
+                    "ChallengesController.GetMine",
+                    "ChallengesController.SetHabits",
                     "ProfileController.SetHandle",
-                    "ProfileController.SetSocialOptIn"
+                    "ProfileController.SetSocialOptIn",
+                    "ProfileController.UpdatePublicProfile",
+                    "PublicProfileController.GetPublicProfile",
+                    "AccountabilityController.GetPairs",
+                    "AccountabilityController.Invite",
+                    "AccountabilityController.Accept",
+                    "AccountabilityController.End",
+                    "AccountabilityController.SetHabits",
+                    "AccountabilityController.GetCheckIns",
+                    "AccountabilityController.CheckIn"
                 ])
         ];
     }

@@ -651,6 +651,51 @@ public class RunCalendarAutoSyncCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_UniqueViolationButNoNewSuggestions_Propagates()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+
+        var existingHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Standup", FrequencyUnit.Day, 1, GoogleEventId: "evt_a")).Value;
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { existingHabit }.AsReadOnly());
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Standup", null, "2026-04-10", null, null, false, null, [])
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var act = () => _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
+    public async Task Handle_NonUniqueDbUpdateExceptionOnSave_Propagates()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Event", null, "2026-04-10", null, null, false, null, [])
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("fk violation", new InvalidOperationException("not a unique violation")));
+
+        var act = () => _handler.Handle(new RunCalendarAutoSyncCommand(user.Id, IsOpportunistic: true), default);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    [Fact]
     public async Task Handle_ConcurrencyConflictThenSuccess_RetryResolvesToSuccess()
     {
         var user = CreateEnabledProUser();
@@ -672,6 +717,116 @@ public class RunCalendarAutoSyncCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Success_SuggestionNotification_EnglishByDefault()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
+                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+            });
+
+        Notification? captured = null;
+        await _notificationRepo.AddAsync(Arg.Do<Notification>(n => captured = n), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        captured.Should().NotBeNull();
+        captured!.Url.Should().Be("/calendar-sync?mode=review");
+        captured.Title.Should().Be("2 new calendar events");
+        captured.Body.Should().Be("Tap to review and import");
+    }
+
+    [Fact]
+    public async Task Handle_Success_SuggestionNotification_PortuguesePlural()
+    {
+        var user = CreateEnabledProUser();
+        user.SetLanguage("pt-BR");
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, []),
+                new("evt_b", "Review", null, "2026-04-11", "10:00", "11:00", true, null, [])
+            });
+
+        Notification? captured = null;
+        await _notificationRepo.AddAsync(Arg.Do<Notification>(n => captured = n), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        captured.Should().NotBeNull();
+        captured!.Title.Should().Be("2 novos eventos do calendário");
+        captured.Body.Should().Be("Toque para revisar e importar");
+    }
+
+    [Fact]
+    public async Task Handle_Success_SuggestionNotification_PortugueseSingular()
+    {
+        var user = CreateEnabledProUser();
+        user.SetLanguage("pt-BR");
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
+        _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())
+            .Returns(new List<CalendarEventItem>
+            {
+                new("evt_a", "Daily standup", null, "2026-04-10", "09:00", "09:30", true, null, [])
+            });
+
+        Notification? captured = null;
+        await _notificationRepo.AddAsync(Arg.Do<Notification>(n => captured = n), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        captured.Should().NotBeNull();
+        captured!.Title.Should().Be("1 novo evento do calendário");
+    }
+
+    [Fact]
+    public async Task Handle_ReconnectRequired_Notification_EnglishByDefault()
+    {
+        var user = CreateEnabledProUser();
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome(null, GoogleTokenRefreshResult.RefreshTokenInvalid, "invalid_grant"));
+
+        Notification? captured = null;
+        await _notificationRepo.AddAsync(Arg.Do<Notification>(n => captured = n), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        captured.Should().NotBeNull();
+        captured!.Title.Should().Be("Google Calendar disconnected");
+        captured.Body.Should().Be("Auto-sync paused. Reconnect to resume.");
+    }
+
+    [Fact]
+    public async Task Handle_ReconnectRequired_Notification_Portuguese()
+    {
+        var user = CreateEnabledProUser();
+        user.SetLanguage("pt-BR");
+        StubUser(user);
+        _tokenService.TryRefreshAsync(user, Arg.Any<CancellationToken>())
+            .Returns(new GoogleTokenRefreshOutcome(null, GoogleTokenRefreshResult.RefreshTokenInvalid, "invalid_grant"));
+
+        Notification? captured = null;
+        await _notificationRepo.AddAsync(Arg.Do<Notification>(n => captured = n), Arg.Any<CancellationToken>());
+
+        await _handler.Handle(new RunCalendarAutoSyncCommand(user.Id), default);
+
+        captured.Should().NotBeNull();
+        captured!.Title.Should().Be("Google Calendar desconectado");
+        captured.Body.Should().Be("A sincronização automática está pausada. Reconecte para retomar.");
     }
 
     private sealed class FakeUniqueViolationException : DbException

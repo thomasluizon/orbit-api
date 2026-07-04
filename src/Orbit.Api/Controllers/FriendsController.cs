@@ -15,7 +15,7 @@ namespace Orbit.Api.Controllers;
 public partial class FriendsController(IMediator mediator, ILogger<FriendsController> logger) : ControllerBase
 {
     public record SendFriendRequestBody(string? Handle, string? ReferralCode);
-    public record SendCheerBody(Guid RecipientId, Guid HabitId, string? Note);
+    public record SendCheerBody(Guid RecipientId, Guid? HabitId, string? Note);
     public record BlockUserBody(Guid BlockedUserId);
     public record ReportUserBody(Guid ReportedUserId, ReportReason Reason, string? Details, Guid? CheerId);
 
@@ -25,6 +25,31 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     public async Task<IActionResult> GetFriends(CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new GetFriendsQuery(HttpContext.GetUserId()), cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
+    [HttpGet("{userId:guid}/profile")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetFriendProfile(Guid userId, CancellationToken cancellationToken)
+    {
+        var query = new GetFriendProfileQuery(HttpContext.GetUserId(), userId);
+        var result = await mediator.Send(query, cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
+    [HttpGet("invite-preview")]
+    [DistributedRateLimit("invite-preview")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetInvitePreview(
+        [FromQuery] string? code,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetInvitePreviewQuery(HttpContext.GetUserId(), code ?? string.Empty);
+        var result = await mediator.Send(query, cancellationToken);
         return result.ToPayGateAwareResult(value => Ok(value));
     }
 

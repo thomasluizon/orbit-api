@@ -20,6 +20,7 @@ public class SendCheerCommandTests
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Cheer> _cheerRepository = Substitute.For<IGenericRepository<Cheer>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
     private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
@@ -36,8 +37,10 @@ public class SendCheerCommandTests
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
         var repos = new SendCheerRepositories(_userRepository, _habitRepository, _cheerRepository, _achievementRepository);
+        var dispatcher = new SocialNotificationDispatcher(
+            _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new SendCheerCommandHandler(
-            guard, friendGraph, repos, _moderation, _push, new XpAwarder(_xpAwardLogRepository), _unitOfWork,
+            guard, friendGraph, repos, dispatcher, _moderation, new XpAwarder(_xpAwardLogRepository), _unitOfWork,
             Substitute.For<ILogger<SendCheerCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _sender, _recipient);
@@ -68,8 +71,11 @@ public class SendCheerCommandTests
         await _cheerRepository.Received(1).AddAsync(
             Arg.Is<Cheer>(c => c.SenderId == _sender.Id && c.RecipientId == _recipient.Id && c.HabitId == _habitId),
             Arg.Any<CancellationToken>());
+        await _notificationRepository.Received(1).AddAsync(
+            Arg.Is<Notification>(n => n.UserId == _recipient.Id && n.Url == "/social?tab=feed"),
+            Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _recipient.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            _recipient.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=feed", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -82,6 +88,7 @@ public class SendCheerCommandTests
 
         result.ErrorCode.Should().Be(ErrorCodes.ContentRejected);
         await _cheerRepository.DidNotReceive().AddAsync(Arg.Any<Cheer>(), Arg.Any<CancellationToken>());
+        await _notificationRepository.DidNotReceive().AddAsync(Arg.Any<Notification>(), Arg.Any<CancellationToken>());
         await _push.DidNotReceive().SendToUserAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -177,4 +184,33 @@ public class SendCheerCommandTests
         result.IsSuccess.Should().BeTrue();
         await _achievementRepository.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task NullHabitId_PersistsGeneralCheerAndSkipsHabitOwnershipCheck()
+    {
+        _habitRepository.AnyAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _handler.Handle(
+            new SendCheerCommand(_sender.Id, _recipient.Id, null, "You've got this!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cheerRepository.Received(1).AddAsync(
+            Arg.Is<Cheer>(c => c.SenderId == _sender.Id && c.RecipientId == _recipient.Id && c.HabitId == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TenthSentCheer_PersistsCheerAndEvaluatesCheerleaderThreshold()
+    {
+        _cheerRepository.CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(CheerleaderThreshold - 1);
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _cheerRepository.Received(1).AddAsync(Arg.Any<Cheer>(), Arg.Any<CancellationToken>());
+        await _cheerRepository.Received().CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    private const int CheerleaderThreshold = 10;
 }

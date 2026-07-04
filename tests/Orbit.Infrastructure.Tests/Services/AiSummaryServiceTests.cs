@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using OpenAI;
 using OpenAI.Chat;
 using Orbit.Domain.Common;
@@ -20,8 +21,8 @@ namespace Orbit.Infrastructure.Tests.Services;
 /// <summary>
 /// Tests the pure prompt/selection logic in AiSummaryService (StripMarkdownFences,
 /// BuildSummaryPrompt, BuildHabitSection, CapToSentence, SelectScheduledHabits) plus the
-/// structured-output mapping of GenerateSummaryAsync (summary + insight parsing, trimming,
-/// and empty-insight handling) against a stubbed chat transport.
+/// structured-output mapping of GenerateSummaryAsync (summary parsing, with Insight always
+/// returned empty) against a stubbed chat transport.
 /// </summary>
 public class AiSummaryServiceTests
 {
@@ -738,50 +739,35 @@ public class AiSummaryServiceTests
     }
 
     [Fact]
-    public async Task GenerateSummaryAsync_ReturnsBothSummaryAndInsight()
+    public async Task GenerateSummaryAsync_ReturnsSummaryWithAlwaysEmptyInsight()
     {
         var service = BuildSummaryService(
-            "{\"summary\":\"Nice work getting the run in.\",\"insight\":\"A little reading later could be a calm way to wind down.\"}");
+            "{\"summary\":\"Nice work getting the run in.\"}");
 
         var result = await InvokeGenerateSummaryAsync(service);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Summary.Should().Be("Nice work getting the run in.");
-        result.Value.Insight.Should().Be("A little reading later could be a calm way to wind down.");
+        result.Value.Insight.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task GenerateSummaryAsync_TrimsInsightToSeventyChars()
+    public async Task GenerateSummaryAsync_ModelStillReturnsInsight_InsightDroppedToEmpty()
     {
-        const string longInsight =
-            "Maybe ease into a slow walk around the block and just breathe for a while before circling back to everything else today";
         var service = BuildSummaryService(
-            $"{{\"summary\":\"Solid day so far.\",\"insight\":\"{longInsight}\"}}");
+            "{\"summary\":\"Solid day so far.\",\"insight\":\"A little reading later could wind you down.\"}");
 
         var result = await InvokeGenerateSummaryAsync(service);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Insight.Length.Should().BeLessThanOrEqualTo(70);
-        result.Value.Insight.Should().NotEndWith(" ");
-    }
-
-    [Fact]
-    public async Task GenerateSummaryAsync_EmptyInsight_StillSucceedsWithSummary()
-    {
-        var service = BuildSummaryService(
-            "{\"summary\":\"Everything is done -- enjoy the rest of the day.\",\"insight\":\"\"}");
-
-        var result = await InvokeGenerateSummaryAsync(service);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Summary.Should().NotBeEmpty();
+        result.Value.Summary.Should().Be("Solid day so far.");
         result.Value.Insight.Should().BeEmpty();
     }
 
     [Fact]
     public async Task GenerateSummaryAsync_BlankSummary_ReturnsFailure()
     {
-        var service = BuildSummaryService("{\"summary\":\"   \",\"insight\":\"Take a breath.\"}");
+        var service = BuildSummaryService("{\"summary\":\"   \"}");
 
         var result = await InvokeGenerateSummaryAsync(service);
 
@@ -799,7 +785,7 @@ public class AiSummaryServiceTests
                 Transport = new HttpClientPipelineTransport(
                     new HttpClient(new JsonResponseHandler(modelJsonContent))),
             });
-        var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance);
+        var aiClient = new AiCompletionClient(chatClient, NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         return new AiSummaryService(aiClient, NullLogger<AiSummaryService>.Instance);
     }
 

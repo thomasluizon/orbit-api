@@ -87,7 +87,8 @@ public class ExportUserDataQueryHandler(
                 user.ThemePreference,
                 user.ColorScheme,
                 user.AiMemoryEnabled,
-                user.AiSummaryEnabled),
+                user.AiSummaryEnabled,
+                user.ProactiveAstraEnabled),
             new ExportedSubscription(
                 user.Plan.ToString(),
                 user.IsLifetimePro,

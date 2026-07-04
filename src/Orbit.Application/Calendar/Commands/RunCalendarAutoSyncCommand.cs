@@ -124,7 +124,8 @@ public partial class RunCalendarAutoSyncCommandHandler(
         }
         catch (CalendarProviderException ex) when (ex.Kind == CalendarFetchErrorKind.ReconnectRequired)
         {
-            LogGoogleApiError(logger, ex, user.Id);
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogReconnectRequired(logger, user.Id, ex.RawErrorCode);
             await HandleReconnectRequired(user, ex.RawErrorCode ?? "reconnect_required", ct);
             return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.ReconnectRequired));
         }
@@ -142,7 +143,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         if (newSuggestions > 0 && IsInQuietHours(user, utcNow)
             && !await HasRecentSuggestionNotification(user.Id, utcNow, ct))
         {
-            await CreateSuggestionNotification(user.Id, newSuggestions, ct);
+            await CreateSuggestionNotification(user, newSuggestions, ct);
         }
 
         user.MarkCalendarSyncSuccess(utcNow);
@@ -151,9 +152,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
         {
             await deps.UnitOfWork.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        catch (DbUpdateException ex) when (newSuggestions > 0 && DbUniqueViolation.IsUniqueViolation(ex))
         {
-            return Result.Success(new CalendarAutoSyncResult(0, reconciled, GoogleCalendarAutoSyncStatus.Idle));
+            return Result.Success(new CalendarAutoSyncResult(0, 0, GoogleCalendarAutoSyncStatus.Idle));
         }
 
         return Result.Success(new CalendarAutoSyncResult(newSuggestions, reconciled, GoogleCalendarAutoSyncStatus.Idle));
@@ -257,10 +258,13 @@ public partial class RunCalendarAutoSyncCommandHandler(
     {
         user.MarkCalendarSyncReconnectRequired(errorCode);
 
+        var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
         var notification = Notification.Create(
             user.Id,
-            "Google Calendar disconnected",
-            "Auto-sync paused. Reconnect to resume.",
+            isPortuguese ? "Google Calendar desconectado" : "Google Calendar disconnected",
+            isPortuguese
+                ? "A sincronização automática está pausada. Reconecte para retomar."
+                : "Auto-sync paused. Reconnect to resume.",
             url: "/calendar-sync");
         await deps.NotificationRepository.AddAsync(notification, ct);
 
@@ -277,15 +281,19 @@ public partial class RunCalendarAutoSyncCommandHandler(
             ct);
     }
 
-    private async Task CreateSuggestionNotification(Guid userId, int count, CancellationToken ct)
+    private async Task CreateSuggestionNotification(User user, int count, CancellationToken ct)
     {
-        var title = count == 1
-            ? "1 new calendar event"
-            : $"{count} new calendar events";
+        var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
+        var title = isPortuguese
+            ? (count == 1 ? "1 novo evento do calendário" : $"{count} novos eventos do calendário")
+            : (count == 1 ? "1 new calendar event" : $"{count} new calendar events");
+        var body = isPortuguese
+            ? "Toque para revisar e importar"
+            : "Tap to review and import";
         var notification = Notification.Create(
-            userId,
+            user.Id,
             title,
-            "Tap to review and import",
+            body,
             url: "/calendar-sync?mode=review");
         await deps.NotificationRepository.AddAsync(notification, ct);
     }
@@ -337,6 +345,9 @@ public partial class RunCalendarAutoSyncCommandHandler(
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Google API error during auto-sync for user {UserId}")]
     private static partial void LogGoogleApiError(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Google Calendar reconnect required during auto-sync for user {UserId} (code: {ErrorCode})")]
+    private static partial void LogReconnectRequired(ILogger logger, Guid userId, string? errorCode);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Duplicate Google Calendar event id skipped during auto-sync for user {UserId}: {GoogleEventId}")]
     private static partial void LogDuplicateFetchedEventId(ILogger logger, Guid userId, string googleEventId);

@@ -81,13 +81,30 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Gamification.Backfill.XpAwardLogBackfillService>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialAccessGuard>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.FriendGraphService>();
+        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialNotificationDispatcher>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.IFriendFeedEventEmitter, Orbit.Application.Social.Services.FriendFeedEmitter>();
         builder.Services.AddScoped<IFriendFeedReader, FriendFeedReader>();
+        builder.Services.AddScoped<Orbit.Application.Challenges.Services.IChallengeProgressService, Orbit.Application.Challenges.Services.ChallengeProgressService>();
+        builder.Services.AddScoped<Orbit.Application.Challenges.Services.ChallengeProgressRepositories>(sp =>
+            new Orbit.Application.Challenges.Services.ChallengeProgressRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipant>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipantHabit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Commands.SendCheerRepositories>(sp =>
             new Orbit.Application.Social.Commands.SendCheerRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+        builder.Services.AddScoped<Orbit.Application.Accountability.Services.AccountabilityPairService>();
+        builder.Services.AddScoped<Orbit.Application.Accountability.Commands.AccountabilityRepositories>(sp =>
+            new Orbit.Application.Accountability.Commands.AccountabilityRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddGoogleCalendarServices();
@@ -224,6 +241,8 @@ public static partial class ServiceCollectionExtensions
             options.TracesSampleRate = sentrySettings.TracesSampleRate;
             options.EnableLogs = sentrySettings.EnableLogs;
             options.SendDefaultPii = false;
+            options.AddExceptionFilterForType<FluentValidation.ValidationException>();
+            options.AddExceptionFilterForType<OperationCanceledException>();
             options.SetBeforeSend(ScrubSensitiveData);
         });
 

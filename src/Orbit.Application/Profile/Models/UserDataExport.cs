@@ -41,7 +41,8 @@ public sealed record ExportedSettings(
     string? ThemePreference,
     string? ColorScheme,
     bool AiMemoryEnabled,
-    bool AiSummaryEnabled);
+    bool AiSummaryEnabled,
+    bool ProactiveAstraEnabled);
 
 public sealed record ExportedHabit(
     Guid Id,
@@ -142,7 +143,7 @@ public sealed record ExportedFriendship(
 public sealed record ExportedCheer(
     Guid SenderId,
     Guid RecipientId,
-    Guid HabitId,
+    Guid? HabitId,
     string? Note,
     DateTime CreatedAtUtc);
 

@@ -21,7 +21,7 @@ public class ResendEmailServiceTests
         {
             ApiKey = "re_test_key",
             FromEmail = "noreply@useorbit.org",
-            SupportEmail = "support@useorbit.org"
+            SupportEmail = "contact@useorbit.org"
         });
 
         var frontendSettings = Options.Create(new FrontendSettings
@@ -89,6 +89,28 @@ public class ResendEmailServiceTests
         _handler.ExceptionToThrow = new HttpRequestException("Connection failed");
 
         var act = () => _sut.SendVerificationCodeAsync("user@test.com", "123456");
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_ClientCancellation_RethrowsInsteadOfSwallowing()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        _handler.ExceptionToThrow = new OperationCanceledException(cts.Token);
+
+        var act = () => _sut.SendVerificationCodeAsync("user@test.com", "123456", "en", cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_TimeoutNotClientCancellation_DoesNotThrow()
+    {
+        _handler.ExceptionToThrow = new TaskCanceledException("Resend timed out");
+
+        var act = () => _sut.SendVerificationCodeAsync("user@test.com", "123456");
+
         await act.Should().NotThrowAsync();
     }
 

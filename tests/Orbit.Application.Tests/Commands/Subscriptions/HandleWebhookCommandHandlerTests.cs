@@ -583,7 +583,7 @@ public class HandleWebhookCommandHandlerTests
         {
             "id": "evt_test_{{Guid.NewGuid():N}}",
             "object": "event",
-            "api_version": "2026-02-25.clover",
+            "api_version": "{{StripeConfiguration.ApiVersion}}",
             "type": "{{eventType}}",
             "created": {{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}},
             "livemode": false,
