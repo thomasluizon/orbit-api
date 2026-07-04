@@ -1,0 +1,11 @@
+Orbit
+
+{{heading}}
+
+{{intro}}
+
+{{cta}}: {{confirmUrl}}
+
+{{warning}}
+
+{{footer}}

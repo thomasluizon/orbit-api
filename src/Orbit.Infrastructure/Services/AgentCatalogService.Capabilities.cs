@@ -1008,7 +1008,9 @@ public partial class AgentCatalogService
                     "OAuthController.SendCode",
                     "OAuthController.VerifyCode",
                     "OAuthController.GoogleAuth",
-                    "OAuthController.Token"
+                    "OAuthController.Token",
+                    "WaitlistController.Join",
+                    "WaitlistController.Confirm"
                 ]),
 
             CreateCapability(

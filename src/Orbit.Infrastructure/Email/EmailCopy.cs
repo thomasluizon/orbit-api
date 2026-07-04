@@ -17,6 +17,9 @@ public static class EmailCopy
     public sealed record AccountDeletionCopy(
         string Subject, string Heading, string Intro, string CodeLabel, string Warning, string Footer, string Preheader);
 
+    public sealed record WaitlistConfirmationCopy(
+        string Subject, string Heading, string Intro, string Cta, string Warning, string Footer, string Preheader);
+
     public static VerificationCodeCopy VerificationCode(bool isPtBr)
     {
         var intro = isPtBr
@@ -68,6 +71,24 @@ public static class EmailCopy
             Warning: isPtBr
                 ? "Se você não solicitou isso, ignore este e-mail. Sua conta permanecerá segura."
                 : "If you didn't request this, ignore this email. Your account will remain safe.",
+            Footer: TeamFooter(isPtBr),
+            Preheader: intro);
+    }
+
+    public static WaitlistConfirmationCopy WaitlistConfirmation(bool isPtBr)
+    {
+        var intro = isPtBr
+            ? "Você está quase na lista. Toque no botão abaixo para confirmar sua vaga no Orbit para iPhone. Avisaremos assim que estiver pronto."
+            : "You're almost on the list. Tap the button below to confirm your spot for Orbit on iPhone. We'll email you the moment it's ready.";
+
+        return new WaitlistConfirmationCopy(
+            Subject: isPtBr ? "Confirme sua vaga na lista de espera do Orbit para iOS" : "Confirm your spot on the Orbit iOS waitlist",
+            Heading: isPtBr ? "Confirme sua vaga na lista de espera" : "Confirm your waitlist spot",
+            Intro: intro,
+            Cta: isPtBr ? "Confirmar minha vaga" : "Confirm my spot",
+            Warning: isPtBr
+                ? "Se você não se inscreveu na lista de espera do Orbit, pode ignorar este e-mail com segurança."
+                : "If you didn't sign up for the Orbit waitlist, you can safely ignore this email.",
             Footer: TeamFooter(isPtBr),
             Preheader: intro);
     }

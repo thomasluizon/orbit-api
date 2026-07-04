@@ -47,6 +47,11 @@ public static partial class ServiceCollectionExtensions
         });
 
         builder.Services.AddScoped<IEmailService, ResendEmailService>();
+
+        builder.Services.Configure<WaitlistSettings>(
+            builder.Configuration.GetSection(WaitlistSettings.SectionName));
+        builder.Services.AddSingleton<IWaitlistConfirmationTokenService, WaitlistConfirmationTokenService>();
+        builder.Services.AddScoped<IMarketingAudienceService, ResendAudienceService>();
     }
 
     private static void AddStripeBilling(WebApplicationBuilder builder)
@@ -137,6 +142,8 @@ public static partial class ServiceCollectionExtensions
             ?? ["http://localhost:3000"];
         var thirdPartyOrigins = builder.Configuration.GetSection("Cors:ThirdPartyOrigins").Get<string[]>()
             ?? [];
+        var landingOrigins = builder.Configuration.GetSection("Cors:LandingOrigins").Get<string[]>()
+            ?? [];
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
@@ -153,6 +160,15 @@ public static partial class ServiceCollectionExtensions
                     policy.WithOrigins(thirdPartyOrigins)
                           .WithHeaders("Authorization", "Content-Type", "Mcp-Session-Id")
                           .WithMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
+                });
+            }
+            if (landingOrigins.Length > 0)
+            {
+                options.AddPolicy("Landing", policy =>
+                {
+                    policy.WithOrigins(landingOrigins)
+                          .WithHeaders("Content-Type")
+                          .WithMethods("POST", "OPTIONS");
                 });
             }
         });

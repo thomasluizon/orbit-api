@@ -312,6 +312,36 @@ public class ResendEmailServiceTests
         _handler.LastRequest.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task SendWaitlistConfirmationAsync_English_SendsEnglishSubjectAndConfirmUrl()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendWaitlistConfirmationAsync(
+            "user@test.com",
+            "https://api.useorbit.org/api/waitlist/confirm?token=abc.def",
+            "en");
+
+        _handler.LastRequest!.RequestUri!.PathAndQuery.Should().Be("/emails");
+        _handler.LastRequestBody.Should().Contain("Confirm your spot on the Orbit iOS waitlist");
+        _handler.LastRequestBody.Should().Contain("https://api.useorbit.org/api/waitlist/confirm?token=abc.def");
+        _handler.LastRequestBody.Should().Contain("\"text\":");
+        _handler.LastRequestBody.Should().NotContain("{{");
+    }
+
+    [Fact]
+    public async Task SendWaitlistConfirmationAsync_Portuguese_SendsPortugueseSubject()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendWaitlistConfirmationAsync(
+            "user@test.com",
+            "https://api.useorbit.org/api/waitlist/confirm?token=abc.def",
+            "pt-BR");
+
+        _handler.LastRequestBody.Should().Contain("Confirme sua vaga na lista de espera");
+    }
+
     /// <summary>
     /// Fake HttpMessageHandler for intercepting HTTP calls.
     /// </summary>
