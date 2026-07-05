@@ -36,6 +36,13 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         bool ShowTopHabits,
         bool Regenerate);
 
+    public record ApplyOnboardingRequest(
+        IReadOnlyList<ApplyHabitInput>? Habits,
+        ApplyLogInput? FirstLog,
+        ApplyGoalInput? Goal,
+        int? WeekStartDay,
+        string? ColorScheme);
+
     private static readonly JsonSerializerOptions ExportJsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -212,6 +219,36 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public async Task<IActionResult> CompleteOnboarding(CancellationToken cancellationToken)
     {
         var command = new CompleteOnboardingCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
+    [HttpPost("onboarding/apply")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ApplyOnboarding(
+        [FromBody] ApplyOnboardingRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new ApplyOnboardingCommand(
+            HttpContext.GetUserId(),
+            request.Habits ?? [],
+            request.FirstLog,
+            request.Goal,
+            request.WeekStartDay,
+            request.ColorScheme);
+        var result = await mediator.Send(command, cancellationToken);
+        return result.ToPayGateAwareResult(value => Ok(value));
+    }
+
+    [HttpPut("import-prompt/dismiss")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DismissImportPrompt(CancellationToken cancellationToken)
+    {
+        var command = new DismissImportPromptCommand(HttpContext.GetUserId());
         var result = await mediator.Send(command, cancellationToken);
         return result.ToPayGateAwareResult(() => NoContent());
     }
