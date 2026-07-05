@@ -55,6 +55,7 @@ public partial class User : Entity
     public Guid? ReferredByUserId { get; private set; }
     public string? Handle { get; private set; }
     public bool SocialOptIn { get; private set; }
+    public bool IsAdmin { get; private set; }
     public bool? MarketingEmailConsent { get; private set; }
     public DateTime? MarketingConsentUpdatedAtUtc { get; private set; }
     public int TotalXp { get; private set; } = 0;
@@ -398,6 +399,13 @@ public partial class User : Entity
     public void SeedDefaultHandle() => Handle = $"user_{Id:N}"[..17];
 
     public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
+
+    /// <summary>
+    /// Grants this user the single administrative role, which gates admin-only endpoints
+    /// (e.g. the marketing broadcast sender) via the JWT admin claim and the "Admin" policy.
+    /// Idempotent. Only ever called by the startup bootstrap seeder for configured operator emails.
+    /// </summary>
+    public void GrantAdmin() => IsAdmin = true;
 
     /// <summary>
     /// Records the user's explicit product-marketing-email consent decision (<c>true</c> = opted in,

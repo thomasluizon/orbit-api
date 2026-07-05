@@ -154,7 +154,11 @@ public static partial class ServiceCollectionExtensions
             };
         });
 
-        builder.Services.AddAuthorization();
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy(AdminPolicy.Name, policy =>
+                policy.RequireClaim(AdminPolicy.ClaimType, AdminPolicy.ClaimValue));
+        });
 
         return builder;
     }

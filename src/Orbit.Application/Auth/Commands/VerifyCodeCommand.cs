@@ -40,7 +40,7 @@ public partial class VerifyCodeCommandHandler(
 
         var wasReactivated = await HandlePostLoginAsync(user, isNewUser, request, cancellationToken);
 
-        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
+        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, user.IsAdmin, cancellationToken);
         if (sessionResult.IsFailure)
             return sessionResult.PropagateError<LoginResponse>();
 

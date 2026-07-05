@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
@@ -12,18 +11,13 @@ public class UpdateMarketingConsentCommandHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IMarketingContactsService _contactsService = Substitute.For<IMarketingContactsService>();
     private readonly UpdateMarketingConsentCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public UpdateMarketingConsentCommandHandlerTests()
     {
-        _handler = new UpdateMarketingConsentCommandHandler(
-            _userRepo,
-            _unitOfWork,
-            _contactsService,
-            NullLogger<UpdateMarketingConsentCommandHandler>.Instance);
+        _handler = new UpdateMarketingConsentCommandHandler(_userRepo, _unitOfWork);
     }
 
     private void SetupUserFound(User user) =>
@@ -34,7 +28,7 @@ public class UpdateMarketingConsentCommandHandlerTests
             .Returns(user);
 
     [Fact]
-    public async Task Handle_OptIn_PersistsConsentAndUpsertsProductContact()
+    public async Task Handle_OptIn_PersistsConsent()
     {
         var user = User.Create("Test User", "test@example.com").Value;
         SetupUserFound(user);
@@ -44,14 +38,10 @@ public class UpdateMarketingConsentCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.MarketingEmailConsent.Should().BeTrue();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        await _contactsService.Received(1).UpsertProductContactAsync(
-            "test@example.com", Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _contactsService.DidNotReceive().SetContactUnsubscribedAsync(
-            Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_OptOut_PersistsConsentAndSetsContactUnsubscribed()
+    public async Task Handle_OptOut_PersistsConsent()
     {
         var user = User.Create("Test User", "test@example.com").Value;
         SetupUserFound(user);
@@ -61,14 +51,10 @@ public class UpdateMarketingConsentCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.MarketingEmailConsent.Should().BeFalse();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-        await _contactsService.Received(1).SetContactUnsubscribedAsync(
-            "test@example.com", true, Arg.Any<CancellationToken>());
-        await _contactsService.DidNotReceive().UpsertProductContactAsync(
-            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_UserNotFound_ReturnsFailureWithoutSyncing()
+    public async Task Handle_UserNotFound_ReturnsFailureWithoutSaving()
     {
         _userRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
@@ -81,23 +67,5 @@ public class UpdateMarketingConsentCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("User not found.");
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
-        await _contactsService.DidNotReceive().UpsertProductContactAsync(
-            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_ResendSyncFails_StillPersistsDecisionAndSucceeds()
-    {
-        var user = User.Create("Test User", "test@example.com").Value;
-        SetupUserFound(user);
-        _contactsService
-            .UpsertProductContactAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns<Task>(_ => throw new InvalidOperationException("Resend unavailable"));
-
-        var result = await _handler.Handle(new UpdateMarketingConsentCommand(UserId, true), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        user.MarketingEmailConsent.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

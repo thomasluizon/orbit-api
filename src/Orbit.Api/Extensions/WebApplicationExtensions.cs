@@ -24,6 +24,7 @@ public static partial class WebApplicationExtensions
         await using (var migrationDb = new OrbitDbContext(migrationOptions))
         {
             await migrationDb.Database.MigrateAsync();
+            await SeedBootstrapAdminsAsync(migrationDb, app.Configuration);
         }
 
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
@@ -66,6 +67,30 @@ public static partial class WebApplicationExtensions
                 await context.Response.WriteAsJsonAsync(result);
             }
         }).AllowAnonymous();
+    }
+
+    private static async Task SeedBootstrapAdminsAsync(OrbitDbContext dbContext, IConfiguration configuration)
+    {
+        var normalizedEmails = (configuration.GetSection("Admin:BootstrapEmails").Get<string[]>() ?? [])
+            .Where(email => !string.IsNullOrWhiteSpace(email))
+            .Select(email => email.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+
+        if (normalizedEmails.Length == 0)
+            return;
+
+        var users = await dbContext.Users
+            .Where(user => normalizedEmails.Contains(user.Email) && !user.IsAdmin)
+            .ToListAsync();
+
+        if (users.Count == 0)
+            return;
+
+        foreach (var user in users)
+            user.GrantAdmin();
+
+        await dbContext.SaveChangesAsync();
     }
 
     private static void UseMcpSelectiveAuth(this WebApplication app)

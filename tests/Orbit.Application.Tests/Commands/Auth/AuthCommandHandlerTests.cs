@@ -61,7 +61,7 @@ public class AuthCommandHandlerTests
         var user = User.Create("Test", TestEmail).Value;
         SetupCacheWithCode("123456");
         SetupExistingUser(user);
-        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
@@ -111,7 +111,7 @@ public class AuthCommandHandlerTests
     public async Task VerifyCode_NewUser_CreatesAccount()
     {
         SetupCacheWithCode("123456");
-        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());
@@ -130,7 +130,7 @@ public class AuthCommandHandlerTests
         var user = User.Create("Existing", TestEmail).Value;
         SetupCacheWithCode("123456");
         SetupExistingUser(user);
-        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         var handler = new VerifyCodeCommandHandler(_cache, _userRepo, _unitOfWork, _authSessionService, _emailService, Substitute.For<MediatR.IMediator>(), Substitute.For<ILogger<VerifyCodeCommandHandler>>());

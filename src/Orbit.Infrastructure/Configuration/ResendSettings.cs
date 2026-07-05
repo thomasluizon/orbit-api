@@ -6,7 +6,5 @@ public sealed class ResendSettings
     public required string ApiKey { get; init; }
     public required string FromEmail { get; init; }
     public string SupportEmail { get; init; } = "contact@useorbit.org";
-    public string ProductSegmentId { get; init; } = "";
-    public string WaitlistSegmentId { get; init; } = "";
-    public string WebhookSecret { get; init; } = "";
+    public string MarketingFromEmail { get; init; } = "Orbit <news@updates.useorbit.org>";
 }

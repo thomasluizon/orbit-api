@@ -50,9 +50,11 @@ public static partial class ServiceCollectionExtensions
 
         builder.Services.Configure<WaitlistSettings>(
             builder.Configuration.GetSection(WaitlistSettings.SectionName));
+        builder.Services.Configure<MarketingSettings>(
+            builder.Configuration.GetSection(MarketingSettings.SectionName));
         builder.Services.AddSingleton<IWaitlistConfirmationTokenService, WaitlistConfirmationTokenService>();
+        builder.Services.AddSingleton<IMarketingUnsubscribeTokenService, MarketingUnsubscribeTokenService>();
         builder.Services.AddScoped<IMarketingContactsService, ResendContactsService>();
-        builder.Services.AddSingleton<IResendWebhookVerifier, ResendWebhookVerifier>();
     }
 
     private static void AddStripeBilling(WebApplicationBuilder builder)

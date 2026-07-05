@@ -66,14 +66,14 @@ public class AuthSessionServiceTests
             .Returns(_user);
 
         _tokenService
-            .GenerateToken(Arg.Any<Guid>(), Arg.Any<string>())
+            .GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<bool>())
             .Returns("access-token-1", "access-token-2", "access-token-3");
     }
 
     [Fact]
     public async Task CreateSessionAsync_WithNullRefreshExpiry_CreatesNonExpiringSession()
     {
-        var result = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        var result = await _service.CreateSessionAsync(_user.Id, _user.Email, false, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("access-token-1");
@@ -86,7 +86,7 @@ public class AuthSessionServiceTests
     [Fact]
     public async Task RefreshSessionAsync_WithNonExpiringSession_RotatesRefreshTokenWithoutAddingExpiry()
     {
-        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, false, CancellationToken.None);
         var originalTokenHash = _storedSession!.TokenHash;
         var originalLastUsedAtUtc = _storedSession.LastUsedAtUtc;
 
@@ -106,7 +106,7 @@ public class AuthSessionServiceTests
     [Fact]
     public async Task RevokeSessionAsync_RevokesStoredSession()
     {
-        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, false, CancellationToken.None);
 
         var revokeResult = await _service.RevokeSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
 
@@ -117,7 +117,7 @@ public class AuthSessionServiceTests
     [Fact]
     public async Task RefreshSessionAsync_WithRevokedSession_ReturnsFailure()
     {
-        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, false, CancellationToken.None);
         _storedSession!.Revoke(DateTime.UtcNow);
 
         var refreshResult = await _service.RefreshSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);

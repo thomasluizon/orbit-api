@@ -21,22 +21,29 @@ public static partial class EmailTemplateRenderer
     public static string RenderHtml(string emailName, EmailLayout layout, IReadOnlyDictionary<string, string> tokens)
     {
         var content = ReplaceTokens(LoadTemplate($"{emailName}.html"), tokens);
-
-        var layoutTokens = new Dictionary<string, string>
-        {
-            ["lang"] = layout.Lang,
-            ["preheader"] = layout.Preheader,
-            ["footer"] = layout.Footer,
-            ["logoUrl"] = layout.LogoUrl,
-            ["headerBgColor"] = layout.GradientHeader ? GradientTopColor : CanvasColor,
-            ["headerBackground"] = layout.GradientHeader
-                ? $"background: linear-gradient(180deg, {GradientTopColor} 0%, {CanvasColor} 100%);"
-                : $"background-color: {CanvasColor};",
-            ["content"] = content,
-        };
-
-        return ReplaceTokens(LoadTemplate("Layout.html"), layoutTokens);
+        return ReplaceTokens(LoadTemplate("Layout.html"), BuildLayoutTokens(layout, content));
     }
+
+    /// <summary>
+    /// Wraps already-rendered <paramref name="contentHtml"/> in the shared branded chrome. Unlike
+    /// <see cref="RenderHtml"/> the content is inserted verbatim and never scanned for
+    /// <c>{{token}}</c> placeholders, so caller-supplied marketing HTML passes through untouched.
+    /// </summary>
+    public static string RenderLayout(EmailLayout layout, string contentHtml)
+        => ReplaceTokens(LoadTemplate("Layout.html"), BuildLayoutTokens(layout, contentHtml));
+
+    private static Dictionary<string, string> BuildLayoutTokens(EmailLayout layout, string content) => new()
+    {
+        ["lang"] = layout.Lang,
+        ["preheader"] = layout.Preheader,
+        ["footer"] = layout.Footer,
+        ["logoUrl"] = layout.LogoUrl,
+        ["headerBgColor"] = layout.GradientHeader ? GradientTopColor : CanvasColor,
+        ["headerBackground"] = layout.GradientHeader
+            ? $"background: linear-gradient(180deg, {GradientTopColor} 0%, {CanvasColor} 100%);"
+            : $"background-color: {CanvasColor};",
+        ["content"] = content,
+    };
 
     public static string RenderText(string emailName, IReadOnlyDictionary<string, string> tokens)
         => ReplaceTokens(LoadTemplate($"{emailName}.txt"), tokens);

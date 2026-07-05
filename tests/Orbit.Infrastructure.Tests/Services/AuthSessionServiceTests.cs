@@ -20,7 +20,7 @@ public class AuthSessionServiceTests
 
     public AuthSessionServiceTests()
     {
-        _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>()).Returns("access-token");
+        _tokenService.GenerateToken(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<bool>()).Returns("access-token");
 
         _sut = new AuthSessionService(
             _userSessionRepository,
@@ -42,7 +42,7 @@ public class AuthSessionServiceTests
     {
         var userId = Guid.NewGuid();
 
-        var result = await _sut.CreateSessionAsync(userId, "thomas@test.com", CancellationToken.None);
+        var result = await _sut.CreateSessionAsync(userId, "thomas@test.com", false, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("access-token");
@@ -59,7 +59,7 @@ public class AuthSessionServiceTests
             Arg.Do<UserSession>(session => captured = session),
             Arg.Any<CancellationToken>());
 
-        await _sut.CreateSessionAsync(Guid.NewGuid(), "thomas@test.com", CancellationToken.None);
+        await _sut.CreateSessionAsync(Guid.NewGuid(), "thomas@test.com", false, CancellationToken.None);
 
         captured.Should().NotBeNull();
         captured!.ExpiresAtUtc.Should().NotBeNull();

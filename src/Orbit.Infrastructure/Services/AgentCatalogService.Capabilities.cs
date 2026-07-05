@@ -464,8 +464,7 @@ public partial class AgentCatalogService
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.CompleteTour",
                     "ProfileController.ResetTour",
-                    "ProfileController.UpdateMarketingConsent",
-                    "ResendWebhookController.HandleWebhook"
+                    "ProfileController.UpdateMarketingConsent"
                 ]),
 
             CreateCapability(
@@ -1025,7 +1024,24 @@ public partial class AgentCatalogService
                 isMutation: true,
                 isPhaseOneReadOnly: false,
                 AgentConfirmationRequirement.None,
-                controllerActions: ["UploadsController.SignUpload"])
+                controllerActions: ["UploadsController.SignUpload"]),
+
+            CreateCapability(
+                AgentCapabilityIds.MarketingManage,
+                "Manage Marketing",
+                "Sends admin marketing broadcasts and handles public one-click unsubscribe. Operator/anonymous endpoints, not agent-invocable.",
+                "marketing",
+                AgentScopes.ManageMarketing,
+                AgentRiskClass.Low,
+                isMutation: true,
+                isPhaseOneReadOnly: false,
+                AgentConfirmationRequirement.None,
+                controllerActions:
+                [
+                    "AdminController.SendMarketingBroadcast",
+                    "MarketingController.Unsubscribe",
+                    "MarketingController.UnsubscribeOneClick"
+                ])
         ];
     }
 }
