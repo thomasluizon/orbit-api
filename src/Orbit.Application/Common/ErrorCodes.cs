@@ -63,6 +63,8 @@ public static class ErrorCodes
     public const string InvalidWebhookSignature = "INVALID_WEBHOOK_SIGNATURE";
     public const string WebhookStripeApiError = "WEBHOOK_STRIPE_API_ERROR";
     public const string WebhookProcessingFailed = "WEBHOOK_PROCESSING_FAILED";
+    public const string ResendWebhookSecretNotConfigured = "RESEND_WEBHOOK_SECRET_NOT_CONFIGURED";
+    public const string InvalidResendWebhookSignature = "INVALID_RESEND_WEBHOOK_SIGNATURE";
     public const string PlayNotificationVerificationFailed = "PLAY_NOTIFICATION_VERIFICATION_FAILED";
     public const string CodeRequestCooldown = "CODE_REQUEST_COOLDOWN";
     public const string GoogleEmailUnavailable = "GOOGLE_EMAIL_UNAVAILABLE";

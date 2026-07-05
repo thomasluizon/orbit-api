@@ -91,6 +91,7 @@ public partial class AccountDeletionService(
             var userToDelete = await dbContext.Users.FindAsync([userId], ct);
             if (userToDelete is not null)
             {
+                await RemoveMarketingContactAsync(scope, userToDelete.Email, userId, ct);
                 var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
                 await resetRepository.DeleteAllUserDataAsync(userId, ct);
                 dbContext.Users.Remove(userToDelete);
@@ -104,6 +105,19 @@ public partial class AccountDeletionService(
         {
             if (logger.IsEnabled(LogLevel.Error))
                 LogAccountDeletionFailed(logger, ex, userId);
+        }
+    }
+
+    private async Task RemoveMarketingContactAsync(IServiceScope scope, string email, Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            var contactsService = scope.ServiceProvider.GetRequiredService<IMarketingContactsService>();
+            await contactsService.RemoveContactAsync(email, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogMarketingContactRemovalFailed(logger, ex, userId);
         }
     }
 
@@ -150,5 +164,8 @@ public partial class AccountDeletionService(
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders, {SlipAlerts} stale SentSlipAlerts, and {StreakFreezeAlerts} stale SentStreakFreezeAlerts older than 90 days")]
     private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int streakFreezeAlerts);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Failed to remove Resend marketing contact for deleted account {UserId}")]
+    private static partial void LogMarketingContactRemovalFailed(ILogger logger, Exception ex, Guid userId);
 
 }

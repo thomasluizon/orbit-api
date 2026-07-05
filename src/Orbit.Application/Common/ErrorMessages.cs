@@ -55,6 +55,8 @@ public static class ErrorMessages
     public static readonly AppError InvalidWebhookSignature = new(ErrorCodes.InvalidWebhookSignature, "Invalid webhook signature");
     public static readonly AppError WebhookStripeApiError = new(ErrorCodes.WebhookStripeApiError, "Stripe API error processing webhook event");
     public static readonly AppError WebhookProcessingFailed = new(ErrorCodes.WebhookProcessingFailed, "Webhook processing failed");
+    public static readonly AppError ResendWebhookSecretNotConfigured = new(ErrorCodes.ResendWebhookSecretNotConfigured, "Resend webhook secret not configured");
+    public static readonly AppError InvalidResendWebhookSignature = new(ErrorCodes.InvalidResendWebhookSignature, "Invalid Resend webhook signature");
     public static readonly AppError PlayNotificationVerificationFailed = new(ErrorCodes.PlayNotificationVerificationFailed, "Failed to verify Play notification");
     public static readonly AppError CodeRequestCooldown = new(ErrorCodes.CodeRequestCooldown, "Please wait before requesting a new code");
     public static readonly AppError VerificationCodeExpired = new(ErrorCodes.CodeExpired, "Verification code expired or not found");

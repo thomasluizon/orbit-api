@@ -463,7 +463,9 @@ public partial class AgentCatalogService
                     "ProfileController.SetThemePreference",
                     "ProfileController.CompleteOnboarding",
                     "ProfileController.CompleteTour",
-                    "ProfileController.ResetTour"
+                    "ProfileController.ResetTour",
+                    "ProfileController.UpdateMarketingConsent",
+                    "ResendWebhookController.HandleWebhook"
                 ]),
 
             CreateCapability(
