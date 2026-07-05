@@ -194,4 +194,55 @@ public class ApplyOnboardingCommandHandlerTests
         await _goalRepo.DidNotReceive().AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         user.HasCompletedOnboarding.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Apply_GoalDeadlineInPast_ReturnsFailureWithoutSaving()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [Habit("Drink water")], null,
+            new ApplyGoalInput("Run 100km", null, 100, "km", Today.AddDays(-1)), null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("Deadline cannot be in the past.");
+        user.HasCompletedOnboarding.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Apply_FirstLogIndexOutOfRange_AppliesWithoutLogging()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [Habit("Drink water")], new ApplyLogInput(5, Today), null, null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Applied.Should().BeTrue();
+        result.Value.LoggedFirstHabit.Should().BeFalse();
+        user.HasCompletedOnboarding.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_InvalidColorScheme_ReturnsFailureWithoutSaving()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [Habit("Drink water")], null, null, WeekStartDay: null, ColorScheme: "magenta");
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        user.HasCompletedOnboarding.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }

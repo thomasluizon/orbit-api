@@ -46,7 +46,8 @@ public class ApplyOnboardingCommandValidator : AbstractValidator<ApplyOnboarding
     public ApplyOnboardingCommandValidator()
     {
         RuleFor(x => x.Habits).NotNull();
-        RuleFor(x => x.Habits.Count).LessThanOrEqualTo(AppConstants.MaxBulkOperationSize);
+        RuleFor(x => x.Habits.Count).LessThanOrEqualTo(AppConstants.MaxBulkOperationSize)
+            .When(x => x.Habits is not null);
         RuleForEach(x => x.Habits).SetValidator(new ApplyHabitInputValidator());
 
         When(x => x.Goal is not null, () =>
