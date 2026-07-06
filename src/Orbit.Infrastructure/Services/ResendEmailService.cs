@@ -110,7 +110,10 @@ public partial class ResendEmailService(
         var isPtBr = LocaleHelper.IsPortuguese(language);
         var footer = MarketingFooterHtml(isPtBr, unsubscribeUrl);
         var layout = new EmailLayout(LangCode(isPtBr), Preheader: "", footer, LogoUrl, GradientHeader: true);
-        var html = EmailTemplateRenderer.RenderLayout(layout, bodyHtml);
+        var readableBody =
+            "<div style=\"font-family: Rubik, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; " +
+            $"font-size: 16px; line-height: 1.6; color: #E2E8F0;\">{bodyHtml}</div>";
+        var html = EmailTemplateRenderer.RenderLayout(layout, readableBody);
 
         var payload = new
         {
@@ -131,7 +134,7 @@ public partial class ResendEmailService(
     private static string MarketingFooterHtml(bool isPtBr, string unsubscribeUrl)
     {
         const string legalIdentity =
-            "TL SOFTWARE ENGINEERING LTDA · CNPJ 58.429.979/0001-06 · Av. Nova Independência, 651 — Brooklin Paulista, São Paulo – SP · CEP 04570-001";
+            "TL SOFTWARE ENGINEERING LTDA · CNPJ 58.429.979/0001-06 · Av. Nova Independência, 651, Brooklin Paulista, São Paulo/SP · CEP 04570-001";
 
         var (reason, unsubscribeLabel) = isPtBr
             ? ("Você está recebendo este e-mail porque optou por receber novidades do Orbit.", "Cancelar inscrição")

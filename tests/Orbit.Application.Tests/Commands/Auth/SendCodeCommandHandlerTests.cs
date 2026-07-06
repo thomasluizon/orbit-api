@@ -153,7 +153,7 @@ public class SendCodeCommandHandlerTests
         var authSessionService = Substitute.For<IAuthSessionService>();
         var mediator = Substitute.For<IMediator>();
 
-        authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+        authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new SessionTokens("jwt-token", "refresh-token")));
 
         return new VerifyCodeCommandHandler(

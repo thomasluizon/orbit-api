@@ -13,7 +13,7 @@ public class JwtTokenService(IOptions<JwtSettings> options) : ITokenService
 {
     private readonly JwtSettings _settings = options.Value;
 
-    public string GenerateToken(Guid userId, string email, bool isAdmin)
+    public string GenerateToken(Guid userId, string email)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.SecretKey));
 
@@ -23,9 +23,6 @@ public class JwtTokenService(IOptions<JwtSettings> options) : ITokenService
             new(ClaimTypes.Email, email),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
-
-        if (isAdmin)
-            claims.Add(new Claim(AdminPolicy.ClaimType, AdminPolicy.ClaimValue));
 
         var descriptor = new SecurityTokenDescriptor
         {
