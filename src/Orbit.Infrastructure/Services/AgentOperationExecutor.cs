@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -111,10 +113,23 @@ public partial class AgentOperationExecutor(
         return DeniedResponse(execution, execution.Summary, denialReason, denialReason);
     }
 
+    /// <summary>
+    /// Deterministic dedupe/confirmation key for a mutation: SHA-256 of the operation id and
+    /// raw arguments, hex-encoded (64 chars). Hashing keeps arbitrarily large tool payloads
+    /// (e.g. bulk creates) inside the fingerprint column's 256-char bound.
+    /// </summary>
+    private static string ComputeOperationFingerprint(string operationId, string argumentsJson)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{operationId}:{argumentsJson}"));
+        return Convert.ToHexString(bytes);
+    }
+
     private AgentPolicyDecision EvaluatePolicy(OperationExecutionContext execution)
     {
         var grantedScopes = GetGrantedScopes(execution.Request);
-        var operationFingerprint = $"{execution.Operation.Id}:{execution.Arguments.GetRawText()}";
+        var operationFingerprint = ComputeOperationFingerprint(
+            execution.Operation.Id,
+            execution.Arguments.GetRawText());
 
         return policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             execution.Capability.Id,
