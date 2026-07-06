@@ -78,3 +78,23 @@ jobs:
       - name: Report vulnerable test/dev packages (non-blocking)
         if: always()
         run: dotnet list package --vulnerable --include-transitive || true
+
+  migration-guard:
+    name: Guard Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fail on edits to applied migrations
+        run: |
+          git fetch origin "${{ github.base_ref }}"
+          violations=$(git diff --name-status --diff-filter=MDR "origin/${{ github.base_ref }}...HEAD" -- ':(glob)**/Migrations/**' ':(glob,exclude)**/*ModelSnapshot.cs')
+          if [ -n "$violations" ]; then
+            echo "::error::An already-applied EF migration was modified, deleted, or renamed. Migrations are append-only: add a NEW migration instead of editing an existing one (the ModelSnapshot is the only file EF regenerates)."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no existing migration was edited (new migrations are allowed)."
