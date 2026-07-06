@@ -98,3 +98,40 @@ jobs:
             exit 1
           fi
           echo "OK: no existing migration was edited (new migrations are allowed)."
+
+  convention-guard:
+    name: Guard Conventions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ban permissive CORS
+        run: |
+          violations=$(grep -rnE '\.AllowAnyHeader\(|\.AllowAnyMethod\(' src --include='*.cs' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::CORS must enumerate explicit headers and methods. AllowAnyHeader()/AllowAnyMethod() are banned."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no permissive CORS calls."
+
+      - name: Stripe key set only at startup
+        run: |
+          violations=$(grep -rnE 'StripeConfiguration\.ApiKey[[:space:]]*=' src --include='*.cs' | grep -v 'ServiceCollectionExtensions.Infrastructure.cs' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::StripeConfiguration.ApiKey may only be assigned once at startup in ServiceCollectionExtensions.Infrastructure.cs. Never set it per-request."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: StripeConfiguration.ApiKey assigned only at startup."
+
+      - name: Ban TODO/FIXME/HACK markers
+        run: |
+          violations=$(grep -rnE '\b(TODO|FIXME|HACK)\b' src --include='*.cs' | grep -v '/Migrations/' || true)
+          if [ -n "$violations" ]; then
+            echo "::error::TODO/FIXME/HACK markers are banned in committed source. Resolve the work or track it in a GitHub issue."
+            echo "$violations"
+            exit 1
+          fi
+          echo "OK: no TODO/FIXME/HACK markers in source."
