@@ -33,4 +33,29 @@ public class AgentOperationFingerprintTests
         AgentOperationFingerprint.Compute("create_habit", """{"title":"Run"}""")
             .Should().NotBe(baseline);
     }
+
+    [Fact]
+    public void Compute_IsStableAcrossKeyOrderAndWhitespace()
+    {
+        var original = AgentOperationFingerprint.Compute(
+            "bulk_create_habits",
+            """{"habits":[{"title":"Read","isBadHabit":false}],"note":"x"}""");
+
+        var jsonbRoundTrip = AgentOperationFingerprint.Compute(
+            "bulk_create_habits",
+            """
+            { "note": "x", "habits": [ { "isBadHabit": false, "title": "Read" } ] }
+            """);
+
+        jsonbRoundTrip.Should().Be(original);
+    }
+
+    [Fact]
+    public void Compute_TreatsNonJsonArgumentsAsOpaque()
+    {
+        var fingerprint = AgentOperationFingerprint.Compute("op", "not json at all");
+
+        fingerprint.Should().HaveLength(64);
+        AgentOperationFingerprint.Compute("op", "not json at all").Should().Be(fingerprint);
+    }
 }
