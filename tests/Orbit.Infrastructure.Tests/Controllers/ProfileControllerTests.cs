@@ -245,6 +245,54 @@ public class ProfileControllerTests
     }
 
     [Fact]
+    public async Task ApplyOnboarding_Success_ReturnsOkWithResponse()
+    {
+        var response = new ApplyOnboardingResponse(true, 2, false, true);
+        _mediator.Send(Arg.Any<ApplyOnboardingCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(response));
+
+        var request = new ProfileController.ApplyOnboardingRequest(
+            [new ApplyHabitInput("Drink water", null, null, null, null)], null, null, 1, "purple");
+        var result = await _controller.ApplyOnboarding(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(response);
+    }
+
+    [Fact]
+    public async Task ApplyOnboarding_Failure_ReturnsBadRequest()
+    {
+        _mediator.Send(Arg.Any<ApplyOnboardingCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<ApplyOnboardingResponse>("Error"));
+
+        var request = new ProfileController.ApplyOnboardingRequest(null, null, null, null, null);
+        var result = await _controller.ApplyOnboarding(request, CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task DismissImportPrompt_Success_ReturnsNoContent()
+    {
+        _mediator.Send(Arg.Any<DismissImportPromptCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+
+        var result = await _controller.DismissImportPrompt(CancellationToken.None);
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task DismissImportPrompt_Failure_ReturnsBadRequest()
+    {
+        _mediator.Send(Arg.Any<DismissImportPromptCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Error"));
+
+        var result = await _controller.DismissImportPrompt(CancellationToken.None);
+
+        result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(400);
+    }
+
+    [Fact]
     public async Task ResetAccount_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<ResetAccountCommand>(), Arg.Any<CancellationToken>())

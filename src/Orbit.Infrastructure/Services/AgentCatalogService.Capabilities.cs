@@ -462,6 +462,8 @@ public partial class AgentCatalogService
                     "ProfileController.SetWeekStartDay",
                     "ProfileController.SetThemePreference",
                     "ProfileController.CompleteOnboarding",
+                    "ProfileController.ApplyOnboarding",
+                    "ProfileController.DismissImportPrompt",
                     "ProfileController.CompleteTour",
                     "ProfileController.ResetTour",
                     "ProfileController.UpdateMarketingConsent"

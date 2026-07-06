@@ -114,7 +114,9 @@ public partial class AgentOperationExecutor(
     private AgentPolicyDecision EvaluatePolicy(OperationExecutionContext execution)
     {
         var grantedScopes = GetGrantedScopes(execution.Request);
-        var operationFingerprint = $"{execution.Operation.Id}:{execution.Arguments.GetRawText()}";
+        var operationFingerprint = AgentOperationFingerprint.Compute(
+            execution.Operation.Id,
+            execution.Arguments.GetRawText());
 
         return policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             execution.Capability.Id,

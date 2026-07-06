@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260705031342_AddHasSeenImportPrompt")]
+    partial class AddHasSeenImportPrompt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1900,9 +1903,6 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<bool>("HasTriedAstra")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsAdmin")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsDeactivated")
                         .HasColumnType("boolean");
 
@@ -1929,12 +1929,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<int>("LongestStreak")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime?>("MarketingConsentUpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("MarketingEmailConsent")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Name")
                         .IsRequired()

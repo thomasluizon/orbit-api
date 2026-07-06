@@ -39,6 +39,7 @@ public partial class User : Entity
     public string? PlayPurchaseToken { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
+    public bool HasSeenImportPrompt { get; private set; } = false;
     public string? GoogleAccessToken { get; private set; }
     public string? GoogleRefreshToken { get; private set; }
     public bool GoogleCalendarAutoSyncEnabled { get; private set; }
@@ -309,6 +310,8 @@ public partial class User : Entity
     }
 
     public void MarkCalendarImported() => HasImportedCalendar = true;
+
+    public void MarkImportPromptSeen() => HasSeenImportPrompt = true;
 
     public Result EnableCalendarAutoSync()
     {
