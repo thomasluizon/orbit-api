@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Api.Extensions;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
@@ -366,14 +367,15 @@ public static partial class WebApplicationExtensions
                 if (paramsElement.TryGetProperty("operationId", out var operationIdElement))
                     operationId = operationIdElement.GetString();
 
-                if (paramsElement.TryGetProperty("arguments", out var argumentsElement))
-                    operationFingerprint = $"{operationId}:{argumentsElement.GetRawText()}";
-                else
-                    operationFingerprint = $"{operationId}:{{}}";
+                operationFingerprint = paramsElement.TryGetProperty("arguments", out var argumentsElement)
+                    ? AgentOperationFingerprint.Compute(operationId ?? string.Empty, argumentsElement.GetRawText())
+                    : AgentOperationFingerprint.Compute(operationId ?? string.Empty, "{}");
             }
             else
             {
-                operationFingerprint = $"{toolName}:{paramsElement.GetRawText()}";
+                operationFingerprint = AgentOperationFingerprint.Compute(
+                    toolName ?? string.Empty,
+                    paramsElement.GetRawText());
             }
 
             return !string.IsNullOrWhiteSpace(toolName);

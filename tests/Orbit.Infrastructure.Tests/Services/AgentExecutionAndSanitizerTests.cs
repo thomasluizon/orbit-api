@@ -170,6 +170,41 @@ public class AgentExecutionAndSanitizerTests
     }
 
     [Fact]
+    public async Task AgentOperationExecutor_HashesFingerprintSoLargePayloadsFitTheColumn()
+    {
+        var catalog = Substitute.For<IAgentCatalogService>();
+        var capability = CreateCapability(AgentCapabilityIds.HabitsWrite, AgentScopes.WriteHabits, AgentRiskClass.Low, AgentConfirmationRequirement.None, isMutation: true);
+        var operation = CreateOperation("bulk_create_habits", capability.Id, isMutation: true, isAgentExecutable: true, AgentConfirmationRequirement.None, AgentRiskClass.Low);
+        catalog.GetOperation(operation.Id).Returns(operation);
+        catalog.GetCapability(capability.Id).Returns(capability);
+        var policy = Substitute.For<IAgentPolicyEvaluator>();
+        var capturedContexts = new List<AgentPolicyEvaluationContext>();
+        policy.Evaluate(Arg.Do<AgentPolicyEvaluationContext>(capturedContexts.Add))
+            .Returns(callInfo => new AgentPolicyDecision(
+                AgentPolicyDecisionStatus.Denied,
+                capability,
+                "missing_scope:write_habits"));
+        var executor = CreateExecutor(catalog, policyEvaluator: policy);
+
+        var habits = string.Join(",", Enumerable.Range(1, 10).Select(index =>
+            $$"""{"title":"Generic unique task number {{index}} with a deliberately long descriptive title"}"""));
+        var largeArguments = Parse($$"""{"habits":[{{habits}}]}""");
+
+        await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, largeArguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+        await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, largeArguments, AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+        await executor.ExecuteAsync(new AgentExecuteOperationRequest(
+            UserId, operation.Id, Parse("""{"habits":[{"title":"Single"}]}"""), AgentExecutionSurface.Chat, AgentAuthMethod.Jwt));
+
+        capturedContexts.Should().HaveCount(3);
+        capturedContexts[0].OperationFingerprint.Should().HaveLength(64);
+        capturedContexts[0].OperationFingerprint.Should().MatchRegex("^[0-9A-F]{64}$");
+        capturedContexts[1].OperationFingerprint.Should().Be(capturedContexts[0].OperationFingerprint);
+        capturedContexts[2].OperationFingerprint.Should().NotBe(capturedContexts[0].OperationFingerprint);
+    }
+
+    [Fact]
     public async Task AgentOperationExecutor_UsesFallbackScopesForJwtRequests()
     {
         var catalog = Substitute.For<IAgentCatalogService>();
