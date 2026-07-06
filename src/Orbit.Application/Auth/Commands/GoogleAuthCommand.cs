@@ -44,7 +44,7 @@ public partial class GoogleAuthCommandHandler(
         if (wasReactivated || request.GoogleAccessToken is not null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, user.IsAdmin, cancellationToken);
+        var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)
             return sessionResult.PropagateError<LoginResponse>();
 
