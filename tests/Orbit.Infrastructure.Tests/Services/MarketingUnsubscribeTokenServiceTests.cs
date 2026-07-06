@@ -1,26 +1,25 @@
 using FluentAssertions;
-using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Options;
+using Orbit.Application.Common;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 public class MarketingUnsubscribeTokenServiceTests
 {
-    private readonly IDataProtectionProvider _provider = new EphemeralDataProtectionProvider();
-    private readonly MarketingUnsubscribeTokenService _sut;
+    private const string SigningKey = "marketing-unsubscribe-signing-key-at-least-32-bytes";
 
-    public MarketingUnsubscribeTokenServiceTests()
-    {
-        _sut = new MarketingUnsubscribeTokenService(_provider);
-    }
+    private static MarketingUnsubscribeTokenService Build(string signingKey = SigningKey) =>
+        new(Options.Create(new MarketingSettings { UnsubscribeSigningKey = signingKey }));
 
     [Fact]
     public void CreateToken_ThenValidate_RoundTripsUserId()
     {
+        var sut = Build();
         var userId = Guid.NewGuid();
 
-        var token = _sut.CreateToken(userId);
-        var valid = _sut.TryValidateToken(token, out var parsedUserId);
+        var token = sut.CreateToken(userId);
+        var valid = sut.TryValidateToken(token, out var parsedUserId);
 
         valid.Should().BeTrue();
         parsedUserId.Should().Be(userId);
@@ -29,22 +28,22 @@ public class MarketingUnsubscribeTokenServiceTests
     [Fact]
     public void TryValidateToken_TamperedToken_Fails()
     {
-        var token = _sut.CreateToken(Guid.NewGuid());
+        var sut = Build();
+        var token = sut.CreateToken(Guid.NewGuid());
         var tampered = token[..^2] + (token.EndsWith('a') ? "bb" : "aa");
 
-        var valid = _sut.TryValidateToken(tampered, out var parsedUserId);
+        var valid = sut.TryValidateToken(tampered, out var parsedUserId);
 
         valid.Should().BeFalse();
         parsedUserId.Should().Be(Guid.Empty);
     }
 
     [Fact]
-    public void TryValidateToken_TokenFromDifferentPurpose_Fails()
+    public void TryValidateToken_TokenSignedWithDifferentKey_Fails()
     {
-        var foreignProtector = _provider.CreateProtector("some-other-purpose");
-        var foreignToken = foreignProtector.Protect($"{Guid.NewGuid():N}|0");
+        var foreignToken = Build("a-completely-different-signing-key-value-here-32b").CreateToken(Guid.NewGuid());
 
-        var valid = _sut.TryValidateToken(foreignToken, out _);
+        var valid = Build().TryValidateToken(foreignToken, out _);
 
         valid.Should().BeFalse();
     }
@@ -52,7 +51,15 @@ public class MarketingUnsubscribeTokenServiceTests
     [Fact]
     public void TryValidateToken_EmptyToken_Fails()
     {
-        _sut.TryValidateToken("", out var parsedUserId).Should().BeFalse();
+        Build().TryValidateToken("", out var parsedUserId).Should().BeFalse();
         parsedUserId.Should().Be(Guid.Empty);
+    }
+
+    [Fact]
+    public void CreateToken_NoSigningKeyConfigured_Throws()
+    {
+        var act = () => Build(signingKey: "").CreateToken(Guid.NewGuid());
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }

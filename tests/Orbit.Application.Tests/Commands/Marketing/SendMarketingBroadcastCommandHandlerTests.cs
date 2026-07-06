@@ -131,12 +131,31 @@ public class SendMarketingBroadcastCommandHandlerTests
         _emailService.MarketingSends.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Handle_OneRecipientSendFails_ContinuesWithTheRest()
+    {
+        var first = User.Create("First", "first@example.com").Value;
+        var second = User.Create("Second", "second@example.com").Value;
+        _emailService.FailForEmail = "first@example.com";
+        AudienceReturns(first, second);
+
+        var result = await _handler.Handle(Command(), CancellationToken.None);
+
+        result.Value.RecipientCount.Should().Be(2);
+        await WaitForSendCountAsync(_emailService, 1);
+        _emailService.MarketingSends.Should().ContainSingle(send => send.To == "second@example.com");
+    }
+
     private sealed class RecordingEmailService : IEmailService
     {
         public ConcurrentBag<(string To, string Subject, string Body, string Language, string UnsubscribeUrl)> MarketingSends { get; } = [];
+        public string? FailForEmail { get; set; }
 
         public Task SendMarketingEmailAsync(string toEmail, string subject, string bodyHtml, string language, string unsubscribeUrl, CancellationToken cancellationToken = default)
         {
+            if (toEmail == FailForEmail)
+                throw new InvalidOperationException("send failed");
+
             MarketingSends.Add((toEmail, subject, bodyHtml, language, unsubscribeUrl));
             return Task.CompletedTask;
         }

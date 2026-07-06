@@ -6,4 +6,5 @@ public class MarketingSettings
 
     public string ApiBaseUrl { get; set; } = "https://api.useorbit.org";
     public int SendDelayMilliseconds { get; set; } = 100;
+    public string UnsubscribeSigningKey { get; set; } = "";
 }

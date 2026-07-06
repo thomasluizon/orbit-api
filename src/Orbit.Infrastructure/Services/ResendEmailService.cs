@@ -17,7 +17,6 @@ public partial class ResendEmailService(
     ILogger<ResendEmailService> logger) : IEmailService
 {
     private const int MaxMarketingRetries = 4;
-    private const double MarketingBaseBackoffMs = 500;
 
     private readonly ResendSettings _settings = options.Value;
     private readonly string _frontendBaseUrl = frontendSettings.Value.BaseUrl;
@@ -191,7 +190,7 @@ public partial class ResendEmailService(
                 }
             }
 
-            var backoff = TimeSpan.FromMilliseconds(MarketingBaseBackoffMs * Math.Pow(2, attempt));
+            var backoff = TimeSpan.FromMilliseconds(_settings.MarketingRetryBaseDelayMs * Math.Pow(2, attempt));
             if (logger.IsEnabled(LogLevel.Warning))
                 LogMarketingRetry(logger, to, attempt + 1, backoff.TotalMilliseconds);
             await Task.Delay(backoff, cancellationToken);

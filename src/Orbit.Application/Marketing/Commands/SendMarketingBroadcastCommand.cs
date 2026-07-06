@@ -67,18 +67,27 @@ public partial class SendMarketingBroadcastCommandHandler(
                 var bgTokenService = scope.ServiceProvider.GetRequiredService<IMarketingUnsubscribeTokenService>();
                 var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<SendMarketingBroadcastCommandHandler>>();
 
+                var failureCount = 0;
                 foreach (var recipient in recipients)
                 {
-                    var content = RenderFor(request, recipient.Language);
-                    var unsubscribeUrl = BuildUnsubscribeUrl(bgTokenService.CreateToken(recipient.UserId), recipient.Language);
-                    await bgEmailService.SendMarketingEmailAsync(
-                        recipient.Email, content.Subject, content.BodyHtml, recipient.Language, unsubscribeUrl, CancellationToken.None);
+                    try
+                    {
+                        var content = RenderFor(request, recipient.Language);
+                        var unsubscribeUrl = BuildUnsubscribeUrl(bgTokenService.CreateToken(recipient.UserId), recipient.Language);
+                        await bgEmailService.SendMarketingEmailAsync(
+                            recipient.Email, content.Subject, content.BodyHtml, recipient.Language, unsubscribeUrl, CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        failureCount++;
+                        LogRecipientSendFailed(bgLogger, ex, recipient.UserId);
+                    }
 
                     if (_settings.SendDelayMilliseconds > 0)
                         await Task.Delay(_settings.SendDelayMilliseconds, CancellationToken.None);
                 }
 
-                LogBroadcastCompleted(bgLogger, recipients.Count);
+                LogBroadcastCompleted(bgLogger, recipients.Count - failureCount, failureCount);
             }
             catch (Exception ex)
             {
@@ -106,9 +115,12 @@ public partial class SendMarketingBroadcastCommandHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Marketing broadcast queued: {RecipientCount} recipients, subject={Subject}, at {QueuedAtUtc:o}")]
     private static partial void LogBroadcastQueued(ILogger logger, int recipientCount, string subject, DateTime queuedAtUtc);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Marketing broadcast fan-out completed for {RecipientCount} recipients")]
-    private static partial void LogBroadcastCompleted(ILogger logger, int recipientCount);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Marketing broadcast fan-out completed: {SentCount} sent, {FailedCount} failed")]
+    private static partial void LogBroadcastCompleted(ILogger logger, int sentCount, int failedCount);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Marketing broadcast fan-out failed after queuing {RecipientCount} recipients")]
     private static partial void LogBroadcastFailed(ILogger logger, Exception ex, int recipientCount);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Marketing broadcast send failed for recipient {UserId}; continuing with the rest")]
+    private static partial void LogRecipientSendFailed(ILogger logger, Exception ex, Guid userId);
 }

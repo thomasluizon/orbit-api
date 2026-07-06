@@ -401,9 +401,10 @@ public partial class User : Entity
     public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
 
     /// <summary>
-    /// Grants this user the single administrative role, which gates admin-only endpoints
-    /// (e.g. the marketing broadcast sender) via the JWT admin claim and the "Admin" policy.
-    /// Idempotent. Only ever called by the startup bootstrap seeder for configured operator emails.
+    /// Grants this user the single administrative role — the only code path that sets IsAdmin, which
+    /// mints the JWT admin claim the "Admin" policy gates admin-only endpoints on. Idempotent. The
+    /// first admin is bootstrapped by a direct DB update; this mutator is the seam a future in-app
+    /// admin dashboard uses to grant admin.
     /// </summary>
     public void GrantAdmin() => IsAdmin = true;
 
