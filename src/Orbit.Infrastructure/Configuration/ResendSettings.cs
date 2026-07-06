@@ -6,4 +6,6 @@ public sealed class ResendSettings
     public required string ApiKey { get; init; }
     public required string FromEmail { get; init; }
     public string SupportEmail { get; init; } = "contact@useorbit.org";
+    public string MarketingFromEmail { get; init; } = "Orbit <news@updates.useorbit.org>";
+    public double MarketingRetryBaseDelayMs { get; init; } = 500;
 }

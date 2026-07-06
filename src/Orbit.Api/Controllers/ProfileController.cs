@@ -28,6 +28,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record SetColorSchemeRequest(string? ColorScheme);
     public record SetHandleRequest(string Handle);
     public record SetSocialOptInRequest([property: JsonRequired] bool Enabled);
+    public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
     public record UpdatePublicProfileRequest(
         [property: JsonRequired] bool Enabled,
         bool ShowStreak,
@@ -311,6 +312,23 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         return result.ToPayGateAwareResult(() => NoContent());
     }
 
+    [HttpPut("marketing-consent")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateMarketingConsent(
+        [FromBody] UpdateMarketingConsentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new UpdateMarketingConsentCommand(HttpContext.GetUserId(), request.Enabled);
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+            LogMarketingConsentChanged(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+
+        return result.ToPayGateAwareResult(() => NoContent());
+    }
+
     [HttpPut("public")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -402,6 +420,9 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Public profile {State} for user {UserId}")]
     private static partial void LogPublicProfileUpdated(ILogger logger, string state, Guid userId);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Information, Message = "Marketing email consent {State} for user {UserId}")]
+    private static partial void LogMarketingConsentChanged(ILogger logger, string state, Guid userId);
 
     [LoggerMessage(EventId = 13, Level = LogLevel.Information, Message = "Proactive Astra check-ins {State} for user {UserId}")]
     private static partial void LogProactiveAstraToggled(ILogger logger, string state, Guid userId);

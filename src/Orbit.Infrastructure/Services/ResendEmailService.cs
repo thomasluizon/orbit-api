@@ -16,6 +16,8 @@ public partial class ResendEmailService(
     IOptions<FrontendSettings> frontendSettings,
     ILogger<ResendEmailService> logger) : IEmailService
 {
+    private const int MaxMarketingRetries = 4;
+
     private readonly ResendSettings _settings = options.Value;
     private readonly string _frontendBaseUrl = frontendSettings.Value.BaseUrl;
 
@@ -100,6 +102,99 @@ public partial class ResendEmailService(
         var text = EmailTemplateRenderer.RenderText("WaitlistConfirmation", tokens);
 
         await SendEmailAsync(toEmail, copy.Subject, html, text, cancellationToken);
+    }
+
+    public async Task SendMarketingEmailAsync(
+        string toEmail, string subject, string bodyHtml, string language, string unsubscribeUrl, CancellationToken cancellationToken = default)
+    {
+        var isPtBr = LocaleHelper.IsPortuguese(language);
+        var footer = MarketingFooterHtml(isPtBr, unsubscribeUrl);
+        var layout = new EmailLayout(LangCode(isPtBr), Preheader: "", footer, LogoUrl, GradientHeader: true);
+        var html = EmailTemplateRenderer.RenderLayout(layout, bodyHtml);
+
+        var payload = new
+        {
+            from = _settings.MarketingFromEmail,
+            to = new[] { toEmail },
+            subject,
+            html,
+            headers = new Dictionary<string, string>
+            {
+                ["List-Unsubscribe"] = $"<{unsubscribeUrl}>",
+                ["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click",
+            },
+        };
+
+        await SendMarketingWithBackoffAsync(toEmail, subject, JsonSerializer.Serialize(payload), cancellationToken);
+    }
+
+    private static string MarketingFooterHtml(bool isPtBr, string unsubscribeUrl)
+    {
+        const string legalIdentity =
+            "TL SOFTWARE ENGINEERING LTDA · CNPJ 58.429.979/0001-06 · Av. Nova Independência, 651 — Brooklin Paulista, São Paulo – SP · CEP 04570-001";
+
+        var (reason, unsubscribeLabel) = isPtBr
+            ? ("Você está recebendo este e-mail porque optou por receber novidades do Orbit.", "Cancelar inscrição")
+            : ("You're receiving this because you opted in to product updates from Orbit.", "Unsubscribe");
+
+        var encodedUrl = WebUtility.HtmlEncode(unsubscribeUrl);
+        return $"{reason}<br>{legalIdentity}<br>" +
+            $"<a href=\"{encodedUrl}\" style=\"color: #90A1B9; text-decoration: underline;\">{unsubscribeLabel}</a>";
+    }
+
+    private async Task SendMarketingWithBackoffAsync(string to, string subject, string serializedPayload, CancellationToken cancellationToken)
+    {
+        if (IsTestAccount(to))
+        {
+            if (logger.IsEnabled(LogLevel.Information))
+                LogSkippingTestEmail(logger, to, subject);
+            return;
+        }
+
+        var client = httpClientFactory.CreateClient("Resend");
+
+        for (var attempt = 0; attempt <= MaxMarketingRetries; attempt++)
+        {
+            HttpResponseMessage response;
+            try
+            {
+                using var content = new StringContent(serializedPayload, Encoding.UTF8, "application/json");
+                response = await client.PostAsync("/emails", content, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                LogEmailSendException(logger, ex, to);
+                return;
+            }
+
+            using (response)
+            {
+                if (response.IsSuccessStatusCode)
+                {
+                    if (logger.IsEnabled(LogLevel.Information))
+                        LogEmailSent(logger, to, subject);
+                    return;
+                }
+
+                var isRetriable = response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
+                if (!isRetriable || attempt == MaxMarketingRetries)
+                {
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                    if (logger.IsEnabled(LogLevel.Error))
+                        LogEmailFailed(logger, to, response.StatusCode, body);
+                    return;
+                }
+            }
+
+            var backoff = TimeSpan.FromMilliseconds(_settings.MarketingRetryBaseDelayMs * Math.Pow(2, attempt));
+            if (logger.IsEnabled(LogLevel.Warning))
+                LogMarketingRetry(logger, to, attempt + 1, backoff.TotalMilliseconds);
+            await Task.Delay(backoff, cancellationToken);
+        }
     }
 
     public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)
@@ -217,5 +312,8 @@ public partial class ResendEmailService(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Email send exception to {To}")]
     private static partial void LogEmailSendException(ILogger logger, Exception ex, string to);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Marketing email to {To} rate-limited; retry {Attempt} after {BackoffMs}ms")]
+    private static partial void LogMarketingRetry(ILogger logger, string to, int attempt, double backoffMs);
 
 }

@@ -24,7 +24,7 @@ public class AuthSessionService(
             ? nowUtc.AddDays(_jwtSettings.RefreshExpiryDays.Value)
             : null;
 
-    public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, CancellationToken cancellationToken = default)
+    public async Task<Result<SessionTokens>> CreateSessionAsync(Guid userId, string email, bool isAdmin, CancellationToken cancellationToken = default)
     {
         var refreshToken = GenerateRefreshToken();
         var nowUtc = DateTime.UtcNow;
@@ -40,7 +40,7 @@ public class AuthSessionService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new SessionTokens(
-            tokenService.GenerateToken(userId, email),
+            tokenService.GenerateToken(userId, email, isAdmin),
             refreshToken));
     }
 
@@ -69,7 +69,7 @@ public class AuthSessionService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new SessionTokens(
-            tokenService.GenerateToken(user.Id, user.Email),
+            tokenService.GenerateToken(user.Id, user.Email, user.IsAdmin),
             newRefreshToken));
     }
 

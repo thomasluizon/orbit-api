@@ -56,6 +56,9 @@ public partial class User : Entity
     public Guid? ReferredByUserId { get; private set; }
     public string? Handle { get; private set; }
     public bool SocialOptIn { get; private set; }
+    public bool IsAdmin { get; private set; }
+    public bool? MarketingEmailConsent { get; private set; }
+    public DateTime? MarketingConsentUpdatedAtUtc { get; private set; }
     public int TotalXp { get; private set; } = 0;
     public int Level { get; private set; } = 1;
     public string? ReferralCouponId { get; private set; }
@@ -399,6 +402,25 @@ public partial class User : Entity
     public void SeedDefaultHandle() => Handle = $"user_{Id:N}"[..17];
 
     public void SetSocialOptIn(bool enabled) => SocialOptIn = enabled;
+
+    /// <summary>
+    /// Grants this user the single administrative role — the only code path that sets IsAdmin, which
+    /// mints the JWT admin claim the "Admin" policy gates admin-only endpoints on. Idempotent. The
+    /// first admin is bootstrapped by a direct DB update; this mutator is the seam a future in-app
+    /// admin dashboard uses to grant admin.
+    /// </summary>
+    public void GrantAdmin() => IsAdmin = true;
+
+    /// <summary>
+    /// Records the user's explicit product-marketing-email consent decision (<c>true</c> = opted in,
+    /// <c>false</c> = opted out) and stamps the decision time. A null value means never asked; once set
+    /// it stays non-null so the one-time in-app consent prompt never shows again.
+    /// </summary>
+    public void SetMarketingConsent(bool consented)
+    {
+        MarketingEmailConsent = consented;
+        MarketingConsentUpdatedAtUtc = DateTime.UtcNow;
+    }
 
     /// <summary>
     /// Sets (or clears, when null) the opaque token that addresses the user's public shareable

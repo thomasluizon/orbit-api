@@ -172,5 +172,8 @@ public class AgentStepUpServiceTests : IDisposable
 
         public Task SendWaitlistConfirmationAsync(string toEmail, string confirmUrl, string language = "en", CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+
+        public Task SendMarketingEmailAsync(string toEmail, string subject, string bodyHtml, string language, string unsubscribeUrl, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }
