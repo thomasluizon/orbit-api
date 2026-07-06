@@ -1,46 +1,75 @@
+using System.Linq.Expressions;
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.DependencyInjection;
-using Orbit.Application.Common;
+using NSubstitute;
+using Orbit.Api.Authorization;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Authorization;
 
 public class AdminAuthorizationPolicyTests
 {
-    private static IAuthorizationService BuildAuthorizationService()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddAuthorization(options =>
-            options.AddPolicy(AdminPolicy.Name, policy =>
-                policy.RequireClaim(AdminPolicy.ClaimType, AdminPolicy.ClaimValue)));
+    private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
+    private readonly AdminAuthorizationHandler _handler;
 
-        return services.BuildServiceProvider().GetRequiredService<IAuthorizationService>();
+    public AdminAuthorizationPolicyTests()
+    {
+        _handler = new AdminAuthorizationHandler(_userRepository);
+    }
+
+    [Fact]
+    public async Task AdminUser_Succeeds()
+    {
+        _userRepository.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        var context = ContextFor(Principal(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AuthenticatedNonAdmin_DoesNotSucceed()
+    {
+        _userRepository.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        var context = ContextFor(Principal(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task MissingNameIdentifier_DoesNotSucceed_AndSkipsRepository()
+    {
+        var context = ContextFor(Principal());
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+        await _userRepository.DidNotReceive()
+            .AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UnparseableNameIdentifier_DoesNotSucceed_AndSkipsRepository()
+    {
+        var context = ContextFor(Principal(new Claim(ClaimTypes.NameIdentifier, "not-a-guid")));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+        await _userRepository.DidNotReceive()
+            .AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
     }
 
     private static ClaimsPrincipal Principal(params Claim[] claims) =>
         new(new ClaimsIdentity(claims, authenticationType: "Test"));
 
-    [Fact]
-    public async Task AdminClaim_IsAllowed()
-    {
-        var principal = Principal(
-            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
-            new Claim(AdminPolicy.ClaimType, AdminPolicy.ClaimValue));
-
-        var result = await BuildAuthorizationService().AuthorizeAsync(principal, resource: null, AdminPolicy.Name);
-
-        result.Succeeded.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task AuthenticatedNonAdmin_IsDenied()
-    {
-        var principal = Principal(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()));
-
-        var result = await BuildAuthorizationService().AuthorizeAsync(principal, resource: null, AdminPolicy.Name);
-
-        result.Succeeded.Should().BeFalse();
-    }
+    private static AuthorizationHandlerContext ContextFor(ClaimsPrincipal principal) =>
+        new([new AdminRequirement()], principal, resource: null);
 }

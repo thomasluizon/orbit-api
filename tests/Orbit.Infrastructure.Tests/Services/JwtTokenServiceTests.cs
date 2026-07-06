@@ -3,7 +3,6 @@ using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using Orbit.Application.Common;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Services;
 
@@ -34,7 +33,7 @@ public class JwtTokenServiceTests
         var userId = Guid.NewGuid();
         var email = "test@example.com";
 
-        var token = _sut.GenerateToken(userId, email, false);
+        var token = _sut.GenerateToken(userId, email);
 
         token.Should().NotBeNullOrWhiteSpace();
     }
@@ -45,7 +44,7 @@ public class JwtTokenServiceTests
         var userId = Guid.NewGuid();
         var email = "test@example.com";
 
-        var token = _sut.GenerateToken(userId, email, false);
+        var token = _sut.GenerateToken(userId, email);
 
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
@@ -61,7 +60,7 @@ public class JwtTokenServiceTests
         var userId = Guid.NewGuid();
         var email = "user@orbit.test";
 
-        var token = _sut.GenerateToken(userId, email, false);
+        var token = _sut.GenerateToken(userId, email);
 
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
@@ -72,24 +71,15 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
-    public void GenerateToken_WhenAdmin_ContainsAdminClaim()
+    public void GenerateToken_OmitsAdminClaim()
     {
-        var token = _sut.GenerateToken(Guid.NewGuid(), "admin@orbit.test", isAdmin: true);
+        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test");
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
 
-        jwt.Claims.Should().Contain(c =>
-            c.Type == AdminPolicy.ClaimType && c.Value == AdminPolicy.ClaimValue);
-    }
-
-    [Fact]
-    public void GenerateToken_WhenNotAdmin_OmitsAdminClaim()
-    {
-        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test", isAdmin: false);
-
-        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
-
-        jwt.Claims.Should().NotContain(c => c.Type == AdminPolicy.ClaimType);
+        jwt.Claims.Should().NotContain(c =>
+            c.Type.Contains("admin", StringComparison.OrdinalIgnoreCase)
+            || c.Value.Contains("admin", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -99,7 +89,7 @@ public class JwtTokenServiceTests
         var email = "test@example.com";
         var beforeGeneration = DateTime.UtcNow;
 
-        var token = _sut.GenerateToken(userId, email, false);
+        var token = _sut.GenerateToken(userId, email);
 
         var handler = new JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(token);
