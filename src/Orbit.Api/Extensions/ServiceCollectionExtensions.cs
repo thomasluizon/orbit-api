@@ -2,11 +2,13 @@ using System.Text;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Sentry;
 using Sentry.AspNetCore;
 using Orbit.Api.Authentication;
+using Orbit.Api.Authorization;
 using Orbit.Api.OAuth;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
@@ -157,8 +159,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddAuthorization(options =>
         {
             options.AddPolicy(AdminPolicy.Name, policy =>
-                policy.RequireClaim(AdminPolicy.ClaimType, AdminPolicy.ClaimValue));
+                policy.Requirements.Add(new AdminRequirement()));
         });
+        builder.Services.AddScoped<IAuthorizationHandler, AdminAuthorizationHandler>();
 
         return builder;
     }

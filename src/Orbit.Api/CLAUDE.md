@@ -12,7 +12,7 @@ Controllers, middleware, OpenAPI/Scalar, DI config, `Program.cs`. This project s
 
 ## Authorization
 
-Default to `[Authorize]` at the controller class level. Override with `[AllowAnonymous]` on individual actions when truly public (e.g., `POST /api/auth/send-code`). The middleware pipeline rejects unauthenticated requests for `[Authorize]` endpoints with 401.
+`[Authorize]` at the controller class level (the `csharp-authz` hook blocks a Controller with neither `[Authorize]` nor `[AllowAnonymous]`); the pipeline 401s unauthenticated `[Authorize]` requests. Override with `[AllowAnonymous]` per-action only when truly public (e.g., `POST /api/auth/send-code`).
 
 Exempt by construction:
 - `GET /health` (mapped via `MapHealthChecks` in `Extensions/WebApplicationExtensions.cs` — no controller)
