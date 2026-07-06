@@ -14,8 +14,8 @@ Clean architecture, four projects: `Orbit.Api` → `Orbit.Application` → `Orbi
 
 These apply everywhere — they override project-local conventions if they conflict.
 
-- **Timezone:** All user-facing dates MUST use `IUserDateService.GetUserTodayAsync(userId)`. NEVER use `DateOnly.FromDateTime(DateTime.UtcNow)` for user-facing logic. `DateTime.UtcNow` is only acceptable for `CreatedAtUtc` timestamps in entity factories and cache key generation.
-- **Authorization:** Every controller endpoint requires JWT Bearer unless it's `/health` or `/api/auth/*`. If you add an endpoint, default to `[Authorize]`. Use `[AllowAnonymous]` explicitly only when the endpoint truly is public.
+- **Timezone:** All user-facing dates MUST use `IUserDateService.GetUserTodayAsync(userId)`. `DateTime.UtcNow` is only for `CreatedAtUtc`/`UpdatedAtUtc` timestamps and cache keys — the `csharp-tz` hook blocks raw `DateTime.UtcNow`/`DateOnly.FromDateTime(DateTime.UtcNow)` in `Orbit.Application`.
+- **Authorization:** default `[Authorize]`; the `csharp-authz` hook blocks a Controller with no `[Authorize]`/`[AllowAnonymous]`. Exempt (mark `[AllowAnonymous]`): `/health`, `/api/auth/*`, signature-verified webhooks.
 - **Validation:** Every new feature needs validators in `Orbit.Application/<Feature>/Validators/` AND domain-entity guards in factory/update methods. The backend is the source of truth — never trust the frontend.
 - **Logging levels.** Inject `ILogger<T>`; structured properties in PascalCase, English only (`logger.LogInformation("Action {Property}", value)`). Reserve each level so prod logs carry only signal:
   - **Trace/Debug** — routine per-operation success, AI call lifecycle + token usage, per-step progress, per-delivery sends. Filtered out in prod.
@@ -25,7 +25,7 @@ These apply everywhere — they override project-local conventions if they confl
   - Prod minimum levels (framework namespaces → `Warning`) live in `appsettings.Production.json`.
 - **No workarounds.** Root-cause every bug. No `TODO`/`FIXME`/`HACK` in committed code. No empty `catch {}`. No `as any`-equivalents like unjustified `null!`.
 - **No dead code.** Delete unused methods, types, parameters, branches the moment they become orphaned by your change.
-- **No narration comments (analyzer-enforced).** Code must read without prose. The only comments allowed are XML-doc comments (`///` or `/** */`) documenting a symbol's intent/contract, and a WHY note that links an upstream issue/PR/doc URL. Everything else is an error (`ORBIT0001`, from `src/Orbit.Analyzers`) and is autofixable via `dotnet format`. To explain code, rename it or extract a well-named method — don't narrate.
+- **Narration comments are `ORBIT0001` build errors** (`src/Orbit.Analyzers`; only `///`/`/** */` XML-doc or a URL-linked WHY note survive; autofix via `dotnet format`). The analyzer is silent in local builds but fails CI — grep for bare `//` before pushing.
 
 ## Cross-repo parity contract
 
