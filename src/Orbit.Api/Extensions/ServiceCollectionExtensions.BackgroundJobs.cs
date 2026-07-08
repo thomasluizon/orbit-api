@@ -15,16 +15,19 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<ISlipAlertMessageService, AiSlipAlertMessageService>();
         builder.Services.AddScoped<IProactiveCheckinMessageService, AiProactiveCheckinMessageService>();
 
-        var useDurableQueue = builder.Configuration.GetSection(BackgroundJobSettings.SectionName)
-            .Get<BackgroundJobSettings>()?.UseDurableQueue ?? false;
+        if (!BuildTimeDocumentGeneration.IsActive)
+        {
+            var useDurableQueue = builder.Configuration.GetSection(BackgroundJobSettings.SectionName)
+                .Get<BackgroundJobSettings>()?.UseDurableQueue ?? false;
 
-        builder.Services.AddHostedService<DataEncryptionMigrationService>();
-        builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
+            builder.Services.AddHostedService<DataEncryptionMigrationService>();
+            builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
 
-        if (useDurableQueue)
-            AddDurableRecurringJobs(builder);
-        else
-            AddInProcessSchedulers(builder);
+            if (useDurableQueue)
+                AddDurableRecurringJobs(builder);
+            else
+                AddInProcessSchedulers(builder);
+        }
 
         builder.Services.AddHealthChecks()
             .AddCheck<BackgroundServiceHealthCheck>("background-services");

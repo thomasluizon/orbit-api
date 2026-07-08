@@ -27,6 +27,9 @@ public static partial class ServiceCollectionExtensions
 {
     public static WebApplicationBuilder ValidateOrbitSecuritySettings(this WebApplicationBuilder builder)
     {
+        if (BuildTimeDocumentGeneration.IsActive)
+            return builder;
+
         var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
         jwtSettings?.Validate();
 
