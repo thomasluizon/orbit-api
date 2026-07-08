@@ -4,6 +4,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build
@@ -22,6 +25,14 @@ jobs:
 
       - name: Build
         run: dotnet build --no-restore
+
+      - name: Fail if committed openapi.json is stale
+        run: |
+          if ! git diff --exit-code -- src/Orbit.Api/openapi.json; then
+            echo "::error::openapi.json is stale. Run 'dotnet build src/Orbit.Api' and commit src/Orbit.Api/openapi.json."
+            exit 1
+          fi
+          echo "OK: committed openapi.json matches the build output."
 
   unit-tests:
     name: Unit Tests
@@ -135,3 +146,34 @@ jobs:
             exit 1
           fi
           echo "OK: no TODO/FIXME/HACK markers in source."
+
+  openapi-breaking:
+    name: OpenAPI Breaking-Change Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}"
+
+      - name: Check base spec exists
+        id: base-spec
+        run: |
+          if git cat-file -e "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json" 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No openapi.json on origin/${{ github.base_ref }} yet; skipping breaking-change diff (first-PR bootstrap)."
+          fi
+
+      - name: Detect breaking API changes
+        if: steps.base-spec.outputs.exists == 'true'
+        uses: oasdiff/oasdiff-action/breaking@v0
+        with:
+          base: "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
+          revision: "src/Orbit.Api/openapi.json"
+          fail-on: ERR
+          review: false

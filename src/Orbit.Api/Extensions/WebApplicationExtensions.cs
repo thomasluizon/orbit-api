@@ -17,13 +17,14 @@ public static partial class WebApplicationExtensions
 {
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
-        var migrationConnectionString = OrbitConnectionStringFactory.ForSession(app.Configuration);
-        var migrationOptions = new DbContextOptionsBuilder<OrbitDbContext>()
-            .UseNpgsql(migrationConnectionString, npgsql =>
-                npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null))
-            .Options;
-        await using (var migrationDb = new OrbitDbContext(migrationOptions))
+        if (!BuildTimeDocumentGeneration.IsActive)
         {
+            var migrationConnectionString = OrbitConnectionStringFactory.ForSession(app.Configuration);
+            var migrationOptions = new DbContextOptionsBuilder<OrbitDbContext>()
+                .UseNpgsql(migrationConnectionString, npgsql =>
+                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null))
+                .Options;
+            await using var migrationDb = new OrbitDbContext(migrationOptions);
             await migrationDb.Database.MigrateAsync();
         }
 
