@@ -686,7 +686,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(s => new { s.UserId, s.GoogleEventId }).IsUnique();
             entity.HasIndex(s => new { s.UserId, s.DismissedAtUtc, s.ImportedAtUtc });
 
-            entity.Property(s => s.GoogleEventId).HasMaxLength(256).IsRequired();
+            entity.Property(s => s.GoogleEventId).HasMaxLength(1024).IsRequired();
 
             entity.HasOne<User>()
                 .WithMany()
@@ -713,7 +713,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasQueryFilter(h => !h.IsDeleted);
 
-            entity.Property(h => h.GoogleEventId).HasMaxLength(256);
+            entity.Property(h => h.GoogleEventId).HasMaxLength(1024);
             entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
                 .HasFilter("\"GoogleEventId\" IS NOT NULL AND \"IsDeleted\" = FALSE")
                 .IsUnique();

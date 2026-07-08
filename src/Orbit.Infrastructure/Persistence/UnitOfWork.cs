@@ -35,7 +35,6 @@ public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisp
             }
             catch
             {
-                await transaction.RollbackAsync(CancellationToken.None);
                 context.ChangeTracker.Clear();
                 throw;
             }

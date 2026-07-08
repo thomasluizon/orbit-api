@@ -59,7 +59,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             {
                 return await ExecuteRelationalAttemptAsync(policyName, partitionKey, policy, cancellationToken);
             }
-            catch (Exception ex) when (IsRetryableRateLimitConflict(ex) && attempt < maxAttempts - 1)
+            catch (Exception ex) when (IsRetryableRateLimitConflict(ex))
             {
                 dbContext.ChangeTracker.Clear();
             }
@@ -90,7 +90,6 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             }
             catch
             {
-                await transaction.RollbackAsync(CancellationToken.None);
                 dbContext.ChangeTracker.Clear();
                 throw;
             }
