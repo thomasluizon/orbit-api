@@ -60,7 +60,7 @@ jobs:
         run: dotnet test tests/Orbit.Infrastructure.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
 
       - name: Enforce line-coverage threshold
-        run: python3 .github/scripts/check_coverage.py ./TestResults 70
+        run: python3 .github/scripts/check_coverage.py ./TestResults 78
 
   dependency-scan:
     name: Dependency Scan
