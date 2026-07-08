@@ -59,6 +59,9 @@ jobs:
       - name: Run Infrastructure Tests
         run: dotnet test tests/Orbit.Infrastructure.Tests --no-restore --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory ./TestResults
 
+      - name: Run Analyzer Tests
+        run: dotnet test tests/Orbit.Analyzers.Tests --no-restore
+
       - name: Enforce line-coverage threshold
         run: python3 .github/scripts/check_coverage.py ./TestResults 78
 
