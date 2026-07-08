@@ -109,6 +109,20 @@ public class OrbitDbContextTests
             nameof(SentReminder.When));
     }
 
+    [Fact]
+    public void Model_GoogleEventIdColumns_AreWidenedForLongCalendarEventIds()
+    {
+        using var context = CreateContext();
+
+        var habitGoogleEventId = context.Model.FindEntityType(typeof(Habit))!
+            .FindProperty(nameof(Habit.GoogleEventId))!;
+        var suggestionGoogleEventId = context.Model.FindEntityType(typeof(GoogleCalendarSyncSuggestion))!
+            .FindProperty(nameof(GoogleCalendarSyncSuggestion.GoogleEventId))!;
+
+        habitGoogleEventId.GetMaxLength().Should().Be(1024);
+        suggestionGoogleEventId.GetMaxLength().Should().Be(1024);
+    }
+
     private static OrbitDbContext CreateContext(IEncryptionService? encryptionService = null)
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()

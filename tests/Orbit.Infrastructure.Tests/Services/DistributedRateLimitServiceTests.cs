@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
@@ -99,12 +100,54 @@ public class DistributedRateLimitServiceTests : IDisposable
         finalDecision.CurrentCount.Should().Be(50);
     }
 
+    [Fact]
+    public async Task TryAcquireAsync_RelationalProvider_RetriesSerializationConflictThenSucceeds()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        using var context = new SerializationConflictOrbitDbContext(options, conflictsBeforeSuccess: 2);
+        context.Database.EnsureCreated();
+        var service = new DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant));
+
+        var decision = await service.TryAcquireAsync("auth", "ip:203.0.113.20");
+
+        decision.Allowed.Should().BeTrue();
+        decision.CurrentCount.Should().Be(1);
+        context.SaveChangesAttempts.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task TryAcquireAsync_RelationalProvider_ExhaustsRetries_ThrowsFailedAfterRetrying()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        using var context = new SerializationConflictOrbitDbContext(options, conflictsBeforeSuccess: int.MaxValue);
+        context.Database.EnsureCreated();
+        var service = new DistributedRateLimitService(context, new FixedTimeProvider(MidWindowInstant));
+
+        var acquire = () => service.TryAcquireAsync("auth", "ip:203.0.113.21");
+
+        await acquire.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*failed after retrying*");
+        context.SaveChangesAttempts.Should().Be(3);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => instant;
     }
 
-    private sealed class RateLimitOnlyOrbitDbContext(DbContextOptions<OrbitDbContext> options)
+    private class RateLimitOnlyOrbitDbContext(DbContextOptions<OrbitDbContext> options)
         : OrbitDbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -141,6 +184,28 @@ public class DistributedRateLimitServiceTests : IDisposable
                 entity.Property(item => item.PolicyName).HasMaxLength(64);
                 entity.Property(item => item.PartitionKey).HasMaxLength(256);
             });
+        }
+    }
+
+    private sealed class SerializationConflictOrbitDbContext(
+        DbContextOptions<OrbitDbContext> options,
+        int conflictsBeforeSuccess) : RateLimitOnlyOrbitDbContext(options)
+    {
+        public int SaveChangesAttempts { get; private set; }
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveChangesAttempts++;
+            if (SaveChangesAttempts <= conflictsBeforeSuccess)
+                throw new DbUpdateException(
+                    "Simulated serialization conflict.",
+                    new PostgresException(
+                        "could not serialize access due to concurrent update",
+                        "ERROR",
+                        "ERROR",
+                        PostgresErrorCodes.SerializationFailure));
+
+            return base.SaveChangesAsync(cancellationToken);
         }
     }
 }
