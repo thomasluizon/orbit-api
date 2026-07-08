@@ -2,7 +2,8 @@
 ## Build Results
 [Bb]in/
 [Oo]bj/
-.config/
+.config/*
+!.config/dotnet-tools.json
 .fake/
 
 ## JetBrains / Rider
@@ -31,6 +32,9 @@
 TestResults/
 *.trhx
 
+## Mutation testing (Stryker)
+StrykerOutput/
+
 ## Environment Variables & Secrets (CRÍTICO PARA SEU PROJETO)
 .env
 appsettings.Development.json
@@ -49,7 +53,7 @@ Desktop.ini
 
 ## Docker / Caddy
 caddy_data/
-caddy_config/.claude/worktrees/
+caddy_config/
 
 ## Claude Code worktrees
 .claude/worktrees/
