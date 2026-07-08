@@ -1,0 +1,22 @@
+{
+  "stryker-config": {
+    "project": "Orbit.Application.csproj",
+    "test-projects": ["tests/Orbit.Application.Tests/Orbit.Application.Tests.csproj"],
+    "mutate": [
+      "**/Subscriptions/Commands/VerifyPlayPurchaseCommand.cs",
+      "**/Subscriptions/Commands/HandlePlayNotificationCommand.cs",
+      "**/Subscriptions/Services/PlayReferralCouponConsumer.cs",
+      "**/Common/PlaySubscriptionStateExtensions.cs",
+      "**/Common/SubscriptionSourceExtensions.cs",
+      "**/Auth/Commands/*.cs",
+      "**/Habits/Services/HabitScheduleService.cs"
+    ],
+    "mutation-level": "Standard",
+    "reporters": ["cleartext", "html", "json"],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    }
+  }
+}

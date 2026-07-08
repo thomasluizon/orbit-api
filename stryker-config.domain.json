@@ -1,0 +1,19 @@
+{
+  "stryker-config": {
+    "project": "Orbit.Domain.csproj",
+    "test-projects": ["tests/Orbit.Domain.Tests/Orbit.Domain.Tests.csproj"],
+    "mutate": [
+      "**/Entities/Habit.cs",
+      "**/Entities/HabitInvariants.cs",
+      "**/Entities/User.cs",
+      "**/Entities/StreakFreeze.cs"
+    ],
+    "mutation-level": "Standard",
+    "reporters": ["cleartext", "html", "json"],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    }
+  }
+}

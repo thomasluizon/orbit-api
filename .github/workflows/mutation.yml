@@ -1,0 +1,57 @@
+name: Mutation Testing
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
+
+env:
+  DOTNET_ROLL_FORWARD: Major
+
+jobs:
+  mutation:
+    name: Mutation (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [domain, application, infrastructure]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Run Stryker (PR — changed in-scope files only)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main
+          dotnet stryker -f stryker-config.${{ matrix.project }}.json --since:origin/main
+
+      - name: Run Stryker (nightly — full in-scope)
+        if: github.event_name == 'schedule'
+        run: dotnet stryker -f stryker-config.${{ matrix.project }}.json --concurrency 2
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-${{ github.event_name }}-${{ matrix.project }}
+          path: |
+            StrykerOutput/**/reports/*.html
+            StrykerOutput/**/reports/*.json
+          if-no-files-found: ignore
