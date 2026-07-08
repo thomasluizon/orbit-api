@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="FsCheck.Xunit" Version="3.3.3" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
@@ -25,6 +26,10 @@
     <ProjectReference Include="..\..\src\Orbit.Application\Orbit.Application.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Domain\Orbit.Domain.csproj" />
     <ProjectReference Include="..\..\src\Orbit.Infrastructure\Orbit.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Orbit.Domain.Tests\Generators\OrbitArbitraries.cs" Link="Generators\OrbitArbitraries.cs" />
   </ItemGroup>
 
 </Project>
