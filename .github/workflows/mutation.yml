@@ -9,6 +9,9 @@ on:
 env:
   DOTNET_ROLL_FORWARD: Major
 
+permissions:
+  contents: read
+
 jobs:
   mutation:
     name: Mutation (${{ matrix.project }})
