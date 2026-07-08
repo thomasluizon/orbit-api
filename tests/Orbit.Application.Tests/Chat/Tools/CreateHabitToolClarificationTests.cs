@@ -117,7 +117,8 @@ public class CreateHabitToolClarificationTests
         var result = await Execute("""{"title": "Morning habit"}""");
 
         var payload = (NeedsClarificationPayload)result.Payload!;
-        foreach (var action in payload.QuickActions)
+        payload.QuickActions.Should().NotBeNull();
+        foreach (var action in payload.QuickActions!)
         {
             var parsed = () => JsonDocument.Parse(action.Value);
             parsed.Should().NotThrow($"QuickAction '{action.Label}' value should be valid JSON");

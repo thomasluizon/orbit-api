@@ -1,5 +1,13 @@
 <Project>
 
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);nullable</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' != 'Orbit.Analyzers'">
     <ProjectReference Include="$(MSBuildThisFileDirectory)src/Orbit.Analyzers/Orbit.Analyzers.csproj"
                       OutputItemType="Analyzer"
