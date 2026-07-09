@@ -16,6 +16,19 @@ severity-ranked report — posted to the PR when the scope is a PR.
 This skill subsumes the old `/review` and `/security-review` commands: it does
 everything both did and adds the backward-compat guard and a single shared rubric.
 
+<!--
+Lockstep twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md — keep them behavior-
+aligned (Stage-6 rule: the copies can't be deduped across two repos + CIs, so they stay
+aligned by hand). Both walk the shared rubric, run the adversarial Phase 6
+(`.claude/skills/_shared/verification-protocol.md`) with the cross-model `/second-opinion`
+step on surviving Critical findings, and end decisively APPROVE / NEEDS WORK. Sanctioned
+differences: default repo (api here / ui there) + the mirror-image `ui#`/`api#` selector, the
+subagent set (security-reviewer + contract-aligner here; parity/i18n/design are ui-only), and
+`dotnet` validate vs the ui `/validate` skill. `opencode` is absent in orbit-api CI (this
+copy's only runtime), so the second-opinion step degrades to UNAVAILABLE here — identical to
+how the ui copy behaves in ui CI.
+-->
+
 **Golden rule**: every finding is constructive and actionable — a clear fix, a file:line,
 and the rule it traces to. Severity is about blast radius, not which dimension raised it.
 
@@ -86,6 +99,8 @@ In parallel:
 - The plan in `.claude/plans/completed/` if the PR body references one.
 - **`.claude/skills/pr-review/rubric.md`** — the dimensions, severities, and finding
   template this review walks.
+- **`.claude/skills/_shared/verification-protocol.md`** — the shared reliability contract;
+  its Verify phase and Deferred ledger run below.
 
 Understand intent: for a PR read the title, body, and linked issue; for a file
 understand its role; for staged changes, what is in flight.
@@ -107,6 +122,12 @@ Parity · i18n · Contract drift + backward-compat · Security · Backend hard r
 FEATURES.md parity.
 
 Focus on changed code, not pre-existing issues — unless a pre-existing issue is Critical.
+
+**Coverage contract (verification protocol §1):** the diff's changed files are the binding
+inventory — rank them worst-first (highest-blast-radius / most-churned files and the
+trust-boundary + contract surfaces before stable leaves) so the riskiest code is reviewed
+even under pressure, and every changed file ends with a verdict or in the Deferred ledger.
+Nothing changed is silently skipped.
 
 Apply the rubric's **Signal gate**: post Critical/High and concretely-actionable Medium only — drop Low/Info nits and style preferences (manufacturing nits to avoid approving is a defect). The outcome is deterministic: **NEEDS WORK** iff any Critical/High finding survives, otherwise **APPROVE**.
 
@@ -165,7 +186,49 @@ not over-claim completeness here.
 
 ---
 
-## Phase 6 — Validate
+## Phase 6 — Verify findings (adversarial)
+
+Run `.claude/skills/_shared/verification-protocol.md` before validating — every finding
+that will decide the outcome has to survive a challenge first.
+
+1. **Adversarial pass (§2).** For every **Critical / High** finding (including any
+   `⚠️ breaks old mobile clients`), spawn an independent skeptic subagent (3 concurrent)
+   whose only job is to *refute* it — read the cited `file:line` in full diff context and
+   argue it is a false positive (the path is unreachable, the value already validated, the
+   field actually still present or optional-and-unused with the grep to prove it, a
+   duplicate, the severity inflated). Default to refuted when uncertain. Drop or downgrade
+   anything the skeptic disproves — a false Critical that blocks a clean PR is as costly as
+   a missed one. The survivors decide the recommendation.
+2. **Cross-model second opinion (§2, Critical survivors — interactive only).** For each
+   **Critical** finding that survives step 1 (including any `⚠️ breaks old mobile clients`),
+   fire **`/second-opinion`** so a *different* model (GLM-5.2 via opencode) independently
+   judges it — pipe the finding dossier (title · severity · `repo/path:line` · the claimed
+   defect · the cited code hunk) to `node .claude/skills/second-opinion/second-opinion.mjs`
+   and apply the JSON verdict it prints:
+   - **AGREE** → the finding is cross-model corroborated; keep the severity, note the
+     confirmation.
+   - **DISAGREE** → tag the finding **`CONTESTED`** and record GLM's `reasoning` beside
+     Claude's; surface **both** verdicts in the report. It stays Critical — the
+     disagreement is the human's to resolve. **Never** let it force a merge or silently drop
+     the finding (the skeptic in step 1 already owns the drop decision).
+   - **UNSURE** → note it; the finding stands as step 1 left it.
+   - **UNAVAILABLE** (opencode absent — **always the case in CI**, or capped / offline) →
+     skip the second opinion, leave the finding unchanged, and state it in one line. Never
+     read "couldn't ask" as agreement. This graceful-degradation path keeps the CI review
+     (no opencode) byte-for-byte identical to today.
+   Scope to **Critical only** (not High) — cross-model time/cost is reserved for the findings
+   that actually block, per the on-demand-diversity budget (research.md). CONTESTED never
+   changes the deterministic recommendation: a surviving Critical still means NEEDS WORK.
+3. **Completeness pass (§3).** One pass only — a diff is its own boundary, so no loop: ask
+   *"what changed file or hunk did I not give a verdict, what dimension did I mark N/A
+   without checking its surface?"* and close the gap before reporting.
+4. **Deferred ledger (§4).** Every dimension marked N/A and every changed file not
+   verdicted goes into the report's **Deferred** line with a one-line reason — so "clean"
+   never hides "not looked at."
+
+---
+
+## Phase 7 — Validate
 
 Run the backend checks from the orbit-api root:
 
@@ -180,7 +243,7 @@ phase is skipped — Build / Unit Tests run as separate required checks.
 
 ---
 
-## Phase 7 — Report
+## Phase 8 — Report
 
 Write the report, then post it to the PR when the scope is a PR.
 
@@ -203,7 +266,10 @@ mkdir -p .claude/reviews
 ## Findings
 
 ### Critical
-{findings in the rubric template, or "None" — `⚠️ breaks old mobile clients` findings sort here first}
+{findings in the rubric template, or "None" — `⚠️ breaks old mobile clients` findings sort here first.
+A finding a cross-model second opinion disputed carries a **`CONTESTED`** tag with both
+verdicts inline — e.g. "Claude: Critical · GLM-5.2: DISAGREE — {GLM's reasoning}" — so the
+human sees the disagreement. It stays Critical; the tag never downgrades it.}
 
 ### High
 {… or "None"}
@@ -227,6 +293,12 @@ mkdir -p .claude/reviews
 |---|---|
 | Build (dotnet) | PASS / FAIL / N/A |
 | Tests (dotnet) | PASS / FAIL / N/A |
+
+## Deferred — N/A dimensions & files not verdicted
+
+{Per the verification protocol §4: each dimension marked N/A (with why its surface wasn't
+touched) and any changed file not given a verdict — one line each. "Nothing deferred" if
+every dimension and file got a verdict.}
 
 ## What's good
 
@@ -256,8 +328,10 @@ endpoint / `mcp__github_inline_comment__create_inline_comment`.
 
 - **CI wrapper** (`.github/workflows/claude-review.yml`) invokes this skill: it owns the
   single decisive post — produce the report + recommendation and let it submit (skip this
-  posting step). In CI also skip Phase 6, and mark any dimension that needs the
-  un-checked-out sibling repo as "not verifiable in CI".
+  posting step). In CI also skip Phase 7 (Validate) — Build / Unit Tests run as separate
+  required checks — and mark any dimension that needs the un-checked-out sibling repo as
+  "not verifiable in CI". The Phase 6 adversarial pass still runs; its `/second-opinion` step
+  returns UNAVAILABLE (no `opencode` in CI) and the findings stand.
 - **Local, a PR you do NOT own**: post the decisive review yourself per the recommendation.
 - **Local, your OWN PR** (GitHub blocks self-approval): write the report and post it with
   `--comment` instead — do not fail trying to `--approve`.
