@@ -3,6 +3,7 @@ name: security-reviewer
 description: Reviews orbit-api Controllers and Infrastructure for security issues: missing [Authorize], JWT leaks, webhook signature checks, CORS gaps, input validation. Use only when the user explicitly asks for a security review of API code.
 tools: Glob, Grep, Read
 model: sonnet
+effort: medium
 ---
 
 # Security reviewer (orbit-api)
