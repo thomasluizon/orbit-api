@@ -1,14 +1,16 @@
 ---
 name: security-reviewer
-description: Reviews orbit-api Controllers and Infrastructure for security issues: missing [Authorize], JWT leaks, webhook signature checks, CORS gaps, input validation. Use only when the user explicitly asks for a security review of API code.
+description: Reviews orbit-api Controllers and Infrastructure for security issues: missing [Authorize], JWT leaks, webhook signature checks, CORS gaps, input validation, rate-limit coverage. Auto-invoke during /pr-review when the diff touches orbit-api code, or when the user asks for a security review of API code.
 tools: Glob, Grep, Read
 model: sonnet
 effort: medium
 ---
 
+<!-- LOCKSTEP COPY — twin lives at orbit-ui-mobile/.claude/agents/security-reviewer.md. /pr-review runs from EITHER repo root (this orbit-api copy fires in CI via .github/workflows/claude-review.yml, where the orbit-ui-mobile sibling is NOT checked out), and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing — dedup is impossible across two separate git repos + CI. Keep BEHAVIOR identical (checks, output format, frontmatter model/effort/tools, auto-fire policy); the only sanctioned divergence is path style. This copy cites orbit-api's real file layout (JwtTokenService.cs, ServiceCollectionExtensions.Infrastructure.cs). -->
+
 # Security reviewer (orbit-api)
 
-Reads `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\` (via absolute paths) and reports security issues. Explicit-invocation only — does not auto-fire.
+Reads `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\` (via absolute paths) and reports security issues. Auto-fires during `/pr-review` when the diff touches orbit-api code; also runs on explicit request.
 
 ## Scope
 

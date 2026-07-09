@@ -6,6 +6,8 @@ model: sonnet
 effort: medium
 ---
 
+<!-- LOCKSTEP COPY — twin lives at orbit-ui-mobile/.claude/agents/contract-aligner.md. /pr-review runs from EITHER repo root (this orbit-api copy fires in CI via .github/workflows/claude-review.yml), and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing — dedup is impossible across two separate git repos + CI. Keep BEHAVIOR identical (steps, drift categories, output format, frontmatter). Sanctioned divergences: (1) path style — this copy uses absolute paths, the ui-mobile copy is ui-mobile-rooted/relative; (2) this copy adds a NOT_VERIFIABLE fallback for when the ui-mobile sibling isn't checked out (orbit-api CI). -->
+
 # Contract aligner
 
 The TypeScript Zod schemas in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\types\` and the .NET DTOs — which are feature-local under `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Application\` (records/classes in each feature's folder or its `Models\` subfolder, e.g. `Subscriptions\SubscriptionDtos.cs`, `Auth\Models\LoginResponse.cs`, plus the request/response records declared alongside their commands and queries) — MUST match. The endpoint paths in `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\packages\shared\src\api\endpoints.ts` MUST match the controller routes in `C:\Users\thoma\Documents\Programming\Projects\orbit-api\src\Orbit.Api\Controllers\`.
