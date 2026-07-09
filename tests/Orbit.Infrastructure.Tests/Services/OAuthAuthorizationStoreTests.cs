@@ -120,4 +120,55 @@ public class OAuthAuthorizationStoreTests : IDisposable
             code.Should().NotContain("/");
         }
     }
+
+    [Fact]
+    public void ExchangeCode_RejectsCodeCreatedWithDifferentRedirectUri()
+    {
+        var (verifier, challenge) = GeneratePkce();
+
+        var code = _store.CreateCode(Guid.NewGuid(), challenge, "https://claude.ai/callback", "client");
+        var entry = _store.ExchangeCode(code, verifier, "https://attacker.com/callback");
+
+        entry.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExchangeCode_RejectsRedirectUriAttemptToOpenRedirector()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var attackerUrl = "https://internal-api.local/redirect?url=https://attacker.com";
+
+        var code = _store.CreateCode(Guid.NewGuid(), challenge, "https://claude.ai/callback", "client");
+        var entry = _store.ExchangeCode(code, verifier, attackerUrl);
+
+        entry.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExchangeCode_EnforcesExactRedirectUriMatch()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var originalUrl = "https://claude.ai/callback?state=abc123";
+
+        var similar = "https://claude.ai/callback?state=abc124";
+
+        var mismatchCode = _store.CreateCode(Guid.NewGuid(), challenge, originalUrl, "client");
+        _store.ExchangeCode(mismatchCode, verifier, similar).Should().BeNull();
+
+        var exactCode = _store.CreateCode(Guid.NewGuid(), challenge, originalUrl, "client");
+        _store.ExchangeCode(exactCode, verifier, originalUrl).Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ExchangeCode_StoresCompleteRedirectUri()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var fullUrl = "https://claude.ai/callback?client_id=abc&state=xyz";
+
+        var code = _store.CreateCode(Guid.NewGuid(), challenge, fullUrl, "client");
+        var entry = _store.ExchangeCode(code, verifier, fullUrl);
+
+        entry.Should().NotBeNull();
+        entry!.RedirectUri.Should().Be(fullUrl);
+    }
 }

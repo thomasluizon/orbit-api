@@ -562,6 +562,145 @@ public class OAuthControllerTests : IDisposable
         await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public void Register_WithAttackerRedirectUri_ReturnsBadRequest()
+    {
+        var body = JsonSerializer.Deserialize<JsonElement>(
+            """{"client_name":"Malicious MCP","redirect_uris":["https://attacker.com/callback"]}""");
+
+        var result = _controller.Register(body);
+
+        var obj = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(obj.Value);
+        json.Should().Contain("invalid_redirect_uri");
+        json.Should().Contain("not in the allowlist");
+    }
+
+    [Fact]
+    public void Register_WithMixedValidAndInvalidRedirectUris_ReturnsBadRequest()
+    {
+        var body = JsonSerializer.Deserialize<JsonElement>(
+            """{"client_name":"Test","redirect_uris":["https://claude.ai/callback","https://attacker.com/callback"]}""");
+
+        var result = _controller.Register(body);
+
+        var obj = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(obj.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
+    [Fact]
+    public void Authorize_WithAttackerDomain_ReturnsBadRequest()
+    {
+        var result = _controller.Authorize(
+            "client-123", "https://attacker.com/callback", "code",
+            "state-abc", "challenge-xyz", "S256");
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(bad.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
+    [Fact]
+    public async Task VerifyCode_WithAttackerDomainRedirectUri_ReturnsBadRequest()
+    {
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", "state-abc",
+            "challenge-xyz", "https://attacker.com/callback", "client-123");
+
+        var result = await _controller.VerifyCode(request, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(bad.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
+    [Fact]
+    public async Task GoogleAuth_WithAttackerDomainRedirectUri_ReturnsBadRequest()
+    {
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "state-abc", "challenge-xyz",
+            "https://attacker.com/callback", "client-123");
+
+        var result = await _controller.GoogleAuth(request, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(bad.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
+    [Fact]
+    public async Task Token_WithAttackerDomainRedirectUri_ReturnsBadRequest()
+    {
+        var result = await _controller.Token(
+            "authorization_code", "any-code", "verifier-xyz",
+            "client-123", "https://attacker.com/callback", CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(bad.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
+    [Fact]
+    public void Authorize_WithInvalidSchemeRedirectUri_ReturnsBadRequest()
+    {
+        var result = _controller.Authorize(
+            "client-123", "javascript:alert('xss')", "code",
+            "state-abc", "challenge-xyz", "S256");
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public void Authorize_WithHttpSchemeRedirectUri_ReturnsBadRequest()
+    {
+        var result = _controller.Authorize(
+            "client-123", "http://claude.ai/callback", "code",
+            "state-abc", "challenge-xyz", "S256");
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public void Authorize_WithFtpSchemeRedirectUri_ReturnsBadRequest()
+    {
+        var result = _controller.Authorize(
+            "client-123", "ftp://claude.ai/callback", "code",
+            "state-abc", "challenge-xyz", "S256");
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public void Authorize_WithSubdomainAttempt_ReturnsBadRequest()
+    {
+        var result = _controller.Authorize(
+            "client-123", "https://attacker.claude.ai/callback", "code",
+            "state-abc", "challenge-xyz", "S256");
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(bad.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
+    [Theory]
+    [InlineData("https://attacker.com/callback")]
+    [InlineData("https://evil.org/callback")]
+    [InlineData("https://malicious.net/callback")]
+    public async Task VerifyCode_RejectsUnallowlistedHosts(string redirectUri)
+    {
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", "state-abc",
+            "challenge-xyz", redirectUri, "client-123");
+
+        var result = await _controller.VerifyCode(request, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(bad.Value);
+        json.Should().Contain("invalid_redirect_uri");
+    }
+
     private sealed class FakeUniqueViolationException : DbException
     {
         public override string SqlState => "23505";

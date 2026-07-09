@@ -323,6 +323,7 @@ public partial class OAuthController(
     private bool IsRedirectUriAllowed(string redirectUri)
     {
         return Uri.TryCreate(redirectUri, UriKind.Absolute, out var redirectParsed)
+            && redirectParsed.Scheme is "https"
             && _allowedRedirectHosts.Contains(redirectParsed.Host);
     }
 
