@@ -291,7 +291,6 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
                         }
                         catch
                         {
-                            await tx.RollbackAsync(CancellationToken.None);
                             dbContext.ChangeTracker.Clear();
                             throw;
                         }

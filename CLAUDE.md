@@ -26,6 +26,7 @@ These apply everywhere — they override project-local conventions if they confl
 - **No workarounds.** Root-cause every bug. No `TODO`/`FIXME`/`HACK` in committed code. No empty `catch {}`. No `as any`-equivalents like unjustified `null!`.
 - **No dead code.** Delete unused methods, types, parameters, branches the moment they become orphaned by your change.
 - **Narration comments are `ORBIT0001` build errors** (`src/Orbit.Analyzers`; only `///`/`/** */` XML-doc or a URL-linked WHY note survive; autofix via `dotnet format`). The analyzer is silent in local builds but fails CI — grep for bare `//` before pushing.
+- **Redundant transaction rollbacks are `ORBIT0002` build errors** (`src/Orbit.Analyzers`, category Reliability): an explicit `RollbackAsync()`/`Rollback()` on a `using`/`await using`-scoped EF `IDbContextTransaction` is banned — scope disposal already rolls back an uncommitted transaction, so let the using-scope dispose it and keep the `catch` to `ChangeTracker.Clear(); throw;`. A genuinely manually-owned transaction (declared without `using`, or reached via a field/parameter) is left alone. Like ORBIT0001 it is silent in local builds but fails CI (the in-box SDK compiler is older than the analyzer's `Microsoft.CodeAnalysis` 5.6.0, so csc skips it with `CS9057` locally).
 
 ## Cross-repo parity contract
 

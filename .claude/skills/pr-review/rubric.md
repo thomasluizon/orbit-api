@@ -295,6 +295,10 @@ options are enforced server-side.
   domain-entity guards.
 - **Logging**: structured, PascalCase properties, English only —
   `logger.LogInformation("Action {Property}", value)`, never interpolated.
+- **Transaction teardown**: no explicit `RollbackAsync()`/`Rollback()` inside a
+  `using`/`await using`-scoped EF transaction — scope disposal already rolls back an
+  uncommitted transaction. The `ORBIT0002` analyzer (`src/Orbit.Analyzers`) fails the CI
+  build on violations; a genuinely manually-owned transaction (no `using`) is exempt.
 - **Tests**: every new command/query handler, validator, and service has a unit test
   (unit only — no integration or E2E suite exists).
 
