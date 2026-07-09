@@ -42,7 +42,7 @@ If you're launched from `orbit-ui-mobile`, do the consumer edits in the same ses
 
 ## LSP
 
-C# LSP (OmniSharp/Roslyn) is wired into Claude Code via the **mobile repo's** `.mcp.json` (sessions are almost always launched from there). When launched directly from orbit-api, no LSP — fall back to grep/glob/read.
+C# LSP (Roslyn, via the CWM.RoslynNavigator MCP server — install once with `dotnet tool install -g CWM.RoslynNavigator`) is wired into Claude Code through the **mobile repo's** `.mcp.json` (sessions are almost always launched from there), pointed at this repo's `Orbit.slnx`. It exposes symbol-level tools (`find_symbol`, `find_references`, `find_implementations`, `get_type_hierarchy`, `get_diagnostics`, ...) instead of reading whole files. When launched directly from orbit-api, no LSP — fall back to grep/glob/read.
 
 ## opencode compatibility
 
