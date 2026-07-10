@@ -34,6 +34,37 @@ jobs:
       - name: Restore
         run: dotnet restore
 
+      # SonarCloud coverage.exclusions (#243 Phase 1) — reserved for genuinely
+      # untestable code: bootstrap/DI, EF/generated, options POCOs, external-SDK
+      # glue, and hosted BackgroundServices. One line per entry:
+      #   Program.cs                                   app-entry builder chain, no branching.
+      #   Extensions/ServiceCollectionExtensions*.cs   DI registration (all 4 partials; glob widened from the exact name that matched only 1).
+      #   Extensions/WebApplicationExtensions.cs       middleware-pipeline wiring.
+      #   Middleware/**                                ASP.NET pipeline glue (correlation, security headers, exception handlers). NOTE: MinimumVersionMiddleware holds a pure semver comparator — Phase 2 extracts it to a testable layer (Orbit.Api has no test project yet) and covers it.
+      #   OpenApi/**                                   Swagger IOpenApiDocumentTransformer.
+      #   OAuth/**                                     OAuth login-page HTML builder + authorization-state store.
+      #   Persistence/OrbitDbContext.cs                EF model configuration.
+      #   Persistence/OrbitDbContextFactory.cs         design-time EF factory.
+      #   Persistence/GenericRepository.cs             thin EF CRUD wrapper.
+      #   Persistence/UnitOfWork.cs                    EF SaveChanges wrapper.
+      #   Persistence/AccountResetRepository.cs        raw EF/SQL data access.
+      #   Configuration/**                             options POCOs (Ai/Jwt/Google/... settings).
+      #   Services/ReminderSchedulerService.cs         hosted ScheduledService (pure reminder-text helpers are a Phase-2 extract target).
+      #   Services/SlipAlertSchedulerService.cs        hosted ScheduledService.
+      #   Services/GoalDeadlineNotificationService.cs  hosted ScheduledService.
+      #   Services/HabitDueDateAdvancementService.cs   hosted BackgroundService.
+      #   Services/DataEncryptionMigrationService.cs   one-time hosted BackgroundService.
+      #   Services/AccountDeletionService.cs           hosted BackgroundService.
+      #   Services/PushNotificationService.cs          FirebaseAdmin + WebPush SDK glue.
+      #   Services/GoogleTokenService.cs               Google OAuth token HTTP client (token-outcome classification is a Phase-2 extract target).
+      #   Services/BackgroundServiceHealthCheck.cs     IHealthCheck over a static registry.
+      #   Services/StripeCouponRewardService.cs        Stripe SDK coupon/subscription wrapper.
+      #   Services/GeoLocationService.cs               ipapi.co HTTP lookup (IsPrivateIpAddress classifier is a Phase-2 extract target).
+      #   AI/AiCompletionClient.cs                     OpenAI SDK wrapper.
+      #   Orbit.Analyzers/**                           build-time Roslyn analyzers (netstandard2.0; Orbit.Analyzers.Tests runs outside the runtime coverage set).
+      # DROPPED (now in coverage): Services/AppConfigService.cs (pure ConvertValue<T> + injectable cache/repo) and
+      # Services/UserDateService.cs (user-timezone "today" + week-start, injectable deps) — both live in
+      # Orbit.Infrastructure, which is in the coverage run, so they are unit-testable and should count.
       - name: SonarScanner Begin
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -44,7 +75,7 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**" \
-            /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/AppConfigService.cs,**/Services/UserDateService.cs,**/Services/StripeCouponRewardService.cs,**/AI/AiCompletionClient.cs,**/Services/GeoLocationService.cs,**/Orbit.Analyzers/**"
+            /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/AI/AiCompletionClient.cs,**/Services/GeoLocationService.cs,**/Orbit.Analyzers/**"
 
       - name: Build
         run: dotnet build --no-restore
