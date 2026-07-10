@@ -357,11 +357,8 @@ public partial class AgentOperationExecutor(
         }
     }
 
-    private static string? RedactArguments(JsonElement arguments)
-    {
-        var raw = arguments.GetRawText();
-        return raw.Length <= 1000 ? raw : raw[..1000];
-    }
+    private static string? RedactArguments(JsonElement arguments) =>
+        AgentAuditRedactor.Redact(arguments.GetRawText());
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to record agent audit entry for operation {OperationId} (user {UserId}, correlation {CorrelationId})")]
     private static partial void LogAuditWriteFailed(ILogger logger, Exception ex, string operationId, Guid userId, string? correlationId);
