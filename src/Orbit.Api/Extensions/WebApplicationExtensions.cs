@@ -9,6 +9,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 using Scalar.AspNetCore;
 
 namespace Orbit.Api.Extensions;
@@ -424,9 +425,7 @@ public static partial class WebApplicationExtensions
 
         try
         {
-            var redactedArguments = auditContext.RawBody.Length <= 1000
-                ? auditContext.RawBody
-                : auditContext.RawBody[..1000];
+            var redactedArguments = AgentAuditRedactor.Redact(auditContext.RawBody);
             await auditService.RecordAsync(new AgentAuditEntry(
                 context.User.GetUserId(),
                 auditContext.Capability.Id,

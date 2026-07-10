@@ -66,6 +66,21 @@ public class AccountDeletionServiceDbTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteAllUserDataAsync_RemovesSentProactiveCheckins()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "proactive@example.com");
+        _dbContext.SentProactiveCheckins.Add(
+            SentProactiveCheckin.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
+        await _dbContext.SaveChangesAsync();
+
+        await new AccountResetRepository(_dbContext).DeleteAllUserDataAsync(userId);
+
+        (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId))
+            .Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RunAsync_DeletesOnlyPastDueDeactivatedUsers_PerUserScope()
     {
         var pastDue = Guid.NewGuid();

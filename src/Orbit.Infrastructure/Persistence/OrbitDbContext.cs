@@ -203,6 +203,7 @@ public class OrbitDbContext : DbContext
         modelBuilder.Entity<SentProactiveCheckin>(entity =>
         {
             entity.HasIndex(a => new { a.UserId, a.Date }).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
