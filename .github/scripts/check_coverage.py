@@ -13,16 +13,31 @@ import sys
 import xml.etree.ElementTree as ET
 
 
+def _confine(candidate: str, base: str) -> str:
+    """Resolve candidate and confirm it stays within base, rejecting path traversal."""
+    resolved = os.path.realpath(candidate)
+    if resolved != base and not resolved.startswith(base + os.sep):
+        raise ValueError(f"Refusing path outside {base}: {candidate}")
+    return resolved
+
+
 def main() -> int:
     results_dir, floor = sys.argv[1], float(sys.argv[2])
-    reports = glob.glob(os.path.join(results_dir, "**", "coverage.cobertura.xml"), recursive=True)
+    base = os.path.realpath(os.getcwd())
+    try:
+        safe_results_dir = _confine(results_dir, base)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 1
+
+    reports = glob.glob(os.path.join(safe_results_dir, "**", "coverage.cobertura.xml"), recursive=True)
     if not reports:
         print(f"No coverage.cobertura.xml found under {results_dir}", file=sys.stderr)
         return 1
 
     hits: dict[tuple[str, str], int] = {}
     for report in reports:
-        root = ET.parse(report).getroot()
+        root = ET.parse(_confine(report, base)).getroot()
         for class_node in root.iter("class"):
             filename = class_node.get("filename", "")
             for line in class_node.iter("line"):
