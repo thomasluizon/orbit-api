@@ -43,4 +43,31 @@ public class UnitOfWorkTests
         (await execute.Should().ThrowAsync<DbUpdateException>()).Which.Should().BeSameAs(conflict);
         context.ChangeTracker.Entries().Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task ExecuteInTransactionAsync_WhenAmbientTransactionActive_RunsInlineWithoutNesting()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        using var context = new OrbitDbContext(options);
+        var unitOfWork = new UnitOfWork(context);
+
+        await using var ambientTransaction = await context.Database.BeginTransactionAsync();
+
+        var operationRan = false;
+        var act = () => unitOfWork.ExecuteInTransactionAsync(_ =>
+        {
+            operationRan = true;
+            return Task.CompletedTask;
+        });
+
+        await act.Should().NotThrowAsync();
+        operationRan.Should().BeTrue();
+        context.Database.CurrentTransaction.Should().BeSameAs(ambientTransaction);
+    }
 }

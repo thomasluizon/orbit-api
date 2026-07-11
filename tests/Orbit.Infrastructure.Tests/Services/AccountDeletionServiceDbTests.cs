@@ -31,6 +31,7 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         var serviceProvider = new ServiceCollection()
             .AddSingleton(_dbContext)
+            .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext))
             .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext))
             .BuildServiceProvider();
 
@@ -78,6 +79,45 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId))
             .Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_DeletesPastDueUserWithOwnedDataAndIdempotencyLedger()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "owned@example.com", DateTime.UtcNow.AddDays(-1));
+        _dbContext.Tags.Add(Tag.Create(userId, "Fitness", "#ff0000").Value);
+        _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand"));
+        _dbContext.SentProactiveCheckins.Add(
+            SentProactiveCheckin.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        (await _dbContext.Users.AnyAsync(u => u.Id == userId)).Should().BeFalse();
+        (await _dbContext.Tags.IgnoreQueryFilters().AnyAsync(t => t.UserId == userId)).Should().BeFalse();
+        (await _dbContext.ProcessedRequests.AnyAsync(r => r.UserId == userId)).Should().BeFalse();
+        (await _dbContext.SentProactiveCheckins.AnyAsync(p => p.UserId == userId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CleanupStaleSentRecords_RemovesProcessedRequestsOlderThan30Days_KeepsRecent()
+    {
+        var userId = Guid.NewGuid();
+        SeedUser(userId, "retention@example.com");
+        await _dbContext.SaveChangesAsync();
+
+        var stale = ProcessedRequest.Create(userId, "stale-key", "LogHabitCommand");
+        typeof(ProcessedRequest).GetProperty("CreatedAtUtc")!.SetValue(stale, DateTime.UtcNow.AddDays(-31));
+        var recent = ProcessedRequest.Create(userId, "recent-key", "LogHabitCommand");
+        _dbContext.ProcessedRequests.AddRange(stale, recent);
+        await _dbContext.SaveChangesAsync();
+
+        await _service.CleanupStaleSentRecords(CancellationToken.None);
+
+        var remaining = await _dbContext.ProcessedRequests.Select(r => r.IdempotencyKey).ToListAsync();
+        remaining.Should().ContainSingle().Which.Should().Be("recent-key");
     }
 
     [Fact]

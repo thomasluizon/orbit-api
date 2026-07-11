@@ -9,6 +9,7 @@ using Sentry;
 using Sentry.AspNetCore;
 using Orbit.Api.Authentication;
 using Orbit.Api.Authorization;
+using Orbit.Api.Idempotency;
 using Orbit.Api.OAuth;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
@@ -67,6 +68,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
+        builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
@@ -214,11 +216,15 @@ public static partial class ServiceCollectionExtensions
 
         builder.Services.AddValidatorsFromAssemblyContaining<CreateHabitCommandValidator>();
 
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<IIdempotencyContext, HttpIdempotencyContext>();
+
         builder.Services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Orbit.Application.Chat.Commands.ProcessUserChatCommand).Assembly);
             cfg.AddOpenBehavior(typeof(ConcurrencyRetryBehavior<,>));
             cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            cfg.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
         });
 
         AddCorsPolicies(builder);

@@ -16,7 +16,7 @@ public record CreateGoalCommand(
     string Unit,
     DateOnly? Deadline,
     int Position = 0,
-    GoalType Type = GoalType.Standard) : IRequest<Result<Guid>>;
+    GoalType Type = GoalType.Standard) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 public partial class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,

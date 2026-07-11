@@ -29,7 +29,7 @@ public record LogHabitResponse(
 public record LogHabitCommand(
     Guid UserId,
     Guid HabitId,
-    DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>;
+    DateOnly? Date = null) : IRequest<Result<LogHabitResponse>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit logging to reduce constructor parameter count (S107).
