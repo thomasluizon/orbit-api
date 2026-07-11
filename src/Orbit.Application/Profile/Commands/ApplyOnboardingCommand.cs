@@ -70,10 +70,7 @@ public class ApplyOnboardingCommandHandler(
     public async Task<Result<ApplyOnboardingResponse>> Handle(
         ApplyOnboardingCommand request, CancellationToken cancellationToken)
     {
-        Result<ApplyOnboardingResponse>? failure = null;
-        ApplyOnboardingResponse? response = null;
-
-        await unitOfWork.ExecuteInTransactionAsync(async ct =>
+        var result = await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
             await unitOfWork.AcquireAdvisoryLockAsync($"onboarding-apply:{request.UserId}", ct);
 
@@ -81,16 +78,10 @@ public class ApplyOnboardingCommandHandler(
                 u => u.Id == request.UserId, cancellationToken: ct);
 
             if (user is null)
-            {
-                failure = Result.Failure<ApplyOnboardingResponse>(ErrorMessages.UserNotFound);
-                return;
-            }
+                return Result.Failure<ApplyOnboardingResponse>(ErrorMessages.UserNotFound);
 
             if (user.HasCompletedOnboarding)
-            {
-                response = new ApplyOnboardingResponse(false, 0, false, false);
-                return;
-            }
+                return Result.Success(new ApplyOnboardingResponse(false, 0, false, false));
 
             var today = await userDateService.GetUserTodayAsync(request.UserId, ct);
 
@@ -98,10 +89,7 @@ public class ApplyOnboardingCommandHandler(
 
             var createResult = await CreateHabitsAsync(request.UserId, habitsToCreate, today, ct);
             if (createResult.IsFailure)
-            {
-                failure = createResult.PropagateError<ApplyOnboardingResponse>();
-                return;
-            }
+                return createResult.PropagateError<ApplyOnboardingResponse>();
 
             var createdHabits = createResult.Value;
 
@@ -112,42 +100,31 @@ public class ApplyOnboardingCommandHandler(
             {
                 var logResult = createdHabits[firstLog.HabitIndex].Log(firstLog.Date);
                 if (logResult.IsFailure)
-                {
-                    failure = logResult.PropagateError<ApplyOnboardingResponse>();
-                    return;
-                }
+                    return logResult.PropagateError<ApplyOnboardingResponse>();
                 loggedFirstHabit = true;
             }
 
             var goalResult = await CreateGoalIfAllowedAsync(request.UserId, request.Goal, today, ct);
             if (goalResult.IsFailure)
-            {
-                failure = goalResult.PropagateError<ApplyOnboardingResponse>();
-                return;
-            }
+                return goalResult.PropagateError<ApplyOnboardingResponse>();
             var createdGoal = goalResult.Value;
 
             var prefsResult = ApplyPreferences(user, request.WeekStartDay, request.ColorScheme);
             if (prefsResult.IsFailure)
-            {
-                failure = prefsResult.PropagateError<ApplyOnboardingResponse>();
-                return;
-            }
+                return prefsResult.PropagateError<ApplyOnboardingResponse>();
 
             user.CompleteOnboarding();
 
             await unitOfWork.SaveChangesAsync(ct);
 
-            response = new ApplyOnboardingResponse(true, createdHabits.Count, createdGoal, loggedFirstHabit);
+            return Result.Success(
+                new ApplyOnboardingResponse(true, createdHabits.Count, createdGoal, loggedFirstHabit));
         }, cancellationToken);
 
-        if (failure is not null)
-            return failure;
-
-        if (response!.Applied)
+        if (result.IsSuccess && result.Value.Applied)
             CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
-        return Result.Success(response);
+        return result;
     }
 
     private async Task<IReadOnlyList<ApplyHabitInput>> TrimToAllowanceAsync(

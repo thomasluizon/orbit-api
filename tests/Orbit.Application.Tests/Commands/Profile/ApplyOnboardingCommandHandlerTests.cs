@@ -33,11 +33,11 @@ public class ApplyOnboardingCommandHandlerTests
         _appConfig.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultFreeMaxHabits);
         _unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<ApplyOnboardingResponse>>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var operation = call.ArgAt<Func<CancellationToken, Task<Result<ApplyOnboardingResponse>>>>(0);
                 var ct = call.ArgAt<CancellationToken>(1);
                 return operation(ct);
             });
@@ -69,6 +69,9 @@ public class ApplyOnboardingCommandHandlerTests
 
     private static ApplyHabitInput Habit(string title) =>
         new(title, null, null, FrequencyUnit.Day, 1);
+
+    private static string SummaryCacheKey() =>
+        $"summary:{UserId}:{DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}:en";
 
     [Fact]
     public async Task Apply_HappyPath_CreatesEverythingAndCompletesOnboarding()
@@ -228,6 +231,44 @@ public class ApplyOnboardingCommandHandlerTests
         result.Value.Applied.Should().BeTrue();
         result.Value.LoggedFirstHabit.Should().BeFalse();
         user.HasCompletedOnboarding.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_WhenApplied_InvalidatesUserAiSummaryCache()
+    {
+        var user = CreateProUser();
+        SetupUser(user);
+        var cacheKey = SummaryCacheKey();
+        _cache.Set(cacheKey, "stale-summary");
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [Habit("Drink water")], null, null, null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Applied.Should().BeTrue();
+        _cache.TryGetValue(cacheKey, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Apply_WhenAlreadyOnboarded_LeavesUserAiCacheUntouched()
+    {
+        var user = CreateProUser();
+        user.CompleteOnboarding();
+        SetupUser(user);
+        var cacheKey = SummaryCacheKey();
+        _cache.Set(cacheKey, "fresh-summary");
+
+        var command = new ApplyOnboardingCommand(
+            UserId, [Habit("Drink water")], null, null, null, null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Applied.Should().BeFalse();
+        _cache.TryGetValue(cacheKey, out var cached).Should().BeTrue();
+        cached.Should().Be("fresh-summary");
     }
 
     [Fact]
