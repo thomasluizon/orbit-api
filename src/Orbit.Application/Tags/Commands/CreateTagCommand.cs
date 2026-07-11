@@ -9,7 +9,7 @@ namespace Orbit.Application.Tags.Commands;
 public record CreateTagCommand(
     Guid UserId,
     string Name,
-    string Color) : IRequest<Result<Guid>>;
+    string Color) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 public class CreateTagCommandHandler(
     IGenericRepository<Tag> tagRepository,

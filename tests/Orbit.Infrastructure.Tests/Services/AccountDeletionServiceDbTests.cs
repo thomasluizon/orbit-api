@@ -87,7 +87,7 @@ public class AccountDeletionServiceDbTests : IDisposable
         var userId = Guid.NewGuid();
         SeedDeactivatedUser(userId, "owned@example.com", DateTime.UtcNow.AddDays(-1));
         _dbContext.Tags.Add(Tag.Create(userId, "Fitness", "#ff0000").Value);
-        _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1"));
+        _dbContext.ProcessedRequests.Add(ProcessedRequest.Create(userId, "mutation-key-1", "LogHabitCommand"));
         _dbContext.SentProactiveCheckins.Add(
             SentProactiveCheckin.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
         await _dbContext.SaveChangesAsync();
@@ -108,9 +108,9 @@ public class AccountDeletionServiceDbTests : IDisposable
         SeedUser(userId, "retention@example.com");
         await _dbContext.SaveChangesAsync();
 
-        var stale = ProcessedRequest.Create(userId, "stale-key");
+        var stale = ProcessedRequest.Create(userId, "stale-key", "LogHabitCommand");
         typeof(ProcessedRequest).GetProperty("CreatedAtUtc")!.SetValue(stale, DateTime.UtcNow.AddDays(-31));
-        var recent = ProcessedRequest.Create(userId, "recent-key");
+        var recent = ProcessedRequest.Create(userId, "recent-key", "LogHabitCommand");
         _dbContext.ProcessedRequests.AddRange(stale, recent);
         await _dbContext.SaveChangesAsync();
 

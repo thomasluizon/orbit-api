@@ -8,16 +8,18 @@ namespace Orbit.Application.Common;
 public interface IIdempotencyStore
 {
     /// <summary>
-    /// Returns the stored serialized response for a previously-processed key, or <c>null</c> if the key
-    /// has not been processed for this user.
+    /// Returns the stored serialized response for a previously-processed (user, key, request type), or
+    /// <c>null</c> if that combination has not been processed. The request type scopes the key so reusing
+    /// one key across two different commands never returns the wrong command's cached response.
     /// </summary>
-    Task<string?> FindResponseBodyAsync(Guid userId, string idempotencyKey, CancellationToken cancellationToken);
+    Task<string?> FindResponseBodyAsync(Guid userId, string idempotencyKey, string requestType, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Adds a tracked, uncommitted reservation for the key so it commits atomically with the wrapped
-    /// handler's mutation. The response body is filled in via the returned reservation after the handler runs.
+    /// Adds a tracked, uncommitted reservation for the (user, key, request type) so it commits atomically
+    /// with the wrapped handler's mutation. The response body is filled in via the returned reservation
+    /// after the handler runs.
     /// </summary>
-    IIdempotencyReservation Reserve(Guid userId, string idempotencyKey);
+    IIdempotencyReservation Reserve(Guid userId, string idempotencyKey, string requestType);
 }
 
 /// <summary>

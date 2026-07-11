@@ -1511,6 +1511,11 @@ namespace Orbit.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("RequestType")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("ResponseBody")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1522,7 +1527,7 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.HasIndex("CreatedAtUtc");
 
-                    b.HasIndex("UserId", "IdempotencyKey")
+                    b.HasIndex("UserId", "IdempotencyKey", "RequestType")
                         .IsUnique();
 
                     b.ToTable("ProcessedRequests");

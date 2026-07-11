@@ -22,7 +22,7 @@ public record CreateHabitCommand(
     HabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? TagIds = null,
     IReadOnlyList<Guid>? GoalIds = null,
-    string? Emoji = null) : IRequest<Result<Guid>>;
+    string? Emoji = null) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 /// <summary>
 /// Groups repository dependencies for habit creation to reduce constructor parameter count (S107).

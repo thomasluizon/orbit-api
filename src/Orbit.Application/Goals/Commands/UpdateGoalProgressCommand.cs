@@ -11,7 +11,7 @@ public record UpdateGoalProgressCommand(
     Guid UserId,
     Guid GoalId,
     decimal NewValue,
-    string? Note = null) : IRequest<Result>;
+    string? Note = null) : IRequest<Result>, IIdempotentCommand;
 
 public partial class UpdateGoalProgressCommandHandler(
     IGenericRepository<Goal> goalRepository,

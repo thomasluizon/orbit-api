@@ -14,18 +14,21 @@ public class ProcessedRequest : Entity
 
     public string IdempotencyKey { get; private set; } = "";
 
+    public string RequestType { get; private set; } = "";
+
     public string ResponseBody { get; private set; } = "";
 
     public DateTime CreatedAtUtc { get; private set; }
 
     private ProcessedRequest() { }
 
-    public static ProcessedRequest Create(Guid userId, string idempotencyKey)
+    public static ProcessedRequest Create(Guid userId, string idempotencyKey, string requestType)
     {
         return new ProcessedRequest
         {
             UserId = userId,
             IdempotencyKey = idempotencyKey,
+            RequestType = requestType,
             CreatedAtUtc = DateTime.UtcNow,
         };
     }

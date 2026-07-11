@@ -16,7 +16,7 @@ namespace Orbit.Application.Habits.Commands;
 public record SkipHabitCommand(
     Guid UserId,
     Guid HabitId,
-    DateOnly? Date = null) : IRequest<Result>, IConcurrencyRetryable;
+    DateOnly? Date = null) : IRequest<Result>, IConcurrencyRetryable, IIdempotentCommand;
 
 public partial class SkipHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,

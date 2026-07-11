@@ -18,6 +18,7 @@ namespace Orbit.Infrastructure.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserId = table.Column<Guid>(type: "uuid", nullable: false),
                     IdempotencyKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    RequestType = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     ResponseBody = table.Column<string>(type: "text", nullable: false),
                     CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
@@ -38,9 +39,9 @@ namespace Orbit.Infrastructure.Migrations
                 column: "CreatedAtUtc");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ProcessedRequests_UserId_IdempotencyKey",
+                name: "IX_ProcessedRequests_UserId_IdempotencyKey_RequestType",
                 table: "ProcessedRequests",
-                columns: new[] { "UserId", "IdempotencyKey" },
+                columns: new[] { "UserId", "IdempotencyKey", "RequestType" },
                 unique: true);
         }
 
