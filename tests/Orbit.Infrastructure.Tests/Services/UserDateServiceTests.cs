@@ -23,16 +23,23 @@ public class UserDateServiceTests
     }
 
     [Fact]
-    public async Task GetUserTodayAsync_UserWithTimezone_ReturnsCorrectDate()
+    public async Task GetUserTodayAsync_AppliesUserTimezoneToLocalizedDayBoundary()
     {
-        var user = User.Create("Test", "test@test.com").Value;
-        user.SetTimeZone("America/New_York");
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
-            .Returns(user);
+        var eastUserId = Guid.NewGuid();
+        var westUserId = Guid.NewGuid();
 
-        var result = await _sut.GetUserTodayAsync(UserId);
+        var eastUser = User.Create("East", "east@test.com").Value;
+        eastUser.SetTimeZone("Pacific/Kiritimati");
+        var westUser = User.Create("West", "west@test.com").Value;
+        westUser.SetTimeZone("Pacific/Honolulu");
 
-        result.Should().NotBe(default);
+        _userRepo.GetByIdAsync(eastUserId, Arg.Any<CancellationToken>()).Returns(eastUser);
+        _userRepo.GetByIdAsync(westUserId, Arg.Any<CancellationToken>()).Returns(westUser);
+
+        var eastToday = await _sut.GetUserTodayAsync(eastUserId);
+        var westToday = await _sut.GetUserTodayAsync(westUserId);
+
+        (eastToday.DayNumber - westToday.DayNumber).Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]

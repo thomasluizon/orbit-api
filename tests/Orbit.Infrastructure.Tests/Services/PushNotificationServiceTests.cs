@@ -1,239 +1,235 @@
-using System.Text.Json;
+using System.Net;
+using System.Security.Cryptography;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
-/// Tests the push subscription routing logic used by PushNotificationService.
-/// FCM subscriptions are identified by P256dh == "fcm", everything else is web push.
-/// The actual send logic requires Firebase/WebPush infrastructure, tested at integration level.
+/// Exercises the real <see cref="PushNotificationService.SendToUserAsync"/> against an in-memory
+/// SQLite <see cref="OrbitDbContext"/> and a stubbed HTTP transport. Web Push delivery is driven end
+/// to end (valid VAPID + receiver EC keys are generated in-process so aes128gcm encryption reaches
+/// the stubbed push service), which lets the dead-token-prune, transient-failure, and success paths
+/// be asserted on real database state. FCM send is not reachable without Firebase credentials, so
+/// only its "not initialized" guard is covered.
 /// </summary>
-public class PushNotificationServiceTests
+public sealed class PushNotificationServiceTests : IDisposable
 {
-    private static readonly Guid ValidUserId = Guid.NewGuid();
+    private readonly SqliteConnection _connection;
+    private readonly OrbitDbContext _dbContext;
+    private readonly VapidSettings _vapidSettings;
+    private readonly string _receiverP256dh;
+    private readonly string _receiverAuth;
+    private readonly Guid _userId = Guid.NewGuid();
 
-    [Fact]
-    public void PushSubscription_FcmSubscription_IdentifiedByP256dhFcm()
+    public PushNotificationServiceTests()
     {
-        var sub = PushSubscription.Create(ValidUserId, "fcm-token-123", "fcm", "auth-key").Value;
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
 
-        sub.P256dh.Should().Be("fcm");
-        sub.Endpoint.Should().Be("fcm-token-123");
-    }
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseSqlite(_connection)
+            .Options;
 
-    [Fact]
-    public void PushSubscription_WebPushSubscription_HasRealP256dh()
-    {
-        var sub = PushSubscription.Create(
-            ValidUserId,
-            "https://fcm.googleapis.com/fcm/send/abc123",
-            "BNcRdreA...real-key",
-            "auth-secret").Value;
+        _dbContext = new SqliteCompatOrbitDbContext(options);
+        _dbContext.Database.EnsureCreated();
 
-        sub.P256dh.Should().NotBe("fcm");
-    }
+        var user = User.Create("Push Tester", "push@useorbit.org").Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, _userId);
+        _dbContext.Users.Add(user);
+        _dbContext.SaveChanges();
 
-    [Fact]
-    public void PushSubscription_FcmRoutingDecision_CorrectlySplits()
-    {
-        var subs = new List<PushSubscription>
+        var (publicKey, privateKey) = GenerateVapidKeyPair();
+        _vapidSettings = new VapidSettings
         {
-            PushSubscription.Create(ValidUserId, "fcm-token-1", "fcm", "auth1").Value,
-            PushSubscription.Create(ValidUserId, "fcm-token-2", "fcm", "auth2").Value,
-            PushSubscription.Create(ValidUserId, "https://push.example.com/sub1", "p256dh-key-1", "auth3").Value,
-            PushSubscription.Create(ValidUserId, "https://push.example.com/sub2", "p256dh-key-2", "auth4").Value,
+            PublicKey = publicKey,
+            PrivateKey = privateKey,
+            Subject = "mailto:push-tests@useorbit.org"
         };
 
-        var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
-        var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
+        (_receiverP256dh, _receiverAuth) = GenerateReceiverKeys();
+    }
 
-        fcmSubs.Should().HaveCount(2);
-        webPushSubs.Should().HaveCount(2);
-        fcmSubs.Should().AllSatisfy(s => s.P256dh.Should().Be("fcm"));
-        webPushSubs.Should().AllSatisfy(s => s.P256dh.Should().NotBe("fcm"));
+    public void Dispose()
+    {
+        _dbContext.Dispose();
+        _connection.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    private PushNotificationService CreateService(StubHttpMessageHandler handler) =>
+        new(_dbContext, Options.Create(_vapidSettings), NullLogger<PushNotificationService>.Instance, new HttpClient(handler));
+
+    private async Task<PushSubscription> SeedWebPushSubscription(string endpoint)
+    {
+        var sub = PushSubscription.Create(_userId, endpoint, _receiverP256dh, _receiverAuth).Value;
+        _dbContext.PushSubscriptions.Add(sub);
+        await _dbContext.SaveChangesAsync();
+        return sub;
     }
 
     [Fact]
-    public void PushSubscription_EmptyList_NoRouting()
+    public async Task SendToUserAsync_NoSubscriptions_DoesNothing()
     {
-        var subs = new List<PushSubscription>();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
 
-        var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
-        var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
+        await service.SendToUserAsync(Guid.NewGuid(), "Title", "Body");
 
-        fcmSubs.Should().BeEmpty();
-        webPushSubs.Should().BeEmpty();
+        handler.CallCount.Should().Be(0);
     }
 
     [Fact]
-    public void PushSubscription_AllFcm_NoWebPush()
+    public async Task SendToUserAsync_FcmSubscriptionAndFirebaseNotInitialized_KeepsSubscription()
     {
-        var subs = new List<PushSubscription>
+        var fcmSub = PushSubscription.Create(_userId, "fcm-device-token", PushSubscription.FcmSentinel, "auth").Value;
+        _dbContext.PushSubscriptions.Add(fcmSub);
+        await _dbContext.SaveChangesAsync();
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        handler.CallCount.Should().Be(0);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendToUserAsync_WebPushDelivered_KeepsSubscription()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/live");
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body", "/habits");
+
+        handler.CallCount.Should().Be(1);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Gone)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task SendToUserAsync_WebPushSubscriptionDead_PrunesSubscription(HttpStatusCode deadStatus)
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/dead");
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(deadStatus));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SendToUserAsync_WebPushTransientFailure_KeepsSubscriptionAndDoesNotThrow()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/flaky");
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var service = CreateService(handler);
+
+        var act = () => service.SendToUserAsync(_userId, "Title", "Body");
+
+        await act.Should().NotThrowAsync();
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendToUserAsync_MixedLiveAndDeadWebPush_PrunesOnlyDeadSubscription()
+    {
+        const string liveEndpoint = "https://push.example.com/sub/keep";
+        const string deadEndpoint = "https://push.example.com/sub/drop";
+        await SeedWebPushSubscription(liveEndpoint);
+        await SeedWebPushSubscription(deadEndpoint);
+
+        var handler = new StubHttpMessageHandler(request =>
+            request.RequestUri!.AbsoluteUri == deadEndpoint
+                ? new HttpResponseMessage(HttpStatusCode.Gone)
+                : new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        var remaining = await _dbContext.PushSubscriptions.Select(s => s.Endpoint).ToListAsync();
+        remaining.Should().ContainSingle().Which.Should().Be(liveEndpoint);
+    }
+
+    private static (string PublicKey, string PrivateKey) GenerateVapidKeyPair()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var parameters = key.ExportParameters(true);
+        return (Base64UrlEncode(UncompressedPoint(parameters)), Base64UrlEncode(LeftPad(parameters.D!, 32)));
+    }
+
+    private static (string P256dh, string Auth) GenerateReceiverKeys()
+    {
+        using var key = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        var p256dh = Base64UrlEncode(UncompressedPoint(key.ExportParameters(false)));
+        var auth = Base64UrlEncode(RandomNumberGenerator.GetBytes(16));
+        return (p256dh, auth);
+    }
+
+    private static byte[] UncompressedPoint(ECParameters parameters)
+    {
+        var buffer = new byte[65];
+        buffer[0] = 0x04;
+        LeftPad(parameters.Q.X!, 32).CopyTo(buffer, 1);
+        LeftPad(parameters.Q.Y!, 32).CopyTo(buffer, 33);
+        return buffer;
+    }
+
+    private static byte[] LeftPad(byte[] bytes, int size)
+    {
+        if (bytes.Length == size) return bytes;
+        var padded = new byte[size];
+        bytes.CopyTo(padded, size - bytes.Length);
+        return padded;
+    }
+
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            PushSubscription.Create(ValidUserId, "token-1", "fcm", "auth1").Value,
-            PushSubscription.Create(ValidUserId, "token-2", "fcm", "auth2").Value,
-        };
-
-        var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
-        var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
-
-        fcmSubs.Should().HaveCount(2);
-        webPushSubs.Should().BeEmpty();
+            CallCount++;
+            return Task.FromResult(responder(request));
+        }
     }
 
-    [Fact]
-    public void PushSubscription_AllWebPush_NoFcm()
+    private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)
+        : OrbitDbContext(options)
     {
-        var subs = new List<PushSubscription>
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            PushSubscription.Create(ValidUserId, "https://push.example.com/1", "real-key-1", "auth1").Value,
-            PushSubscription.Create(ValidUserId, "https://push.example.com/2", "real-key-2", "auth2").Value,
-        };
+            base.OnModelCreating(modelBuilder);
 
-        var fcmSubs = subs.Where(s => s.P256dh == "fcm").ToList();
-        var webPushSubs = subs.Where(s => s.P256dh != "fcm").ToList();
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    var defaultSql = property.GetDefaultValueSql();
+                    if (defaultSql is not null && defaultSql.Contains("::", StringComparison.Ordinal))
+                        property.SetDefaultValueSql(null);
+                }
 
-        fcmSubs.Should().BeEmpty();
-        webPushSubs.Should().HaveCount(2);
-    }
-
-    [Fact]
-    public void Create_EmptyUserId_ReturnsFailure()
-    {
-        var result = PushSubscription.Create(Guid.Empty, "endpoint", "key", "auth");
-        result.IsFailure.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Create_EmptyEndpoint_ReturnsFailure()
-    {
-        var result = PushSubscription.Create(ValidUserId, "", "key", "auth");
-        result.IsFailure.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Create_EmptyP256dh_ReturnsFailure()
-    {
-        var result = PushSubscription.Create(ValidUserId, "endpoint", "", "auth");
-        result.IsFailure.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Create_EmptyAuth_ReturnsFailure()
-    {
-        var result = PushSubscription.Create(ValidUserId, "endpoint", "key", "");
-        result.IsFailure.Should().BeTrue();
-    }
-
-    [Fact]
-    public void Create_ValidInputs_ReturnsSuccess()
-    {
-        var result = PushSubscription.Create(ValidUserId, "https://push.example.com", "p256dh-key", "auth-secret");
-        result.IsSuccess.Should().BeTrue();
-        result.Value.UserId.Should().Be(ValidUserId);
-    }
-
-    [Fact]
-    public void TokenPreview_ShortEndpoint_TruncatesCorrectly()
-    {
-        var endpoint = "short";
-        var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
-
-        preview.Should().Be("short...");
-    }
-
-    [Fact]
-    public void TokenPreview_LongEndpoint_TruncatesTo20Chars()
-    {
-        var endpoint = "https://push.example.com/sub/abcdefghijklmnopqrst";
-        var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
-
-        preview.Should().Be("https://push.example...");
-        preview.Should().HaveLength(23);    }
-
-    [Fact]
-    public void TokenPreview_ExactlyTwentyChars_NoExtraTruncation()
-    {
-        var endpoint = "12345678901234567890";
-        var preview = endpoint[..Math.Min(20, endpoint.Length)] + "...";
-
-        preview.Should().Be("12345678901234567890...");
-    }
-
-    [Fact]
-    public void WebPushPayload_SerializesCorrectly_WithUrl()
-    {
-        var title = "Test Title";
-        var body = "Test Body";
-        var url = "/habits";
-
-        var payload = JsonSerializer.Serialize(new { title, body, url });
-
-        payload.Should().Contain("\"title\":\"Test Title\"");
-        payload.Should().Contain("\"body\":\"Test Body\"");
-        payload.Should().Contain("\"url\":\"/habits\"");
-    }
-
-    [Fact]
-    public void WebPushPayload_SerializesCorrectly_WithNullUrl()
-    {
-        var title = "Alert";
-        var body = "Something happened";
-        string? url = null;
-
-        var payload = JsonSerializer.Serialize(new { title, body, url });
-
-        payload.Should().Contain("\"url\":null");
-    }
-
-    [Fact]
-    public void WebPushPayload_SpecialCharacters_EscapedInJson()
-    {
-        var title = "He said \"hello\"";
-        var body = "Line1\nLine2";
-        var url = "/";
-
-        var payload = JsonSerializer.Serialize(new { title, body, url });
-        var parsed = JsonDocument.Parse(payload);
-
-        parsed.RootElement.GetProperty("title").GetString().Should().Be("He said \"hello\"");
-        parsed.RootElement.GetProperty("body").GetString().Should().Be("Line1\nLine2");
-    }
-
-    [Fact]
-    public void MultiUserRouting_GroupsByUserId()
-    {
-        var user1 = Guid.NewGuid();
-        var user2 = Guid.NewGuid();
-
-        var subs = new List<PushSubscription>
-        {
-            PushSubscription.Create(user1, "token-1", "fcm", "auth1").Value,
-            PushSubscription.Create(user1, "https://push.com/1", "key1", "auth2").Value,
-            PushSubscription.Create(user2, "token-2", "fcm", "auth3").Value,
-        };
-
-        var user1Subs = subs.Where(s => s.UserId == user1).ToList();
-        var user2Subs = subs.Where(s => s.UserId == user2).ToList();
-
-        user1Subs.Should().HaveCount(2);
-        user2Subs.Should().HaveCount(1);
-    }
-
-    [Fact]
-    public void StaleSubscriptionTracking_AccumulatesAcrossTypes()
-    {
-        var staleSubscriptions = new List<PushSubscription>();
-
-        var fcmSub = PushSubscription.Create(ValidUserId, "stale-token", "fcm", "auth1").Value;
-        var webSub = PushSubscription.Create(ValidUserId, "https://gone.com/sub", "key1", "auth2").Value;
-
-        staleSubscriptions.Add(fcmSub);
-        staleSubscriptions.Add(webSub);
-
-        staleSubscriptions.Should().HaveCount(2);
-        staleSubscriptions.Should().Contain(fcmSub);
-        staleSubscriptions.Should().Contain(webSub);
+                foreach (var index in entityType.GetIndexes())
+                    index.SetFilter(null);
+            }
+        }
     }
 }
