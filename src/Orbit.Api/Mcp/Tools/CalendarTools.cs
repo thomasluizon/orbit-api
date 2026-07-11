@@ -21,7 +21,7 @@ public class CalendarTools(IMediator mediator, McpExecutorBridge executorBridge)
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetCalendarEventsQuery(userId);
         var result = await mediator.Send(query, cancellationToken);
 
@@ -60,14 +60,5 @@ public class CalendarTools(IMediator mediator, McpExecutorBridge executorBridge)
         }, confirmationToken, cancellationToken);
 
         return result.Succeeded ? $"Calendar sync: {action} completed." : result.Message;
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }

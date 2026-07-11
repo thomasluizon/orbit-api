@@ -8,6 +8,17 @@ public interface IUnitOfWork : IDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Runs <paramref name="operation"/> in a transaction and returns its value, so callers can flow a
+    /// result straight out of the transaction instead of smuggling it through a captured mutable local.
+    /// Same transaction semantics as the void overload: joins an ambient transaction when one is active,
+    /// otherwise wraps the operation in an execution-strategy-managed transaction that commits on success
+    /// and clears the change tracker before rethrowing on failure.
+    /// </summary>
+    Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Takes a transaction-scoped PostgreSQL advisory lock derived from <paramref name="key"/>, serializing
     /// callers that pass the same key until the surrounding transaction commits or rolls back. Must be
     /// called inside an <see cref="ExecuteInTransactionAsync"/> operation — the lock auto-releases at

@@ -14,7 +14,7 @@ public class GamificationTools(IMediator mediator)
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetGamificationProfileQuery(userId);
         var result = await mediator.Send(query, cancellationToken);
 
@@ -37,7 +37,7 @@ public class GamificationTools(IMediator mediator)
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetAchievementsQuery(userId);
         var result = await mediator.Send(query, cancellationToken);
 
@@ -73,7 +73,7 @@ public class GamificationTools(IMediator mediator)
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetStreakInfoQuery(userId);
         var result = await mediator.Send(query, cancellationToken);
 
@@ -88,14 +88,5 @@ public class GamificationTools(IMediator mediator)
                $"Freezes Available: {s.FreezesAvailable}/{s.MaxFreezesPerMonth} this month\n" +
                $"Freezes Used: {s.FreezesUsedThisMonth}\n" +
                (s.RecentFreezeDates.Count > 0 ? $"Recent freeze dates: {string.Join(", ", s.RecentFreezeDates)}" : "");
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }
