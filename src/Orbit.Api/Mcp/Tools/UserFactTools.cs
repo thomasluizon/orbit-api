@@ -22,7 +22,7 @@ public class UserFactTools(IMediator mediator, McpExecutorBridge executorBridge)
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var query = new GetUserFactsQuery(userId);
         var result = await mediator.Send(query, cancellationToken);
 
@@ -54,14 +54,5 @@ public class UserFactTools(IMediator mediator, McpExecutorBridge executorBridge)
         }, confirmationToken, cancellationToken);
 
         return result.Succeeded ? $"Deleted user fact {factId}" : result.Message;
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }

@@ -22,7 +22,7 @@ public class ChecklistTemplateTools(IMediator mediator, McpExecutorBridge execut
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var result = await mediator.Send(new GetChecklistTemplatesQuery(userId), cancellationToken);
 
         if (result.IsFailure)
@@ -70,14 +70,5 @@ public class ChecklistTemplateTools(IMediator mediator, McpExecutorBridge execut
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded ? $"Deleted checklist template {templateId}." : result.Message;
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }
