@@ -91,10 +91,14 @@ public partial class AccountDeletionService(
             var userToDelete = await dbContext.Users.FindAsync([userId], ct);
             if (userToDelete is not null)
             {
+                var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
-                await resetRepository.DeleteAllUserDataAsync(userId, ct);
-                dbContext.Users.Remove(userToDelete);
-                await dbContext.SaveChangesAsync(ct);
+                await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+                {
+                    await resetRepository.DeleteAllUserDataAsync(userId, transactionToken);
+                    dbContext.Users.Remove(userToDelete);
+                    await unitOfWork.SaveChangesAsync(transactionToken);
+                }, ct);
             }
 
             if (logger.IsEnabled(LogLevel.Information))
@@ -126,9 +130,16 @@ public partial class AccountDeletionService(
             .Where(a => a.FrozenDate < cutoff)
             .ExecuteDeleteAsync(ct);
 
-        if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedStreakFreezeAlerts > 0) && logger.IsEnabled(LogLevel.Information))
-            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedStreakFreezeAlerts);
+        var processedRequestCutoff = DateTime.UtcNow.AddDays(-ProcessedRequestRetentionDays);
+        var deletedProcessedRequests = await dbContext.ProcessedRequests
+            .Where(r => r.CreatedAtUtc < processedRequestCutoff)
+            .ExecuteDeleteAsync(ct);
+
+        if ((deletedReminders > 0 || deletedSlipAlerts > 0 || deletedStreakFreezeAlerts > 0 || deletedProcessedRequests > 0) && logger.IsEnabled(LogLevel.Information))
+            LogStaleRecordsCleaned(logger, deletedReminders, deletedSlipAlerts, deletedStreakFreezeAlerts, deletedProcessedRequests);
     }
+
+    private const int ProcessedRequestRetentionDays = 30;
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "AccountDeletionService started")]
     private static partial void LogServiceStarted(ILogger logger);
@@ -148,7 +159,7 @@ public partial class AccountDeletionService(
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to delete account {UserId}")]
     private static partial void LogAccountDeletionFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders, {SlipAlerts} stale SentSlipAlerts, and {StreakFreezeAlerts} stale SentStreakFreezeAlerts older than 90 days")]
-    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int streakFreezeAlerts);
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "Cleaned up {Reminders} stale SentReminders, {SlipAlerts} stale SentSlipAlerts, and {StreakFreezeAlerts} stale SentStreakFreezeAlerts older than 90 days, plus {ProcessedRequests} ProcessedRequests older than 30 days")]
+    private static partial void LogStaleRecordsCleaned(ILogger logger, int reminders, int slipAlerts, int streakFreezeAlerts, int processedRequests);
 
 }

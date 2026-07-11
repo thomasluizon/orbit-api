@@ -57,6 +57,7 @@ public class OrbitDbContext : DbContext
     public DbSet<GoogleCalendarSyncSuggestion> GoogleCalendarSyncSuggestions => Set<GoogleCalendarSyncSuggestion>();
     public DbSet<ProcessedPlayNotification> ProcessedPlayNotifications => Set<ProcessedPlayNotification>();
     public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
+    public DbSet<ProcessedRequest> ProcessedRequests => Set<ProcessedRequest>();
     public DbSet<AiFactExtractionBatch> AiFactExtractionBatches => Set<AiFactExtractionBatch>();
     public DbSet<AiUsageDaily> AiUsageDaily => Set<AiUsageDaily>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
@@ -99,6 +100,7 @@ public class OrbitDbContext : DbContext
         ConfigureSentStreakFreezeAlertEntity(modelBuilder);
         ConfigureProcessedPlayNotificationEntity(modelBuilder);
         ConfigureProcessedStripeEventEntity(modelBuilder);
+        ConfigureProcessedRequestEntity(modelBuilder);
         ConfigureAiFactExtractionBatchEntity(modelBuilder);
         ConfigureAiUsageDailyEntity(modelBuilder);
         ConfigureNotificationEntity(modelBuilder);
@@ -231,6 +233,17 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(e => e.EventId).IsUnique();
             entity.Property(e => e.EventId).IsRequired().HasMaxLength(255);
+        });
+    }
+
+    private static void ConfigureProcessedRequestEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProcessedRequest>(entity =>
+        {
+            entity.HasIndex(request => new { request.UserId, request.IdempotencyKey }).IsUnique();
+            entity.HasIndex(request => request.CreatedAtUtc);
+            entity.Property(request => request.IdempotencyKey).IsRequired().HasMaxLength(200);
+            entity.HasOne<User>().WithMany().HasForeignKey(request => request.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
