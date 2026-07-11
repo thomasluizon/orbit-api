@@ -21,7 +21,7 @@ public class ApiKeyTools(IMediator mediator, McpExecutorBridge executorBridge)
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var result = await mediator.Send(new GetApiKeysQuery(userId), cancellationToken);
 
         if (result.IsFailure)
@@ -72,14 +72,5 @@ public class ApiKeyTools(IMediator mediator, McpExecutorBridge executorBridge)
         return action == "create"
             ? $"Created API key '{result.TargetName}' (id: {result.TargetId})"
             : $"Revoked API key {keyId}.";
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }

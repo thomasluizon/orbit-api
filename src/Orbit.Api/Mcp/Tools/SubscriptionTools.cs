@@ -33,7 +33,7 @@ public class SubscriptionTools(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var u = await userRepository.GetByIdAsync(userId, cancellationToken);
         if (u is null)
             return $"Error: {ErrorMessages.UserNotFound.Message}";
@@ -53,7 +53,7 @@ public class SubscriptionTools(
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var result = await mediator.Send(new GetReferralStatsQuery(userId), cancellationToken);
 
         if (result.IsFailure)
@@ -95,14 +95,5 @@ public class SubscriptionTools(
         }, confirmationToken, cancellationToken);
 
         return result.Succeeded ? $"Subscription: {result.TargetName}" : result.Message;
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }

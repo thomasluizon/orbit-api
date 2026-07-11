@@ -26,7 +26,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var userId = GetUserId(user);
+        var userId = McpToolHelpers.GetUserId(user);
         var result = await mediator.Send(new GetNotificationsQuery(userId), cancellationToken);
 
         if (result.IsFailure)
@@ -131,14 +131,5 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         }, confirmationToken, cancellationToken);
 
         return result.Succeeded ? $"Deleted notification {notificationId}." : result.Message;
-    }
-
-    private static Guid GetUserId(ClaimsPrincipal user)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? throw new UnauthorizedAccessException("User ID not found in token");
-        if (!Guid.TryParse(claim, out var userId))
-            throw new UnauthorizedAccessException("User ID claim is not a valid GUID");
-        return userId;
     }
 }
