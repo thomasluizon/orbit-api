@@ -16,23 +16,36 @@ public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisp
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        await ExecuteInTransactionAsync<object?>(async ct =>
+        {
+            await operation(ct);
+            return null;
+        }, cancellationToken);
+    }
+
+    public async Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
         // Join an ambient transaction (e.g. IdempotencyBehavior's) rather than nest, which Npgsql forbids: https://github.com/thomasluizon/orbit-ui-mobile/issues/243
         if (!UseRelationalTransactionPath() || context.Database.CurrentTransaction is not null)
         {
-            await operation(cancellationToken);
-            return;
+            return await operation(cancellationToken);
         }
 
         var strategy = context.Database.CreateExecutionStrategy();
 
-        await strategy.ExecuteAsync(async () =>
+        return await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
             try
             {
-                await operation(cancellationToken);
+                var result = await operation(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
+                return result;
             }
             catch
             {
