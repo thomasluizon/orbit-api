@@ -146,7 +146,6 @@ public class OrbitDbContextTests
 
         var user = context.Model.FindEntityType(typeof(User))!;
         user.FindProperty(nameof(User.ColorScheme))!.GetMaxLength().Should().Be(50);
-        user.FindProperty(nameof(User.Language))!.GetMaxLength().Should().Be(10);
         user.FindProperty(nameof(User.ThemePreference))!.GetMaxLength().Should().Be(10);
         user.FindProperty(nameof(User.TimeZone))!.GetMaxLength().Should().Be(100);
 

@@ -33,16 +33,6 @@ namespace Orbit.Infrastructure.Migrations
                 oldNullable: true);
 
             migrationBuilder.AlterColumn<string>(
-                name: "Language",
-                table: "Users",
-                type: "character varying(10)",
-                maxLength: 10,
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
                 name: "ColorScheme",
                 table: "Users",
                 type: "character varying(50)",
@@ -129,16 +119,6 @@ namespace Orbit.Infrastructure.Migrations
 
             migrationBuilder.AlterColumn<string>(
                 name: "ThemePreference",
-                table: "Users",
-                type: "text",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "character varying(10)",
-                oldMaxLength: 10,
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Language",
                 table: "Users",
                 type: "text",
                 nullable: true,
