@@ -143,7 +143,7 @@ public partial class VerifyCodeCommandHandler(
         }
 
         if (isNewUser)
-            SendWelcomeEmailInBackground(user.Email, user.Name, request.Language);
+            SendWelcomeEmailInBackground(user.Id, user.Email, user.Name, request.Language);
 
         return wasReactivated;
     }
@@ -160,7 +160,7 @@ public partial class VerifyCodeCommandHandler(
         }
     }
 
-    private void SendWelcomeEmailInBackground(string email, string name, string language)
+    private void SendWelcomeEmailInBackground(Guid userId, string email, string name, string language)
     {
         _ = Task.Run(async () =>
         {
@@ -170,7 +170,7 @@ public partial class VerifyCodeCommandHandler(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                LogWelcomeEmailFailed(logger, ex, email);
+                LogWelcomeEmailFailed(logger, ex, userId);
             }
         }, CancellationToken.None);
     }
@@ -178,6 +178,6 @@ public partial class VerifyCodeCommandHandler(
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]
     private static partial void LogReferralProcessingFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Welcome email failed for user {Email}")]
-    private static partial void LogWelcomeEmailFailed(ILogger logger, Exception ex, string email);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Welcome email failed for user {UserId}")]
+    private static partial void LogWelcomeEmailFailed(ILogger logger, Exception ex, Guid userId);
 }
