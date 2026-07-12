@@ -3,13 +3,16 @@ using System.Linq.Expressions;
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using Stripe;
@@ -360,28 +363,34 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_DuplicateEventId_SkipsProcessingWithoutSaving()
+    public async Task Handle_ReservesProcessedEventViaConstraint_WithoutCheckThenInsertPreCheck()
     {
-        _processedRepo.AnyAsync(
-            Arg.Any<Expression<Func<ProcessedStripeEvent, bool>>>(),
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
             Arg.Any<CancellationToken>())
-            .Returns(true);
+            .Returns(user);
+
+        var subscription = CreateMockSubscription("sub_test");
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(subscription);
 
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _userRepo.DidNotReceive().FindOneTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
+        await _processedRepo.DidNotReceive().AnyAsync(
+            Arg.Any<Expression<Func<ProcessedStripeEvent, bool>>>(),
             Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _processedRepo.Received(1).AddAsync(
+            Arg.Any<ProcessedStripeEvent>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ConcurrentDuplicate_SaveConflict_ReturnsSuccess()
+    public async Task Handle_DuplicateEvent_UniqueViolationOnSave_IsIdempotentSuccess()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -400,10 +409,72 @@ public class HandleWebhookCommandHandlerTests
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
             UserId.ToString(), "sub_test", "cus_test"));
 
-        var command = new HandleWebhookCommand(json, signature);
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Command_IsMarkedConcurrencyRetryable() =>
+        typeof(HandleWebhookCommand).Should().BeAssignableTo<IConcurrencyRetryable>();
+
+    [Fact]
+    public async Task Handle_SaveThrowsConcurrencyConflict_PropagatesInsteadOfSwallowingAsFailure()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var subscription = CreateMockSubscription("sub_test");
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(subscription);
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateConcurrencyException("stale xmin token"));
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        var act = () => _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+    }
+
+    [Fact]
+    public async Task Handle_ThroughRetryBehavior_ConcurrencyConflictThenSuccess_UpgradesProAndRetries()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var subscription = CreateMockSubscription("sub_test");
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(subscription);
+
+        var saveAttempts = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => saveAttempts++ == 0
+                ? throw new DbUpdateConcurrencyException("stale xmin token")
+                : 1);
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+        var command = new HandleWebhookCommand(json, signature);
+        var behavior = new ConcurrencyRetryBehavior<HandleWebhookCommand, Result>(_unitOfWork);
+        RequestHandlerDelegate<Result> next = cancellationToken => _handler.Handle(command, cancellationToken);
+
+        var result = await behavior.Handle(command, next, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        saveAttempts.Should().Be(2);
+        user.IsPro.Should().BeTrue();
+        _unitOfWork.Received(1).ResetTracking();
     }
 
     [Fact]

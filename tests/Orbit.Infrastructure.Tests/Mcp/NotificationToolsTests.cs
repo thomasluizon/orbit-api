@@ -60,7 +60,7 @@ public class NotificationToolsTests
     }
 
     [Fact]
-    public async Task GetNotifications_WithNotifications_ReturnsFormattedList()
+    public async Task GetNotifications_WithNotifications_ReturnsTitlesWithoutBody()
     {
         var response = new GetNotificationsResponse(
             [Item("Reminder", "Time to exercise", isRead: false)],
@@ -72,8 +72,24 @@ public class NotificationToolsTests
 
         result.Should().Contain("Notifications (1, 1 unread)");
         result.Should().Contain("Reminder");
-        result.Should().Contain("Time to exercise");
         result.Should().Contain("[NEW]");
+        result.Should().NotContain("Time to exercise");
+    }
+
+    [Fact]
+    public async Task GetNotifications_OmitsBodyThatEmbedsAnotherUserName()
+    {
+        var response = new GetNotificationsResponse(
+            [Item("New friend request", "Alice Johnson wants to be your friend.", isRead: false)],
+            1);
+        _mediator.Send(Arg.Any<GetNotificationsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(response));
+
+        var result = await _tools.GetNotifications(_user);
+
+        result.Should().Contain("New friend request");
+        result.Should().NotContain("Alice Johnson");
+        result.Should().NotContain("wants to be your friend");
     }
 
     [Fact]
