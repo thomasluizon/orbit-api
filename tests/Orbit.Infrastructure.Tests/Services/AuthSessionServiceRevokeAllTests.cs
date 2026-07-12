@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Domain.Entities;
@@ -61,6 +62,27 @@ public class AuthSessionServiceRevokeAllTests
     }
 
     [Fact]
+    public async Task RevokeAllSessionsAsync_ConcurrencyConflict_ReturnsInvalidSessionWithoutThrowing()
+    {
+        var dbName = NewDbName();
+        var userId = Guid.NewGuid();
+
+        await using (var seed = CreateContext(dbName))
+        {
+            seed.UserSessions.Add(UserSession.Create(userId, Hash("active"), DateTime.UtcNow.AddDays(90)).Value);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName, new ConflictAlwaysInterceptor());
+
+        var act = async () => await CreateService(context).RevokeAllSessionsAsync(userId, CancellationToken.None);
+
+        var result = await act.Should().NotThrowAsync();
+        result.Which.IsFailure.Should().BeTrue();
+        result.Which.ErrorCode.Should().Be("INVALID_SESSION");
+    }
+
+    [Fact]
     public async Task RevokeAllSessionsAsync_EmptyUserId_Fails()
     {
         var dbName = NewDbName();
@@ -92,11 +114,25 @@ public class AuthSessionServiceRevokeAllTests
             }));
     }
 
-    private static OrbitDbContext CreateContext(string dbName) =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(dbName).Options);
+    private static OrbitDbContext CreateContext(string dbName, ISaveChangesInterceptor? interceptor = null)
+    {
+        var builder = new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(dbName);
+        if (interceptor is not null)
+            builder.AddInterceptors(interceptor);
+        return new OrbitDbContext(builder.Options);
+    }
 
     private static string NewDbName() => $"AuthSessionRevokeAll_{Guid.NewGuid()}";
 
     private static string Hash(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+
+    private sealed class ConflictAlwaysInterceptor : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            throw new DbUpdateConcurrencyException("simulated stale token");
+        }
+    }
 }

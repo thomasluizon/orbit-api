@@ -9,6 +9,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
+using Orbit.Application.Auth.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -82,8 +83,7 @@ public class DistributedRateLimitFilterTests
     [Fact]
     public async Task RefreshPolicy_PartitionsUnauthenticatedRequestByRefreshTokenNotIp()
     {
-        const string refreshToken =
-            "AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555";
+        var refreshToken = new string('A', RefreshTokenRules.TokenLength);
         string? capturedPartitionKey = null;
         _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));

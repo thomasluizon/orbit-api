@@ -117,7 +117,15 @@ public class AuthSessionService(
         foreach (var session in activeSessions)
             session.Revoke(nowUtc);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.DiscardChanges();
+            return Result.Failure(ErrorMessages.InvalidSession);
+        }
 
         return Result.Success();
     }

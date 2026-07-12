@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
+using Orbit.Application.Auth.Validators;
 
 namespace Orbit.Infrastructure.Tests.RateLimiting;
 
@@ -74,11 +75,9 @@ public class DistributedRateLimitPartitionKeyTests
         partitionKey.Should().BeEmpty();
     }
 
-    private const string RefreshTokenA =
-        "AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555";
+    private static readonly string RefreshTokenA = new('A', RefreshTokenRules.TokenLength);
 
-    private const string RefreshTokenB =
-        "1111AAAA2222BBBB3333CCCC4444DDDD5555EEEE6666FFFF1111AAAA2222BBBB3333CCCC4444DDDD5555EEEE6666FFFF1111AAAA2222BBBB3333CCCC4444DDDD5555EEEE";
+    private static readonly string RefreshTokenB = new('B', RefreshTokenRules.TokenLength);
 
     [Fact]
     public void TryResolveRefreshTokenPartitionKey_Refresh_HashesTokenUnderTokenPrefixWithoutLeakingSecret()
@@ -115,6 +114,17 @@ public class DistributedRateLimitPartitionKeyTests
 
         resolved.Resolved.Should().BeFalse();
         resolved.PartitionKey.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("short")]
+    [InlineData("g-not-hex-but-right-length-padding-000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")]
+    public void TryResolveRefreshTokenPartitionKey_Refresh_FallsBackWhenTokenIsMalformed(string malformedToken)
+    {
+        var lowercase = new string('a', RefreshTokenRules.TokenLength);
+
+        ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(malformedToken)).Resolved.Should().BeFalse();
+        ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(lowercase)).Resolved.Should().BeFalse();
     }
 
     [Fact]

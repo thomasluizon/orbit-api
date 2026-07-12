@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Orbit.Api.Extensions;
+using Orbit.Application.Auth.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -161,8 +162,11 @@ public sealed partial class DistributedRateLimitFilter(
     /// session, so hashing it yields a stable per-session bucket that a stolen or targeted token cannot
     /// escape by rotating source IPs — closing the cross-IP brute-force/replay gap that IP partitioning
     /// leaves open. The token is hashed so the partition key (which is logged) never carries the raw
-    /// secret. Returns false when the policy isn't refresh partitioned or no non-blank refresh token is
-    /// present, so the caller falls back to IP partitioning.
+    /// secret. The token is accepted only if it matches the exact server-issued shape
+    /// (<see cref="RefreshTokenRules.IsWellFormed"/>); a malformed token (the trivial "vary the body to
+    /// mint a fresh bucket" bypass) resolves to false so the caller falls back to IP partitioning and the
+    /// request is still throttled per source IP. Also returns false when the policy isn't refresh
+    /// partitioned or no refresh token is present.
     /// </summary>
     public static bool TryResolveRefreshTokenPartitionKey(
         string policyName,
@@ -186,7 +190,7 @@ public sealed partial class DistributedRateLimitFilter(
             if (tokenProperty?.PropertyType != typeof(string))
                 continue;
 
-            if (tokenProperty.GetValue(argument) is not string rawToken || string.IsNullOrWhiteSpace(rawToken))
+            if (tokenProperty.GetValue(argument) is not string rawToken || !RefreshTokenRules.IsWellFormed(rawToken))
                 continue;
 
             partitionKey = $"{policyName.ToLowerInvariant()}:token:{HashRefreshToken(rawToken)}";
