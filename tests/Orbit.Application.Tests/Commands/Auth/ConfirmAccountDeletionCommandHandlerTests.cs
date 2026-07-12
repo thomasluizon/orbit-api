@@ -42,6 +42,36 @@ public class ConfirmAccountDeletionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ValidCode_ClearsGoogleOAuthTokens()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        user.SetGoogleTokens("access-token", "refresh-token");
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+
+        var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "123456"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.GoogleAccessToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_InvalidCode_LeavesGoogleOAuthTokensIntact()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        user.SetGoogleTokens("access-token", "refresh-token");
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+
+        var result = await _handler.Handle(new ConfirmAccountDeletionCommand(UserId, "999999"), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        user.GoogleAccessToken.Should().Be("access-token");
+        user.GoogleRefreshToken.Should().Be("refresh-token");
+    }
+
+    [Fact]
     public async Task Handle_InvalidCode_ReturnsFailureAndIncrementsAttempts()
     {
         var user = User.Create("Test", TestEmail).Value;

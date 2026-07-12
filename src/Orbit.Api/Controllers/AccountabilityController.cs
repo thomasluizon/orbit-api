@@ -50,6 +50,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpPost("pairs/{pairId:guid}/accept")]
+    [DistributedRateLimit("accountability-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -70,6 +71,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpDelete("pairs/{pairId:guid}")]
+    [DistributedRateLimit("accountability-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -85,6 +87,7 @@ public partial class AccountabilityController(IMediator mediator, ILogger<Accoun
     }
 
     [HttpPut("pairs/{pairId:guid}/habits")]
+    [DistributedRateLimit("accountability-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
