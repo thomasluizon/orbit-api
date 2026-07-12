@@ -26,8 +26,22 @@ public interface IGenericRepository<T> where T : Entity
     /// queries hide; always constrain the predicate with the owner's id to keep the scope per-user.
     /// </summary>
     Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads a single tracked entity matching <paramref name="predicate"/> with global query filters
+    /// disabled, so a soft-deleted or deactivated row is still returned. Auth and subscription-webhook
+    /// reconciliation use this to resolve (and mutate) a user the default deactivation filter hides.
+    /// </summary>
+    Task<T?> FindOneTrackedIgnoringFiltersAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<int> CountAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Existence check with global query filters disabled, so a soft-deleted or deactivated row still
+    /// counts. Used by the admin-authorization and purchase-token-uniqueness guards, which must account
+    /// for rows the default deactivation filter hides.
+    /// </summary>
+    Task<bool> AnyIgnoringFiltersAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task AddAsync(T entity, CancellationToken cancellationToken = default);
     void Update(T entity);
     void Remove(T entity);

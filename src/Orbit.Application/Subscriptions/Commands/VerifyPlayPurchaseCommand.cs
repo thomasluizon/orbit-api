@@ -104,7 +104,7 @@ public partial class VerifyPlayPurchaseCommandHandler(
         }
         catch (DbUpdateException)
         {
-            if (await userRepository.AnyAsync(
+            if (await userRepository.AnyIgnoringFiltersAsync(
                 u => u.PlayPurchaseToken == request.PurchaseToken && u.Id != request.UserId, cancellationToken))
             {
                 LogAccountMismatch(logger, request.UserId);

@@ -135,9 +135,8 @@ public class VerifyCodeCommandHandlerTests
     {
         SetupCacheWithCode("123456");
         var racedUser = User.Create("Raced", TestEmail).Value;
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns((User?)null, racedUser);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -176,9 +175,8 @@ public class VerifyCodeCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
     }

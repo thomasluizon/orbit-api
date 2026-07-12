@@ -162,9 +162,8 @@ public class AuthCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
     }

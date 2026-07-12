@@ -133,7 +133,7 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         await _service.RunAsync(CancellationToken.None);
 
-        var remaining = await _dbContext.Users.Select(u => u.Id).ToListAsync();
+        var remaining = await _dbContext.Users.IgnoreQueryFilters().Select(u => u.Id).ToListAsync();
         remaining.Should().BeEquivalentTo(new[] { futureDated, active });
     }
 

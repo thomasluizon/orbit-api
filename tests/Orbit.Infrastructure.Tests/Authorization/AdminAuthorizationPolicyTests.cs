@@ -22,7 +22,7 @@ public class AdminAuthorizationPolicyTests
     [Fact]
     public async Task AdminUser_Succeeds()
     {
-        _userRepository.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _userRepository.AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(true);
         var context = ContextFor(Principal(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())));
 
@@ -34,7 +34,7 @@ public class AdminAuthorizationPolicyTests
     [Fact]
     public async Task AuthenticatedNonAdmin_DoesNotSucceed()
     {
-        _userRepository.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _userRepository.AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(false);
         var context = ContextFor(Principal(new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())));
 
@@ -52,7 +52,7 @@ public class AdminAuthorizationPolicyTests
 
         context.HasSucceeded.Should().BeFalse();
         await _userRepository.DidNotReceive()
-            .AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
+            .AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class AdminAuthorizationPolicyTests
 
         context.HasSucceeded.Should().BeFalse();
         await _userRepository.DidNotReceive()
-            .AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
+            .AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
     }
 
     private static ClaimsPrincipal Principal(params Claim[] claims) =>

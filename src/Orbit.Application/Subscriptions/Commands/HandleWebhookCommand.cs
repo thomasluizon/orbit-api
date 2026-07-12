@@ -114,7 +114,7 @@ public partial class HandleWebhookCommandHandler(
                 $"checkout.session.completed missing or invalid userId metadata (session: {session?.Id ?? "null"}).");
         }
 
-        var user = await userRepository.FindOneTrackedAsync(u => u.Id == uid, cancellationToken: ct);
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == uid, ct);
         LogUserFound(logger, user is not null, subscriptionId);
 
         if (user is null || subscriptionId is null)
@@ -146,8 +146,8 @@ public partial class HandleWebhookCommandHandler(
         if (invoiceSubId is null)
             return;
 
-        var user = await userRepository.FindOneTrackedAsync(
-            u => u.StripeSubscriptionId == invoiceSubId, cancellationToken: ct);
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+            u => u.StripeSubscriptionId == invoiceSubId, ct);
 
         if (user is null)
             return;
@@ -168,8 +168,8 @@ public partial class HandleWebhookCommandHandler(
         if (subscription is null)
             return;
 
-        var user = await userRepository.FindOneTrackedAsync(
-            u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+            u => u.StripeSubscriptionId == subscription.Id, ct);
 
         if (user is null)
             return;
@@ -187,8 +187,8 @@ public partial class HandleWebhookCommandHandler(
         if (subscription is null)
             return;
 
-        var user = await userRepository.FindOneTrackedAsync(
-            u => u.StripeSubscriptionId == subscription.Id, cancellationToken: ct);
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+            u => u.StripeSubscriptionId == subscription.Id, ct);
 
         if (user is null)
             return;

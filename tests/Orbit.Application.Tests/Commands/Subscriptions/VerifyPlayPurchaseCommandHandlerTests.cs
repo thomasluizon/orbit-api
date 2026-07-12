@@ -228,7 +228,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
         StubVerify(ActiveState());
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new DbUpdateException("duplicate key value violates unique constraint"));
-        _userRepo.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _userRepo.AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         var result = await _handler.Handle(Command(), CancellationToken.None);
@@ -286,7 +286,7 @@ public class VerifyPlayPurchaseCommandHandlerTests
             .Returns("coupon_abc");
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new DbUpdateException("transient"));
-        _userRepo.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
+        _userRepo.AnyIgnoringFiltersAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
         var act = () => _handler.Handle(Command(), CancellationToken.None);
