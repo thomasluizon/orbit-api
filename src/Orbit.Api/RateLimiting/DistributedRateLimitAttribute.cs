@@ -19,19 +19,25 @@ public sealed class DistributedRateLimitAttribute(string policyName) : Attribute
         => new DistributedRateLimitFilter(
             policyName,
             serviceProvider.GetRequiredService<IDistributedRateLimitService>(),
+            serviceProvider.GetRequiredService<IAuthSessionService>(),
             serviceProvider.GetRequiredService<ILogger<DistributedRateLimitFilter>>());
 }
 
 public sealed partial class DistributedRateLimitFilter(
     string policyName,
     IDistributedRateLimitService distributedRateLimitService,
+    IAuthSessionService authSessionService,
     ILogger<DistributedRateLimitFilter> logger) : IAsyncActionFilter
 {
     private const string FailOpenPolicy = "support";
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var partitionKey = ResolvePartitionKey(policyName, context.HttpContext, context.ActionArguments.Values);
+        var partitionKey = await ResolvePartitionKeyAsync(
+            policyName,
+            context.HttpContext,
+            context.ActionArguments.Values,
+            context.HttpContext.RequestAborted);
         DistributedRateLimitDecision decision;
 
         try
@@ -97,7 +103,11 @@ public sealed partial class DistributedRateLimitFilter(
         await next();
     }
 
-    private static string ResolvePartitionKey(string policyName, HttpContext context, IEnumerable<object?> actionArguments)
+    private async Task<string> ResolvePartitionKeyAsync(
+        string policyName,
+        HttpContext context,
+        IEnumerable<object?> actionArguments,
+        CancellationToken cancellationToken)
     {
         if (context.User.Identity?.IsAuthenticated == true)
             return $"user:{context.GetUserId()}";
@@ -105,8 +115,11 @@ public sealed partial class DistributedRateLimitFilter(
         if (TryResolveEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
             return emailPartitionKey;
 
-        if (TryResolveRefreshTokenPartitionKey(policyName, actionArguments, out var refreshPartitionKey))
-            return refreshPartitionKey;
+        if (TryExtractRefreshToken(policyName, actionArguments, out var refreshToken)
+            && await authSessionService.HasSessionForTokenAsync(refreshToken, cancellationToken))
+        {
+            return BuildRefreshTokenPartitionKey(policyName, refreshToken);
+        }
 
         return $"ip:{context.GetClientIpAddress() ?? "unknown"}";
     }
@@ -157,23 +170,20 @@ public sealed partial class DistributedRateLimitFilter(
         new(StringComparer.OrdinalIgnoreCase) { "refresh" };
 
     /// <summary>
-    /// For unauthenticated requests under the <c>refresh</c> policy, partitions by a SHA-256 hash of the
-    /// request's refresh token instead of the caller IP. A refresh token uniquely identifies one user
-    /// session, so hashing it yields a stable per-session bucket that a stolen or targeted token cannot
-    /// escape by rotating source IPs — closing the cross-IP brute-force/replay gap that IP partitioning
-    /// leaves open. The token is hashed so the partition key (which is logged) never carries the raw
-    /// secret. The token is accepted only if it matches the exact server-issued shape
-    /// (<see cref="RefreshTokenRules.IsWellFormed"/>); a malformed token (the trivial "vary the body to
-    /// mint a fresh bucket" bypass) resolves to false so the caller falls back to IP partitioning and the
-    /// request is still throttled per source IP. Also returns false when the policy isn't refresh
-    /// partitioned or no refresh token is present.
+    /// For unauthenticated requests under the <c>refresh</c> policy, extracts the request's refresh token
+    /// when it matches the exact server-issued shape (<see cref="RefreshTokenRules.IsWellFormed"/>). Format
+    /// alone is not enough to earn a per-session bucket: the caller additionally confirms the token maps to
+    /// a real stored session before partitioning by it, so a malformed OR well-formed-but-forged token —
+    /// the "vary the body to mint a fresh, never-throttled bucket" bypass, which is as cheap for an attacker
+    /// as minting a real token — never yields a private bucket and instead falls back to per-IP throttling.
+    /// Returns false when the policy isn't refresh partitioned or no well-formed refresh token is present.
     /// </summary>
-    public static bool TryResolveRefreshTokenPartitionKey(
+    public static bool TryExtractRefreshToken(
         string policyName,
         IEnumerable<object?> actionArguments,
-        out string partitionKey)
+        out string refreshToken)
     {
-        partitionKey = string.Empty;
+        refreshToken = string.Empty;
 
         if (!RefreshTokenPartitionedPolicies.Contains(policyName))
             return false;
@@ -193,12 +203,21 @@ public sealed partial class DistributedRateLimitFilter(
             if (tokenProperty.GetValue(argument) is not string rawToken || !RefreshTokenRules.IsWellFormed(rawToken))
                 continue;
 
-            partitionKey = $"{policyName.ToLowerInvariant()}:token:{HashRefreshToken(rawToken)}";
+            refreshToken = rawToken;
             return true;
         }
 
         return false;
     }
+
+    /// <summary>
+    /// Builds the per-session rate-limit partition key for a refresh token already confirmed to map to a
+    /// real stored session. The token is SHA-256 hashed so the partition key (which is logged) never carries
+    /// the raw secret; the same token always maps to the same bucket, so a stolen or targeted token cannot
+    /// escape throttling by rotating source IPs.
+    /// </summary>
+    public static string BuildRefreshTokenPartitionKey(string policyName, string refreshToken) =>
+        $"{policyName.ToLowerInvariant()}:token:{HashRefreshToken(refreshToken)}";
 
     private static string HashRefreshToken(string refreshToken) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));

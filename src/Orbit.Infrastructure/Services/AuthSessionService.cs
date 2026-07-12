@@ -130,6 +130,12 @@ public class AuthSessionService(
         return Result.Success();
     }
 
+    public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        var tokenHash = HashToken(refreshToken);
+        return await userSessionRepository.AnyAsync(session => session.TokenHash == tokenHash, cancellationToken);
+    }
+
     private static string GenerateRefreshToken()
     {
         return Convert.ToHexString(RandomNumberGenerator.GetBytes(64));

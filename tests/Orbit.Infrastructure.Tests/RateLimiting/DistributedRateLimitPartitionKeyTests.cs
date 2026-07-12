@@ -80,68 +80,79 @@ public class DistributedRateLimitPartitionKeyTests
     private static readonly string RefreshTokenB = new('B', RefreshTokenRules.TokenLength);
 
     [Fact]
-    public void TryResolveRefreshTokenPartitionKey_Refresh_HashesTokenUnderTokenPrefixWithoutLeakingSecret()
+    public void BuildRefreshTokenPartitionKey_HashesTokenUnderTokenPrefixWithoutLeakingSecret()
     {
-        var resolved = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
+        var partitionKey = DistributedRateLimitFilter.BuildRefreshTokenPartitionKey("refresh", RefreshTokenA);
 
-        resolved.Resolved.Should().BeTrue();
-        resolved.PartitionKey.Should().StartWith("refresh:token:");
-        resolved.PartitionKey.Should().NotContain(RefreshTokenA);
+        partitionKey.Should().StartWith("refresh:token:");
+        partitionKey.Should().NotContain(RefreshTokenA);
     }
 
     [Fact]
-    public void TryResolveRefreshTokenPartitionKey_Refresh_SameTokenMapsToSameKeyAcrossRequests()
+    public void BuildRefreshTokenPartitionKey_SameTokenMapsToSameKey()
     {
-        var first = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
-        var second = ResolveRefreshFor("refresh", new AuthController.RefreshSessionOperationRequest(RefreshTokenA));
+        var first = DistributedRateLimitFilter.BuildRefreshTokenPartitionKey("refresh", RefreshTokenA);
+        var second = DistributedRateLimitFilter.BuildRefreshTokenPartitionKey("refresh", RefreshTokenA);
 
-        first.PartitionKey.Should().Be(second.PartitionKey);
+        first.Should().Be(second);
     }
 
     [Fact]
-    public void TryResolveRefreshTokenPartitionKey_Refresh_DifferentTokensMapToDifferentKeys()
+    public void BuildRefreshTokenPartitionKey_DifferentTokensMapToDifferentKeys()
     {
-        var first = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
-        var second = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenB));
+        var first = DistributedRateLimitFilter.BuildRefreshTokenPartitionKey("refresh", RefreshTokenA);
+        var second = DistributedRateLimitFilter.BuildRefreshTokenPartitionKey("refresh", RefreshTokenB);
 
-        first.PartitionKey.Should().NotBe(second.PartitionKey);
+        first.Should().NotBe(second);
     }
 
     [Fact]
-    public void TryResolveRefreshTokenPartitionKey_Refresh_FallsBackWhenTokenIsBlank()
+    public void TryExtractRefreshToken_Refresh_ReturnsWellFormedTokenAcrossRequestShapes()
     {
-        var resolved = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest("   "));
+        var fromPlain = ExtractRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
+        var fromOperation = ExtractRefreshFor("refresh", new AuthController.RefreshSessionOperationRequest(RefreshTokenA));
+
+        fromPlain.Resolved.Should().BeTrue();
+        fromPlain.RefreshToken.Should().Be(RefreshTokenA);
+        fromOperation.Resolved.Should().BeTrue();
+        fromOperation.RefreshToken.Should().Be(RefreshTokenA);
+    }
+
+    [Fact]
+    public void TryExtractRefreshToken_Refresh_FallsBackWhenTokenIsBlank()
+    {
+        var resolved = ExtractRefreshFor("refresh", new AuthController.RefreshSessionRequest("   "));
 
         resolved.Resolved.Should().BeFalse();
-        resolved.PartitionKey.Should().BeEmpty();
+        resolved.RefreshToken.Should().BeEmpty();
     }
 
     [Theory]
     [InlineData("short")]
     [InlineData("g-not-hex-but-right-length-padding-000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")]
-    public void TryResolveRefreshTokenPartitionKey_Refresh_FallsBackWhenTokenIsMalformed(string malformedToken)
+    public void TryExtractRefreshToken_Refresh_FallsBackWhenTokenIsMalformed(string malformedToken)
     {
         var lowercase = new string('a', RefreshTokenRules.TokenLength);
 
-        ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(malformedToken)).Resolved.Should().BeFalse();
-        ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(lowercase)).Resolved.Should().BeFalse();
+        ExtractRefreshFor("refresh", new AuthController.RefreshSessionRequest(malformedToken)).Resolved.Should().BeFalse();
+        ExtractRefreshFor("refresh", new AuthController.RefreshSessionRequest(lowercase)).Resolved.Should().BeFalse();
     }
 
     [Fact]
-    public void TryResolveRefreshTokenPartitionKey_Refresh_FallsBackWhenNoTokenArgument()
+    public void TryExtractRefreshToken_Refresh_FallsBackWhenNoTokenArgument()
     {
-        var resolved = ResolveRefreshFor("refresh", new AuthController.SendCodeRequest("a@x.com"));
+        var resolved = ExtractRefreshFor("refresh", new AuthController.SendCodeRequest("a@x.com"));
 
         resolved.Resolved.Should().BeFalse();
     }
 
     [Fact]
-    public void TryResolveRefreshTokenPartitionKey_DoesNotApplyToUnrelatedPolicy()
+    public void TryExtractRefreshToken_DoesNotApplyToUnrelatedPolicy()
     {
-        var resolved = ResolveRefreshFor("auth", new AuthController.RefreshSessionRequest(RefreshTokenA));
+        var resolved = ExtractRefreshFor("auth", new AuthController.RefreshSessionRequest(RefreshTokenA));
 
         resolved.Resolved.Should().BeFalse();
-        resolved.PartitionKey.Should().BeEmpty();
+        resolved.RefreshToken.Should().BeEmpty();
     }
 
     private static (bool Resolved, string PartitionKey) ResolveFor(string policyName, object request)
@@ -154,13 +165,13 @@ public class DistributedRateLimitPartitionKeyTests
         return (resolved, partitionKey);
     }
 
-    private static (bool Resolved, string PartitionKey) ResolveRefreshFor(string policyName, object request)
+    private static (bool Resolved, string RefreshToken) ExtractRefreshFor(string policyName, object request)
     {
-        var resolved = DistributedRateLimitFilter.TryResolveRefreshTokenPartitionKey(
+        var resolved = DistributedRateLimitFilter.TryExtractRefreshToken(
             policyName,
             [request],
-            out var partitionKey);
+            out var refreshToken);
 
-        return (resolved, partitionKey);
+        return (resolved, refreshToken);
     }
 }
