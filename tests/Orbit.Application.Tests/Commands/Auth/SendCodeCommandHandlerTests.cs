@@ -1,9 +1,13 @@
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -16,18 +20,21 @@ public class SendCodeCommandHandlerTests
 {
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
+    private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
     private readonly SendCodeCommandHandler _handler;
+    private Job? _enqueuedJob;
 
     private const string SmokeEmail = "smoke@useorbit.org";
     private const string SmokeCode = "428913";
 
     public SendCodeCommandHandlerTests()
     {
-        _handler = new SendCodeCommandHandler(_cache, _emailService);
+        _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
+        _handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
     }
 
     [Fact]
-    public async Task Production_PinnedEmail_SeedsFixedCode_AndSkipsEmail()
+    public async Task Production_PinnedEmail_SeedsFixedCode_AndDoesNotEnqueueEmail()
     {
         await WithEnv("Production", SmokeEmail, SmokeCode, async () =>
         {
@@ -36,8 +43,7 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().Be(SmokeCode);
-            await _emailService.DidNotReceive().SendVerificationCodeAsync(
-                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
         });
     }
 
@@ -72,7 +78,7 @@ public class SendCodeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Production_DifferentEmail_NoBypass_SendsEmail()
+    public async Task Production_DifferentEmail_NoBypass_EnqueuesEmailWithCachedCode()
     {
         await WithEnv("Production", SmokeEmail, SmokeCode, async () =>
         {
@@ -81,13 +87,12 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:someone-else@useorbit.org", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().NotBe(SmokeCode);
-            await _emailService.Received(1).SendVerificationCodeAsync(
-                "someone-else@useorbit.org", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            AssertEnqueuedVerificationEmail("someone-else@useorbit.org", entry.Code, "en");
         });
     }
 
     [Fact]
-    public async Task NonProduction_PinnedEmail_NoBypass_SendsEmail()
+    public async Task NonProduction_PinnedEmail_NoBypass_EnqueuesEmail()
     {
         await WithEnv("Development", SmokeEmail, SmokeCode, async () =>
         {
@@ -96,13 +101,25 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().NotBe(SmokeCode);
-            await _emailService.Received(1).SendVerificationCodeAsync(
-                SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
         });
     }
 
     [Fact]
-    public async Task Production_UnsetSecret_NoBypass_SendsEmail()
+    public async Task NonDefaultLanguage_EnqueuesEmailWithThatLanguage()
+    {
+        await WithEnv("Development", SmokeEmail, SmokeCode, async () =>
+        {
+            var result = await _handler.Handle(new SendCodeCommand(SmokeEmail, "pt-BR"), CancellationToken.None);
+
+            result.IsSuccess.Should().BeTrue();
+            _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
+            AssertEnqueuedVerificationEmail(SmokeEmail, entry!.Code, "pt-BR");
+        });
+    }
+
+    [Fact]
+    public async Task Production_UnsetSecret_NoBypass_EnqueuesEmail()
     {
         await WithEnv("Production", SmokeEmail, null, async () =>
         {
@@ -111,13 +128,12 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().NotBe(SmokeCode);
-            await _emailService.Received(1).SendVerificationCodeAsync(
-                SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
         });
     }
 
     [Fact]
-    public async Task Production_ShortSmokeCode_NoBypass_SendsEmail()
+    public async Task Production_ShortSmokeCode_NoBypass_EnqueuesEmail()
     {
         await WithEnv("Production", SmokeEmail, "short", async () =>
         {
@@ -126,13 +142,12 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().NotBe("short");
-            await _emailService.Received(1).SendVerificationCodeAsync(
-                SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
         });
     }
 
     [Fact]
-    public async Task Production_NonNumericSmokeCode_NoBypass_SendsEmail()
+    public async Task Production_NonNumericSmokeCode_NoBypass_EnqueuesEmail()
     {
         await WithEnv("Production", SmokeEmail, "abc123", async () =>
         {
@@ -141,9 +156,33 @@ public class SendCodeCommandHandlerTests
             result.IsSuccess.Should().BeTrue();
             _cache.TryGetValue($"verify:{SmokeEmail}", out VerificationEntry? entry).Should().BeTrue();
             entry!.Code.Should().NotBe("abc123");
-            await _emailService.Received(1).SendVerificationCodeAsync(
-                SmokeEmail, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+            AssertEnqueuedVerificationEmail(SmokeEmail, entry.Code, "en");
         });
+    }
+
+    [Fact]
+    public async Task Cooldown_WithinWindow_ReturnsFailure_AndDoesNotEnqueue()
+    {
+        await WithEnv("Development", SmokeEmail, SmokeCode, async () =>
+        {
+            _cache.Set($"verify:{SmokeEmail}", new VerificationEntry("111111", 0, DateTime.UtcNow),
+                new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+
+            var result = await _handler.Handle(new SendCodeCommand(SmokeEmail), CancellationToken.None);
+
+            result.IsFailure.Should().BeTrue();
+            _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
+        });
+    }
+
+    private void AssertEnqueuedVerificationEmail(string expectedEmail, string expectedCode, string expectedLanguage)
+    {
+        _backgroundJobClient.Received(1).Create(
+            Arg.Any<Job>(), Arg.Is<IState>(state => state is EnqueuedState));
+        _enqueuedJob.Should().NotBeNull();
+        _enqueuedJob!.Type.Should().Be(typeof(SendVerificationCodeEmailJob));
+        _enqueuedJob.Method.Name.Should().Be(nameof(SendVerificationCodeEmailJob.ExecuteAsync));
+        _enqueuedJob.Args.Should().Equal(expectedEmail, expectedCode, expectedLanguage);
     }
 
     private VerifyCodeCommandHandler BuildVerifyHandler()

@@ -1,5 +1,6 @@
 using Hangfire;
 using Hangfire.PostgreSql;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
@@ -22,6 +23,8 @@ public static partial class ServiceCollectionExtensions
 
             builder.Services.AddHostedService<DataEncryptionMigrationService>();
             builder.Services.AddHostedService<XpAwardLogBackfillHostedService>();
+
+            AddDurableJobQueue(builder);
 
             if (useDurableQueue)
                 AddDurableRecurringJobs(builder);
@@ -50,12 +53,20 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<AiUsageSummaryService>();
     }
 
-    private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
+    /// <summary>
+    /// Registers the durable Hangfire job queue — PostgreSQL-backed storage, the enqueue client, and a
+    /// processing server — unconditionally, so request-path work such as the verification-code email can
+    /// be handed to <see cref="IBackgroundJobClient"/> and dispatched out of band: the send survives a
+    /// restart and is auto-retried on failure. This is independent of
+    /// <c>BackgroundServices:UseDurableQueue</c>, which only governs whether the recurring scans run as
+    /// Hangfire recurring jobs or as in-process polling loops.
+    /// </summary>
+    private static void AddDurableJobQueue(WebApplicationBuilder builder)
     {
         var connectionString = OrbitConnectionStringFactory.ForSession(builder.Configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException(
-                $"{BackgroundJobSettings.SectionName}:UseDurableQueue is true but no database connection string is configured.");
+                "A database connection string is required for the durable background-job queue.");
 
         builder.Services.AddHangfire(config => config
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -68,6 +79,11 @@ public static partial class ServiceCollectionExtensions
             options.SchedulePollingInterval = TimeSpan.FromMinutes(1);
         });
 
+        builder.Services.AddScoped<SendVerificationCodeEmailJob>();
+    }
+
+    private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
+    {
         builder.Services.AddSingleton<ScheduledJobRunner>();
         AddScheduledJob<ReminderSchedulerService>(builder);
         AddScheduledJob<GoalDeadlineNotificationService>(builder);
