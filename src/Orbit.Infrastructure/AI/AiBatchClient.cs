@@ -16,7 +16,8 @@ namespace Orbit.Infrastructure.AI;
 /// Thin wrapper over the OpenAI .NET SDK's <see cref="OpenAIFileClient"/> and
 /// <see cref="BatchClient"/> for the fact-extraction Batch API flow. Constructed from
 /// <see cref="AiSettings"/>, mirroring <see cref="AiCompletionClient"/>'s endpoint / credential /
-/// timeout / retry configuration. The Batch + Files surface is pre-release (OPENAI001), suppressed
+/// retry configuration but using the longer <see cref="AiSettings.BatchNetworkTimeoutSeconds"/> for
+/// whole-file up/download. The Batch + Files surface is pre-release (OPENAI001), suppressed
 /// file-wide here so the experimental API stays contained to this adapter.
 /// </summary>
 public sealed class AiBatchClient : IAiBatchClient
@@ -34,7 +35,7 @@ public sealed class AiBatchClient : IAiBatchClient
         var clientOptions = new OpenAIClientOptions
         {
             Endpoint = new Uri(settings.BaseUrl),
-            NetworkTimeout = TimeSpan.FromSeconds(settings.NetworkTimeoutSeconds),
+            NetworkTimeout = TimeSpan.FromSeconds(settings.BatchNetworkTimeoutSeconds),
             RetryPolicy = new AiRetryLoggingPolicy(settings.MaxRetries, logger)
         };
         var credential = new ApiKeyCredential(settings.ApiKey);

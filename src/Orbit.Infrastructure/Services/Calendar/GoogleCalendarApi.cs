@@ -11,7 +11,7 @@ namespace Orbit.Infrastructure.Services.Calendar;
 /// pagination via its page-token loop. Kept deliberately logic-free: filtering, dedup, and
 /// mapping live in <see cref="GoogleCalendarEventFetcher"/> so they stay unit-testable.
 /// </summary>
-internal sealed class GoogleCalendarApi : IGoogleCalendarApi
+internal sealed class GoogleCalendarApi(TimeSpan httpTimeout) : IGoogleCalendarApi
 {
     private const int EventsPageSize = 2500;
 
@@ -81,13 +81,15 @@ internal sealed class GoogleCalendarApi : IGoogleCalendarApi
         return request;
     }
 
-    private static CalendarService CreateCalendarService(string accessToken)
+    private CalendarService CreateCalendarService(string accessToken)
     {
         var credential = GoogleCredential.FromAccessToken(accessToken);
-        return new CalendarService(new BaseClientService.Initializer
+        var service = new CalendarService(new BaseClientService.Initializer
         {
             HttpClientInitializer = credential,
             ApplicationName = "Orbit"
         });
+        service.HttpClient.Timeout = httpTimeout;
+        return service;
     }
 }

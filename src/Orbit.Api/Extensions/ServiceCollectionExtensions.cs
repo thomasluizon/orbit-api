@@ -116,7 +116,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
-        builder.Services.AddGoogleCalendarServices();
+        builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ITokenService, JwtTokenService>();
         builder.Services.AddScoped<IAuthSessionService, AuthSessionService>();
@@ -184,6 +184,9 @@ public static partial class ServiceCollectionExtensions
         return builder;
     }
 
+    private static TimeSpan GetDefaultHttpTimeout(WebApplicationBuilder builder)
+        => TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
+
     public static WebApplicationBuilder AddOrbitInfrastructure(this WebApplicationBuilder builder)
     {
         builder.Services.Configure<EncryptionSettings>(
@@ -192,7 +195,7 @@ public static partial class ServiceCollectionExtensions
 
         builder.Services.Configure<FrontendSettings>(builder.Configuration.GetSection("Frontend"));
 
-        var httpTimeout = TimeSpan.FromSeconds(builder.Configuration.GetValue("HttpClients:DefaultTimeoutSeconds", 30));
+        var httpTimeout = GetDefaultHttpTimeout(builder);
 
         AddEmailAndSupabaseClients(builder, httpTimeout);
 
@@ -200,9 +203,10 @@ public static partial class ServiceCollectionExtensions
             builder.Configuration.GetSection(GoogleSettings.SectionName));
 
         builder.Services.AddSingleton<OAuthAuthorizationStore>();
+        builder.Services.AddHttpClient(GoogleTokenService.HttpClientName, client => client.Timeout = httpTimeout);
 
-        AddStripeBilling(builder);
-        AddGooglePlayBilling(builder);
+        AddStripeBilling(builder, httpTimeout);
+        AddGooglePlayBilling(builder, httpTimeout);
         AddPushAndReferralServices(builder, httpTimeout);
         AddBackgroundServices(builder);
 

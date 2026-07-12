@@ -57,7 +57,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IMarketingContactsService, ResendContactsService>();
     }
 
-    private static void AddStripeBilling(WebApplicationBuilder builder)
+    private static void AddStripeBilling(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         builder.Services.Configure<StripeSettings>(
             builder.Configuration.GetSection(StripeSettings.SectionName));
@@ -65,6 +65,13 @@ public static partial class ServiceCollectionExtensions
         if (!string.IsNullOrEmpty(stripeKey))
         {
             Stripe.StripeConfiguration.ApiKey = stripeKey;
+            var stripeHttpClient = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) })
+            {
+                Timeout = httpTimeout,
+            };
+            Stripe.StripeConfiguration.StripeClient = new Stripe.StripeClient(
+                stripeKey,
+                httpClient: new Stripe.SystemNetHttpClient(stripeHttpClient, Stripe.StripeConfiguration.MaxNetworkRetries));
         }
 
         builder.Services.AddSingleton<Stripe.CustomerService>();
@@ -78,7 +85,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
     }
 
-    private static void AddGooglePlayBilling(WebApplicationBuilder builder)
+    private static void AddGooglePlayBilling(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
         builder.Services.Configure<GooglePlaySettings>(
             builder.Configuration.GetSection(GooglePlaySettings.SectionName));
@@ -89,12 +96,14 @@ public static partial class ServiceCollectionExtensions
                 .FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(googlePlaySettings.ServiceAccountJson)
                 .ToGoogleCredential()
                 .CreateScoped(Google.Apis.AndroidPublisher.v3.AndroidPublisherService.Scope.Androidpublisher);
-            return new Google.Apis.AndroidPublisher.v3.AndroidPublisherService(
+            var service = new Google.Apis.AndroidPublisher.v3.AndroidPublisherService(
                 new Google.Apis.Services.BaseClientService.Initializer
                 {
                     HttpClientInitializer = credential,
                     ApplicationName = "Orbit",
                 });
+            service.HttpClient.Timeout = httpTimeout;
+            return service;
         });
         builder.Services.AddScoped<Orbit.Application.Common.IPlayBillingService, Orbit.Infrastructure.Services.GooglePlayBillingService>();
         builder.Services.AddSingleton<Orbit.Application.Common.IPlayPushTokenValidator, Orbit.Infrastructure.Services.GooglePlayPushTokenValidator>();
