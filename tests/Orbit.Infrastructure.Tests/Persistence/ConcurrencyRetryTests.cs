@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -275,6 +276,7 @@ public class ConcurrencyRetryTests
             PassingGoalGate(),
             Substitute.For<IGamificationService>(),
             new UnitOfWork(context),
+            new MemoryCache(new MemoryCacheOptions()),
             NullLogger<UpdateGoalProgressCommandHandler>.Instance);
 
     private static OrbitDbContext CreateContext(string dbName, ISaveChangesInterceptor? interceptor = null)

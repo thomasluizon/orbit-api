@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -74,7 +75,7 @@ public class ScheduledJobRegistryTests
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
         new CalendarAutoSyncService(ScopeFactory(), NullLogger<CalendarAutoSyncService>.Instance, EmptyConfiguration, TimeProvider.System),
-        new OpenAiBatchPollerService(ScopeFactory(), NullLogger<OpenAiBatchPollerService>.Instance, EmptyConfiguration),
+        new OpenAiBatchPollerService(ScopeFactory(), NullLogger<OpenAiBatchPollerService>.Instance, EmptyConfiguration, new MemoryCache(new MemoryCacheOptions())),
     ];
 
     private static IServiceScopeFactory ScopeFactory() => Substitute.For<IServiceScopeFactory>();

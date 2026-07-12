@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -13,7 +14,8 @@ public record CreateTagCommand(
 
 public class CreateTagCommandHandler(
     IGenericRepository<Tag> tagRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateTagCommand, Result<Guid>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<CreateTagCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateTagCommand request, CancellationToken cancellationToken)
     {
@@ -31,6 +33,8 @@ public class CreateTagCommandHandler(
 
         await tagRepository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.Tags(request.UserId));
 
         return Result.Success(result.Value.Id);
     }

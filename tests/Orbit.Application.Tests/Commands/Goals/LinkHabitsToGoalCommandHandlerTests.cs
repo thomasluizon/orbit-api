@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
@@ -16,6 +17,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly LinkHabitsToGoalCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -23,7 +25,7 @@ public class LinkHabitsToGoalCommandHandlerTests
 
     public LinkHabitsToGoalCommandHandlerTests()
     {
-        _handler = new LinkHabitsToGoalCommandHandler(_goalRepo, _habitRepo, _payGate, _unitOfWork);
+        _handler = new LinkHabitsToGoalCommandHandler(_goalRepo, _habitRepo, _payGate, _unitOfWork, _cache);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

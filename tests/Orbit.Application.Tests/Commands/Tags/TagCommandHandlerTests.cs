@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Tags.Commands;
 using Orbit.Domain.Entities;
@@ -24,7 +25,7 @@ public class TagCommandHandlerTests
         _tagRepo.AnyAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
-        var handler = new CreateTagCommandHandler(_tagRepo, _unitOfWork);
+        var handler = new CreateTagCommandHandler(_tagRepo, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new CreateTagCommand(UserId, "Fitness", "#ff0000");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -43,7 +44,7 @@ public class TagCommandHandlerTests
         _tagRepo.AnyAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-        var handler = new CreateTagCommandHandler(_tagRepo, _unitOfWork);
+        var handler = new CreateTagCommandHandler(_tagRepo, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new CreateTagCommand(UserId, "Fitness", "#ff0000");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -64,7 +65,7 @@ public class TagCommandHandlerTests
         _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Tag>());
 
-        var handler = new UpdateTagCommandHandler(_tagRepo, _unitOfWork);
+        var handler = new UpdateTagCommandHandler(_tagRepo, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new UpdateTagCommand(UserId, tag.Id, "New Name", "#ffffff");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -84,7 +85,7 @@ public class TagCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((Tag?)null);
 
-        var handler = new UpdateTagCommandHandler(_tagRepo, _unitOfWork);
+        var handler = new UpdateTagCommandHandler(_tagRepo, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new UpdateTagCommand(UserId, Guid.NewGuid(), "Name", "#fff");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -103,7 +104,7 @@ public class TagCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(tag);
 
-        var handler = new DeleteTagCommandHandler(_tagRepo, _unitOfWork);
+        var handler = new DeleteTagCommandHandler(_tagRepo, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new DeleteTagCommand(UserId, tag.Id);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -122,7 +123,7 @@ public class TagCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns((Tag?)null);
 
-        var handler = new DeleteTagCommandHandler(_tagRepo, _unitOfWork);
+        var handler = new DeleteTagCommandHandler(_tagRepo, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new DeleteTagCommand(UserId, Guid.NewGuid());
 
         var result = await handler.Handle(command, CancellationToken.None);

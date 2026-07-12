@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -24,6 +25,7 @@ public partial class CreateGoalCommandHandler(
     IUserDateService userDateService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
+    IMemoryCache cache,
     ILogger<CreateGoalCommandHandler> logger) : IRequestHandler<CreateGoalCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
@@ -64,6 +66,8 @@ public partial class CreateGoalCommandHandler(
         {
             LogGamificationGoalCreationFailed(logger, ex, request.UserId);
         }
+
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success(goal.Id);
     }

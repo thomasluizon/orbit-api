@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Tags.Commands;
 using Orbit.Domain.Entities;
@@ -11,13 +12,14 @@ public class RestoreTagCommandHandlerTests
 {
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly RestoreTagCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public RestoreTagCommandHandlerTests()
     {
-        _handler = new RestoreTagCommandHandler(_tagRepo, _unitOfWork);
+        _handler = new RestoreTagCommandHandler(_tagRepo, _unitOfWork, _cache);
     }
 
     private void SetupTags(params Tag[] tags)

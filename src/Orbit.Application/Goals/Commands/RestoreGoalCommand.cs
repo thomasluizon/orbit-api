@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -14,7 +15,8 @@ public record RestoreGoalCommand(
 public class RestoreGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<RestoreGoalCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<RestoreGoalCommand, Result>
 {
     public async Task<Result> Handle(RestoreGoalCommand request, CancellationToken cancellationToken)
     {
@@ -32,6 +34,8 @@ public class RestoreGoalCommandHandler(
 
         goal.Restore();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success();
     }

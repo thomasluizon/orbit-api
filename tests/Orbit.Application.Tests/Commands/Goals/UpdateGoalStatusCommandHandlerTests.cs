@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -18,6 +19,7 @@ public class UpdateGoalStatusCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly UpdateGoalStatusCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -26,7 +28,7 @@ public class UpdateGoalStatusCommandHandlerTests
     public UpdateGoalStatusCommandHandlerTests()
     {
         _handler = new UpdateGoalStatusCommandHandler(
-            _goalRepo, _payGate, _gamificationService, _unitOfWork,
+            _goalRepo, _payGate, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<UpdateGoalStatusCommandHandler>>());
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
