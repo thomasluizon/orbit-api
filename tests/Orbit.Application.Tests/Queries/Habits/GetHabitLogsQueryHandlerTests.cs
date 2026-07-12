@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -11,7 +12,7 @@ namespace Orbit.Application.Tests.Queries.Habits;
 public class GetHabitLogsQueryHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
-    private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IHabitLogReader _habitLogReader = Substitute.For<IHabitLogReader>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetHabitLogsQueryHandler _handler;
 
@@ -21,7 +22,7 @@ public class GetHabitLogsQueryHandlerTests
 
     public GetHabitLogsQueryHandlerTests()
     {
-        _handler = new GetHabitLogsQueryHandler(_habitRepo, _habitLogRepo, _userDateService);
+        _handler = new GetHabitLogsQueryHandler(_habitRepo, _habitLogReader, _userDateService);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
@@ -32,24 +33,32 @@ public class GetHabitLogsQueryHandlerTests
             DueDate: Today)).Value;
     }
 
-    [Fact]
-    public async Task Handle_HabitFound_ReturnsLogs()
+    private void SetupHabitFound(Habit? habit)
     {
-        var habit = CreateTestHabit();
         _habitRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(habit);
+    }
 
-        _habitLogRepo.FindAsync(
-            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+    private void SetupLogs(params HabitLog[] logs)
+    {
+        _habitLogReader.ReadRecentLogsAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<int>(),
             Arg.Any<CancellationToken>())
-            .Returns(new List<HabitLog>().AsReadOnly());
+            .Returns(logs);
+    }
 
-        var query = new GetHabitLogsQuery(UserId, HabitId);
+    [Fact]
+    public async Task Handle_HabitFound_ReturnsLogs()
+    {
+        SetupHabitFound(CreateTestHabit());
+        SetupLogs();
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
@@ -58,15 +67,9 @@ public class GetHabitLogsQueryHandlerTests
     [Fact]
     public async Task Handle_HabitNotFound_ReturnsFailure()
     {
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Habit?)null);
+        SetupHabitFound(null);
 
-        var query = new GetHabitLogsQuery(UserId, HabitId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Habit not found");
@@ -74,40 +77,65 @@ public class GetHabitLogsQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_HabitNotFound_DoesNotQueryLogs()
+    {
+        SetupHabitFound(null);
+
+        await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
+
+        await _habitLogReader.DidNotReceive().ReadRecentLogsAsync(
+            Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WrongUser_ReturnsHabitNotFound()
     {
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns((Habit?)null);
+        SetupHabitFound(null);
 
-        var wrongUserId = Guid.NewGuid();
-        var query = new GetHabitLogsQuery(wrongUserId, HabitId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetHabitLogsQuery(Guid.NewGuid(), HabitId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
     }
 
     [Fact]
-    public async Task Handle_CallsUserDateService()
+    public async Task Handle_ReadsLogsWithDefaultLookbackAndRowCap()
+    {
+        SetupHabitFound(CreateTestHabit());
+        SetupLogs();
+
+        await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
+
+        await _habitLogReader.Received(1).ReadRecentLogsAsync(
+            HabitId,
+            Today.AddDays(-AppConstants.HabitLogsLookbackDays),
+            AppConstants.MaxHabitLogsReturned,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_MapsReaderRowsPreservingOrder()
     {
         var habit = CreateTestHabit();
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(habit);
+        var newer = habit.Log(new DateOnly(2026, 4, 2)).Value;
+        var older = habit.Log(new DateOnly(2026, 3, 30)).Value;
+        SetupHabitFound(habit);
+        SetupLogs(newer, older);
 
-        _habitLogRepo.FindAsync(
-            Arg.Any<Expression<Func<HabitLog, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<HabitLog>().AsReadOnly());
+        var result = await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
 
-        var query = new GetHabitLogsQuery(UserId, HabitId);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Select(l => l.Id).Should().ContainInOrder(newer.Id, older.Id);
+        result.Value[0].Date.Should().Be(new DateOnly(2026, 4, 2));
+        result.Value[0].Value.Should().Be(newer.Value);
+    }
 
-        await _handler.Handle(query, CancellationToken.None);
+    [Fact]
+    public async Task Handle_CallsUserDateService()
+    {
+        SetupHabitFound(CreateTestHabit());
+        SetupLogs();
+
+        await _handler.Handle(new GetHabitLogsQuery(UserId, HabitId), CancellationToken.None);
 
         await _userDateService.Received(1).GetUserTodayAsync(UserId, Arg.Any<CancellationToken>());
     }

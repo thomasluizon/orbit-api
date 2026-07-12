@@ -93,6 +93,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Social.Services.IFriendFeedEventEmitter, Orbit.Application.Social.Services.FriendFeedEmitter>();
         builder.Services.AddScoped<IFriendFeedReader, FriendFeedReader>();
         builder.Services.AddScoped<ISocialGraphReader, SocialGraphReader>();
+        builder.Services.AddScoped<IHabitLogReader, HabitLogReader>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.IChallengeProgressService, Orbit.Application.Challenges.Services.ChallengeProgressService>();
         builder.Services.AddScoped<Orbit.Application.Challenges.Services.ChallengeProgressRepositories>(sp =>
             new Orbit.Application.Challenges.Services.ChallengeProgressRepositories(

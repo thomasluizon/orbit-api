@@ -37,24 +37,24 @@ public class GetGoalsQueryHandlerTests
         return goal;
     }
 
-    [Fact]
-    public async Task Handle_ReturnsGoalsForUser()
+    private void ArrangePage(IReadOnlyList<Goal> pageItems, int totalCount)
     {
-        var goals = new List<Goal>
-        {
-            CreateTestGoal("Goal 1"),
-            CreateTestGoal("Goal 2")
-        };
-
-        _goalRepo.FindAsync(
+        _goalRepo.FindPagedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IOrderedQueryable<Goal>>>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
-            .Returns(goals.AsReadOnly());
+            .Returns((pageItems, totalCount));
+    }
 
-        var query = new GetGoalsQuery(UserId);
+    [Fact]
+    public async Task Handle_MapsRepositoryPageAndReportsTotalCount()
+    {
+        ArrangePage(new List<Goal> { CreateTestGoal("Goal 1"), CreateTestGoal("Goal 2") }, 2);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(2);
@@ -64,80 +64,74 @@ public class GetGoalsQueryHandlerTests
     [Fact]
     public async Task Handle_NoGoals_ReturnsEmptyResult()
     {
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal>().AsReadOnly());
+        ArrangePage(new List<Goal>(), 0);
 
-        var query = new GetGoalsQuery(UserId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().BeEmpty();
         result.Value.TotalCount.Should().Be(0);
+        result.Value.TotalPages.Should().Be(0);
     }
 
     [Fact]
-    public async Task Handle_StatusFilter_FiltersCorrectly()
+    public async Task Handle_ForwardsPagingAndComputesTotalPagesFromRepositoryCount()
     {
-        var activeGoal = CreateTestGoal("Active");
-        var completedGoal = CreateTestGoal("Completed", target: 10, current: 10);
+        var pageItems = new List<Goal> { CreateTestGoal("Goal 1"), CreateTestGoal("Goal 2") };
+        ArrangePage(pageItems, 5);
 
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal> { activeGoal, completedGoal }.AsReadOnly());
-
-        var query = new GetGoalsQuery(UserId, StatusFilter: GoalStatus.Active);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Items.Should().HaveCount(1);
-        result.Value.Items[0].Status.Should().Be(GoalStatus.Active);
-    }
-
-    [Fact]
-    public async Task Handle_Pagination_ReturnsCorrectPage()
-    {
-        var goals = Enumerable.Range(1, 5)
-            .Select(i => CreateTestGoal($"Goal {i}"))
-            .ToList();
-
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(goals.AsReadOnly());
-
-        var query = new GetGoalsQuery(UserId, Page: 1, PageSize: 2);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetGoalsQuery(UserId, Page: 1, PageSize: 2), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().HaveCount(2);
         result.Value.TotalCount.Should().Be(5);
         result.Value.TotalPages.Should().Be(3);
         result.Value.Page.Should().Be(1);
+        result.Value.PageSize.Should().Be(2);
+        await _goalRepo.Received(1).FindPagedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IOrderedQueryable<Goal>>>(),
+            1,
+            2,
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_StatusFilter_BuildsPredicateMatchingOnlyThatStatusForTheUser()
+    {
+        var predicate = await CapturePredicate(new GetGoalsQuery(UserId, StatusFilter: GoalStatus.Active));
+
+        var active = CreateTestGoal("Active");
+        var completed = CreateTestGoal("Completed", target: 10, current: 10);
+        var foreignActive = Goal.Create(new Goal.CreateGoalParams(Guid.NewGuid(), "Foreign", 100, "units")).Value;
+
+        completed.Status.Should().Be(GoalStatus.Completed);
+        predicate(active).Should().BeTrue();
+        predicate(completed).Should().BeFalse();
+        predicate(foreignActive).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_NoStatusFilter_BuildsPredicateMatchingEveryStatusForTheUser()
+    {
+        var predicate = await CapturePredicate(new GetGoalsQuery(UserId));
+
+        var active = CreateTestGoal("Active");
+        var completed = CreateTestGoal("Completed", target: 10, current: 10);
+        var foreignActive = Goal.Create(new Goal.CreateGoalParams(Guid.NewGuid(), "Foreign", 100, "units")).Value;
+
+        predicate(active).Should().BeTrue();
+        predicate(completed).Should().BeTrue();
+        predicate(foreignActive).Should().BeFalse();
     }
 
     [Fact]
     public async Task Handle_ProgressPercentage_CalculatedCorrectly()
     {
-        var goal = CreateTestGoal("Progress Goal", target: 200, current: 50);
+        ArrangePage(new List<Goal> { CreateTestGoal("Progress Goal", target: 200, current: 50) }, 1);
 
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal> { goal }.AsReadOnly());
-
-        var query = new GetGoalsQuery(UserId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items[0].ProgressPercentage.Should().Be(25);
@@ -146,17 +140,9 @@ public class GetGoalsQueryHandlerTests
     [Fact]
     public async Task Handle_TrackingStatus_OnTrackWhenDeadlineFar()
     {
-        var goal = CreateTestGoal("Far Deadline", target: 100, current: 50);
+        ArrangePage(new List<Goal> { CreateTestGoal("Far Deadline", target: 100, current: 50) }, 1);
 
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal> { goal }.AsReadOnly());
-
-        var query = new GetGoalsQuery(UserId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items[0].TrackingStatus.Should().Be("on_track");
@@ -168,12 +154,17 @@ public class GetGoalsQueryHandlerTests
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.PayGateFailure("Goals are a Pro feature"));
 
-        var query = new GetGoalsQuery(UserId);
-
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Orbit.Domain.Common.Result.PayGateErrorCode);
+        await _goalRepo.DidNotReceive().FindPagedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IOrderedQueryable<Goal>>>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -184,14 +175,17 @@ public class GetGoalsQueryHandlerTests
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(_ => { computed = true; return new Dictionary<Guid, int>(); });
 
-        _goalRepo.FindAsync(
+        _goalRepo.FindPagedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IOrderedQueryable<Goal>>>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 computed.Should().BeTrue();
-                return new List<Goal> { CreateTestGoal() }.AsReadOnly();
+                return ((IReadOnlyList<Goal>)new List<Goal> { CreateTestGoal() }, 1);
             });
 
         var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
@@ -209,15 +203,28 @@ public class GetGoalsQueryHandlerTests
         _streakGoalReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [goal.Id] = 5 });
-        _goalRepo.FindAsync(
-            Arg.Any<Expression<Func<Goal, bool>>>(),
-            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Goal> { goal }.AsReadOnly());
+        ArrangePage(new List<Goal> { goal }, 1);
 
         var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items[0].CurrentValue.Should().Be(5);
+    }
+
+    private async Task<Func<Goal, bool>> CapturePredicate(GetGoalsQuery query)
+    {
+        Expression<Func<Goal, bool>>? captured = null;
+        _goalRepo.FindPagedAsync(
+            Arg.Do<Expression<Func<Goal, bool>>>(p => captured = p),
+            Arg.Any<Func<IQueryable<Goal>, IOrderedQueryable<Goal>>>(),
+            Arg.Any<int>(),
+            Arg.Any<int>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<Goal>)new List<Goal>(), 0));
+
+        await _handler.Handle(query, CancellationToken.None);
+        captured.Should().NotBeNull();
+        return captured!.Compile();
     }
 }

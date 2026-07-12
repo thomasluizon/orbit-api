@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -17,11 +16,9 @@ public record GetHabitLogsQuery(Guid UserId, Guid HabitId) : IRequest<Result<IRe
 
 public class GetHabitLogsQueryHandler(
     IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
+    IHabitLogReader habitLogReader,
     IUserDateService userDateService) : IRequestHandler<GetHabitLogsQuery, Result<IReadOnlyList<HabitLogResponse>>>
 {
-    private const int DefaultLookbackDays = 365;
-
     public async Task<Result<IReadOnlyList<HabitLogResponse>>> Handle(GetHabitLogsQuery request, CancellationToken cancellationToken)
     {
         var habit = await habitRepository.FindOneTrackedAsync(
@@ -32,14 +29,15 @@ public class GetHabitLogsQueryHandler(
             return Result.Failure<IReadOnlyList<HabitLogResponse>>(ErrorMessages.HabitNotFound);
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var cutoff = userToday.AddDays(-DefaultLookbackDays);
+        var cutoff = userToday.AddDays(-AppConstants.HabitLogsLookbackDays);
 
-        var logs = await habitLogRepository.FindAsync(
-            l => l.HabitId == request.HabitId && l.Date >= cutoff,
+        var logs = await habitLogReader.ReadRecentLogsAsync(
+            request.HabitId,
+            cutoff,
+            AppConstants.MaxHabitLogsReturned,
             cancellationToken);
 
         var result = logs
-            .OrderByDescending(l => l.Date)
             .Select(l => new HabitLogResponse(l.Id, l.Date, l.Value, l.CreatedAtUtc))
             .ToList();
 
