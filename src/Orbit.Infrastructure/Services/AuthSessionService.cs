@@ -18,6 +18,8 @@ public class AuthSessionService(
     IUnitOfWork unitOfWork,
     IOptions<JwtSettings> jwtSettings) : IAuthSessionService
 {
+    private const int MaxRevokeAllAttempts = 3;
+
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
     private DateTime? GetRefreshExpiry(DateTime nowUtc) =>
@@ -107,33 +109,42 @@ public class AuthSessionService(
             return Result.Failure(DomainErrors.UserIdRequired);
 
         var nowUtc = DateTime.UtcNow;
-        var activeSessions = await userSessionRepository.FindTrackedAsync(
-            s => s.UserId == userId && s.RevokedAtUtc == null,
-            cancellationToken);
 
-        if (activeSessions.Count == 0)
-            return Result.Success();
-
-        foreach (var session in activeSessions)
-            session.Revoke(nowUtc);
-
-        try
+        for (var attempt = 0; attempt < MaxRevokeAllAttempts; attempt++)
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            unitOfWork.DiscardChanges();
-            return Result.Failure(ErrorMessages.InvalidSession);
+            var activeSessions = await userSessionRepository.FindTrackedAsync(
+                s => s.UserId == userId && s.RevokedAtUtc == null,
+                cancellationToken);
+
+            if (activeSessions.Count == 0)
+                return Result.Success();
+
+            foreach (var session in activeSessions)
+                session.Revoke(nowUtc);
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                unitOfWork.ResetTracking();
+            }
         }
 
-        return Result.Success();
+        return Result.Failure(ErrorMessages.InvalidSession);
     }
 
     public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
+        var nowUtc = DateTime.UtcNow;
         var tokenHash = HashToken(refreshToken);
-        return await userSessionRepository.AnyAsync(session => session.TokenHash == tokenHash, cancellationToken);
+        return await userSessionRepository.AnyAsync(
+            session => session.TokenHash == tokenHash
+                && session.RevokedAtUtc == null
+                && (session.ExpiresAtUtc == null || session.ExpiresAtUtc > nowUtc),
+            cancellationToken);
     }
 
     private static string GenerateRefreshToken()

@@ -51,6 +51,47 @@ public class AuthSessionServiceHasSessionForTokenTests
         exists.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task HasSessionForTokenAsync_ReturnsFalse_WhenTheMatchingSessionIsRevoked()
+    {
+        var dbName = NewDbName();
+        const string refreshToken = "a-revoked-token";
+        var session = UserSession.Create(Guid.NewGuid(), Hash(refreshToken), DateTime.UtcNow.AddDays(90)).Value;
+        session.Revoke(DateTime.UtcNow);
+
+        await using (var seed = CreateContext(dbName))
+        {
+            seed.UserSessions.Add(session);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+
+        var exists = await CreateService(context).HasSessionForTokenAsync(refreshToken, CancellationToken.None);
+
+        exists.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HasSessionForTokenAsync_ReturnsFalse_WhenTheMatchingSessionIsExpired()
+    {
+        var dbName = NewDbName();
+        const string refreshToken = "an-expired-token";
+        var session = UserSession.Create(Guid.NewGuid(), Hash(refreshToken), DateTime.UtcNow.AddDays(-1)).Value;
+
+        await using (var seed = CreateContext(dbName))
+        {
+            seed.UserSessions.Add(session);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+
+        var exists = await CreateService(context).HasSessionForTokenAsync(refreshToken, CancellationToken.None);
+
+        exists.Should().BeFalse();
+    }
+
     private static AuthSessionService CreateService(OrbitDbContext context)
     {
         var tokenService = Substitute.For<ITokenService>();

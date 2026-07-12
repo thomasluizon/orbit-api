@@ -62,6 +62,33 @@ public class AuthSessionServiceRevokeAllTests
     }
 
     [Fact]
+    public async Task RevokeAllSessionsAsync_TransientConcurrencyConflict_RetriesAndRevokesEveryActiveSession()
+    {
+        var dbName = NewDbName();
+        var userId = Guid.NewGuid();
+        var sessionA = UserSession.Create(userId, Hash("active-a"), DateTime.UtcNow.AddDays(90)).Value;
+        var sessionB = UserSession.Create(userId, Hash("active-b"), DateTime.UtcNow.AddDays(90)).Value;
+
+        await using (var seed = CreateContext(dbName))
+        {
+            seed.UserSessions.AddRange(sessionA, sessionB);
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var context = CreateContext(dbName, new ConflictOnceInterceptor()))
+        {
+            var result = await CreateService(context).RevokeAllSessionsAsync(userId, CancellationToken.None);
+            result.IsSuccess.Should().BeTrue();
+        }
+
+        await using var verify = CreateContext(dbName);
+        var sessions = await verify.UserSessions.Where(s => s.UserId == userId).ToListAsync();
+
+        sessions.Should().HaveCount(2);
+        sessions.Should().OnlyContain(s => s.RevokedAtUtc != null);
+    }
+
+    [Fact]
     public async Task RevokeAllSessionsAsync_ConcurrencyConflict_ReturnsInvalidSessionWithoutThrowing()
     {
         var dbName = NewDbName();
@@ -133,6 +160,21 @@ public class AuthSessionServiceRevokeAllTests
             DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             throw new DbUpdateConcurrencyException("simulated stale token");
+        }
+    }
+
+    private sealed class ConflictOnceInterceptor : SaveChangesInterceptor
+    {
+        private bool _hasThrown;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (_hasThrown)
+                return base.SavingChangesAsync(eventData, result, cancellationToken);
+
+            _hasThrown = true;
+            throw new DbUpdateConcurrencyException("simulated transient stale token");
         }
     }
 }
