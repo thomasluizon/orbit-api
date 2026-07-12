@@ -135,7 +135,13 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<JwtSettings>(
             builder.Configuration.GetSection(JwtSettings.SectionName));
 
-        var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()!;
+        JwtSettings jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
+            ?? throw new InvalidOperationException("Configuration section 'Jwt' is missing.");
+        if (string.IsNullOrWhiteSpace(jwtSettings.SecretKey)
+            || string.IsNullOrWhiteSpace(jwtSettings.Issuer)
+            || string.IsNullOrWhiteSpace(jwtSettings.Audience))
+            throw new InvalidOperationException(
+                "Configuration section 'Jwt' is incomplete; SecretKey, Issuer, and Audience are required.");
 
         builder.Services.AddAuthentication(options =>
         {

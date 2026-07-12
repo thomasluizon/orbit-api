@@ -13,12 +13,24 @@ namespace Orbit.Api.Extensions;
 
 public static partial class ServiceCollectionExtensions
 {
+    private static string RequireConfigValue(WebApplicationBuilder builder, string key)
+    {
+        var value = builder.Configuration[key];
+        if (string.IsNullOrWhiteSpace(value))
+            throw new InvalidOperationException($"Configuration key '{key}' is missing or empty.");
+        return value;
+    }
+
     private static void AddEmailAndSupabaseClients(WebApplicationBuilder builder, TimeSpan httpTimeout)
     {
+        var supabaseUrl = RequireConfigValue(builder, "Supabase:Url");
+        var supabaseAnonKey = RequireConfigValue(builder, "Supabase:AnonKey");
+        var supabaseSecretKey = RequireConfigValue(builder, "Supabase:SecretKey");
+
         builder.Services.AddHttpClient("Supabase", client =>
         {
-            client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
-            client.DefaultRequestHeaders.Add("apikey", builder.Configuration["Supabase:AnonKey"]!);
+            client.BaseAddress = new Uri(supabaseUrl);
+            client.DefaultRequestHeaders.Add("apikey", supabaseAnonKey);
             client.Timeout = httpTimeout;
         });
 
@@ -28,9 +40,8 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHttpClient(SupabaseObjectStorageService.HttpClientName, client =>
         {
             // Secret keys use the apikey header only — on Authorization: Bearer the gateway parses them as a JWT and rejects the request: https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
-            var secretKey = builder.Configuration["Supabase:SecretKey"]!;
-            client.BaseAddress = new Uri(builder.Configuration["Supabase:Url"]!);
-            client.DefaultRequestHeaders.Add("apikey", secretKey);
+            client.BaseAddress = new Uri(supabaseUrl);
+            client.DefaultRequestHeaders.Add("apikey", supabaseSecretKey);
             client.Timeout = httpTimeout;
         });
 
