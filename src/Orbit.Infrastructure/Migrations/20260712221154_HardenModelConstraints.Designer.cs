@@ -1968,7 +1968,8 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Language")
-                        .HasColumnType("text");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
 
                     b.Property<DateOnly?>("LastActiveDate")
                         .HasColumnType("date");
