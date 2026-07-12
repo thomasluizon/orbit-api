@@ -28,7 +28,8 @@ public sealed partial class MinimumVersionMiddleware(
     public async Task InvokeAsync(HttpContext context, IAppConfigService configService)
     {
         var clientVersion = context.Request.Headers[AppVersionHeaderName].ToString().Trim();
-        if (string.IsNullOrWhiteSpace(clientVersion))
+        var clientParts = NormalizeVersion(clientVersion);
+        if (clientParts is null)
         {
             await next(context);
             return;
@@ -37,7 +38,7 @@ public sealed partial class MinimumVersionMiddleware(
         var minimumVersion = await configService.GetAsync(
             AppConfigKeys.MinSupportedVersion, "0.0.0", context.RequestAborted);
 
-        if (!IsVersionBelow(clientVersion, minimumVersion))
+        if (!IsVersionBelow(clientParts, minimumVersion))
         {
             await next(context);
             return;
@@ -58,12 +59,8 @@ public sealed partial class MinimumVersionMiddleware(
         });
     }
 
-    private static bool IsVersionBelow(string current, string minimum)
+    private static bool IsVersionBelow(int[] currentParts, string minimum)
     {
-        var currentParts = NormalizeVersion(current);
-        if (currentParts is null)
-            return false;
-
         var minimumParts = NormalizeVersion(minimum) ?? [0];
         var length = Math.Max(currentParts.Length, minimumParts.Length);
         for (var i = 0; i < length; i++)

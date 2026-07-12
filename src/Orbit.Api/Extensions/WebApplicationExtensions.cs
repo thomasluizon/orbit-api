@@ -98,7 +98,11 @@ public static partial class WebApplicationExtensions
     private static async Task HandleMcpRequestAsync(HttpContext context, Func<Task> next)
     {
         var body = await ReadBufferedRequestBodyAsync(context);
-        if (IsMcpUnauthenticatedMethod(body))
+
+        using var document = TryParseMcpBody(body);
+        var root = document?.RootElement;
+
+        if (IsMcpUnauthenticatedMethod(root))
         {
             await next();
             return;
@@ -107,7 +111,7 @@ public static partial class WebApplicationExtensions
         if (!await TryAuthenticateMcpRequestAsync(context))
             return;
 
-        if (!TryGetMcpToolCall(body, out var toolName, out var requestId, out var operationId, out var operationFingerprint))
+        if (!TryGetMcpToolCall(root, out var toolName, out var requestId, out var operationId, out var operationFingerprint))
         {
             await next();
             return;
@@ -118,6 +122,18 @@ public static partial class WebApplicationExtensions
             next,
             body,
             new McpToolCallRequest(toolName!, requestId, operationId, operationFingerprint));
+    }
+
+    internal static JsonDocument? TryParseMcpBody(string body)
+    {
+        try
+        {
+            return JsonDocument.Parse(body);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static async Task<string> ReadBufferedRequestBodyAsync(HttpContext context)
@@ -319,27 +335,21 @@ public static partial class WebApplicationExtensions
         return options;
     }
 
-    private static bool IsMcpUnauthenticatedMethod(string body)
+    internal static bool IsMcpUnauthenticatedMethod(JsonElement? root)
     {
-        try
+        if (root is not { ValueKind: JsonValueKind.Object } element ||
+            !element.TryGetProperty("method", out var methodProp))
         {
-            using var doc = JsonDocument.Parse(body);
-            if (doc.RootElement.TryGetProperty("method", out var methodProp))
-            {
-                var method = methodProp.GetString();
-                return method is "initialize" or "ping"
-                    || (method?.StartsWith("notifications/") == true);
-            }
-        }
-        catch (System.Text.Json.JsonException)
-        {
+            return false;
         }
 
-        return false;
+        var method = methodProp.GetString();
+        return method is "initialize" or "ping"
+            || method?.StartsWith("notifications/") == true;
     }
 
-    private static bool TryGetMcpToolCall(
-        string body,
+    internal static bool TryGetMcpToolCall(
+        JsonElement? root,
         out string? toolName,
         out JsonElement? requestId,
         out string? operationId,
@@ -350,47 +360,39 @@ public static partial class WebApplicationExtensions
         operationId = null;
         operationFingerprint = null;
 
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("method", out var methodElement) ||
-                !string.Equals(methodElement.GetString(), "tools/call", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            if (root.TryGetProperty("id", out var idElement))
-                requestId = idElement.Clone();
-
-            if (!root.TryGetProperty("params", out var paramsElement))
-                return false;
-
-            if (paramsElement.TryGetProperty("name", out var nameElement))
-                toolName = nameElement.GetString();
-
-            if (string.Equals(toolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase))
-            {
-                if (paramsElement.TryGetProperty("operationId", out var operationIdElement))
-                    operationId = operationIdElement.GetString();
-
-                operationFingerprint = paramsElement.TryGetProperty("arguments", out var argumentsElement)
-                    ? AgentOperationFingerprint.Compute(operationId ?? string.Empty, argumentsElement.GetRawText())
-                    : AgentOperationFingerprint.Compute(operationId ?? string.Empty, "{}");
-            }
-            else
-            {
-                operationFingerprint = AgentOperationFingerprint.Compute(
-                    toolName ?? string.Empty,
-                    paramsElement.GetRawText());
-            }
-
-            return !string.IsNullOrWhiteSpace(toolName);
-        }
-        catch (JsonException)
+        if (root is not { ValueKind: JsonValueKind.Object } element ||
+            !element.TryGetProperty("method", out var methodElement) ||
+            !string.Equals(methodElement.GetString(), "tools/call", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
+
+        if (element.TryGetProperty("id", out var idElement))
+            requestId = idElement.Clone();
+
+        if (!element.TryGetProperty("params", out var paramsElement))
+            return false;
+
+        if (paramsElement.TryGetProperty("name", out var nameElement))
+            toolName = nameElement.GetString();
+
+        if (string.Equals(toolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase))
+        {
+            if (paramsElement.TryGetProperty("operationId", out var operationIdElement))
+                operationId = operationIdElement.GetString();
+
+            operationFingerprint = paramsElement.TryGetProperty("arguments", out var argumentsElement)
+                ? AgentOperationFingerprint.Compute(operationId ?? string.Empty, argumentsElement.GetRawText())
+                : AgentOperationFingerprint.Compute(operationId ?? string.Empty, "{}");
+        }
+        else
+        {
+            operationFingerprint = AgentOperationFingerprint.Compute(
+                toolName ?? string.Empty,
+                paramsElement.GetRawText());
+        }
+
+        return !string.IsNullOrWhiteSpace(toolName);
     }
 
     private static async Task WriteMcpPolicyErrorAsync(
