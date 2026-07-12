@@ -319,7 +319,7 @@ public class ProfileCommandHandlerTests
         SetupUserFound(user);
         var accountResetRepo = Substitute.For<IAccountResetRepository>();
 
-        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _cache);
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         var command = new ResetAccountCommand(UserId);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -338,7 +338,7 @@ public class ProfileCommandHandlerTests
         SetupUserNotFound();
         var accountResetRepo = Substitute.For<IAccountResetRepository>();
 
-        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _cache);
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         var command = new ResetAccountCommand(UserId);
 
         var result = await handler.Handle(command, CancellationToken.None);

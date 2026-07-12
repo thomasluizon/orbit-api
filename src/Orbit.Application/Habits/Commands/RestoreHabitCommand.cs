@@ -17,6 +17,7 @@ public class RestoreHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUserStreakService userStreakService,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<RestoreHabitCommand, Result>
 {
     public async Task<Result> Handle(RestoreHabitCommand request, CancellationToken cancellationToken)
@@ -42,7 +43,8 @@ public class RestoreHabitCommandHandler(
             ct => userStreakService.RecalculateAsync(request.UserId, ct),
             cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

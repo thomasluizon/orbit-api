@@ -277,6 +277,7 @@ public class ConcurrencyRetryTests
             PassingGoalGate(),
             Substitute.For<IGamificationService>(),
             new UnitOfWork(context, new DatabaseConnectionSettings()),
+            Substitute.For<IUserDateService>(),
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<UpdateGoalProgressCommandHandler>.Instance);
 

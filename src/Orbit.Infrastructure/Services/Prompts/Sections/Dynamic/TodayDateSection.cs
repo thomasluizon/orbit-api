@@ -9,9 +9,11 @@ public class TodayDateSection : IPromptSection
 
     public string Build(PromptContext context)
     {
+        var today = context.UserToday ?? throw new InvalidOperationException(
+            "PromptContext.UserToday must be set before building the today-date section.");
         var sb = new StringBuilder();
         sb.AppendLine();
-        sb.AppendLine($"## Today's Date: {(context.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)):yyyy-MM-dd}");
+        sb.AppendLine($"## Today's Date: {today:yyyy-MM-dd}");
         sb.AppendLine();
         return sb.ToString();
     }

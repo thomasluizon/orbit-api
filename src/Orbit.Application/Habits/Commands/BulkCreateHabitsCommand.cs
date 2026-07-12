@@ -106,7 +106,7 @@ public partial class BulkCreateHabitsCommandHandler(
             }
         }, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
 
         return Result.Success(new BulkCreateResult(results));
     }

@@ -122,7 +122,10 @@ public class ApplyOnboardingCommandHandler(
         }, cancellationToken);
 
         if (result.IsSuccess && result.Value.Applied)
-            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        {
+            var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
+        }
 
         return result;
     }

@@ -22,7 +22,7 @@ public class ReorderGoalsCommandHandlerTests
 
     public ReorderGoalsCommandHandlerTests()
     {
-        _handler = new ReorderGoalsCommandHandler(_goalRepo, _payGate, _unitOfWork, _cache);
+        _handler = new ReorderGoalsCommandHandler(_goalRepo, _payGate, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

@@ -99,7 +99,7 @@ public partial class BulkLogHabitsCommandHandler(
             }
         }, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(new BulkLogResult(results));
     }

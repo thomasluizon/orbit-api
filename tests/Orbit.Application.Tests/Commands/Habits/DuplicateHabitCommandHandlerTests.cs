@@ -24,7 +24,7 @@ public class DuplicateHabitCommandHandlerTests
 
     public DuplicateHabitCommandHandlerTests()
     {
-        _handler = new DuplicateHabitCommandHandler(_habitRepo, _habitLogRepo, _payGate, _unitOfWork, _cache);
+        _handler = new DuplicateHabitCommandHandler(_habitRepo, _habitLogRepo, _payGate, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());

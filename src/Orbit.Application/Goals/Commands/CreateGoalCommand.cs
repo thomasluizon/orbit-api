@@ -34,12 +34,9 @@ public partial class CreateGoalCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<Guid>();
 
-        if (request.Deadline is { } deadline)
-        {
-            var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-            if (deadline < today)
-                return Result.Failure<Guid>(ErrorMessages.DeadlineInPast);
-        }
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        if (request.Deadline is { } deadline && deadline < today)
+            return Result.Failure<Guid>(ErrorMessages.DeadlineInPast);
 
         var goalResult = Goal.Create(new Goal.CreateGoalParams(
             request.UserId,
@@ -67,7 +64,7 @@ public partial class CreateGoalCommandHandler(
             LogGamificationGoalCreationFailed(logger, ex, request.UserId);
         }
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(goal.Id);
     }

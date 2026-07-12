@@ -17,6 +17,7 @@ public class DuplicateHabitCommandHandler(
     IGenericRepository<HabitLog> habitLogRepository,
     IPayGateService payGateService,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<DuplicateHabitCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(DuplicateHabitCommand request, CancellationToken cancellationToken)
@@ -61,7 +62,8 @@ public class DuplicateHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(rootCopy.Value.Id);
     }

@@ -20,7 +20,7 @@ public class ResetAccountCommandHandlerTests
 
     public ResetAccountCommandHandlerTests()
     {
-        _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, _cache);
+        _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task>>(),
                 Arg.Any<CancellationToken>())

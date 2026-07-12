@@ -36,11 +36,43 @@ public class CacheInvalidationHelperTests
             cache.TryGetValue(key, out _).Should().BeTrue($"key '{key}' should exist before invalidation");
         }
 
-        CacheInvalidationHelper.InvalidateSummaryCache(cache, userId);
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, userId, today);
 
         foreach (var key in keys)
         {
             cache.TryGetValue(key, out _).Should().BeFalse($"key '{key}' should be removed after invalidation");
         }
+    }
+
+    [Fact]
+    public void InvalidateSummaryCache_UsesSuppliedTodayNotUtc()
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var userId = Guid.NewGuid();
+        var suppliedToday = new DateOnly(2020, 1, 15);
+        var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var suppliedKey = $"summary:{userId}:{suppliedToday:yyyy-MM-dd}:en";
+        var utcKey = $"summary:{userId}:{utcToday:yyyy-MM-dd}:en";
+        cache.Set(suppliedKey, "cached");
+        cache.Set(utcKey, "cached");
+
+        CacheInvalidationHelper.InvalidateSummaryCache(cache, userId, suppliedToday);
+
+        cache.TryGetValue(suppliedKey, out _).Should().BeFalse("the supplied user-local today defines the window");
+        cache.TryGetValue(utcKey, out _).Should().BeTrue("an unrelated UTC-dated key stays untouched");
+    }
+
+    [Fact]
+    public void InvalidateRetrospectiveCache_RemovesKeysAroundSuppliedToday()
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var userId = Guid.NewGuid();
+        var today = new DateOnly(2020, 1, 15);
+        var key = $"retro:{userId}:week:{today}:en";
+        cache.Set(key, "cached");
+
+        CacheInvalidationHelper.InvalidateRetrospectiveCache(cache, userId, today);
+
+        cache.TryGetValue(key, out _).Should().BeFalse();
     }
 }

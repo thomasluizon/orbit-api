@@ -25,7 +25,7 @@ public class LinkHabitsToGoalCommandHandlerTests
 
     public LinkHabitsToGoalCommandHandlerTests()
     {
-        _handler = new LinkHabitsToGoalCommandHandler(_goalRepo, _habitRepo, _payGate, _unitOfWork, _cache);
+        _handler = new LinkHabitsToGoalCommandHandler(_goalRepo, _habitRepo, _payGate, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

@@ -23,7 +23,7 @@ public class RestoreGoalCommandHandlerTests
 
     public RestoreGoalCommandHandlerTests()
     {
-        _handler = new RestoreGoalCommandHandler(_goalRepo, _payGate, _unitOfWork, _cache);
+        _handler = new RestoreGoalCommandHandler(_goalRepo, _payGate, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

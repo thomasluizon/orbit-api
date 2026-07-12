@@ -23,7 +23,7 @@ public class DeleteHabitCommandHandlerTests
 
     public DeleteHabitCommandHandlerTests()
     {
-        _handler = new DeleteHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _cache);
+        _handler = new DeleteHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
     }

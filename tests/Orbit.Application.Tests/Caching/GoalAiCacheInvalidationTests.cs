@@ -35,7 +35,7 @@ public class GoalAiCacheInvalidationTests
         var cache = new MemoryCache(new MemoryCacheOptions());
         cache.Set(GoalReviewKey("en"), "cached review");
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, UserId, new DateOnly(2026, 7, 12));
 
         cache.TryGetValue(GoalReviewKey("en"), out _).Should().BeFalse();
     }
