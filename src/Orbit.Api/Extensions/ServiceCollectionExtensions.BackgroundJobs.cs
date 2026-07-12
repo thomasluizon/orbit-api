@@ -34,7 +34,8 @@ public static partial class ServiceCollectionExtensions
         }
 
         builder.Services.AddHealthChecks()
-            .AddCheck<BackgroundServiceHealthCheck>("background-services");
+            .AddCheck<BackgroundServiceHealthCheck>("background-services")
+            .AddCheck<DatabaseHealthCheck>("database");
     }
 
     private static void AddInProcessSchedulers(WebApplicationBuilder builder)

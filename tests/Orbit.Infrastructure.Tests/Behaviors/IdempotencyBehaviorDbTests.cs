@@ -6,6 +6,7 @@ using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Behaviors;
@@ -37,7 +38,7 @@ public class IdempotencyBehaviorDbTests : IDisposable
         _dbContext.Users.Add(user);
         _dbContext.SaveChanges();
 
-        _unitOfWork = new UnitOfWork(_dbContext);
+        _unitOfWork = new UnitOfWork(_dbContext, new DatabaseConnectionSettings());
         _store = new IdempotencyStore(_dbContext);
     }
 

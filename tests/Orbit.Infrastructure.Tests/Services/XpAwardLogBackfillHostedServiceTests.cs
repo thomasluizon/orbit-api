@@ -7,6 +7,7 @@ using Orbit.Application.Gamification.Backfill;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -30,6 +31,7 @@ public sealed class XpAwardLogBackfillHostedServiceTests : IDisposable
     public XpAwardLogBackfillHostedServiceTests()
     {
         var services = new ServiceCollection();
+        services.AddSingleton(new DatabaseConnectionSettings());
         services.AddScoped(_ => CreateContext(_dbName));
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();

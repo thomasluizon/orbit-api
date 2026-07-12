@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Persistence;
 
-public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisposable
+public sealed class UnitOfWork(OrbitDbContext context, DatabaseConnectionSettings databaseSettings)
+    : IUnitOfWork, IAsyncDisposable
 {
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -35,24 +37,36 @@ public sealed class UnitOfWork(OrbitDbContext context) : IUnitOfWork, IAsyncDisp
             return await operation(cancellationToken);
         }
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(databaseSettings.TransactionTimeoutSeconds));
+        var transactionToken = timeoutCts.Token;
+
         var strategy = context.Database.CreateExecutionStrategy();
 
-        return await strategy.ExecuteAsync(async () =>
+        try
         {
-            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await context.Database.BeginTransactionAsync(transactionToken);
 
-            try
-            {
-                var result = await operation(cancellationToken);
-                await transaction.CommitAsync(cancellationToken);
-                return result;
-            }
-            catch
-            {
-                context.ChangeTracker.Clear();
-                throw;
-            }
-        });
+                try
+                {
+                    var result = await operation(transactionToken);
+                    await transaction.CommitAsync(transactionToken);
+                    return result;
+                }
+                catch
+                {
+                    context.ChangeTracker.Clear();
+                    throw;
+                }
+            });
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Transaction exceeded the {databaseSettings.TransactionTimeoutSeconds}s timeout and was rolled back.");
+        }
     }
 
     public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default)
