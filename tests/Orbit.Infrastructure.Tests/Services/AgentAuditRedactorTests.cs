@@ -47,6 +47,58 @@ public class AgentAuditRedactorTests
         result.Should().NotContain("***REDACTED***");
     }
 
+    [Theory]
+    [InlineData("name")]
+    [InlineData("Name")]
+    [InlineData("firstName")]
+    [InlineData("last_name")]
+    [InlineData("fullName")]
+    [InlineData("displayName")]
+    [InlineData("userName")]
+    [InlineData("nickname")]
+    public void Redact_MasksUserNameFields(string key)
+    {
+        var json = $$"""{"{{key}}":"Alice Johnson","email":"a@b.com"}""";
+
+        var result = AgentAuditRedactor.Redact(json);
+
+        result.Should().NotContain("Alice Johnson");
+        result.Should().Contain("***REDACTED***");
+        result.Should().Contain("a@b.com");
+    }
+
+    [Theory]
+    [InlineData("bodyHtmlEn")]
+    [InlineData("bodyHtmlPt")]
+    [InlineData("BodyHtmlEn")]
+    [InlineData("body_html_pt")]
+    public void Redact_MasksMarketingBroadcastBody(string key)
+    {
+        var json = $$"""{"{{key}}":"<h1>Launch promo</h1>","subjectEn":"Big news"}""";
+
+        var result = AgentAuditRedactor.Redact(json);
+
+        result.Should().NotContain("Launch promo");
+        result.Should().Contain("***REDACTED***");
+        result.Should().Contain("Big news");
+    }
+
+    [Fact]
+    public void Redact_MarketingBroadcast_MasksBothLocaleBodiesKeepsSubjectAndEmail()
+    {
+        var json = """
+            {"subjectEn":"Weekly digest","subjectPt":"Resumo semanal",
+             "bodyHtmlEn":"<p>Private copy</p>","bodyHtmlPt":"<p>Copia privada</p>",
+             "testEmail":"admin@orbit.app"}
+            """;
+
+        var result = AgentAuditRedactor.Redact(json);
+
+        result.Should().NotContain("Private copy").And.NotContain("Copia privada");
+        result.Should().Contain("Weekly digest").And.Contain("Resumo semanal");
+        result.Should().Contain("admin@orbit.app");
+    }
+
     [Fact]
     public void Redact_MasksWholeBodyWhenNotJson()
     {
