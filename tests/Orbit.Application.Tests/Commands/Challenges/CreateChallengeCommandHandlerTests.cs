@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Challenges.Commands;
@@ -35,9 +36,13 @@ public class CreateChallengeCommandHandlerTests
     {
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
+        var scopeFactory = new ServiceCollection()
+            .AddSingleton(_push)
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
         _handler = new CreateChallengeCommandHandler(
             guard, friendGraph, _challengeRepository, _habitRepository, _userRepository,
-            _push, _unitOfWork, Substitute.For<ILogger<CreateChallengeCommandHandler>>());
+            scopeFactory, _unitOfWork, Substitute.For<ILogger<CreateChallengeCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _creator, _friend);
         SocialTestHelpers.StubFind(_friendshipRepository, AcceptedFriendship());
@@ -81,6 +86,37 @@ public class CreateChallengeCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _push.Received(1).SendToUserAsync(
             _friend.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ManyInvitedFriends_PushesEachExactlyOnce_AcrossThrottledFanOut()
+    {
+        var friends = Enumerable.Range(0, 8)
+            .Select(index => SocialTestHelpers.OptedInUser($"Friend-{index}"))
+            .ToList();
+
+        SocialTestHelpers.StubUsers(_userRepository, [_creator, .. friends]);
+        SocialTestHelpers.StubFind(_friendshipRepository, friends.Select(AcceptedFriendshipWith).ToArray());
+        SocialTestHelpers.StubFind(_blockedUserRepository);
+
+        var result = await _handler.Handle(Command(invited: friends.Select(f => f.Id).ToList()), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        foreach (var friend in friends)
+        {
+            await _push.Received(1).SendToUserAsync(
+                friend.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        }
+        await _push.Received(friends.Count).SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    private Friendship AcceptedFriendshipWith(User friend)
+    {
+        var friendship = Friendship.Create(_creator.Id, friend.Id).Value;
+        friendship.Accept();
+        return friendship;
     }
 
     [Fact]
