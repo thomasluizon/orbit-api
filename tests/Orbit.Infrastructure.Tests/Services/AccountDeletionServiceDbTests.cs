@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 
@@ -31,7 +32,7 @@ public class AccountDeletionServiceDbTests : IDisposable
 
         var serviceProvider = new ServiceCollection()
             .AddSingleton(_dbContext)
-            .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext))
+            .AddSingleton<IUnitOfWork>(new UnitOfWork(_dbContext, new DatabaseConnectionSettings()))
             .AddSingleton<IAccountResetRepository>(new AccountResetRepository(_dbContext))
             .BuildServiceProvider();
 

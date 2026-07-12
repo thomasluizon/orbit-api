@@ -101,7 +101,7 @@ public class AuthSessionServiceHasSessionForTokenTests
             new GenericRepository<UserSession>(context),
             new GenericRepository<User>(context),
             tokenService,
-            new UnitOfWork(context),
+            new UnitOfWork(context, new DatabaseConnectionSettings()),
             Options.Create(new JwtSettings
             {
                 SecretKey = "test-secret-key-that-is-at-least-32-bytes-long-for-hmac",

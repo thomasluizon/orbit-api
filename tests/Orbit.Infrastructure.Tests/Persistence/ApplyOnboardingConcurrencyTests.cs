@@ -11,6 +11,7 @@ using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -38,7 +39,7 @@ public class ApplyOnboardingConcurrencyTests
 
         var interceptor = new ConflictOnceInterceptor();
         await using var context = CreateContext(dbName, interceptor);
-        var unitOfWork = new UnitOfWork(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
         var handler = new ApplyOnboardingCommandHandler(
             new GenericRepository<User>(context),
             new GenericRepository<Habit>(context),

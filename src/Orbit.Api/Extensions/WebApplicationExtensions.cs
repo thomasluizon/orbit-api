@@ -36,6 +36,10 @@ public static partial class WebApplicationExtensions
 
         app.UseMiddleware<Orbit.Api.Middleware.SecurityHeadersMiddleware>();
         app.UseForwardedHeaders(BuildForwardedHeadersOptions(app));
+
+        // After UseForwardedHeaders so Request.IsHttps reflects X-Forwarded-Proto, which EnableForHttps gates on: https://learn.microsoft.com/aspnet/core/performance/response-compression
+        app.UseResponseCompression();
+
         app.UseMiddleware<Orbit.Api.Middleware.RequestCorrelationMiddleware>();
 
         if (app.Environment.IsDevelopment())

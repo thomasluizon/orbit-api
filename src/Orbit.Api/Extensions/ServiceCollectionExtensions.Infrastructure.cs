@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using Orbit.Api.Mcp.Tools;
 using Orbit.Api.Middleware;
@@ -225,6 +227,8 @@ public static partial class ServiceCollectionExtensions
 
     private static void AddApiPipeline(WebApplicationBuilder builder)
     {
+        AddResponseCompression(builder);
+
         builder.Services.AddControllers()
             .AddJsonOptions(options =>
             {
@@ -247,6 +251,22 @@ public static partial class ServiceCollectionExtensions
         {
             options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
         });
+    }
+
+    private static void AddResponseCompression(WebApplicationBuilder builder)
+    {
+        builder.Services.AddResponseCompression(options =>
+        {
+            // EnableForHttps is required because Render terminates TLS upstream (X-Forwarded-Proto=https), so compression would otherwise never apply; BREACH is not a concern here as responses are parameterized JSON with no attacker-reflected secrets: https://learn.microsoft.com/aspnet/core/performance/response-compression
+            options.EnableForHttps = true;
+            options.Providers.Add<BrotliCompressionProvider>();
+            options.Providers.Add<GzipCompressionProvider>();
+            options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+                ["application/json", "application/problem+json"]);
+        });
+
+        builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+        builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
     }
 
     private static void InitializeFirebase(ConfigurationManager configuration)

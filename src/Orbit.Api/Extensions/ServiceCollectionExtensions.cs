@@ -58,14 +58,18 @@ public static partial class ServiceCollectionExtensions
     public static WebApplicationBuilder AddOrbitDatabase(this WebApplicationBuilder builder)
     {
         var databaseSettings = DatabaseConnectionSettings.From(builder.Configuration);
-        builder.Services.AddDbContext<OrbitDbContext>(options =>
-            options.UseNpgsql(
-                OrbitConnectionStringFactory.ForRequestPath(builder.Configuration),
-                npgsql =>
-                {
-                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
-                    npgsql.CommandTimeout(databaseSettings.CommandTimeoutSeconds);
-                }));
+        builder.Services.AddSingleton(databaseSettings);
+        builder.Services.AddSingleton<SlowQueryCommandInterceptor>();
+        builder.Services.AddDbContext<OrbitDbContext>((serviceProvider, options) =>
+            options
+                .UseNpgsql(
+                    OrbitConnectionStringFactory.ForRequestPath(builder.Configuration),
+                    npgsql =>
+                    {
+                        npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
+                        npgsql.CommandTimeout(databaseSettings.CommandTimeoutSeconds);
+                    })
+                .AddInterceptors(serviceProvider.GetRequiredService<SlowQueryCommandInterceptor>()));
 
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
