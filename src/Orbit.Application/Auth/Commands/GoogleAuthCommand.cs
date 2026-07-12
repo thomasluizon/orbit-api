@@ -100,9 +100,9 @@ public partial class GoogleAuthCommandHandler(
     {
         var email = rawEmail.Trim().ToLowerInvariant();
 
-        var user = await userRepository.FindOneTrackedAsync(
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
             u => u.Email == email,
-            cancellationToken: cancellationToken);
+            cancellationToken);
 
         if (user is not null)
             return Result.Success((user, false));
@@ -122,9 +122,9 @@ public partial class GoogleAuthCommandHandler(
         }
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
-            var raced = await userRepository.FindOneTrackedAsync(
+            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(
                 u => u.Email == email,
-                cancellationToken: cancellationToken);
+                cancellationToken);
             if (raced is null)
                 throw;
 

@@ -93,9 +93,9 @@ public partial class VerifyCodeCommandHandler(
     private async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
         string email, string language, CancellationToken cancellationToken)
     {
-        var user = await userRepository.FindOneTrackedAsync(
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
             u => u.Email == email,
-            cancellationToken: cancellationToken);
+            cancellationToken);
 
         if (user is not null)
             return Result.Success((user, false));
@@ -116,9 +116,9 @@ public partial class VerifyCodeCommandHandler(
         }
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
-            var raced = await userRepository.FindOneTrackedAsync(
+            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(
                 u => u.Email == email,
-                cancellationToken: cancellationToken);
+                cancellationToken);
             if (raced is null)
                 throw;
 

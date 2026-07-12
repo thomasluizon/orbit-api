@@ -388,9 +388,9 @@ public class OAuthControllerTests : IDisposable
         var httpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(httpClient);
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var request = new OAuthController.GoogleAuthRequest(
@@ -406,6 +406,32 @@ public class OAuthControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GoogleAuth_DeactivatedUser_ReactivatesAndReturnsRedirect()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
+            """{"email":"test@example.com","aud":"test-google-client-id","name":"Thomas"}""");
+        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
+
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "state-abc", "challenge-xyz",
+            "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.GoogleAuth(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        user.IsDeactivated.Should().BeFalse();
+        await _userRepo.DidNotReceive().AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GoogleAuth_NewUser_CreatesUserAndReturnsRedirect()
     {
         var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
@@ -413,9 +439,9 @@ public class OAuthControllerTests : IDisposable
         var httpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(httpClient);
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var request = new OAuthController.GoogleAuthRequest(
@@ -437,9 +463,9 @@ public class OAuthControllerTests : IDisposable
         var httpClient = new HttpClient(mockHandler);
         _httpClientFactory.CreateClient().Returns(httpClient);
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var request = new OAuthController.GoogleAuthRequest(
@@ -461,9 +487,9 @@ public class OAuthControllerTests : IDisposable
             """{"email":"Test@Example.com","aud":"test-google-client-id","name":"Thomas"}""");
         _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 var predicate = callInfo.Arg<System.Linq.Expressions.Expression<Func<User, bool>>>().Compile();
@@ -488,9 +514,9 @@ public class OAuthControllerTests : IDisposable
             """{"email":"new@example.com","aud":"test-google-client-id","name":"Raced"}""");
         _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null, racedUser);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));

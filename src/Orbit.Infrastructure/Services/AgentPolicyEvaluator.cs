@@ -51,6 +51,7 @@ public class AgentPolicyEvaluator(
     private User? GetUser(Guid userId)
     {
         return dbContext.Users
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefault(item => item.Id == userId);
     }

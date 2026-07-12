@@ -37,6 +37,7 @@ public class AgentStepUpService(
             return Result.Failure<AgentStepUpChallenge>(ErrorMessages.StepUpNotRequired);
 
         var user = await dbContext.Users
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
 
