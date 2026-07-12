@@ -39,7 +39,7 @@ public partial class SendMarketingBroadcastCommandHandler(
             await emailService.SendMarketingEmailAsync(
                 request.TestEmail, preview.Subject, preview.BodyHtml, "en", previewUrl, cancellationToken);
 
-            LogPreviewSent(logger, request.TestEmail);
+            LogPreviewSent(logger, request.SubjectEn);
             return Result.Success(new MarketingBroadcastResult(RecipientCount: 1, WasTest: true));
         }
 
@@ -50,7 +50,7 @@ public partial class SendMarketingBroadcastCommandHandler(
             .Select(user => new MarketingRecipient(user.Id, user.Email, user.Language ?? "en"))
             .ToList();
 
-        LogBroadcastQueued(logger, recipients.Count, request.SubjectEn, DateTime.UtcNow);
+        LogBroadcastQueued(logger, recipients.Count, request.SubjectEn);
         FanOutInBackground(request, recipients);
 
         return Result.Success(new MarketingBroadcastResult(recipients.Count, WasTest: false));
@@ -109,11 +109,11 @@ public partial class SendMarketingBroadcastCommandHandler(
 
     private sealed record RenderedContent(string Subject, string BodyHtml);
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Marketing broadcast preview sent to {TestEmail}")]
-    private static partial void LogPreviewSent(ILogger logger, string testEmail);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Marketing broadcast preview sent; subject={Subject}")]
+    private static partial void LogPreviewSent(ILogger logger, string subject);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Marketing broadcast queued: {RecipientCount} recipients, subject={Subject}, at {QueuedAtUtc:o}")]
-    private static partial void LogBroadcastQueued(ILogger logger, int recipientCount, string subject, DateTime queuedAtUtc);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Marketing broadcast queued: {RecipientCount} recipients, subject={Subject}")]
+    private static partial void LogBroadcastQueued(ILogger logger, int recipientCount, string subject);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Marketing broadcast fan-out completed: {SentCount} sent, {FailedCount} failed")]
     private static partial void LogBroadcastCompleted(ILogger logger, int sentCount, int failedCount);

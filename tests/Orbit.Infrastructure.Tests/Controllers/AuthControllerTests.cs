@@ -66,7 +66,7 @@ public class AuthControllerTests
     public async Task VerifyCode_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(default(LoginResponse)!));
+            .Returns(Result.Success(new LoginResponse(UserId, "token", "Name", "test@example.com", false, "refresh")));
 
         var request = new AuthController.VerifyCodeRequest("test@example.com", "123456");
         var result = await _controller.VerifyCode(request, CancellationToken.None);
@@ -350,5 +350,60 @@ public class AuthControllerTests
         var result = await _controller.LogoutOperation(request, CancellationToken.None);
 
         result.Should().BeOfType<UnauthorizedObjectResult>();
+    }
+
+    [Fact]
+    public async Task SendCode_Success_LogDoesNotLeakEmail()
+    {
+        _mediator.Send(Arg.Any<SendCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var (controller, logger) = BuildWithCapturingLogger();
+
+        await controller.SendCode(new AuthController.SendCodeRequest("pii-user@example.com"), CancellationToken.None);
+
+        logger.Entries.Should().NotBeEmpty();
+        logger.Entries.Should().OnlyContain(entry => !entry.Contains("pii-user@example.com"));
+    }
+
+    [Fact]
+    public async Task VerifyCode_Success_LogsUserIdInsteadOfEmail()
+    {
+        var userId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new LoginResponse(userId, "token", "Name", "pii-user@example.com", false, "refresh")));
+        var (controller, logger) = BuildWithCapturingLogger();
+
+        await controller.VerifyCode(
+            new AuthController.VerifyCodeRequest("pii-user@example.com", "123456"), CancellationToken.None);
+
+        var loginLog = logger.Entries.Should().ContainSingle(entry => entry.Contains("logged in via code")).Subject;
+        loginLog.Should().NotContain("pii-user@example.com");
+        loginLog.Should().Contain(userId.ToString());
+    }
+
+    private (AuthController Controller, CollectingLogger<AuthController> Logger) BuildWithCapturingLogger()
+    {
+        var logger = new CollectingLogger<AuthController>();
+        var controller = new AuthController(_mediator, _auditService, logger)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        return (controller, logger);
+    }
+
+    private sealed class CollectingLogger<T> : ILogger<T>
+    {
+        public List<string> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Add(formatter(state, exception));
     }
 }
