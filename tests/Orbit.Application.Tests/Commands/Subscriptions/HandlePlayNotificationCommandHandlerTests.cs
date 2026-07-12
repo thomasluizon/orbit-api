@@ -2,14 +2,17 @@ using System.Linq.Expressions;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Services;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -326,5 +329,50 @@ public class HandlePlayNotificationCommandHandlerTests
         await act.Should().ThrowAsync<DbUpdateException>();
         await _referralConsumer.DidNotReceive().CancelConsumedCouponAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Command_IsMarkedConcurrencyRetryable() =>
+        typeof(HandlePlayNotificationCommand).Should().BeAssignableTo<IConcurrencyRetryable>();
+
+    [Fact]
+    public async Task Handle_SaveThrowsConcurrencyConflict_PropagatesWithoutTreatingAsDuplicate()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateConcurrencyException("stale xmin token"));
+
+        var act = () => _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro")), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        await _processedRepo.Received(1).AnyAsync(
+            Arg.Any<Expression<Func<ProcessedPlayNotification, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ThroughRetryBehavior_ConcurrencyConflictThenSuccess_GrantsProAndRetries()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+
+        var saveAttempts = 0;
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => saveAttempts++ == 0
+                ? throw new DbUpdateConcurrencyException("stale xmin token")
+                : 1);
+
+        var command = new HandlePlayNotificationCommand(BuildPushBody(2, "tok_renew", "orbit_pro"));
+        var behavior = new ConcurrencyRetryBehavior<HandlePlayNotificationCommand, Result>(_unitOfWork);
+        RequestHandlerDelegate<Result> next = cancellationToken => _handler.Handle(command, cancellationToken);
+
+        var result = await behavior.Handle(command, next, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        saveAttempts.Should().Be(2);
+        user.PlayPurchaseToken.Should().Be("tok_renew");
+        _unitOfWork.Received(1).ResetTracking();
     }
 }

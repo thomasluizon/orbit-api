@@ -1,6 +1,8 @@
+using System.Reflection;
 using System.Security.Claims;
 using FluentAssertions;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -212,6 +214,18 @@ public class AuthControllerTests
         var result = await _controller.Logout(request, CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public void Logout_IsAnnotatedAllowAnonymous_SoItIsReachableWithoutAuth()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.Logout));
+
+        method.Should().NotBeNull();
+        method!.GetCustomAttribute<AllowAnonymousAttribute>(inherit: true)
+            .Should().NotBeNull("logout must be reachable without an authenticated session");
+        method.GetCustomAttribute<AuthorizeAttribute>(inherit: true)
+            .Should().BeNull("logout must not require authentication");
     }
 
     [Fact]

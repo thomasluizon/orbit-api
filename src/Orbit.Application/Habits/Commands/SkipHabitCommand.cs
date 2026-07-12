@@ -86,6 +86,9 @@ public partial class SkipHabitCommandHandler(
         if (targetDate > today)
             return Result.Failure(ErrorMessages.CannotSkipFutureDate);
 
+        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
+            return Result.Failure(ErrorMessages.BeyondOverdueWindow);
+
         if (!habit.IsFlexible && habit.DueDate > targetDate)
             return Result.Failure(ErrorMessages.HabitNotYetDue);
 

@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
+using Hangfire;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -115,7 +116,7 @@ public class VerifyCodeCommandHandlerTests
     [Fact]
     public async Task Handle_ResendingCode_DoesNotResetAttemptBudget()
     {
-        var sendCodeHandler = new SendCodeCommandHandler(_cache, _emailService);
+        var sendCodeHandler = new SendCodeCommandHandler(_cache, Substitute.For<IBackgroundJobClient>());
         await sendCodeHandler.Handle(new SendCodeCommand(TestEmail), CancellationToken.None);
 
         for (var attempt = 0; attempt < 3; attempt++)

@@ -1,7 +1,6 @@
 using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Infrastructure.Services;
 
@@ -17,9 +16,10 @@ public class ResendContactsServiceTests
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient("Resend").Returns(httpClient);
 
-        return new ResendContactsService(
-            factory,
-            new NullLoggerFactory().CreateLogger<ResendContactsService>());
+        var logger = Substitute.For<ILogger<ResendContactsService>>();
+        logger.IsEnabled(Arg.Any<LogLevel>()).Returns(true);
+
+        return new ResendContactsService(factory, logger);
     }
 
     [Fact]
