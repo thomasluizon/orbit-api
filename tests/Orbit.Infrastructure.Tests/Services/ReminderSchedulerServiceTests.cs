@@ -568,6 +568,71 @@ public class ReminderSchedulerServiceTests
             user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task CheckAndSendReminders_ManyDueReminders_DeliversEachRecipientExactlyOnce()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        var users = SeedDueRelativeReminders(dbContext, count: 6);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        (await dbContext.SentReminders.CountAsync()).Should().Be(users.Count);
+        foreach (var user in users)
+        {
+            await pushService.Received(1).SendToUserAsync(
+                user.Id, Arg.Any<string>(), Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+        }
+        await pushService.Received(users.Count).SendToUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckAndSendReminders_OneRecipientPushThrows_OthersStillRecordedAndDelivered()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        var users = SeedDueRelativeReminders(dbContext, count: 4);
+        await dbContext.SaveChangesAsync();
+
+        pushService.SendToUserAsync(
+                users[0].Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("push down")));
+
+        var service = CreateService(dbContext, pushService);
+        await service.CheckAndSendReminders(CancellationToken.None);
+
+        (await dbContext.SentReminders.CountAsync()).Should().Be(users.Count);
+        foreach (var user in users.Skip(1))
+        {
+            await pushService.Received(1).SendToUserAsync(
+                user.Id, Arg.Any<string>(), Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+        }
+    }
+
+    private static List<User> SeedDueRelativeReminders(OrbitDbContext dbContext, int count)
+    {
+        var users = new List<User>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var user = User.Create($"User{index}", $"user{index}@test.com").Value;
+            var habit = Habit.Create(new HabitCreateParams(
+                user.Id, $"Workout {index}", FrequencyUnit.Day, 1,
+                ReminderEnabled: true,
+                DueDate: UtcToday,
+                DueTime: new TimeOnly(0, 0),
+                ReminderTimes: new[] { 0 })).Value;
+            dbContext.Users.Add(user);
+            dbContext.Habits.Add(habit);
+            users.Add(user);
+        }
+        return users;
+    }
+
     private static OrbitDbContext CreateInMemoryDbContext() =>
         new(new DbContextOptionsBuilder<OrbitDbContext>()
             .UseInMemoryDatabase($"ReminderSchedulerServiceTests_{Guid.NewGuid()}")

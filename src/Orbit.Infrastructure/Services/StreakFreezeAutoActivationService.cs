@@ -88,8 +88,127 @@ public partial class StreakFreezeAutoActivationService(
 
         var completionsByUser = await LoadRecentCompletionsAsync(dbContext, candidateIds, monthFloor, ct);
 
+        var staged = new List<StagedFreeze>(candidates.Count);
         foreach (var user in candidates)
-            await ProcessUserAsync(user, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
+        {
+            var stagedFreeze = StageFreeze(user, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, dbContext);
+            if (stagedFreeze is not null)
+                staged.Add(stagedFreeze);
+        }
+
+        if (staged.Count == 0) return;
+
+        if (await TrySaveBatchAsync(dbContext, ct))
+        {
+            await NotifyActivatedAsync(staged, pushService, ct);
+            return;
+        }
+
+        dbContext.ChangeTracker.Clear();
+        await ActivatePerUserFallbackAsync(
+            candidateIds, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
+    }
+
+    private sealed record StagedFreeze(User User, DateOnly MissedDate, string Title, string Body);
+
+    private StagedFreeze? StageFreeze(
+        User user,
+        bool gamificationFreeTierEnabled,
+        Dictionary<Guid, List<StreakFreeze>> freezesByUser,
+        Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
+        Dictionary<Guid, HashSet<DateOnly>> completionsByUser,
+        OrbitDbContext dbContext)
+    {
+        if (!user.HasProAccess && !gamificationFreeTierEnabled) return null;
+
+        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
+        var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
+        var missedDate = userToday.AddDays(-1);
+
+        if (user.LastActiveDate is null || user.LastActiveDate >= missedDate) return null;
+
+        var existingFreezes = freezesByUser.GetValueOrDefault(user.Id) ?? [];
+        if (existingFreezes.Any(f => f.UsedOnDate == missedDate)) return null;
+
+        var guardedDates = guardedByUser.GetValueOrDefault(user.Id) ?? [];
+        if (guardedDates.Contains(missedDate)) return null;
+
+        var completions = completionsByUser.GetValueOrDefault(user.Id) ?? [];
+        if (completions.Contains(missedDate)) return null;
+
+        var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var freezesThisMonth = existingFreezes.Count(f => f.UsedOnDate >= monthStart && f.UsedOnDate < monthEnd);
+        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth) return null;
+
+        var consume = user.ConsumeStreakFreeze();
+        if (consume.IsFailure) return null;
+
+        dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
+        dbContext.SentStreakFreezeAlerts.Add(SentStreakFreezeAlert.Create(user.Id, missedDate));
+
+        var (title, body) = BuildNotification(user.CurrentStreak, user.Language ?? "en");
+        dbContext.Notifications.Add(Notification.Create(user.Id, title, body, StreakUrl));
+
+        return new StagedFreeze(user, missedDate, title, body);
+    }
+
+    private async Task<bool> TrySaveBatchAsync(OrbitDbContext dbContext, CancellationToken ct)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        {
+            return false;
+        }
+    }
+
+    private async Task NotifyActivatedAsync(
+        List<StagedFreeze> staged, IPushNotificationService pushService, CancellationToken ct)
+    {
+        foreach (var freeze in staged)
+        {
+            await pushService.SendToUserAsync(freeze.User.Id, freeze.Title, freeze.Body, StreakUrl, ct);
+
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFreezeActivated(logger, freeze.User.Id, freeze.MissedDate);
+        }
+    }
+
+    private async Task ActivatePerUserFallbackAsync(
+        List<Guid> candidateIds,
+        bool gamificationFreeTierEnabled,
+        Dictionary<Guid, List<StreakFreeze>> freezesByUser,
+        Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
+        Dictionary<Guid, HashSet<DateOnly>> completionsByUser,
+        IPushNotificationService pushService,
+        OrbitDbContext dbContext,
+        CancellationToken ct)
+    {
+        var users = await dbContext.Users
+            .Where(u => candidateIds.Contains(u.Id))
+            .ToListAsync(ct);
+
+        foreach (var user in users)
+        {
+            var staged = StageFreeze(user, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, dbContext);
+            if (staged is null) continue;
+
+            if (!await TrySaveUserFreezeAsync(user.Id, dbContext, ct))
+                continue;
+
+            await pushService.SendToUserAsync(user.Id, staged.Title, staged.Body, StreakUrl, ct);
+
+            if (logger.IsEnabled(LogLevel.Information))
+                LogFreezeActivated(logger, user.Id, staged.MissedDate);
+        }
     }
 
     private static async Task<Dictionary<Guid, HashSet<DateOnly>>> LoadRecentCompletionsAsync(
@@ -121,56 +240,6 @@ public partial class StreakFreezeAutoActivationService(
             dates.Add(log.Date);
         }
         return completions;
-    }
-
-    private async Task ProcessUserAsync(
-        User user,
-        bool gamificationFreeTierEnabled,
-        Dictionary<Guid, List<StreakFreeze>> freezesByUser,
-        Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
-        Dictionary<Guid, HashSet<DateOnly>> completionsByUser,
-        IPushNotificationService pushService,
-        OrbitDbContext dbContext,
-        CancellationToken ct)
-    {
-        if (!user.HasProAccess && !gamificationFreeTierEnabled) return;
-
-        var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-        var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-        var missedDate = userToday.AddDays(-1);
-
-        if (user.LastActiveDate is null || user.LastActiveDate >= missedDate) return;
-
-        var existingFreezes = freezesByUser.GetValueOrDefault(user.Id) ?? [];
-        if (existingFreezes.Any(f => f.UsedOnDate == missedDate)) return;
-
-        var guardedDates = guardedByUser.GetValueOrDefault(user.Id) ?? [];
-        if (guardedDates.Contains(missedDate)) return;
-
-        var completions = completionsByUser.GetValueOrDefault(user.Id) ?? [];
-        if (completions.Contains(missedDate)) return;
-
-        var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
-        var monthEnd = monthStart.AddMonths(1);
-        var freezesThisMonth = existingFreezes.Count(f => f.UsedOnDate >= monthStart && f.UsedOnDate < monthEnd);
-        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth) return;
-
-        var consume = user.ConsumeStreakFreeze();
-        if (consume.IsFailure) return;
-
-        dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
-        dbContext.SentStreakFreezeAlerts.Add(SentStreakFreezeAlert.Create(user.Id, missedDate));
-
-        var (title, body) = BuildNotification(user.CurrentStreak, user.Language ?? "en");
-        dbContext.Notifications.Add(Notification.Create(user.Id, title, body, StreakUrl));
-
-        if (!await TrySaveUserFreezeAsync(user.Id, dbContext, ct))
-            return;
-
-        await pushService.SendToUserAsync(user.Id, title, body, StreakUrl, ct);
-
-        if (logger.IsEnabled(LogLevel.Information))
-            LogFreezeActivated(logger, user.Id, missedDate);
     }
 
     private async Task<bool> TrySaveUserFreezeAsync(Guid userId, OrbitDbContext dbContext, CancellationToken ct)

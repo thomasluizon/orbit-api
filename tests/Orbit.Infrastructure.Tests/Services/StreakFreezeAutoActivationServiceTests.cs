@@ -374,6 +374,32 @@ public class StreakFreezeAutoActivationServiceTests
         user.StreakFreezesAccumulated.Should().Be(0);
     }
 
+    [Fact]
+    public async Task ActivateMissedDayFreezes_MultipleEligibleUsers_PersistsAllInOneBatchedSave()
+    {
+        var users = Enumerable.Range(0, 4).Select(_ => CreateEligibleProUser()).ToList();
+
+        var interceptor = new CountingSaveChangesInterceptor();
+        await using var dbContext = CreateInterceptingContext(interceptor);
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.AddRange(users);
+        await dbContext.SaveChangesAsync();
+        interceptor.Reset();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        interceptor.SaveCount.Should().Be(1);
+        foreach (var user in users)
+        {
+            (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id)).Should().Be(1);
+            user.StreakFreezesAccumulated.Should().Be(0);
+            await pushService.Received(1).SendToUserAsync(
+                user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        }
+    }
+
     private static User CreateEligibleProUser()
     {
         var user = User.Create($"User-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@test.com").Value;
@@ -436,6 +462,22 @@ public class StreakFreezeAutoActivationServiceTests
     private sealed class FakeUniqueViolationException : DbException
     {
         public override string SqlState => "23505";
+    }
+
+    private sealed class CountingSaveChangesInterceptor : SaveChangesInterceptor
+    {
+        private int _count;
+
+        public int SaveCount => _count;
+
+        public void Reset() => _count = 0;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _count);
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     private sealed class ThrowConcurrencyForUserInterceptor(Guid conflictUserId) : SaveChangesInterceptor

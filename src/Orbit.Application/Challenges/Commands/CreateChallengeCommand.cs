@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Social.Services;
@@ -27,12 +28,13 @@ public partial class CreateChallengeCommandHandler(
     IGenericRepository<Challenge> challengeRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
-    IPushNotificationService pushNotificationService,
+    IServiceScopeFactory scopeFactory,
     IUnitOfWork unitOfWork,
     ILogger<CreateChallengeCommandHandler> logger) : IRequestHandler<CreateChallengeCommand, Result<Guid>>
 {
     private const string JoinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private const int JoinCodeLength = 8;
+    private const int MaxInvitePushConcurrency = 5;
 
     public async Task<Result<Guid>> Handle(CreateChallengeCommand request, CancellationToken cancellationToken)
     {
@@ -90,7 +92,15 @@ public partial class CreateChallengeCommandHandler(
             return;
 
         var invitedUsers = await userRepository.FindAsync(u => invitedFriendIds.Contains(u.Id), cancellationToken);
-        foreach (var user in invitedUsers)
+
+        using var throttle = new SemaphoreSlim(MaxInvitePushConcurrency);
+        await Task.WhenAll(invitedUsers.Select(user => NotifyOneAsync(requester, user, throttle, cancellationToken)));
+    }
+
+    private async Task NotifyOneAsync(User requester, User user, SemaphoreSlim throttle, CancellationToken cancellationToken)
+    {
+        await throttle.WaitAsync(cancellationToken);
+        try
         {
             var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
             var title = isPortuguese ? "Novo desafio em grupo" : "New group challenge";
@@ -98,14 +108,17 @@ public partial class CreateChallengeCommandHandler(
                 ? $"{requester.Name} convidou você para um desafio."
                 : $"{requester.Name} invited you to a challenge.";
 
-            try
-            {
-                await pushNotificationService.SendToUserAsync(user.Id, title, body, cancellationToken: cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                LogPushNotificationFailed(logger, ex, user.Id);
-            }
+            using var scope = scopeFactory.CreateScope();
+            var pushNotificationService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
+            await pushNotificationService.SendToUserAsync(user.Id, title, body, cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogPushNotificationFailed(logger, ex, user.Id);
+        }
+        finally
+        {
+            throttle.Release();
         }
     }
 
