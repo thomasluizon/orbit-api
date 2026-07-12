@@ -234,6 +234,48 @@ public class AgentPolicyEvaluatorTests : IDisposable
         decision.PendingOperation.Should().NotBeNull();
     }
 
+    [Fact]
+    public void Evaluate_DeactivatedUser_NonAuthCapability_DeniesWithAccountDeactivated()
+    {
+        var user = _dbContext.Users.First(item => item.Id == _userId);
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        _dbContext.SaveChanges();
+
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.HabitsWrite,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "create_habit",
+            "create_habit via chat",
+            OperationFingerprint: "create_habit:{\"title\":\"Meditate\"}"));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.Denied);
+        decision.Reason.Should().Be("account_deactivated");
+    }
+
+    [Fact]
+    public void Evaluate_DeactivatedUser_AccountManageCapability_IsNotBlockedByDeactivation()
+    {
+        var user = _dbContext.Users.First(item => item.Id == _userId);
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        _dbContext.SaveChanges();
+
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.AccountManage,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "manage_account",
+            "manage_account via chat",
+            OperationFingerprint: "manage_account:{\"action\":\"delete\"}"));
+
+        decision.Reason.Should().NotBe("user_not_found");
+        decision.Reason.Should().NotBe("account_deactivated");
+    }
+
     [Theory]
     [InlineData("create_habit")]
     [InlineData("log_habit")]

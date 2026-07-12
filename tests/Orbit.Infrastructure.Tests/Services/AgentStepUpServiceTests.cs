@@ -142,6 +142,33 @@ public class AgentStepUpServiceTests : IDisposable
             .Should().Be(1);
     }
 
+    [Fact]
+    public async Task IssueChallenge_ForDeactivatedUser_StillFindsUserAndSucceeds()
+    {
+        var user = await _dbContext.Users.FirstAsync(item => item.Id == _userId);
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+        await _dbContext.SaveChangesAsync();
+
+        var capability = _catalogService.GetCapability(AgentCapabilityIds.AccountManage)!;
+        var pendingOperation = _pendingOperationStore.Create(
+            _userId,
+            capability,
+            "manage_account",
+            "{\"action\":\"delete\"}",
+            "Delete account",
+            "manage_account:{\"action\":\"delete\"}",
+            AgentExecutionSurface.Chat);
+
+        var challengeResult = await _stepUpService.IssueChallengeAsync(
+            _userId,
+            pendingOperation.Id,
+            "en",
+            CancellationToken.None);
+
+        challengeResult.IsSuccess.Should().BeTrue();
+        _emailService.LastVerificationCode.Should().NotBeNull();
+    }
+
     private sealed class TestEmailService : IEmailService
     {
         public string? LastVerificationCode { get; private set; }

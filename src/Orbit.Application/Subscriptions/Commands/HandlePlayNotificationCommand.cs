@@ -68,13 +68,13 @@ public partial class HandlePlayNotificationCommandHandler(
         if (state is null)
             return Result.Success();
 
-        var user = await userRepository.FindOneTrackedAsync(
-            u => u.PlayPurchaseToken == notification.PurchaseToken, cancellationToken: cancellationToken);
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+            u => u.PlayPurchaseToken == notification.PurchaseToken, cancellationToken);
 
         if (user is null && !string.IsNullOrEmpty(state.LinkedPurchaseToken))
         {
-            user = await userRepository.FindOneTrackedAsync(
-                u => u.PlayPurchaseToken == state.LinkedPurchaseToken, cancellationToken: cancellationToken);
+            user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+                u => u.PlayPurchaseToken == state.LinkedPurchaseToken, cancellationToken);
         }
 
         if (user is null)
