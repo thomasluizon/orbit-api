@@ -8,6 +8,7 @@ using Orbit.Api.Extensions;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Scalar.AspNetCore;
@@ -21,9 +22,13 @@ public static partial class WebApplicationExtensions
         if (!BuildTimeDocumentGeneration.IsActive)
         {
             var migrationConnectionString = OrbitConnectionStringFactory.ForSession(app.Configuration);
+            var databaseSettings = DatabaseConnectionSettings.From(app.Configuration);
             var migrationOptions = new DbContextOptionsBuilder<OrbitDbContext>()
                 .UseNpgsql(migrationConnectionString, npgsql =>
-                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null))
+                {
+                    npgsql.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
+                    npgsql.CommandTimeout(databaseSettings.MigrationCommandTimeoutSeconds);
+                })
                 .Options;
             await using var migrationDb = new OrbitDbContext(migrationOptions);
             await migrationDb.Database.MigrateAsync();

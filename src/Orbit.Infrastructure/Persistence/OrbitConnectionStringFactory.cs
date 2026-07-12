@@ -17,23 +17,19 @@ public static class OrbitConnectionStringFactory
 {
     public static string ForRequestPath(IConfiguration configuration)
     {
-        var settings = ReadSettings(configuration);
+        var settings = DatabaseConnectionSettings.From(configuration);
         return ApplyPoolCap(configuration.GetConnectionString("DefaultConnection"), settings.EfMaxPoolSize);
     }
 
     public static string ForSession(IConfiguration configuration)
     {
-        var settings = ReadSettings(configuration);
+        var settings = DatabaseConnectionSettings.From(configuration);
         var sessionConnectionString = configuration.GetConnectionString("SessionConnection");
         if (string.IsNullOrWhiteSpace(sessionConnectionString))
             sessionConnectionString = configuration.GetConnectionString("DefaultConnection");
 
         return ApplyPoolCap(sessionConnectionString, settings.SessionMaxPoolSize);
     }
-
-    private static DatabaseConnectionSettings ReadSettings(IConfiguration configuration) =>
-        configuration.GetSection(DatabaseConnectionSettings.SectionName).Get<DatabaseConnectionSettings>()
-            ?? new DatabaseConnectionSettings();
 
     private static string ApplyPoolCap(string? connectionString, int maxPoolSize)
     {
