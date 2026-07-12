@@ -663,6 +663,8 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<User>(entity =>
         {
+            entity.HasQueryFilter(u => !u.IsDeactivated);
+
             entity.HasIndex(u => u.Email).IsUnique();
             entity.HasIndex(u => u.ReferralCode).IsUnique().HasFilter("\"ReferralCode\" IS NOT NULL");
             entity.HasIndex(u => u.PlayPurchaseToken).IsUnique().HasFilter("\"PlayPurchaseToken\" IS NOT NULL");

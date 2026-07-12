@@ -76,6 +76,7 @@ public partial class AccountDeletionService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
         return await dbContext.Users
+            .IgnoreQueryFilters()
             .Where(u => u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
             .Select(u => u.Id)
             .ToListAsync(ct);
@@ -88,7 +89,9 @@ public partial class AccountDeletionService(
             using var scope = scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-            var userToDelete = await dbContext.Users.FindAsync([userId], ct);
+            var userToDelete = await dbContext.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Id == userId, ct);
             if (userToDelete is not null)
             {
                 var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();

@@ -78,6 +78,13 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await _dbSet.IgnoreQueryFilters().Where(predicate).ToListAsync(cancellationToken);
     }
 
+    public async Task<T?> FindOneTrackedIgnoringFiltersAsync(
+        Expression<Func<T, bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.IgnoreQueryFilters().FirstOrDefaultAsync(predicate, cancellationToken);
+    }
+
     public async Task<int> CountAsync(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)
@@ -90,6 +97,13 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         CancellationToken cancellationToken = default)
     {
         return await _dbSet.AnyAsync(predicate, cancellationToken);
+    }
+
+    public async Task<bool> AnyIgnoringFiltersAsync(
+        Expression<Func<T, bool>> predicate,
+        CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.IgnoreQueryFilters().AnyAsync(predicate, cancellationToken);
     }
 
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)

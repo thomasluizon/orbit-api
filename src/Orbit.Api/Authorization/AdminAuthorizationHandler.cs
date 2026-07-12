@@ -24,7 +24,7 @@ public sealed class AdminAuthorizationHandler(IGenericRepository<User> userRepos
         if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
             return;
 
-        if (await userRepository.AnyAsync(user => user.Id == userId && user.IsAdmin))
+        if (await userRepository.AnyIgnoringFiltersAsync(user => user.Id == userId && user.IsAdmin))
             context.Succeed(requirement);
     }
 }
