@@ -94,9 +94,81 @@ public class ResendEmailServicePiiScrubbingTests
         errorLog.Should().Contain("BadRequest");
     }
 
+    [Fact]
+    public async Task MarketingSuccess_InfoLog_OmitsRecipientEmail()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await SendMarketing();
+
+        _logger.Entries.Should().Contain(entry => entry.Contains("Email sent"));
+        _logger.Entries.Should().OnlyContain(entry => !entry.Contains(RecipientEmail));
+    }
+
+    [Fact]
+    public async Task MarketingRetry_WarningLog_OmitsRecipientEmail()
+    {
+        _handler.StatusSequence = new Queue<HttpStatusCode>([HttpStatusCode.TooManyRequests, HttpStatusCode.OK]);
+
+        await SendMarketing();
+
+        _logger.Entries.Should().Contain(entry => entry.Contains("rate-limited"));
+        _logger.Entries.Should().OnlyContain(entry => !entry.Contains(RecipientEmail));
+    }
+
+    [Fact]
+    public async Task MarketingSendException_ErrorLog_OmitsRecipientEmail()
+    {
+        _handler.ExceptionToThrow = new HttpRequestException("Connection reset");
+
+        await SendMarketing();
+
+        _logger.Entries.Should().Contain(entry => entry.Contains("Email send exception"));
+        _logger.Entries.Should().OnlyContain(entry => !entry.Contains(RecipientEmail));
+    }
+
+    [Fact]
+    public async Task MarketingTestAccount_SkipLog_OmitsRecipientEmail() =>
+        await WithTestAccountAsync(async () =>
+        {
+            await SendMarketing();
+
+            _logger.Entries.Should().Contain(entry => entry.Contains("Skipping email"));
+            _logger.Entries.Should().OnlyContain(entry => !entry.Contains(RecipientEmail));
+        });
+
+    [Fact]
+    public async Task TransactionalTestAccount_SkipLog_OmitsRecipientEmail() =>
+        await WithTestAccountAsync(async () =>
+        {
+            await _sut.SendVerificationCodeAsync(RecipientEmail, "123456");
+
+            _logger.Entries.Should().Contain(entry => entry.Contains("Skipping email"));
+            _logger.Entries.Should().OnlyContain(entry => !entry.Contains(RecipientEmail));
+        });
+
+    private Task SendMarketing() =>
+        _sut.SendMarketingEmailAsync(
+            RecipientEmail, "Product news", "<p>hi</p>", "en",
+            "https://api.useorbit.org/api/marketing/unsubscribe?token=t");
+
+    private static async Task WithTestAccountAsync(Func<Task> action)
+    {
+        Environment.SetEnvironmentVariable("TEST_ACCOUNTS", $"{RecipientEmail}:123456");
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TEST_ACCOUNTS", null);
+        }
+    }
+
     private sealed class FakeHttpMessageHandler : HttpMessageHandler
     {
         public HttpResponseMessage ResponseToReturn { get; set; } = new(HttpStatusCode.OK);
+        public Queue<HttpStatusCode>? StatusSequence { get; set; }
         public Exception? ExceptionToThrow { get; set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -104,6 +176,12 @@ public class ResendEmailServicePiiScrubbingTests
         {
             if (ExceptionToThrow is not null)
                 throw ExceptionToThrow;
+
+            if (StatusSequence is { Count: > 0 })
+            {
+                var status = StatusSequence.Count > 1 ? StatusSequence.Dequeue() : StatusSequence.Peek();
+                return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("{}") });
+            }
 
             return Task.FromResult(ResponseToReturn);
         }
