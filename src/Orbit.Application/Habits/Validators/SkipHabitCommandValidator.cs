@@ -12,5 +12,10 @@ public class SkipHabitCommandValidator : AbstractValidator<SkipHabitCommand>
 
         RuleFor(x => x.HabitId)
             .NotEmpty();
+
+        RuleFor(x => x.Date)
+            .NotEqual(default(DateOnly))
+            .When(x => x.Date.HasValue)
+            .WithMessage("Date must be a valid calendar date");
     }
 }
