@@ -29,6 +29,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("send-code")]
     [DistributedRateLimit("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendCode(
@@ -78,6 +79,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("verify-code")]
     [DistributedRateLimit("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> VerifyCode(
@@ -139,6 +141,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("google")]
     [DistributedRateLimit("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GoogleAuth(
@@ -205,6 +208,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("refresh")]
     [DistributedRateLimit("refresh")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(

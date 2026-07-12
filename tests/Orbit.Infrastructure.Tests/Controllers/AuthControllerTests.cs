@@ -228,6 +228,37 @@ public class AuthControllerTests
             .Should().BeNull("logout must not require authentication");
     }
 
+    [Theory]
+    [InlineData(nameof(AuthController.SendCode))]
+    [InlineData(nameof(AuthController.VerifyCode))]
+    [InlineData(nameof(AuthController.GoogleAuth))]
+    [InlineData(nameof(AuthController.Refresh))]
+    public void PublicAuthEntrypoints_AreExplicitlyAllowAnonymous(string actionName)
+    {
+        var method = typeof(AuthController).GetMethod(actionName);
+
+        method.Should().NotBeNull();
+        method!.GetCustomAttribute<AllowAnonymousAttribute>(inherit: true)
+            .Should().NotBeNull($"{actionName} is a pre-login /api/auth/* route and must be reachable without a session");
+        method.GetCustomAttribute<AuthorizeAttribute>(inherit: true)
+            .Should().BeNull($"{actionName} must not require authentication");
+    }
+
+    [Theory]
+    [InlineData(nameof(AuthController.LogoutAll))]
+    [InlineData(nameof(AuthController.RequestDeletion))]
+    [InlineData(nameof(AuthController.ConfirmDeletion))]
+    public void AuthenticatedAuthEndpoints_RequireAuthorization(string actionName)
+    {
+        var method = typeof(AuthController).GetMethod(actionName);
+
+        method.Should().NotBeNull();
+        method!.GetCustomAttribute<AuthorizeAttribute>(inherit: true)
+            .Should().NotBeNull($"{actionName} operates on the current user and must require authentication");
+        method.GetCustomAttribute<AllowAnonymousAttribute>(inherit: true)
+            .Should().BeNull($"{actionName} must not be reachable anonymously");
+    }
+
     [Fact]
     public async Task SendCodeOperation_Success_ReturnsOkAndRecordsAudit()
     {
