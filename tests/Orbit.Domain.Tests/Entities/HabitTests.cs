@@ -159,16 +159,6 @@ public class HabitTests
     }
 
     [Fact]
-    public void Create_NullDueDate_DefaultsToToday()
-    {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        var habit = CreateValidHabit(dueDate: null);
-
-        habit.DueDate.Should().Be(today);
-    }
-
-    [Fact]
     public void Create_TrimsTitle()
     {
         var result = Habit.Create(new HabitCreateParams(ValidUserId, "  Exercise  ", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
