@@ -203,6 +203,33 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.Notifications.IgnoreQueryFilters().CountAsync(n => n.UserId == _otherUserId)).Should().Be(2);
     }
 
+    [Fact]
+    public async Task DeleteAllUserDataAsync_RemovesApiKeysAndPushSubscriptions_ForTargetUserOnly()
+    {
+        SeedUser(_userId, "target@example.com");
+        SeedUser(_otherUserId, "other@example.com");
+
+        _dbContext.ApiKeys.Add(ApiKey.Create(_userId, "cli", ["habits:read"]).Value.Entity);
+        _dbContext.ApiKeys.Add(ApiKey.Create(_userId, "automation", ["habits:write"]).Value.Entity);
+        _dbContext.ApiKeys.Add(ApiKey.Create(_otherUserId, "cli", ["habits:read"]).Value.Entity);
+
+        _dbContext.PushSubscriptions.Add(
+            PushSubscription.Create(_userId, "https://push/target-web", "p256dh", "auth").Value);
+        _dbContext.PushSubscriptions.Add(
+            PushSubscription.Create(_userId, "https://push/target-device", PushSubscription.FcmSentinel, "auth").Value);
+        _dbContext.PushSubscriptions.Add(
+            PushSubscription.Create(_otherUserId, "https://push/other", "p256dh", "auth").Value);
+        await _dbContext.SaveChangesAsync();
+
+        await _repository.DeleteAllUserDataAsync(_userId);
+
+        (await _dbContext.ApiKeys.CountAsync(k => k.UserId == _userId)).Should().Be(0);
+        (await _dbContext.PushSubscriptions.CountAsync(p => p.UserId == _userId)).Should().Be(0);
+
+        (await _dbContext.ApiKeys.CountAsync(k => k.UserId == _otherUserId)).Should().Be(1);
+        (await _dbContext.PushSubscriptions.CountAsync(p => p.UserId == _otherUserId)).Should().Be(1);
+    }
+
     private void SeedSocialDataForUser(Guid userId, Guid counterpartId, Guid habitId)
     {
         _dbContext.Friendships.Add(Friendship.Create(userId, counterpartId).Value);
