@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Common;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -39,14 +40,16 @@ public partial class GoogleTokenService(
         try
         {
             var client = httpClientFactory.CreateClient(HttpClientName);
-            using var response = await client.PostAsync(GoogleTokenUrl,
-                new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["client_id"] = configuration["Google:ClientId"]!,
-                    ["client_secret"] = configuration["Google:ClientSecret"]!,
-                    ["refresh_token"] = user.GoogleRefreshToken,
-                    ["grant_type"] = "refresh_token"
-                }), ct);
+            using var response = await HttpRetryPolicy.SendWithRetryAsync(
+                () => client.PostAsync(GoogleTokenUrl,
+                    new FormUrlEncodedContent(new Dictionary<string, string>
+                    {
+                        ["client_id"] = configuration["Google:ClientId"]!,
+                        ["client_secret"] = configuration["Google:ClientSecret"]!,
+                        ["refresh_token"] = user.GoogleRefreshToken,
+                        ["grant_type"] = "refresh_token"
+                    }), ct),
+                ct);
 
             var body = await response.Content.ReadAsStringAsync(ct);
 

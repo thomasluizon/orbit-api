@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Common;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Services;
@@ -21,7 +22,9 @@ public sealed partial class SupabaseObjectStorageService(
         var client = httpClientFactory.CreateClient(HttpClientName);
 
         var requestPath = $"/storage/v1/object/upload/sign/{_settings.Bucket}/{objectKey}";
-        using var response = await client.PostAsync(requestPath, content: null, cancellationToken);
+        using var response = await HttpRetryPolicy.SendWithRetryAsync(
+            () => client.PostAsync(requestPath, content: null, cancellationToken),
+            cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {

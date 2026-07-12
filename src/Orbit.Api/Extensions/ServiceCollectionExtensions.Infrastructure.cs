@@ -62,6 +62,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.Configure<StripeSettings>(
             builder.Configuration.GetSection(StripeSettings.SectionName));
         var stripeKey = builder.Configuration.GetSection(StripeSettings.SectionName).Get<StripeSettings>()?.SecretKey;
+        Stripe.StripeConfiguration.MaxNetworkRetries = 2;
         if (!string.IsNullOrEmpty(stripeKey))
         {
             Stripe.StripeConfiguration.ApiKey = stripeKey;

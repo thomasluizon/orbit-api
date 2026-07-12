@@ -25,7 +25,7 @@ public class ResendContactsServiceTests
     [Fact]
     public async Task AddContactAsync_PostsToContactsEndpointWithEmail()
     {
-        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.Created);
+        _handler.StatusToReturn = HttpStatusCode.Created;
         var service = BuildService();
 
         await service.AddContactAsync("User@Test.com");
@@ -39,10 +39,8 @@ public class ResendContactsServiceTests
     [Fact]
     public async Task AddContactAsync_DuplicateEmailConflict_IsTreatedAsBenignSuccess()
     {
-        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.Conflict)
-        {
-            Content = new StringContent("Contact already exists")
-        };
+        _handler.StatusToReturn = HttpStatusCode.Conflict;
+        _handler.BodyToReturn = "Contact already exists";
         var service = BuildService();
 
         var act = () => service.AddContactAsync("user@test.com");
@@ -54,10 +52,8 @@ public class ResendContactsServiceTests
     [Fact]
     public async Task AddContactAsync_ApiFailure_DoesNotThrow()
     {
-        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.InternalServerError)
-        {
-            Content = new StringContent("Server error")
-        };
+        _handler.StatusToReturn = HttpStatusCode.InternalServerError;
+        _handler.BodyToReturn = "Server error";
         var service = BuildService();
 
         var act = () => service.AddContactAsync("user@test.com");
@@ -67,7 +63,8 @@ public class ResendContactsServiceTests
 
     private sealed class FakeHttpMessageHandler : HttpMessageHandler
     {
-        public HttpResponseMessage ResponseToReturn { get; set; } = new(HttpStatusCode.OK);
+        public HttpStatusCode StatusToReturn { get; set; } = HttpStatusCode.OK;
+        public string BodyToReturn { get; set; } = "";
         public HttpRequestMessage? LastRequest { get; private set; }
         public string LastRequestBody { get; private set; } = "";
 
@@ -78,7 +75,7 @@ public class ResendContactsServiceTests
             if (request.Content is not null)
                 LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
 
-            return ResponseToReturn;
+            return new HttpResponseMessage(StatusToReturn) { Content = new StringContent(BodyToReturn) };
         }
     }
 }
