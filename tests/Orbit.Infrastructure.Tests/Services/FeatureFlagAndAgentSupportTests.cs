@@ -134,6 +134,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
         var serviceProvider = Substitute.For<IServiceProvider>();
         serviceProvider.GetService(typeof(IDistributedRateLimitService)).Returns(rateLimitService);
+        serviceProvider.GetService(typeof(IAuthSessionService)).Returns(Substitute.For<IAuthSessionService>());
         serviceProvider.GetService(typeof(ILogger<DistributedRateLimitFilter>)).Returns(logger);
         var attribute = new DistributedRateLimitAttribute("chat");
 
@@ -150,7 +151,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
         rateLimitService.TryAcquireAsync("chat", $"user:{userId}", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(true, 20, 1, DateTime.UtcNow.AddSeconds(30)));
-        var filter = new DistributedRateLimitFilter("chat", rateLimitService, logger);
+        var filter = new DistributedRateLimitFilter("chat", rateLimitService, Substitute.For<IAuthSessionService>(), logger);
         var context = CreateActionExecutingContext(new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -178,7 +179,7 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
         var retryAt = DateTime.UtcNow.AddSeconds(15);
         rateLimitService.TryAcquireAsync("auth", "ip:203.0.113.10", Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 5, 5, retryAt));
-        var filter = new DistributedRateLimitFilter("auth", rateLimitService, logger);
+        var filter = new DistributedRateLimitFilter("auth", rateLimitService, Substitute.For<IAuthSessionService>(), logger);
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
         httpContext.TraceIdentifier = "req_rate_limited";

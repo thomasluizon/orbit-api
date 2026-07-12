@@ -7,7 +7,9 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
+using Orbit.Application.Auth.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -16,6 +18,7 @@ namespace Orbit.Infrastructure.Tests.RateLimiting;
 public class DistributedRateLimitFilterTests
 {
     private readonly IDistributedRateLimitService _service = Substitute.For<IDistributedRateLimitService>();
+    private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly ILogger<DistributedRateLimitFilter> _logger = Substitute.For<ILogger<DistributedRateLimitFilter>>();
 
     [Fact]
@@ -24,7 +27,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("support", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
 
-        var filter = new DistributedRateLimitFilter("support", _service, _logger);
+        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -44,7 +47,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("chat", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("rate-limit store down"));
 
-        var filter = new DistributedRateLimitFilter("chat", _service, _logger);
+        var filter = new DistributedRateLimitFilter("chat", _service, _authSessionService, _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -64,7 +67,7 @@ public class DistributedRateLimitFilterTests
         _service.TryAcquireAsync("support", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DistributedRateLimitDecision(false, 3, 3, DateTime.UtcNow.AddHours(1)));
 
-        var filter = new DistributedRateLimitFilter("support", _service, _logger);
+        var filter = new DistributedRateLimitFilter("support", _service, _authSessionService, _logger);
         var (context, _) = CreateExecutingContext();
         var nextCalled = false;
 
@@ -78,7 +81,45 @@ public class DistributedRateLimitFilterTests
         context.Result.Should().NotBeNull();
     }
 
-    private static (ActionExecutingContext Context, HttpContext HttpContext) CreateExecutingContext()
+    [Fact]
+    public async Task RefreshPolicy_PartitionsUnauthenticatedRequestByRefreshToken_WhenTokenMapsToRealSession()
+    {
+        var refreshToken = new string('A', RefreshTokenRules.TokenLength);
+        _authSessionService.HasSessionForTokenAsync(refreshToken, Arg.Any<CancellationToken>()).Returns(true);
+        string? capturedPartitionKey = null;
+        _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
+
+        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, _logger);
+        var (context, _) = CreateExecutingContext(new AuthController.RefreshSessionRequest(refreshToken));
+
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+
+        capturedPartitionKey.Should().StartWith("refresh:token:");
+        capturedPartitionKey.Should().NotContain(refreshToken);
+    }
+
+    [Fact]
+    public async Task RefreshPolicy_FallsBackToIpPartition_WhenWellFormedTokenHasNoRealSession()
+    {
+        var forgedToken = new string('A', RefreshTokenRules.TokenLength);
+        _authSessionService.HasSessionForTokenAsync(forgedToken, Arg.Any<CancellationToken>()).Returns(false);
+        string? capturedPartitionKey = null;
+        _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
+
+        var filter = new DistributedRateLimitFilter("refresh", _service, _authSessionService, _logger);
+        var (context, httpContext) = CreateExecutingContext(new AuthController.RefreshSessionRequest(forgedToken));
+        httpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("203.0.113.7");
+
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+
+        capturedPartitionKey.Should().StartWith("ip:");
+        capturedPartitionKey.Should().NotStartWith("refresh:token:");
+    }
+
+    private static (ActionExecutingContext Context, HttpContext HttpContext) CreateExecutingContext(
+        params object?[] actionArguments)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = "POST";
@@ -89,10 +130,14 @@ public class DistributedRateLimitFilterTests
             new RouteData(),
             new ControllerActionDescriptor());
 
+        var arguments = new Dictionary<string, object?>();
+        for (var index = 0; index < actionArguments.Length; index++)
+            arguments[$"arg{index}"] = actionArguments[index];
+
         var executingContext = new ActionExecutingContext(
             actionContext,
             [],
-            new Dictionary<string, object?>(),
+            arguments,
             controller: new object());
 
         return (executingContext, httpContext);

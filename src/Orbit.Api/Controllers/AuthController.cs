@@ -204,7 +204,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("refresh")]
-    [DistributedRateLimit("auth")]
+    [DistributedRateLimit("refresh")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
@@ -225,7 +225,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     }
 
     [HttpPost("operations/refresh")]
-    [DistributedRateLimit("auth")]
+    [DistributedRateLimit("refresh")]
     [AllowAnonymous]
     public async Task<IActionResult> RefreshOperation(
         [FromBody] RefreshSessionOperationRequest request,
@@ -304,6 +304,26 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
                 "logout_auth_session",
                 AgentOperationStatus.Failed,
                 policyReason: result.Error));
+    }
+
+    [Authorize]
+    [HttpPost("logout-all")]
+    [DistributedRateLimit("auth")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
+    {
+        var command = new LogoutAllSessionsCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            LogAllSessionsRevoked(logger, HttpContext.GetUserId(), HttpContext.GetRequestId());
+            return Ok(new { message = "Logged out of all sessions" });
+        }
+
+        LogSessionRevocationFailed(logger, result.Error, HttpContext.GetRequestId());
+        return result.ToErrorResult();
     }
 
     [Authorize]
@@ -391,6 +411,9 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Session revocation failed: {Error}. RequestId={RequestId}")]
     private static partial void LogSessionRevocationFailed(ILogger logger, string? error, string requestId);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Information, Message = "All sessions revoked for {UserId}. RequestId={RequestId}")]
+    private static partial void LogAllSessionsRevoked(ILogger logger, Guid userId, string requestId);
 
     private static AgentExecuteOperationResponse BuildOperationResponse(
         string operationId,

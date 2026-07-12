@@ -18,6 +18,8 @@ public class AuthSessionService(
     IUnitOfWork unitOfWork,
     IOptions<JwtSettings> jwtSettings) : IAuthSessionService
 {
+    private const int MaxRevokeAllAttempts = 3;
+
     private readonly JwtSettings _jwtSettings = jwtSettings.Value;
 
     private DateTime? GetRefreshExpiry(DateTime nowUtc) =>
@@ -62,10 +64,13 @@ public class AuthSessionService(
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         var newRefreshToken = GenerateRefreshToken();
-        session.Rotate(
+        var rotateResult = session.Rotate(
             HashToken(newRefreshToken),
             GetRefreshExpiry(nowUtc),
             nowUtc);
+
+        if (rotateResult.IsFailure)
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         try
         {
@@ -96,6 +101,50 @@ public class AuthSessionService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    public async Task<Result> RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty)
+            return Result.Failure(DomainErrors.UserIdRequired);
+
+        var nowUtc = DateTime.UtcNow;
+
+        for (var attempt = 0; attempt < MaxRevokeAllAttempts; attempt++)
+        {
+            var activeSessions = await userSessionRepository.FindTrackedAsync(
+                s => s.UserId == userId && s.RevokedAtUtc == null,
+                cancellationToken);
+
+            if (activeSessions.Count == 0)
+                return Result.Success();
+
+            foreach (var session in activeSessions)
+                session.Revoke(nowUtc);
+
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+                return Result.Success();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                unitOfWork.ResetTracking();
+            }
+        }
+
+        return Result.Failure(ErrorMessages.InvalidSession);
+    }
+
+    public async Task<bool> HasSessionForTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        var nowUtc = DateTime.UtcNow;
+        var tokenHash = HashToken(refreshToken);
+        return await userSessionRepository.AnyAsync(
+            session => session.TokenHash == tokenHash
+                && session.RevokedAtUtc == null
+                && (session.ExpiresAtUtc == null || session.ExpiresAtUtc > nowUtc),
+            cancellationToken);
     }
 
     private static string GenerateRefreshToken()
