@@ -903,4 +903,34 @@ public class UserTests
 
         user.HasCompletedOnboardingChecklist.Should().BeTrue();
     }
+
+    [Fact]
+    public void Deactivate_ClearsGoogleCalendarConnection()
+    {
+        var user = CreateValidUser();
+        typeof(User).GetProperty(nameof(User.IsLifetimePro))!.SetValue(user, true);
+        user.SetGoogleTokens("access-token", "refresh-token");
+        user.EnableCalendarAutoSync().IsSuccess.Should().BeTrue();
+
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+
+        user.IsDeactivated.Should().BeTrue();
+        user.GoogleAccessToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().BeNull();
+        user.GoogleCalendarAutoSyncEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CancelDeactivation_LeavesGoogleTokensCleared_ReconnectRequired()
+    {
+        var user = CreateValidUser();
+        user.SetGoogleTokens("access-token", "refresh-token");
+        user.Deactivate(DateTime.UtcNow.AddDays(7));
+
+        user.CancelDeactivation();
+
+        user.IsDeactivated.Should().BeFalse();
+        user.GoogleAccessToken.Should().BeNull();
+        user.GoogleRefreshToken.Should().BeNull();
+    }
 }
