@@ -174,12 +174,23 @@ public partial class StreakFreezeAutoActivationService(
         List<StagedFreeze> staged, IPushNotificationService pushService, CancellationToken ct)
     {
         foreach (var freeze in staged)
+            await NotifyFreezeActivatedAsync(freeze, pushService, ct);
+    }
+
+    private async Task NotifyFreezeActivatedAsync(
+        StagedFreeze freeze, IPushNotificationService pushService, CancellationToken ct)
+    {
+        try
         {
             await pushService.SendToUserAsync(freeze.User.Id, freeze.Title, freeze.Body, StreakUrl, ct);
-
-            if (logger.IsEnabled(LogLevel.Information))
-                LogFreezeActivated(logger, freeze.User.Id, freeze.MissedDate);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogFreezePushFailed(logger, freeze.User.Id, ex);
+        }
+
+        if (logger.IsEnabled(LogLevel.Information))
+            LogFreezeActivated(logger, freeze.User.Id, freeze.MissedDate);
     }
 
     private async Task ActivatePerUserFallbackAsync(
@@ -204,10 +215,7 @@ public partial class StreakFreezeAutoActivationService(
             if (!await TrySaveUserFreezeAsync(user.Id, dbContext, ct))
                 continue;
 
-            await pushService.SendToUserAsync(user.Id, staged.Title, staged.Body, StreakUrl, ct);
-
-            if (logger.IsEnabled(LogLevel.Information))
-                LogFreezeActivated(logger, user.Id, staged.MissedDate);
+            await NotifyFreezeActivatedAsync(staged, pushService, ct);
         }
     }
 
@@ -305,4 +313,7 @@ public partial class StreakFreezeAutoActivationService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Streak freeze skipped for user {UserId} due to a concurrent update; will re-evaluate next run")]
     private static partial void LogFreezeConflictSkipped(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to deliver streak-freeze push for user {UserId}; freeze already persisted")]
+    private static partial void LogFreezePushFailed(ILogger logger, Guid userId, Exception ex);
 }

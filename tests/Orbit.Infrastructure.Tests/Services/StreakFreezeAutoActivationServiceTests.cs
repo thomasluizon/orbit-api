@@ -400,6 +400,34 @@ public class StreakFreezeAutoActivationServiceTests
         }
     }
 
+    [Fact]
+    public async Task ActivateMissedDayFreezes_OnePushThrows_OtherStagedUsersStillNotifiedAndAllFrozen()
+    {
+        var users = Enumerable.Range(0, 4).Select(_ => CreateEligibleProUser()).ToList();
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        pushService.SendToUserAsync(
+                users[0].Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("push down")));
+
+        dbContext.Users.AddRange(users);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        foreach (var user in users)
+            (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id)).Should().Be(1);
+
+        foreach (var user in users.Skip(1))
+        {
+            await pushService.Received(1).SendToUserAsync(
+                user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        }
+    }
+
     private static User CreateEligibleProUser()
     {
         var user = User.Create($"User-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@test.com").Value;
