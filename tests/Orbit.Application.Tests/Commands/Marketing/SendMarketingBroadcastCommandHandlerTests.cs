@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,6 +11,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Marketing.Commands;
+using Orbit.Application.Marketing.Jobs;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -18,11 +22,14 @@ public class SendMarketingBroadcastCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly RecordingEmailService _emailService = new();
     private readonly IMarketingUnsubscribeTokenService _tokenService = Substitute.For<IMarketingUnsubscribeTokenService>();
+    private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
     private readonly SendMarketingBroadcastCommandHandler _handler;
+    private Job? _enqueuedJob;
 
     public SendMarketingBroadcastCommandHandlerTests()
     {
         _tokenService.CreateToken(Arg.Any<Guid>()).Returns(call => $"token-{call.Arg<Guid>():N}");
+        _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());
 
         var provider = Substitute.For<IServiceProvider>();
         provider.GetService(typeof(IEmailService)).Returns(_emailService);
@@ -42,7 +49,7 @@ public class SendMarketingBroadcastCommandHandlerTests
         });
 
         _handler = new SendMarketingBroadcastCommandHandler(
-            _userRepo, _emailService, _tokenService, scopeFactory, settings,
+            _userRepo, _backgroundJobClient, _tokenService, scopeFactory, settings,
             NullLogger<SendMarketingBroadcastCommandHandler>.Instance);
     }
 
@@ -103,7 +110,7 @@ public class SendMarketingBroadcastCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_TestEmail_SendsExactlyOne_AndDoesNotEnumerateAudience()
+    public async Task Handle_TestEmail_EnqueuesExactlyOne_AndDoesNotEnumerateAudience()
     {
         var result = await _handler.Handle(Command(testEmail: "preview@example.com"), CancellationToken.None);
 
@@ -111,9 +118,19 @@ public class SendMarketingBroadcastCommandHandlerTests
         result.Value.RecipientCount.Should().Be(1);
         result.Value.WasTest.Should().BeTrue();
 
-        _emailService.MarketingSends.Should().ContainSingle();
-        _emailService.MarketingSends.Single().To.Should().Be("preview@example.com");
-        _emailService.MarketingSends.Single().Subject.Should().Be("EN Subject");
+        _backgroundJobClient.Received(1).Create(
+            Arg.Any<Job>(), Arg.Is<IState>(state => state is EnqueuedState));
+        _enqueuedJob.Should().NotBeNull();
+        _enqueuedJob!.Type.Should().Be(typeof(SendMarketingEmailJob));
+        _enqueuedJob.Method.Name.Should().Be(nameof(SendMarketingEmailJob.ExecuteAsync));
+        _enqueuedJob.Args.Should().Equal(
+            "preview@example.com",
+            "EN Subject",
+            "<p>EN body</p>",
+            "en",
+            "https://api.useorbit.org/api/marketing/unsubscribe?token=token-00000000000000000000000000000000&lang=en");
+
+        _emailService.MarketingSends.Should().BeEmpty();
 
         await _userRepo.DidNotReceive().FindAsync(
             Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>());
@@ -136,7 +153,7 @@ public class SendMarketingBroadcastCommandHandlerTests
     {
         var logger = new CollectingLogger<SendMarketingBroadcastCommandHandler>();
         var handler = new SendMarketingBroadcastCommandHandler(
-            _userRepo, _emailService, _tokenService, Substitute.For<IServiceScopeFactory>(),
+            _userRepo, _backgroundJobClient, _tokenService, Substitute.For<IServiceScopeFactory>(),
             Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
             logger);
 

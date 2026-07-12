@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
+using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -13,7 +15,7 @@ public record RequestAccountDeletionCommand(Guid UserId) : IRequest<Result>;
 public class RequestAccountDeletionCommandHandler(
     IMemoryCache cache,
     IGenericRepository<User> userRepository,
-    IEmailService emailService) : IRequestHandler<RequestAccountDeletionCommand, Result>
+    IBackgroundJobClient backgroundJobClient) : IRequestHandler<RequestAccountDeletionCommand, Result>
 {
     public async Task<Result> Handle(RequestAccountDeletionCommand request, CancellationToken cancellationToken)
     {
@@ -38,7 +40,8 @@ public class RequestAccountDeletionCommandHandler(
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
         });
 
-        await emailService.SendAccountDeletionCodeAsync(user.Email, code, user.Language ?? "en", cancellationToken);
+        backgroundJobClient.Enqueue<SendAccountDeletionCodeEmailJob>(
+            job => job.ExecuteAsync(user.Email, code, user.Language ?? "en"));
 
         return Result.Success();
     }

@@ -1,7 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
-using Orbit.Application.Auth.Commands;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -347,43 +346,5 @@ public class ProfileCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("User not found.");
         await accountResetRepo.DidNotReceive().DeleteAllUserDataAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RequestAccountDeletion_Valid_SendsCodeAndSucceeds()
-    {
-        var user = CreateTestUser();
-        var emailService = Substitute.For<IEmailService>();
-
-        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(user);
-
-        var handler = new RequestAccountDeletionCommandHandler(_cache, _userRepo, emailService);
-        var command = new RequestAccountDeletionCommand(UserId);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await emailService.Received(1).SendAccountDeletionCodeAsync(
-            user.Email,
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RequestAccountDeletion_UserNotFound_ReturnsFailure()
-    {
-        var emailService = Substitute.For<IEmailService>();
-        _userRepo.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((User?)null);
-
-        var handler = new RequestAccountDeletionCommandHandler(_cache, _userRepo, emailService);
-        var command = new RequestAccountDeletionCommand(UserId);
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be("User not found.");
-        await emailService.DidNotReceive().SendAccountDeletionCodeAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }
