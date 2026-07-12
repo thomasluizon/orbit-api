@@ -1,8 +1,10 @@
+using Hangfire;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
+using Orbit.Application.Marketing.Jobs;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -20,7 +22,7 @@ public record MarketingBroadcastResult(int RecipientCount, bool WasTest);
 
 public partial class SendMarketingBroadcastCommandHandler(
     IGenericRepository<User> userRepository,
-    IEmailService emailService,
+    IBackgroundJobClient backgroundJobClient,
     IMarketingUnsubscribeTokenService unsubscribeTokenService,
     IServiceScopeFactory scopeFactory,
     IOptions<MarketingSettings> marketingSettings,
@@ -34,10 +36,11 @@ public partial class SendMarketingBroadcastCommandHandler(
     {
         if (!string.IsNullOrWhiteSpace(request.TestEmail))
         {
+            string testEmail = request.TestEmail;
             var preview = RenderFor(request, "en");
             var previewUrl = BuildUnsubscribeUrl(unsubscribeTokenService.CreateToken(Guid.Empty), "en");
-            await emailService.SendMarketingEmailAsync(
-                request.TestEmail, preview.Subject, preview.BodyHtml, "en", previewUrl, cancellationToken);
+            backgroundJobClient.Enqueue<SendMarketingEmailJob>(
+                job => job.ExecuteAsync(testEmail, preview.Subject, preview.BodyHtml, "en", previewUrl));
 
             LogPreviewSent(logger, request.SubjectEn);
             return Result.Success(new MarketingBroadcastResult(RecipientCount: 1, WasTest: true));

@@ -1,6 +1,7 @@
 using Hangfire;
 using Hangfire.PostgreSql;
 using Orbit.Application.Auth.Jobs;
+using Orbit.Application.Marketing.Jobs;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
@@ -80,6 +81,8 @@ public static partial class ServiceCollectionExtensions
         });
 
         builder.Services.AddScoped<SendVerificationCodeEmailJob>();
+        builder.Services.AddScoped<SendAccountDeletionCodeEmailJob>();
+        builder.Services.AddScoped<SendMarketingEmailJob>();
     }
 
     private static void AddDurableRecurringJobs(WebApplicationBuilder builder)
