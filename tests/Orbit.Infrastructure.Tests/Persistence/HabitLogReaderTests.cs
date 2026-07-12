@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Infrastructure.Persistence;
@@ -128,5 +129,66 @@ public class HabitLogReaderTests
 
         result.Should().HaveCount(366);
         result.Should().OnlyContain(l => l.Date >= since);
+    }
+
+    [Fact]
+    public async Task ReadRecentLogsAsync_ReturnsNewestFirstWithinLookbackScopedToHabit()
+    {
+        await using var context = CreateInMemoryDbContext();
+        var target = RecurringHabit();
+        Log(target, Anchor);
+        Log(target, Anchor.AddDays(-10));
+        Log(target, Anchor.AddDays(-30));
+        Log(target, Anchor.AddDays(-40));
+        var other = RecurringHabit();
+        Log(other, Anchor);
+        context.Habits.AddRange(target, other);
+        await context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(context)
+            .ReadRecentLogsAsync(target.Id, Anchor.AddDays(-30), 100, CancellationToken.None);
+
+        result.Should().OnlyContain(l => l.HabitId == target.Id);
+        result.Select(l => l.Date).Should().Equal(Anchor, Anchor.AddDays(-10), Anchor.AddDays(-30));
+    }
+
+    [Fact]
+    public async Task ReadRecentLogsAsync_CapsAtLimitKeepingNewest()
+    {
+        await using var context = CreateInMemoryDbContext();
+        var habit = RecurringHabit();
+        foreach (var i in Enumerable.Range(0, 6))
+            Log(habit, Anchor.AddDays(-i));
+        context.Habits.Add(habit);
+        await context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(context)
+            .ReadRecentLogsAsync(habit.Id, Anchor.AddDays(-365), 3, CancellationToken.None);
+
+        result.Select(l => l.Date).Should().Equal(Anchor, Anchor.AddDays(-1), Anchor.AddDays(-2));
+    }
+
+    [Fact]
+    public async Task ReadRecentLogsAsync_ExcludesSoftDeletedLogs()
+    {
+        await using var context = CreateInMemoryDbContext();
+        var habit = RecurringHabit();
+        Log(habit, Anchor);
+        Log(habit, Anchor.AddDays(-1)).SoftDelete();
+        context.Habits.Add(habit);
+        await context.SaveChangesAsync();
+
+        var result = await new HabitLogReader(context)
+            .ReadRecentLogsAsync(habit.Id, Anchor.AddDays(-365), 100, CancellationToken.None);
+
+        result.Select(l => l.Date).Should().Equal(Anchor);
+    }
+
+    private static OrbitDbContext CreateInMemoryDbContext()
+    {
+        var options = new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"HabitLogReaderTests_{Guid.NewGuid()}")
+            .Options;
+        return new OrbitDbContext(options);
     }
 }
