@@ -163,10 +163,15 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Tag>(entity =>
         {
-            entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
+            entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique().HasFilter("\"IsDeleted\" = FALSE");
             entity.HasIndex(t => new { t.UserId, t.IsDeleted });
             entity.HasIndex(t => new { t.UserId, t.UpdatedAtUtc });
             entity.HasQueryFilter(t => !t.IsDeleted);
+
+            entity.Property(t => t.Name).IsRequired().HasMaxLength(50);
+            entity.Property(t => t.Color).IsRequired().HasMaxLength(50);
+
+            entity.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
 
             entity.HasMany(t => t.Habits)
                 .WithMany(h => h.Tags)
@@ -679,6 +684,11 @@ public class OrbitDbContext : DbContext
             entity.Property(u => u.Handle).HasMaxLength(DomainConstants.HandleMaxLength);
             entity.Property(u => u.PublicProfileSlug).HasMaxLength(32);
 
+            entity.Property(u => u.ColorScheme).HasMaxLength(50);
+            entity.Property(u => u.Language).HasMaxLength(10);
+            entity.Property(u => u.ThemePreference).HasMaxLength(10);
+            entity.Property(u => u.TimeZone).HasMaxLength(100);
+
             entity.Property(u => u.GoogleCalendarAutoSyncStatus)
                 .HasConversion<string>()
                 .HasMaxLength(32);
@@ -736,6 +746,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
             entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });
             entity.HasQueryFilter(h => !h.IsDeleted);
+
+            entity.HasOne<User>().WithMany().HasForeignKey(h => h.UserId).OnDelete(DeleteBehavior.Cascade);
 
             entity.Property(h => h.GoogleEventId).HasMaxLength(1024);
             entity.HasIndex(h => new { h.UserId, h.GoogleEventId })
@@ -828,7 +840,7 @@ public class OrbitDbContext : DbContext
             if (nullableEncConverter is null)
                 return;
 
-            entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text");
+            entity.Property(l => l.Note).HasConversion(nullableEncConverter).HasColumnType("text").HasMaxLength(1000);
         });
     }
 
@@ -858,6 +870,8 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(g => new { g.UserId, g.UpdatedAtUtc });
             entity.HasQueryFilter(g => !g.IsDeleted);
 
+            entity.Property(g => g.Unit).HasMaxLength(50);
+
             entity.HasMany(g => g.ProgressLogs)
                 .WithOne()
                 .HasForeignKey(l => l.GoalId)
@@ -872,7 +886,7 @@ public class OrbitDbContext : DbContext
             if (encConverter is null || nullableEncConverter is null)
                 return;
 
-            entity.Property(g => g.Title).HasConversion(encConverter).HasColumnType("text");
+            entity.Property(g => g.Title).HasConversion(encConverter).HasColumnType("text").HasMaxLength(200);
             entity.Property(g => g.Description).HasConversion(nullableEncConverter).HasColumnType("text");
         });
     }
