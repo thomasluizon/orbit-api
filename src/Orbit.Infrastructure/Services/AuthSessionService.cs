@@ -73,6 +73,7 @@ public class AuthSessionService(
         }
         catch (DbUpdateConcurrencyException)
         {
+            unitOfWork.DiscardChanges();
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
         }
 

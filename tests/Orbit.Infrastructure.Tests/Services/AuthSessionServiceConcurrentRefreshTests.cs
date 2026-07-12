@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -67,6 +68,32 @@ public class AuthSessionServiceConcurrentRefreshTests
         interceptor.SaveAttempts.Should().Be(1);
     }
 
+    [Fact]
+    public async Task RefreshSessionAsync_AfterConcurrencyConflict_LeavesContextCleanForSubsequentAuditWrite()
+    {
+        var dbName = NewDbName();
+        var (userId, token) = await SeedSessionAsync(dbName);
+
+        var interceptor = new ConflictOnModifiedSessionInterceptor();
+        await using var context = CreateContext(dbName, interceptor);
+
+        var result = await CreateService(context).RefreshSessionAsync(token, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("INVALID_SESSION");
+        context.ChangeTracker.Entries<UserSession>()
+            .Should().NotContain(entry => entry.State == EntityState.Modified);
+
+        var auditService = new AgentAuditService(context);
+        var writeAuditLog = async () =>
+            await auditService.RecordAsync(BuildRefreshAuditEntry(userId), CancellationToken.None);
+
+        await writeAuditLog.Should().NotThrowAsync<DbUpdateConcurrencyException>();
+
+        await using var verify = CreateContext(dbName);
+        verify.AgentAuditLogs.Should().ContainSingle(log => log.UserId == userId);
+    }
+
     private static async Task<(Guid UserId, string Token)> SeedSessionAsync(string dbName)
     {
         const string token = "shared-refresh-token";
@@ -111,6 +138,16 @@ public class AuthSessionServiceConcurrentRefreshTests
 
     private static string NewDbName() => $"AuthSessionConcurrentRefresh_{Guid.NewGuid()}";
 
+    private static AgentAuditEntry BuildRefreshAuditEntry(Guid userId) => new(
+        userId,
+        AgentCapabilityIds.AuthManage,
+        "refresh_auth_session",
+        AgentExecutionSurface.Metadata,
+        AgentAuthMethod.Unknown,
+        AgentRiskClass.Low,
+        AgentPolicyDecisionStatus.Denied,
+        AgentOperationStatus.Failed);
+
     private static string Hash(string token) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
@@ -140,6 +177,22 @@ public class AuthSessionServiceConcurrentRefreshTests
         {
             SaveAttempts++;
             throw new DbUpdateConcurrencyException("simulated stale token");
+        }
+    }
+
+    private sealed class ConflictOnModifiedSessionInterceptor : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var staleSessionTracked = eventData.Context!.ChangeTracker
+                .Entries<UserSession>()
+                .Any(entry => entry.State == EntityState.Modified);
+
+            if (staleSessionTracked)
+                throw new DbUpdateConcurrencyException("simulated stale token");
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
         }
     }
 }
