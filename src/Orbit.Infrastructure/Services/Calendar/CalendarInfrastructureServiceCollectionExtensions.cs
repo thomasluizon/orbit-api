@@ -10,9 +10,9 @@ namespace Orbit.Infrastructure.Services.Calendar;
 /// </summary>
 public static class CalendarInfrastructureServiceCollectionExtensions
 {
-    public static IServiceCollection AddGoogleCalendarServices(this IServiceCollection services)
+    public static IServiceCollection AddGoogleCalendarServices(this IServiceCollection services, TimeSpan httpTimeout)
     {
-        services.AddScoped<IGoogleCalendarApi, GoogleCalendarApi>();
+        services.AddScoped<IGoogleCalendarApi>(_ => new GoogleCalendarApi(httpTimeout));
         services.AddScoped<ICalendarEventFetcher, GoogleCalendarEventFetcher>();
         return services;
     }
