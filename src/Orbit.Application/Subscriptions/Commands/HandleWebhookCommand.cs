@@ -1,6 +1,8 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -11,7 +13,7 @@ using Stripe.Checkout;
 
 namespace Orbit.Application.Subscriptions.Commands;
 
-public record HandleWebhookCommand(string Json, string Signature) : IRequest<Result>;
+public record HandleWebhookCommand(string Json, string Signature) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class HandleWebhookCommandHandler(
     IGenericRepository<User> userRepository,
@@ -50,12 +52,6 @@ public partial class HandleWebhookCommandHandler(
 
         LogStripeEventType(logger, stripeEvent.Type, stripeEvent.Id);
 
-        if (await processedEventRepository.AnyAsync(e => e.EventId == stripeEvent.Id, cancellationToken))
-        {
-            LogDuplicateEvent(logger, stripeEvent.Id);
-            return Result.Success();
-        }
-
         await processedEventRepository.AddAsync(ProcessedStripeEvent.Create(stripeEvent.Id), cancellationToken);
 
         try
@@ -89,7 +85,7 @@ public partial class HandleWebhookCommandHandler(
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
             return Result.Failure(ErrorMessages.WebhookStripeApiError);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not DbUpdateConcurrencyException)
         {
             LogErrorProcessingStripeEvent(logger, ex, stripeEvent.Type);
             return Result.Failure(ErrorMessages.WebhookProcessingFailed);
