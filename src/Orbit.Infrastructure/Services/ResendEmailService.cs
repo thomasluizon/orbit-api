@@ -150,7 +150,7 @@ public partial class ResendEmailService(
         if (IsTestAccount(to))
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogSkippingTestEmail(logger, to, subject);
+                LogSkippingTestEmail(logger, subject);
             return;
         }
 
@@ -170,7 +170,7 @@ public partial class ResendEmailService(
             }
             catch (Exception ex)
             {
-                LogEmailSendException(logger, ex, to);
+                LogEmailSendException(logger, ex);
                 return;
             }
 
@@ -179,23 +179,22 @@ public partial class ResendEmailService(
                 if (response.IsSuccessStatusCode)
                 {
                     if (logger.IsEnabled(LogLevel.Information))
-                        LogEmailSent(logger, to, subject);
+                        LogEmailSent(logger, subject);
                     return;
                 }
 
                 var isRetriable = response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
                 if (!isRetriable || attempt == MaxMarketingRetries)
                 {
-                    var body = await response.Content.ReadAsStringAsync(cancellationToken);
                     if (logger.IsEnabled(LogLevel.Error))
-                        LogEmailFailed(logger, to, response.StatusCode, body);
+                        LogEmailFailed(logger, subject, response.StatusCode);
                     return;
                 }
             }
 
             var backoff = TimeSpan.FromMilliseconds(_settings.MarketingRetryBaseDelayMs * Math.Pow(2, attempt));
             if (logger.IsEnabled(LogLevel.Warning))
-                LogMarketingRetry(logger, to, attempt + 1, backoff.TotalMilliseconds);
+                LogMarketingRetry(logger, attempt + 1, backoff.TotalMilliseconds);
             await Task.Delay(backoff, cancellationToken);
         }
     }
@@ -247,7 +246,7 @@ public partial class ResendEmailService(
         if (IsTestAccount(to))
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogSkippingTestEmail(logger, to, subject);
+                LogSkippingTestEmail(logger, subject);
             return;
         }
 
@@ -268,13 +267,12 @@ public partial class ResendEmailService(
             if (response.IsSuccessStatusCode)
             {
                 if (logger.IsEnabled(LogLevel.Information))
-                    LogEmailSent(logger, to, subject);
+                    LogEmailSent(logger, subject);
             }
             else
             {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (logger.IsEnabled(LogLevel.Error))
-                    LogEmailFailed(logger, to, response.StatusCode, body);
+                    LogEmailFailed(logger, subject, response.StatusCode);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -283,7 +281,7 @@ public partial class ResendEmailService(
         }
         catch (Exception ex)
         {
-            LogEmailSendException(logger, ex, to);
+            LogEmailSendException(logger, ex);
         }
     }
 
@@ -304,19 +302,19 @@ public partial class ResendEmailService(
         return false;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Skipping email to test account {To} subject={Subject}")]
-    private static partial void LogSkippingTestEmail(ILogger logger, string to, string subject);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Skipping email to test account; subject={Subject}")]
+    private static partial void LogSkippingTestEmail(ILogger logger, string subject);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Email sent to {To} subject={Subject}")]
-    private static partial void LogEmailSent(ILogger logger, string to, string subject);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Email sent; subject={Subject}")]
+    private static partial void LogEmailSent(ILogger logger, string subject);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Email failed to {To} status={Status} body={Body}")]
-    private static partial void LogEmailFailed(ILogger logger, string to, System.Net.HttpStatusCode status, string body);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Email failed; subject={Subject} status={Status}")]
+    private static partial void LogEmailFailed(ILogger logger, string subject, System.Net.HttpStatusCode status);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Email send exception to {To}")]
-    private static partial void LogEmailSendException(ILogger logger, Exception ex, string to);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Email send exception")]
+    private static partial void LogEmailSendException(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Marketing email to {To} rate-limited; retry {Attempt} after {BackoffMs}ms")]
-    private static partial void LogMarketingRetry(ILogger logger, string to, int attempt, double backoffMs);
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Marketing email rate-limited; retry {Attempt} after {BackoffMs}ms")]
+    private static partial void LogMarketingRetry(ILogger logger, int attempt, double backoffMs);
 
 }
