@@ -11,6 +11,7 @@ using Orbit.Api.Authentication;
 using Orbit.Api.Authorization;
 using Orbit.Api.Idempotency;
 using Orbit.Api.OAuth;
+using Orbit.Api.Observability;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
@@ -259,28 +260,9 @@ public static partial class ServiceCollectionExtensions
             options.SendDefaultPii = false;
             options.AddExceptionFilterForType<FluentValidation.ValidationException>();
             options.AddExceptionFilterForType<OperationCanceledException>();
-            options.SetBeforeSend(ScrubSensitiveData);
+            options.SetBeforeSend(SentryEventScrubber.Scrub);
         });
 
         return builder;
-    }
-
-    private static SentryEvent ScrubSensitiveData(SentryEvent sentryEvent, SentryHint hint)
-    {
-        if (sentryEvent.User is { } user)
-        {
-            user.Email = null;
-            user.Username = null;
-            user.IpAddress = null;
-        }
-
-        if (sentryEvent.Request is { } request)
-        {
-            request.Headers?.Clear();
-            request.Cookies = null;
-            request.Data = null;
-        }
-
-        return sentryEvent;
     }
 }
