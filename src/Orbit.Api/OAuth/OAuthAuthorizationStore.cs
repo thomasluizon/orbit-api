@@ -20,12 +20,12 @@ public sealed partial class OAuthAuthorizationStore : IDisposable
         }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
 
-    public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId)
+    public string CreateCode(Guid userId, string codeChallenge, string redirectUri, string clientId, string? nonce = null)
     {
         var code = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace("+", "-").Replace("/", "_").TrimEnd('=');
 
-        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, DateTime.UtcNow);
+        var entry = new AuthorizationEntry(userId, codeChallenge, redirectUri, clientId, nonce, DateTime.UtcNow);
         _codes[code] = entry;
         return code;
     }
@@ -72,4 +72,5 @@ public record AuthorizationEntry(
     string CodeChallenge,
     string RedirectUri,
     string ClientId,
+    string? Nonce,
     DateTime CreatedAt);

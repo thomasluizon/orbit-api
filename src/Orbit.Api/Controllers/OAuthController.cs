@@ -34,6 +34,7 @@ public partial class OAuthController(
     ILogger<OAuthController> logger) : ControllerBase
 {
     private const string InvalidRedirectUriError = "invalid_redirect_uri";
+    private const string MissingStateError = "invalid_request";
     private static readonly string[] SupportedResponseTypes = ["code"];
     private static readonly string[] SupportedGrantTypes = ["authorization_code"];
     private static readonly string[] SupportedCodeChallengeMethods = ["S256"];
@@ -116,7 +117,8 @@ public partial class OAuthController(
         [FromQuery] string response_type,
         [FromQuery] string state,
         [FromQuery] string code_challenge,
-        [FromQuery] string code_challenge_method)
+        [FromQuery] string code_challenge_method,
+        [FromQuery] string? nonce = null)
     {
         if (response_type != "code")
             return BadRequest(new { error = "unsupported_response_type" });
@@ -127,10 +129,13 @@ public partial class OAuthController(
         if (!IsRedirectUriAllowed(redirect_uri))
             return BadRequest(new { error = InvalidRedirectUriError });
 
+        if (string.IsNullOrEmpty(state))
+            return BadRequest(new { error = MissingStateError, error_description = "state is required for CSRF protection" });
+
         var googleClientId = googleSettings.Value.ClientId ?? "";
         var html = OAuthLoginPage.Render(
             client_id, redirect_uri, state,
-            code_challenge, code_challenge_method, googleClientId);
+            code_challenge, code_challenge_method, googleClientId, nonce);
 
         return Content(html, "text/html");
     }
@@ -150,7 +155,8 @@ public partial class OAuthController(
 
     public record VerifyCodeRequest(
         string Email, string Code,
-        string State, string CodeChallenge, string RedirectUri, string ClientId);
+        string State, string CodeChallenge, string RedirectUri, string ClientId,
+        string? Nonce = null);
 
     [HttpPost("/oauth/verify-code")]
     [DistributedRateLimit("auth")]
@@ -158,6 +164,9 @@ public partial class OAuthController(
     {
         if (!IsRedirectUriAllowed(request.RedirectUri))
             return BadRequest(new { error = InvalidRedirectUriError });
+
+        if (string.IsNullOrEmpty(request.State))
+            return BadRequest(new { error = MissingStateError });
 
         var result = await mediator.Send(
             new VerifyCodeCommand(request.Email, request.Code), ct);
@@ -167,7 +176,7 @@ public partial class OAuthController(
 
         var loginResponse = result.Value;
         var authCode = authStore.CreateCode(
-            loginResponse.UserId, request.CodeChallenge, request.RedirectUri, request.ClientId);
+            loginResponse.UserId, request.CodeChallenge, request.RedirectUri, request.ClientId, request.Nonce);
 
         var separator = request.RedirectUri.Contains('?') ? "&" : "?";
         var redirectUrl = $"{request.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(request.State)}";
@@ -177,7 +186,8 @@ public partial class OAuthController(
 
     public record GoogleAuthRequest(
         string Credential,
-        string State, string CodeChallenge, string RedirectUri, string ClientId);
+        string State, string CodeChallenge, string RedirectUri, string ClientId,
+        string? Nonce = null);
 
     [HttpPost("/oauth/google")]
     [DistributedRateLimit("auth")]
@@ -185,6 +195,9 @@ public partial class OAuthController(
     {
         if (!IsRedirectUriAllowed(request.RedirectUri))
             return BadRequest(new { error = InvalidRedirectUriError });
+
+        if (string.IsNullOrEmpty(request.State))
+            return BadRequest(new { error = MissingStateError });
 
         var client = httpClientFactory.CreateClient();
         var response = await client.GetAsync(
@@ -230,7 +243,7 @@ public partial class OAuthController(
         }
 
         var authCode = authStore.CreateCode(
-            user.Id, request.CodeChallenge, request.RedirectUri, request.ClientId);
+            user.Id, request.CodeChallenge, request.RedirectUri, request.ClientId, request.Nonce);
 
         var separator = request.RedirectUri.Contains('?') ? "&" : "?";
         var redirectUrl = $"{request.RedirectUri}{separator}code={Uri.EscapeDataString(authCode)}&state={Uri.EscapeDataString(request.State)}";
@@ -312,12 +325,16 @@ public partial class OAuthController(
         if (logger.IsEnabled(LogLevel.Information))
             LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
 
-        return Ok(new
+        var response = new Dictionary<string, object>
         {
-            access_token = rawKey,
-            token_type = "Bearer",
-            scope = string.Join(' ', AgentScopes.ClaudeDefaultScopes)
-        });
+            ["access_token"] = rawKey,
+            ["token_type"] = "Bearer",
+            ["scope"] = string.Join(' ', AgentScopes.ClaudeDefaultScopes)
+        };
+        if (!string.IsNullOrEmpty(entry.Nonce))
+            response["nonce"] = entry.Nonce;
+
+        return Ok(response);
     }
 
     private bool IsRedirectUriAllowed(string redirectUri)

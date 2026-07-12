@@ -171,4 +171,31 @@ public class OAuthAuthorizationStoreTests : IDisposable
         entry.Should().NotBeNull();
         entry!.RedirectUri.Should().Be(fullUrl);
     }
+
+    [Fact]
+    public void ExchangeCode_BindsNonceToCode_AndReturnsItVerbatim()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var redirectUri = "https://claude.ai/callback";
+        var nonce = "client-nonce-" + Guid.NewGuid().ToString("N");
+
+        var code = _store.CreateCode(Guid.NewGuid(), challenge, redirectUri, "client", nonce);
+        var entry = _store.ExchangeCode(code, verifier, redirectUri);
+
+        entry.Should().NotBeNull();
+        entry!.Nonce.Should().Be(nonce);
+    }
+
+    [Fact]
+    public void ExchangeCode_WithoutNonce_LeavesNonceNull()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var redirectUri = "https://claude.ai/callback";
+
+        var code = _store.CreateCode(Guid.NewGuid(), challenge, redirectUri, "client");
+        var entry = _store.ExchangeCode(code, verifier, redirectUri);
+
+        entry.Should().NotBeNull();
+        entry!.Nonce.Should().BeNull();
+    }
 }
