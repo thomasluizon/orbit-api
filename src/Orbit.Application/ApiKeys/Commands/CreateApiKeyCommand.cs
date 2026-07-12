@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -26,7 +27,8 @@ public record CreateApiKeyCommand(
 public class CreateApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<CreateApiKeyCommand, Result<CreateApiKeyResponse>>
 {
     private const int MaxActiveKeys = 5;
 
@@ -56,6 +58,8 @@ public class CreateApiKeyCommandHandler(
 
         await apiKeyRepository.AddAsync(apiKey, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.ApiKeys(request.UserId));
 
         return Result.Success(new CreateApiKeyResponse(
             apiKey.Id,

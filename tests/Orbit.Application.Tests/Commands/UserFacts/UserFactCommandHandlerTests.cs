@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.UserFacts.Commands;
 using Orbit.Domain.Common;
@@ -32,7 +33,7 @@ public class UserFactCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(fact);
 
-        var handler = new DeleteUserFactCommandHandler(_factRepo, _payGate, _unitOfWork);
+        var handler = new DeleteUserFactCommandHandler(_factRepo, _payGate, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new DeleteUserFactCommand(UserId, fact.Id);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -53,7 +54,7 @@ public class UserFactCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<UserFact> { fact1, fact2 }.AsReadOnly());
 
-        var handler = new BulkDeleteUserFactsCommandHandler(_factRepo, _payGate, _unitOfWork);
+        var handler = new BulkDeleteUserFactsCommandHandler(_factRepo, _payGate, _unitOfWork, new MemoryCache(new MemoryCacheOptions()));
         var command = new BulkDeleteUserFactsCommand(UserId, new List<Guid> { fact1.Id, fact2.Id });
 
         var result = await handler.Handle(command, CancellationToken.None);

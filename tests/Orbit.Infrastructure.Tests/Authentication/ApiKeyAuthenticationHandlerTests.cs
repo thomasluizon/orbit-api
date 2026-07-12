@@ -42,6 +42,7 @@ public class ApiKeyAuthenticationHandlerTests
         services.AddSingleton(apiKeyRepo);
         services.AddSingleton(payGate);
         services.AddSingleton(unitOfWork);
+        services.AddMemoryCache();
         var serviceProvider = services.BuildServiceProvider();
 
         var optionsMonitor = Substitute.For<IOptionsMonitor<AuthenticationSchemeOptions>>();

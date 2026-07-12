@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ChecklistTemplates.Queries;
 using Orbit.Domain.Entities;
@@ -10,13 +11,14 @@ namespace Orbit.Application.Tests.Queries.ChecklistTemplates;
 public class GetChecklistTemplatesQueryHandlerTests
 {
     private readonly IGenericRepository<ChecklistTemplate> _repo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetChecklistTemplatesQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetChecklistTemplatesQueryHandlerTests()
     {
-        _handler = new GetChecklistTemplatesQueryHandler(_repo);
+        _handler = new GetChecklistTemplatesQueryHandler(_repo, _cache);
     }
 
     [Fact]

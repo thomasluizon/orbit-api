@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -11,7 +12,8 @@ public record DeleteUserFactCommand(Guid UserId, Guid FactId) : IRequest<Result>
 public class DeleteUserFactCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteUserFactCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<DeleteUserFactCommand, Result>
 {
     public async Task<Result> Handle(DeleteUserFactCommand request, CancellationToken cancellationToken)
     {
@@ -28,6 +30,8 @@ public class DeleteUserFactCommandHandler(
 
         fact.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.UserFacts(request.UserId));
 
         return Result.Success();
     }

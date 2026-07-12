@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.UserFacts.Queries;
 using Orbit.Domain.Common;
@@ -12,6 +13,7 @@ public class GetUserFactsQueryHandlerTests
 {
     private readonly IGenericRepository<UserFact> _userFactRepo = Substitute.For<IGenericRepository<UserFact>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetUserFactsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -20,7 +22,7 @@ public class GetUserFactsQueryHandlerTests
     {
         _payGate.CanReadUserFacts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
-        _handler = new GetUserFactsQueryHandler(_userFactRepo, _payGate);
+        _handler = new GetUserFactsQueryHandler(_userFactRepo, _payGate, _cache);
     }
 
     [Fact]

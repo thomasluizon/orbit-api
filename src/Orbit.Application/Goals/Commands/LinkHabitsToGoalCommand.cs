@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -17,7 +18,8 @@ public class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<LinkHabitsToGoalCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<LinkHabitsToGoalCommand, Result>
 {
     public async Task<Result> Handle(LinkHabitsToGoalCommand request, CancellationToken cancellationToken)
     {
@@ -51,6 +53,9 @@ public class LinkHabitsToGoalCommandHandler(
             goal.AddHabit(habit);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+
         return Result.Success();
     }
 }

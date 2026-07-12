@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,7 +23,8 @@ namespace Orbit.Infrastructure.Services;
 public sealed partial class OpenAiBatchPollerService(
     IServiceScopeFactory scopeFactory,
     ILogger<OpenAiBatchPollerService> logger,
-    IConfiguration configuration) : ScheduledServiceBase, IScheduledJob
+    IConfiguration configuration,
+    IMemoryCache cache) : ScheduledServiceBase, IScheduledJob
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -100,10 +102,13 @@ public sealed partial class OpenAiBatchPollerService(
         var outputJsonl = await batchClient.DownloadFileAsync(outputFileId, ct);
         var facts = ParseExtractedFacts(outputJsonl);
 
-        await PersistFactsAsync(batch.UserId, facts, userFactRepository, appConfig, ct);
+        var persistedFactCount = await PersistFactsAsync(batch.UserId, facts, userFactRepository, appConfig, ct);
 
         batch.MarkCompleted(outputFileId);
         await unitOfWork.SaveChangesAsync(ct);
+
+        if (persistedFactCount > 0)
+            cache.Remove(ReferenceCacheKeys.UserFacts(batch.UserId));
 
         await DeleteFilesAsync(batchClient, batch.InputFileId, outputFileId, ct);
 
@@ -126,7 +131,7 @@ public sealed partial class OpenAiBatchPollerService(
         LogBatchFailed(logger, batch.BatchId, status.Status);
     }
 
-    private async Task PersistFactsAsync(
+    private static async Task<int> PersistFactsAsync(
         Guid userId,
         IReadOnlyList<FactCandidate> candidates,
         IGenericRepository<UserFact> userFactRepository,
@@ -134,19 +139,20 @@ public sealed partial class OpenAiBatchPollerService(
         CancellationToken ct)
     {
         if (candidates.Count == 0)
-            return;
+            return 0;
 
         var existingFacts = await userFactRepository.FindAsync(f => f.UserId == userId && !f.IsDeleted, ct);
         var existingFactCount = existingFacts.Count;
 
         var maxFacts = await appConfig.GetAsync(AppConfigKeys.MaxUserFacts, AppConstants.MaxUserFacts, ct);
         if (existingFactCount >= maxFacts)
-            return;
+            return 0;
 
         var existingTexts = existingFacts
             .Select(f => f.FactText.Trim().ToLowerInvariant())
             .ToHashSet();
 
+        var added = 0;
         var remaining = maxFacts - existingFactCount;
         foreach (var candidate in candidates)
         {
@@ -160,8 +166,11 @@ public sealed partial class OpenAiBatchPollerService(
             {
                 await userFactRepository.AddAsync(factResult.Value, ct);
                 remaining--;
+                added++;
             }
         }
+
+        return added;
     }
 
     internal static IReadOnlyList<FactCandidate> ParseExtractedFacts(string outputJsonl)

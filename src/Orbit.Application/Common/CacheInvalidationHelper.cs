@@ -9,7 +9,8 @@ public static class CacheInvalidationHelper
 
     public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var nowAtUtc = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(nowAtUtc);
         for (int i = -2; i <= 2; i++)
         {
             var date = today.AddDays(i);
@@ -29,7 +30,8 @@ public static class CacheInvalidationHelper
     /// </summary>
     public static void InvalidateRetrospectiveCache(IMemoryCache cache, Guid userId)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var nowAtUtc = DateTime.UtcNow;
+        var today = DateOnly.FromDateTime(nowAtUtc);
         for (int i = -2; i <= 2; i++)
         {
             var date = today.AddDays(i);
@@ -40,12 +42,24 @@ public static class CacheInvalidationHelper
     }
 
     /// <summary>
-    /// Convenience: invalidate both summary and retrospective caches for a user. Use this from
-    /// any mutation command that affects habits, logs, or goals.
+    /// Invalidate the per-user, per-language goal-review cache. The review is derived from the
+    /// user's active goals and their linked habits' logs, so any goal or habit mutation must clear
+    /// it, otherwise users see a stale 1-hour-old review after editing a goal or logging a habit.
+    /// </summary>
+    public static void InvalidateGoalReviewCache(IMemoryCache cache, Guid userId)
+    {
+        foreach (var lang in AppConstants.SupportedLanguages)
+            cache.Remove($"goal-review:{userId}:{lang}");
+    }
+
+    /// <summary>
+    /// Convenience: invalidate the summary, retrospective, and goal-review caches for a user. Use
+    /// this from any mutation command that affects habits, logs, or goals.
     /// </summary>
     public static void InvalidateUserAiCaches(IMemoryCache cache, Guid userId)
     {
         InvalidateSummaryCache(cache, userId);
         InvalidateRetrospectiveCache(cache, userId);
+        InvalidateGoalReviewCache(cache, userId);
     }
 }

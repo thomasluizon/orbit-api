@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -12,7 +13,8 @@ public record DeleteTagCommand(
 
 public class DeleteTagCommandHandler(
     IGenericRepository<Tag> tagRepository,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteTagCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<DeleteTagCommand, Result>
 {
     public async Task<Result> Handle(DeleteTagCommand request, CancellationToken cancellationToken)
     {
@@ -25,6 +27,9 @@ public class DeleteTagCommandHandler(
 
         tag.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.Tags(request.UserId));
+
         return Result.Success();
     }
 }

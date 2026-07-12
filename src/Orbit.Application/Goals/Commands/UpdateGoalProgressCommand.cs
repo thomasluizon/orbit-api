@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -19,6 +20,7 @@ public partial class UpdateGoalProgressCommandHandler(
     IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
+    IMemoryCache cache,
     ILogger<UpdateGoalProgressCommandHandler> logger) : IRequestHandler<UpdateGoalProgressCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalProgressCommand request, CancellationToken cancellationToken)
@@ -54,6 +56,8 @@ public partial class UpdateGoalProgressCommandHandler(
 
         if (justCompleted)
             await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success();
     }

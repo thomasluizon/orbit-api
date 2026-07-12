@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -17,13 +18,18 @@ public record UserFactDto(
 
 public class GetUserFactsQueryHandler(
     IGenericRepository<UserFact> userFactRepository,
-    IPayGateService payGate) : IRequestHandler<GetUserFactsQuery, Result<IReadOnlyList<UserFactDto>>>
+    IPayGateService payGate,
+    IMemoryCache cache) : IRequestHandler<GetUserFactsQuery, Result<IReadOnlyList<UserFactDto>>>
 {
     public async Task<Result<IReadOnlyList<UserFactDto>>> Handle(GetUserFactsQuery request, CancellationToken cancellationToken)
     {
         var gateCheck = await payGate.CanReadUserFacts(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<IReadOnlyList<UserFactDto>>();
+
+        var cacheKey = ReferenceCacheKeys.UserFacts(request.UserId);
+        if (cache.TryGetValue(cacheKey, out IReadOnlyList<UserFactDto>? cached) && cached is not null)
+            return Result.Success(cached);
 
         var facts = await userFactRepository.FindAsync(
             f => f.UserId == request.UserId,
@@ -38,6 +44,11 @@ public class GetUserFactsQueryHandler(
                 f.ExtractedAtUtc,
                 f.UpdatedAtUtc))
             .ToList();
+
+        cache.Set(cacheKey, (IReadOnlyList<UserFactDto>)result, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = ReferenceCacheKeys.Ttl
+        });
 
         return Result.Success<IReadOnlyList<UserFactDto>>(result);
     }

@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Commands;
 using Orbit.Domain.Common;
@@ -13,13 +14,14 @@ public class CreateApiKeyCommandHandlerTests
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CreateApiKeyCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public CreateApiKeyCommandHandlerTests()
     {
-        _handler = new CreateApiKeyCommandHandler(_apiKeyRepo, _payGate, _unitOfWork);
+        _handler = new CreateApiKeyCommandHandler(_apiKeyRepo, _payGate, _unitOfWork, _cache);
 
         _payGate.CanCreateApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());

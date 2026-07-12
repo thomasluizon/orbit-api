@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -14,7 +15,8 @@ public record DeleteGoalCommand(
 public class DeleteGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteGoalCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<DeleteGoalCommand, Result>
 {
     public async Task<Result> Handle(DeleteGoalCommand request, CancellationToken cancellationToken)
     {
@@ -31,6 +33,8 @@ public class DeleteGoalCommandHandler(
 
         goal.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
 
         return Result.Success();
     }

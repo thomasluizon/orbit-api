@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -13,7 +14,8 @@ public record RevokeApiKeyCommand(
 public class RevokeApiKeyCommandHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<RevokeApiKeyCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<RevokeApiKeyCommand, Result>
 {
     public async Task<Result> Handle(RevokeApiKeyCommand request, CancellationToken cancellationToken)
     {
@@ -31,6 +33,8 @@ public class RevokeApiKeyCommandHandler(
 
         apiKey.Revoke();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.ApiKeys(request.UserId));
 
         return Result.Success();
     }
