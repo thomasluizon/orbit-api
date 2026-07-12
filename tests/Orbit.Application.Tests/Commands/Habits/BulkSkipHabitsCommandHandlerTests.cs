@@ -227,6 +227,33 @@ public class BulkSkipHabitsCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_MixedWindowResults_SkipsInWindowReportsBeyondWindowFailure()
+    {
+        var inWindow = Habit.Create(new HabitCreateParams(
+            UserId, "In window", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var stale = Habit.Create(new HabitCreateParams(
+            UserId, "Stale", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 3)))).Value;
+        SetupHabitsForUser(new List<Habit> { inWindow, stale });
+
+        var beyondWindow = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 3));
+        var items = new List<BulkSkipItem>
+        {
+            new(inWindow.Id),
+            new(stale.Id, beyondWindow)
+        };
+        var command = new BulkSkipHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Success);
+        result.Value.Results[1].Status.Should().Be(BulkItemStatus.Failed);
+        result.Value.Results[1].ErrorCode.Should().Be(ErrorCodes.BeyondOverdueWindow);
+        inWindow.DueDate.Should().BeAfter(Today);
+    }
+
     private void SetupHabitsForUser(List<Habit> habits)
     {
         _habitRepo.FindTrackedAsync(
