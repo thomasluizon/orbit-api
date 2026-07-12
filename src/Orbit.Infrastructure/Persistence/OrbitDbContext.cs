@@ -165,6 +165,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(t => new { t.UserId, t.Name }).IsUnique();
             entity.HasIndex(t => new { t.UserId, t.IsDeleted });
+            entity.HasIndex(t => new { t.UserId, t.UpdatedAtUtc });
             entity.HasQueryFilter(t => !t.IsDeleted);
 
             entity.HasMany(t => t.Habits)
@@ -284,6 +285,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
             entity.HasIndex(n => new { n.UserId, n.IsDeleted });
+            entity.HasIndex(n => new { n.UserId, n.UpdatedAtUtc });
             entity.HasQueryFilter(n => !n.IsDeleted);
         });
     }
@@ -457,6 +459,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(ct => ct.UserId);
             entity.HasIndex(ct => new { ct.UserId, ct.IsDeleted });
+            entity.HasIndex(ct => new { ct.UserId, ct.UpdatedAtUtc });
             entity.HasQueryFilter(ct => !ct.IsDeleted);
             entity.HasOne<User>().WithMany().HasForeignKey(ct => ct.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.Property(ct => ct.Name).HasMaxLength(100);
@@ -731,6 +734,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(h => h.UserId);
             entity.HasIndex(h => new { h.UserId, h.IsDeleted });
+            entity.HasIndex(h => new { h.UserId, h.UpdatedAtUtc });
             entity.HasQueryFilter(h => !h.IsDeleted);
 
             entity.Property(h => h.GoogleEventId).HasMaxLength(1024);
@@ -817,6 +821,8 @@ public class OrbitDbContext : DbContext
                 .HasFilter("\"Value\" > 0 AND NOT \"IsDeleted\"")
                 .IsUnique();
 
+            entity.HasIndex(l => new { l.HabitId, l.UpdatedAtUtc });
+
             entity.HasQueryFilter(l => !l.IsDeleted);
 
             if (nullableEncConverter is null)
@@ -849,6 +855,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(g => g.UserId);
             entity.HasIndex(g => new { g.UserId, g.IsDeleted });
+            entity.HasIndex(g => new { g.UserId, g.UpdatedAtUtc });
             entity.HasQueryFilter(g => !g.IsDeleted);
 
             entity.HasMany(g => g.ProgressLogs)
@@ -876,6 +883,7 @@ public class OrbitDbContext : DbContext
         {
             entity.HasIndex(l => l.GoalId);
             entity.HasIndex(l => new { l.GoalId, l.IsDeleted });
+            entity.HasIndex(l => new { l.GoalId, l.UpdatedAtUtc });
             entity.HasQueryFilter(l => !l.IsDeleted);
 
             if (nullableEncConverter is null)
