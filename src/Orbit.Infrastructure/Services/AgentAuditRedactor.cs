@@ -5,11 +5,11 @@ namespace Orbit.Infrastructure.Services;
 
 /// <summary>
 /// Masks the values of sensitive JSON properties (verification codes, tokens,
-/// passwords, secrets) before an argument payload is persisted to the agent
-/// audit trail, so a secret can never land in <c>AgentAuditLogs.RedactedArguments</c>.
-/// Both the structured agent-operation path and the legacy MCP audit path route
-/// through this. A body that does not parse as JSON is masked whole rather than
-/// stored raw.
+/// passwords, secrets, user names, marketing broadcast bodies) before an argument
+/// payload is persisted to the agent audit trail, so neither a secret nor personal
+/// data can land in <c>AgentAuditLogs.RedactedArguments</c>. Both the structured
+/// agent-operation path and the legacy MCP audit path route through this. A body that
+/// does not parse as JSON is masked whole rather than stored raw.
 /// </summary>
 public static class AgentAuditRedactor
 {
@@ -19,11 +19,12 @@ public static class AgentAuditRedactor
     private static readonly HashSet<string> SensitiveKeys = new(StringComparer.Ordinal)
     {
         "code", "codeverifier", "verifier", "authorization", "auth", "otp", "pin",
+        "name", "firstname", "lastname", "fullname", "displayname", "username", "nickname",
     };
 
     private static readonly string[] SensitiveFragments =
     [
-        "token", "password", "secret", "credential", "apikey",
+        "token", "password", "secret", "credential", "apikey", "bodyhtml",
     ];
 
     /// <summary>Redacts sensitive fields from a JSON argument payload, then truncates to the audit cap.</summary>

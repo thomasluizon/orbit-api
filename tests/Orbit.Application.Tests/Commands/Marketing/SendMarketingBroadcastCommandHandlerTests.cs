@@ -132,6 +132,25 @@ public class SendMarketingBroadcastCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TestEmail_PreviewLogDoesNotLeakTestEmail()
+    {
+        var logger = new CollectingLogger<SendMarketingBroadcastCommandHandler>();
+        var handler = new SendMarketingBroadcastCommandHandler(
+            _userRepo, _emailService, _tokenService, Substitute.For<IServiceScopeFactory>(),
+            Options.Create(new MarketingSettings { ApiBaseUrl = "https://api.useorbit.org", SendDelayMilliseconds = 0 }),
+            logger);
+
+        var command = new SendMarketingBroadcastCommand(
+            "EN Subject", "PT Assunto", "<p>EN body</p>", "<p>PT corpo</p>", "preview-pii@example.com");
+        await handler.Handle(command, CancellationToken.None);
+
+        var previewLog = logger.Entries.Should()
+            .ContainSingle(entry => entry.Contains("preview sent")).Subject;
+        previewLog.Should().NotContain("preview-pii@example.com");
+        previewLog.Should().Contain("EN Subject");
+    }
+
+    [Fact]
     public async Task Handle_OneRecipientSendFails_ContinuesWithTheRest()
     {
         var first = User.Create("First", "first@example.com").Value;
@@ -144,6 +163,22 @@ public class SendMarketingBroadcastCommandHandlerTests
         result.Value.RecipientCount.Should().Be(2);
         await WaitForSendCountAsync(_emailService, 1);
         _emailService.MarketingSends.Should().ContainSingle(send => send.To == "second@example.com");
+    }
+
+    private sealed class CollectingLogger<T> : ILogger<T>
+    {
+        public List<string> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) => Entries.Add(formatter(state, exception));
     }
 
     private sealed class RecordingEmailService : IEmailService

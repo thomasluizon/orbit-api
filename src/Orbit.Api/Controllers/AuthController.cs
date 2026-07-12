@@ -40,7 +40,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogVerificationCodeSent(logger, request.Email, HttpContext.GetRequestId());
+            LogVerificationCodeSent(logger, HttpContext.GetRequestId());
             return Ok(new { message = "Verification code sent" });
         }
 
@@ -89,7 +89,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
         if (result.IsSuccess)
         {
-            LogUserLoggedInViaCode(logger, request.Email, HttpContext.GetRequestId());
+            LogUserLoggedInViaCode(logger, result.Value.UserId, HttpContext.GetRequestId());
             return Ok(result.Value);
         }
 
@@ -370,14 +370,14 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
         return result.ToErrorResult();
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent to {Email}. RequestId={RequestId}")]
-    private static partial void LogVerificationCodeSent(ILogger logger, string email, string requestId);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent. RequestId={RequestId}")]
+    private static partial void LogVerificationCodeSent(ILogger logger, string requestId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code: {Error}. RequestId={RequestId}")]
     private static partial void LogFailedToSendCode(ILogger logger, string? error, string requestId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code {Email}. RequestId={RequestId}")]
-    private static partial void LogUserLoggedInViaCode(ILogger logger, string email, string requestId);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code. UserId={UserId} RequestId={RequestId}")]
+    private static partial void LogUserLoggedInViaCode(ILogger logger, Guid userId, string requestId);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed: {Error}. RequestId={RequestId}")]
     private static partial void LogCodeVerificationFailed(ILogger logger, string? error, string requestId);
