@@ -216,16 +216,33 @@ public class AuthControllerTests
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(401);
     }
 
-    [Fact]
-    public void Logout_IsAnnotatedAllowAnonymous_SoItIsReachableWithoutAuth()
+    [Theory]
+    [InlineData(nameof(AuthController.SendCode), true)]
+    [InlineData(nameof(AuthController.VerifyCode), true)]
+    [InlineData(nameof(AuthController.GoogleAuth), true)]
+    [InlineData(nameof(AuthController.Refresh), true)]
+    [InlineData(nameof(AuthController.Logout), true)]
+    [InlineData(nameof(AuthController.LogoutAll), false)]
+    [InlineData(nameof(AuthController.RequestDeletion), false)]
+    [InlineData(nameof(AuthController.ConfirmDeletion), false)]
+    public void AuthActions_HaveExpectedAnonymityContract(string actionName, bool shouldAllowAnonymous)
     {
-        var method = typeof(AuthController).GetMethod(nameof(AuthController.Logout));
-
+        var method = typeof(AuthController).GetMethod(actionName);
         method.Should().NotBeNull();
-        method!.GetCustomAttribute<AllowAnonymousAttribute>(inherit: true)
-            .Should().NotBeNull("logout must be reachable without an authenticated session");
-        method.GetCustomAttribute<AuthorizeAttribute>(inherit: true)
-            .Should().BeNull("logout must not require authentication");
+
+        var allowAnonymous = method!.GetCustomAttribute<AllowAnonymousAttribute>(inherit: true);
+        var authorize = method.GetCustomAttribute<AuthorizeAttribute>(inherit: true);
+
+        if (shouldAllowAnonymous)
+        {
+            allowAnonymous.Should().NotBeNull($"{actionName} is a pre-login route and must be reachable without a session");
+            authorize.Should().BeNull($"{actionName} must not require authentication");
+        }
+        else
+        {
+            authorize.Should().NotBeNull($"{actionName} operates on the current user and must require authentication");
+            allowAnonymous.Should().BeNull($"{actionName} must not be reachable anonymously");
+        }
     }
 
     [Fact]
