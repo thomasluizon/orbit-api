@@ -99,6 +99,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpPost("requests/{friendshipId:guid}/accept")]
+    [DistributedRateLimit("friend-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -114,6 +115,7 @@ public partial class FriendsController(IMediator mediator, ILogger<FriendsContro
     }
 
     [HttpDelete("{friendUserId:guid}")]
+    [DistributedRateLimit("friend-mutations")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> RemoveFriend(Guid friendUserId, CancellationToken cancellationToken)

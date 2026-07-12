@@ -105,6 +105,7 @@ public class AiController(
     public record ExecutePendingOperationRequest(string ConfirmationToken);
 
     [HttpPost("pending-operations/{id:guid}/confirm")]
+    [DistributedRateLimit("ai-operations")]
     public async Task<IActionResult> ConfirmPendingOperation(Guid id, CancellationToken cancellationToken)
     {
         if (HttpContext.User.GetAgentAuthMethod() == AgentAuthMethod.ApiKey)
@@ -204,6 +205,7 @@ public class AiController(
     }
 
     [HttpPost("pending-operations/{id:guid}/execute")]
+    [DistributedRateLimit("ai-operations")]
     public async Task<IActionResult> ExecutePendingOperation(
         Guid id,
         [FromBody] ExecutePendingOperationRequest request,
