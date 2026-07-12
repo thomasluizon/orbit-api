@@ -8635,6 +8635,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "nonce",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {

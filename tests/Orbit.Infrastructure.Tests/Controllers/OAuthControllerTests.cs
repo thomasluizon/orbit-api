@@ -727,6 +727,193 @@ public class OAuthControllerTests : IDisposable
         json.Should().Contain("invalid_redirect_uri");
     }
 
+    [Fact]
+    public void Authorize_MissingState_ReturnsBadRequest()
+    {
+        var result = _controller.Authorize(
+            "client-123", "https://claude.ai/callback", "code",
+            "", "challenge-xyz", "S256");
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_request");
+    }
+
+    [Fact]
+    public async Task VerifyCode_MissingState_ReturnsBadRequestAndDoesNotVerifyCode()
+    {
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", "",
+            "challenge-xyz", "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.VerifyCode(request, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_request");
+        await _mediator.DidNotReceive().Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GoogleAuth_MissingState_ReturnsBadRequestBeforeCallingGoogle()
+    {
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "", "challenge-xyz",
+            "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.GoogleAuth(request, CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_request");
+        _httpClientFactory.DidNotReceive().CreateClient();
+    }
+
+    [Fact]
+    public async Task VerifyCode_EchoesStateVerbatim_SoClientCanDetectMismatch()
+    {
+        var state = "state-" + Guid.NewGuid().ToString("N");
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(loginResponse));
+
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", state,
+            "challenge-xyz", "https://claude.ai/callback", "client-123");
+
+        var redirectUrl = ExtractRedirectUrl(await _controller.VerifyCode(request, CancellationToken.None));
+
+        ExtractQueryParam(redirectUrl, "state").Should().Be(state);
+        redirectUrl.Should().NotContain("tampered-state");
+    }
+
+    [Fact]
+    public async Task VerifyCode_StateWithQueryInjection_IsPercentEncodedSoNoParamSmuggling()
+    {
+        var tamperedState = "benign&code=forged-code&x=";
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(loginResponse));
+
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", tamperedState,
+            "challenge-xyz", "https://claude.ai/callback", "client-123");
+
+        var redirectUrl = ExtractRedirectUrl(await _controller.VerifyCode(request, CancellationToken.None));
+
+        redirectUrl.Should().Contain("state=benign%26code%3Dforged-code");
+        redirectUrl.Should().NotContain("&code=forged-code");
+        ExtractQueryParam(redirectUrl, "code").Should().NotBe("forged-code");
+        ExtractQueryParam(redirectUrl, "state").Should().Be(tamperedState);
+    }
+
+    [Fact]
+    public async Task Token_WithNonce_EchoesNonceInResponse()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var code = _authStore.CreateCode(
+            UserId, challenge, "https://claude.ai/callback", "client-123", "replay-nonce");
+
+        var result = await _controller.Token(
+            "authorization_code", code, verifier,
+            "client-123", "https://claude.ai/callback", CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        var json = JsonSerializer.Serialize(ok.Value);
+        json.Should().Contain("nonce");
+        json.Should().Contain("replay-nonce");
+    }
+
+    [Fact]
+    public async Task Token_WithoutNonce_OmitsNonceFromResponse()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var code = _authStore.CreateCode(
+            UserId, challenge, "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.Token(
+            "authorization_code", code, verifier,
+            "client-123", "https://claude.ai/callback", CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        JsonSerializer.Serialize(ok.Value).Should().NotContain("nonce");
+    }
+
+    [Fact]
+    public async Task VerifyCode_WithNonce_BindsNonceRetrievableAtTokenExchange()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var loginResponse = new LoginResponse(UserId, "jwt-token", "Thomas", "test@example.com");
+        _mediator.Send(Arg.Any<VerifyCodeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(loginResponse));
+
+        var request = new OAuthController.VerifyCodeRequest(
+            "test@example.com", "123456", "state-abc", challenge,
+            "https://claude.ai/callback", "client-123", Nonce: "verify-nonce-7");
+        var code = ExtractQueryParam(
+            ExtractRedirectUrl(await _controller.VerifyCode(request, CancellationToken.None)), "code");
+
+        var tokenResult = await _controller.Token(
+            "authorization_code", code, verifier,
+            "client-123", "https://claude.ai/callback", CancellationToken.None);
+
+        var ok = tokenResult.Should().BeOfType<OkObjectResult>().Subject;
+        JsonSerializer.Serialize(ok.Value).Should().Contain("verify-nonce-7");
+    }
+
+    [Fact]
+    public async Task GoogleAuth_WithNonce_BindsNonceRetrievableAtTokenExchange()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var user = User.Create("Thomas", "test@example.com").Value;
+        var mockHandler = new MockHttpMessageHandler(HttpStatusCode.OK,
+            """{"email":"test@example.com","aud":"test-google-client-id","name":"Thomas"}""");
+        _httpClientFactory.CreateClient().Returns(new HttpClient(mockHandler));
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var request = new OAuthController.GoogleAuthRequest(
+            "valid-token", "state-abc", challenge,
+            "https://claude.ai/callback", "client-123", Nonce: "google-nonce-42");
+        var code = ExtractQueryParam(
+            ExtractRedirectUrl(await _controller.GoogleAuth(request, CancellationToken.None)), "code");
+
+        var tokenResult = await _controller.Token(
+            "authorization_code", code, verifier,
+            "client-123", "https://claude.ai/callback", CancellationToken.None);
+
+        var ok = tokenResult.Should().BeOfType<OkObjectResult>().Subject;
+        JsonSerializer.Serialize(ok.Value).Should().Contain("google-nonce-42");
+    }
+
+    private static (string verifier, string challenge) GeneratePkce()
+    {
+        var verifier = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(verifier));
+        var challenge = Convert.ToBase64String(hash)
+            .Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        return (verifier, challenge);
+    }
+
+    private static string ExtractRedirectUrl(IActionResult result)
+    {
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        return doc.RootElement.GetProperty("redirectUrl").GetString()!;
+    }
+
+    private static string ExtractQueryParam(string url, string key)
+    {
+        var query = url[(url.IndexOf('?') + 1)..];
+        foreach (var pair in query.Split('&'))
+        {
+            var parts = pair.Split('=', 2);
+            if (parts[0] == key)
+                return parts.Length == 2 ? Uri.UnescapeDataString(parts[1]) : string.Empty;
+        }
+        return string.Empty;
+    }
+
     private sealed class FakeUniqueViolationException : DbException
     {
         public override string SqlState => "23505";
