@@ -131,12 +131,12 @@ public partial class GoogleAuthCommandHandler(
             return Result.Success((raced, false));
         }
 
-        SendWelcomeEmailInBackground(user.Email, user.Name, language);
+        SendWelcomeEmailInBackground(user.Id, user.Email, user.Name, language);
 
         return Result.Success((user, true));
     }
 
-    private void SendWelcomeEmailInBackground(string email, string name, string language)
+    private void SendWelcomeEmailInBackground(Guid userId, string email, string name, string language)
     {
         _ = Task.Run(async () =>
         {
@@ -146,7 +146,7 @@ public partial class GoogleAuthCommandHandler(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                LogWelcomeEmailFailed(logger, ex, email);
+                LogWelcomeEmailFailed(logger, ex, userId);
             }
         }, CancellationToken.None);
     }
@@ -189,8 +189,8 @@ public partial class GoogleAuthCommandHandler(
         }, CancellationToken.None);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Welcome email failed for user {Email}")]
-    private static partial void LogWelcomeEmailFailed(ILogger logger, Exception ex, string email);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Welcome email failed for user {UserId}")]
+    private static partial void LogWelcomeEmailFailed(ILogger logger, Exception ex, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Referral processing failed for user {UserId}")]
     private static partial void LogReferralProcessingFailed(ILogger logger, Exception ex, Guid userId);

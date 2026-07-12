@@ -24,17 +24,16 @@ public sealed partial class ResendContactsService(
         if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Conflict)
         {
             if (logger.IsEnabled(LogLevel.Information))
-                LogContactAdded(logger, email);
+                LogContactAdded(logger);
             return;
         }
 
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        LogContactAddFailed(logger, email, response.StatusCode, body);
+        LogContactAddFailed(logger, response.StatusCode);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Waitlist contact added for {Email}")]
-    private static partial void LogContactAdded(ILogger logger, string email);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Waitlist contact added")]
+    private static partial void LogContactAdded(ILogger logger);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Waitlist contact add failed for {Email} status={Status} body={Body}")]
-    private static partial void LogContactAddFailed(ILogger logger, string email, System.Net.HttpStatusCode status, string body);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Waitlist contact add failed status={Status}")]
+    private static partial void LogContactAddFailed(ILogger logger, System.Net.HttpStatusCode status);
 }
