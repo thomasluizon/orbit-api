@@ -281,6 +281,42 @@ public class SkipHabitCommandHandlerTests
         await _habitLogRepo.DidNotReceive().AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_TargetBeyondOverdueWindow_ReturnsFailure()
+    {
+        var beyondWindow = Today.AddDays(-(AppConstants.DefaultOverdueWindowDays + 3));
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Stale overdue", FrequencyUnit.Day, 1,
+            DueDate: beyondWindow)).Value;
+        SetupHabitFound(habit);
+
+        var command = new SkipHabitCommand(UserId, habit.Id, beyondWindow);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.BeyondOverdueWindow);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TargetAtOverdueWindowBoundary_Succeeds()
+    {
+        var boundary = Today.AddDays(-AppConstants.DefaultOverdueWindowDays);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Boundary", FrequencyUnit.Day, 1,
+            DueDate: boundary)).Value;
+        SetupHabitFound(habit);
+
+        var command = new SkipHabitCommand(UserId, habit.Id, boundary);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.DueDate.Should().BeAfter(boundary);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     private void SetupHabitFound(Habit habit)
     {
         _habitRepo.FindOneTrackedAsync(

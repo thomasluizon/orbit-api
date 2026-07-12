@@ -44,7 +44,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             return Ok(new { message = "Verification code sent" });
         }
 
-        LogFailedToSendCode(logger, request.Email, result.Error, HttpContext.GetRequestId());
+        LogFailedToSendCode(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult();
     }
 
@@ -93,7 +93,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             return Ok(result.Value);
         }
 
-        LogCodeVerificationFailed(logger, request.Email, result.Error, HttpContext.GetRequestId());
+        LogCodeVerificationFailed(logger, result.Error, HttpContext.GetRequestId());
         return result.ToErrorResult(StatusCodes.Status401Unauthorized);
     }
 
@@ -256,6 +256,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
                 policyReason: result.Error));
     }
 
+    [AllowAnonymous]
     [HttpPost("logout")]
     [DistributedRateLimit("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -352,14 +353,14 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Verification code sent to {Email}. RequestId={RequestId}")]
     private static partial void LogVerificationCodeSent(ILogger logger, string email, string requestId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code to {Email}: {Error}. RequestId={RequestId}")]
-    private static partial void LogFailedToSendCode(ILogger logger, string email, string? error, string requestId);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Failed to send code: {Error}. RequestId={RequestId}")]
+    private static partial void LogFailedToSendCode(ILogger logger, string? error, string requestId);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "User logged in via code {Email}. RequestId={RequestId}")]
     private static partial void LogUserLoggedInViaCode(ILogger logger, string email, string requestId);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed for {Email}: {Error}. RequestId={RequestId}")]
-    private static partial void LogCodeVerificationFailed(ILogger logger, string email, string? error, string requestId);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Code verification failed: {Error}. RequestId={RequestId}")]
+    private static partial void LogCodeVerificationFailed(ILogger logger, string? error, string requestId);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Google auth failed: {Error}. RequestId={RequestId}")]
     private static partial void LogGoogleAuthFailed(ILogger logger, string? error, string requestId);

@@ -83,6 +83,10 @@ public class BulkSkipHabitsCommandHandler(
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.CannotSkipFutureDate.Message, ErrorCode: ErrorMessages.CannotSkipFutureDate.Code);
 
+        if (targetDate < today.AddDays(-AppConstants.DefaultOverdueWindowDays))
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.BeyondOverdueWindow.Message, ErrorCode: ErrorMessages.BeyondOverdueWindow.Code);
+
         if (!habitMap.TryGetValue(habitId, out var habit))
             return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
                 Error: ErrorMessages.HabitNotFound.Message, ErrorCode: ErrorMessages.HabitNotFound.Code);
