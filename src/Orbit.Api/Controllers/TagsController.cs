@@ -32,6 +32,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     }
 
     [HttpPost]
+    [DistributedRateLimit("tags")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -51,6 +52,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     }
 
     [HttpPut("{id:guid}")]
+    [DistributedRateLimit("tags")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -71,6 +73,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     }
 
     [HttpDelete("{id:guid}")]
+    [DistributedRateLimit("tags")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -88,6 +91,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     }
 
     [HttpPost("{id:guid}/restore")]
+    [DistributedRateLimit("tags")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -104,6 +108,7 @@ public partial class TagsController(IMediator mediator, ILogger<TagsController> 
     }
 
     [HttpPut("{habitId:guid}/assign")]
+    [DistributedRateLimit("tags")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
