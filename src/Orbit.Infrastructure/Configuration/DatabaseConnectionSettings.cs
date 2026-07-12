@@ -22,7 +22,11 @@ namespace Orbit.Infrastructure.Configuration;
 /// transaction is not clipped; the long AI/batch work is OpenAI network I/O bounded separately by
 /// <c>AI:BatchNetworkTimeoutSeconds</c>, not a single long DB command). <see cref="MigrationCommandTimeoutSeconds"/>
 /// is deliberately larger because a startup migration can build an index or backfill a table in one statement
-/// that far exceeds the request-path budget. See thomasluizon/orbit-ui-mobile#243.
+/// that far exceeds the request-path budget. <see cref="TransactionTimeoutSeconds"/> is a wall-clock ceiling on
+/// a whole <c>UnitOfWork.ExecuteInTransactionAsync</c> unit of work — the per-command timeout cannot bound a
+/// transaction that wedges between commands (app-side stall, lock wait), so this releases the held backend
+/// instead of leaking it. It sits above <see cref="CommandTimeoutSeconds"/> so a legitimate multi-statement
+/// transaction is never clipped. See thomasluizon/orbit-ui-mobile#243.
 /// </para>
 /// </summary>
 public sealed class DatabaseConnectionSettings
@@ -36,6 +40,10 @@ public sealed class DatabaseConnectionSettings
     public int CommandTimeoutSeconds { get; init; } = 60;
 
     public int MigrationCommandTimeoutSeconds { get; init; } = 180;
+
+    public int TransactionTimeoutSeconds { get; init; } = 120;
+
+    public int SlowQueryThresholdMilliseconds { get; init; } = 500;
 
     public static DatabaseConnectionSettings From(IConfiguration configuration) =>
         configuration.GetSection(SectionName).Get<DatabaseConnectionSettings>()

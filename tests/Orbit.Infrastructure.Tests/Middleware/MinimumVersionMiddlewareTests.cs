@@ -28,15 +28,17 @@ public class MinimumVersionMiddlewareTests
         return configService;
     }
 
-    private static async Task<(bool NextCalled, DefaultHttpContext Context)> InvokeWithVersion(
-        string? clientVersion,
-        string floor = FloorVersion)
+    private static DefaultHttpContext BuildContext(string? clientVersion)
     {
         var context = new DefaultHttpContext();
         context.Response.Body = new MemoryStream();
         if (clientVersion is not null)
             context.Request.Headers["X-App-Version"] = clientVersion;
+        return context;
+    }
 
+    private static async Task<bool> InvokeMiddleware(DefaultHttpContext context, IAppConfigService configService)
+    {
         var nextCalled = false;
         var middleware = new MinimumVersionMiddleware(
             _ =>
@@ -46,7 +48,16 @@ public class MinimumVersionMiddlewareTests
             },
             NullLogger<MinimumVersionMiddleware>.Instance);
 
-        await middleware.InvokeAsync(context, BuildConfigService(floor));
+        await middleware.InvokeAsync(context, configService);
+        return nextCalled;
+    }
+
+    private static async Task<(bool NextCalled, DefaultHttpContext Context)> InvokeWithVersion(
+        string? clientVersion,
+        string floor = FloorVersion)
+    {
+        var context = BuildContext(clientVersion);
+        var nextCalled = await InvokeMiddleware(context, BuildConfigService(floor));
         return (nextCalled, context);
     }
 
@@ -119,5 +130,39 @@ public class MinimumVersionMiddlewareTests
         var (nextCalled, _) = await InvokeWithVersion("1.0.0-beta");
 
         nextCalled.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-a-version")]
+    [InlineData("vNext")]
+    public async Task InvokeAsync_NonComparableHeader_SkipsConfigReadBeforeAuth(string? clientVersion)
+    {
+        var configService = BuildConfigService(FloorVersion);
+        var context = BuildContext(clientVersion);
+
+        var nextCalled = await InvokeMiddleware(context, configService);
+
+        nextCalled.Should().BeTrue();
+        context.Response.StatusCode.Should().Be(StatusCodes.Status200OK);
+        await configService.DidNotReceive().GetAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("0.9.0")]
+    [InlineData("1.2.0")]
+    [InlineData("2.0.0-rc1")]
+    public async Task InvokeAsync_ComparableHeader_ReadsConfigExactlyOnce(string clientVersion)
+    {
+        var configService = BuildConfigService(FloorVersion);
+        var context = BuildContext(clientVersion);
+
+        await InvokeMiddleware(context, configService);
+
+        await configService.Received(1).GetAsync(
+            AppConfigKeys.MinSupportedVersion, "0.0.0", Arg.Any<CancellationToken>());
     }
 }

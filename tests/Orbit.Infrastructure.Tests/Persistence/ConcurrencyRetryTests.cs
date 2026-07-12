@@ -10,6 +10,7 @@ using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Persistence;
@@ -54,7 +55,7 @@ public class ConcurrencyRetryTests
 
         await using var context = CreateContext(dbName, interceptor);
         var handler = new ClaimAdRewardCommandHandler(
-            new GenericRepository<User>(context), new UnitOfWork(context), StubToday(today), StubLimit());
+            new GenericRepository<User>(context), new UnitOfWork(context, new DatabaseConnectionSettings()), StubToday(today), StubLimit());
 
         var result = await handler.Handle(new ClaimAdRewardCommand(userId), CancellationToken.None);
 
@@ -86,7 +87,7 @@ public class ConcurrencyRetryTests
         var interceptor = new ConflictOnceInterceptor();
         await using var context = CreateContext(dbName, interceptor);
         var handler = new ClaimAdRewardCommandHandler(
-            new GenericRepository<User>(context), new UnitOfWork(context), StubToday(today), StubLimit());
+            new GenericRepository<User>(context), new UnitOfWork(context, new DatabaseConnectionSettings()), StubToday(today), StubLimit());
 
         var result = await handler.Handle(new ClaimAdRewardCommand(userId), CancellationToken.None);
 
@@ -176,7 +177,7 @@ public class ConcurrencyRetryTests
         }
 
         await using var context = CreateContext(dbName, new ConflictAlwaysInterceptor());
-        var unitOfWork = new UnitOfWork(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
         var goal = context.Goals.Single(g => g.Id == goalId);
         goal.Update("Renamed", null, 120, "kg", null);
 
@@ -202,7 +203,7 @@ public class ConcurrencyRetryTests
         var interceptor = new ConflictOnceInterceptor();
         await using var context = CreateContext(dbName, interceptor);
         var userRepo = new GenericRepository<User>(context);
-        var unitOfWork = new UnitOfWork(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
 
         var mutateRuns = 0;
         await ConcurrencyRetry.SaveWithRetryAsync(
@@ -239,7 +240,7 @@ public class ConcurrencyRetryTests
         var interceptor = new ConflictAlwaysInterceptor();
         await using var context = CreateContext(dbName, interceptor);
         var userRepo = new GenericRepository<User>(context);
-        var unitOfWork = new UnitOfWork(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
 
         var act = async () => await ConcurrencyRetry.SaveWithRetryAsync(
             unitOfWork,
@@ -275,7 +276,7 @@ public class ConcurrencyRetryTests
             new GenericRepository<GoalProgressLog>(context),
             PassingGoalGate(),
             Substitute.For<IGamificationService>(),
-            new UnitOfWork(context),
+            new UnitOfWork(context, new DatabaseConnectionSettings()),
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<UpdateGoalProgressCommandHandler>.Instance);
 
