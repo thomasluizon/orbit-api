@@ -31,10 +31,10 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         Func<IQueryable<T>, IQueryable<T>>? includes,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<T> query = _dbSet.AsNoTracking();
+        IQueryable<T> query = _dbSet.AsNoTracking().Where(predicate);
         if (includes is not null)
             query = includes(query).AsSplitQuery();
-        return await query.Where(predicate).ToListAsync(cancellationToken);
+        return await query.ToListAsync(cancellationToken);
     }
 
     public async Task<T?> FindOneTrackedAsync(
@@ -42,10 +42,10 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         Func<IQueryable<T>, IQueryable<T>>? includes = null,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<T> query = _dbSet;
+        IQueryable<T> query = _dbSet.Where(predicate);
         if (includes is not null)
             query = includes(query).AsSplitQuery();
-        return await query.FirstOrDefaultAsync(predicate, cancellationToken);
+        return await query.FirstOrDefaultAsync(cancellationToken);
     }
 
     public async Task ReloadAsync(T entity, CancellationToken cancellationToken = default)
@@ -65,10 +65,10 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         Func<IQueryable<T>, IQueryable<T>>? includes,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<T> query = _dbSet;
+        IQueryable<T> query = _dbSet.Where(predicate);
         if (includes is not null)
             query = includes(query).AsSplitQuery();
-        return await query.Where(predicate).ToListAsync(cancellationToken);
+        return await query.ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(
