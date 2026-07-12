@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -226,6 +227,75 @@ public sealed class PushNotificationServiceTests : IDisposable
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task SendToUserAsync_HostileOverlongContent_DeliversPayloadUnderPlatformLimit()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/hostile");
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        var hostileTitle = "Alert" + (char)0 + (char)27 + (char)127 + new string('A', 5_000);
+        var hostileBody = "Body" + (char)10 + (char)13 + (char)9 + new string('B', 20_000);
+
+        await service.SendToUserAsync(_userId, hostileTitle, hostileBody, "/habits");
+
+        handler.CallCount.Should().Be(1);
+        handler.LastRequestContentLength.Should().BeLessThanOrEqualTo(4096);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public void SanitizeForDelivery_StripsControlCharacters()
+    {
+        var controlChars = new[] { 0, 7, 9, 10, 13, 27, 127, 133 };
+        var input = "Hello" + string.Concat(controlChars.Select(c => (char)c)) + "World";
+
+        var result = PushNotificationService.SanitizeForDelivery(input, PushNotificationService.MaxBodyBytes);
+
+        result.Should().Be("HelloWorld");
+    }
+
+    [Fact]
+    public void SanitizeForDelivery_TruncatesOverlongContentToByteBudget()
+    {
+        var input = new string('a', 5_000);
+
+        var result = PushNotificationService.SanitizeForDelivery(input, PushNotificationService.MaxTitleBytes);
+
+        result.Length.Should().Be(PushNotificationService.MaxTitleBytes);
+        Encoding.UTF8.GetByteCount(result).Should().Be(PushNotificationService.MaxTitleBytes);
+    }
+
+    [Fact]
+    public void SanitizeForDelivery_NeverSplitsMultiByteRuneAtBoundary()
+    {
+        var input = string.Concat(Enumerable.Repeat("\U0001F600", 10));
+
+        var result = PushNotificationService.SanitizeForDelivery(input, 10);
+
+        Encoding.UTF8.GetByteCount(result).Should().Be(8);
+        result.Should().Be("\U0001F600\U0001F600");
+        result.Should().NotContain("�");
+    }
+
+    [Fact]
+    public void SanitizeForDelivery_PreservesValidContentUnchanged()
+    {
+        const string input = "Great job! You kept your streak \U0001F525 café";
+
+        var result = PushNotificationService.SanitizeForDelivery(input, PushNotificationService.MaxBodyBytes);
+
+        result.Should().Be(input);
+    }
+
+    [Fact]
+    public void SanitizeForDelivery_EmptyString_ReturnsEmpty()
+    {
+        PushNotificationService.SanitizeForDelivery(string.Empty, PushNotificationService.MaxBodyBytes)
+            .Should().BeEmpty();
+    }
+
     private static (string PublicKey, string PrivateKey) GenerateVapidKeyPair()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -264,10 +334,13 @@ public sealed class PushNotificationServiceTests : IDisposable
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
     {
         public int CallCount { get; private set; }
+        public long? LastRequestContentLength { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             CallCount++;
+            if (request.Content is not null)
+                LastRequestContentLength = request.Content.ReadAsByteArrayAsync(cancellationToken).GetAwaiter().GetResult().LongLength;
             return Task.FromResult(responder(request));
         }
     }
