@@ -83,9 +83,9 @@ public class OrbitConnectionStringFactoryTests
         });
 
         new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForRequestPath(configuration))
-            .MaxPoolSize.Should().Be(8);
+            .MaxPoolSize.Should().Be(15);
         new NpgsqlConnectionStringBuilder(OrbitConnectionStringFactory.ForSession(configuration))
-            .MaxPoolSize.Should().Be(2);
+            .MaxPoolSize.Should().Be(5);
     }
 
     [Fact]
