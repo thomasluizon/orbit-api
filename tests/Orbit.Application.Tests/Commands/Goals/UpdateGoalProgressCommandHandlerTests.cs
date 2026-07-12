@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -17,6 +18,7 @@ public class UpdateGoalProgressCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly UpdateGoalProgressCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -25,7 +27,7 @@ public class UpdateGoalProgressCommandHandlerTests
     public UpdateGoalProgressCommandHandlerTests()
     {
         _handler = new UpdateGoalProgressCommandHandler(
-            _goalRepo, _progressLogRepo, _payGate, _gamificationService, _unitOfWork,
+            _goalRepo, _progressLogRepo, _payGate, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<UpdateGoalProgressCommandHandler>>());
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());

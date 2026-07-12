@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
@@ -14,13 +15,14 @@ public class ReorderGoalsCommandHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly ReorderGoalsCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public ReorderGoalsCommandHandlerTests()
     {
-        _handler = new ReorderGoalsCommandHandler(_goalRepo, _payGate, _unitOfWork);
+        _handler = new ReorderGoalsCommandHandler(_goalRepo, _payGate, _unitOfWork, _cache);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

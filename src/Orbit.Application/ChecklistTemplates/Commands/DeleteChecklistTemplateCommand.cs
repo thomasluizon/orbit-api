@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -12,7 +13,8 @@ public record DeleteChecklistTemplateCommand(
 
 public class DeleteChecklistTemplateCommandHandler(
     IGenericRepository<ChecklistTemplate> repository,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteChecklistTemplateCommand, Result>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<DeleteChecklistTemplateCommand, Result>
 {
     public async Task<Result> Handle(DeleteChecklistTemplateCommand request, CancellationToken cancellationToken)
     {
@@ -25,6 +27,9 @@ public class DeleteChecklistTemplateCommandHandler(
 
         template.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.ChecklistTemplates(request.UserId));
+
         return Result.Success();
     }
 }

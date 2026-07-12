@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -13,7 +14,8 @@ public record BulkDeleteUserFactsCommand(
 public class BulkDeleteUserFactsCommandHandler(
     IGenericRepository<UserFact> userFactRepository,
     IPayGateService payGate,
-    IUnitOfWork unitOfWork) : IRequestHandler<BulkDeleteUserFactsCommand, Result<int>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<BulkDeleteUserFactsCommand, Result<int>>
 {
     public async Task<Result<int>> Handle(BulkDeleteUserFactsCommand request, CancellationToken cancellationToken)
     {
@@ -30,7 +32,10 @@ public class BulkDeleteUserFactsCommandHandler(
             fact.SoftDelete();
 
         if (facts.Count > 0)
+        {
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            cache.Remove(ReferenceCacheKeys.UserFacts(request.UserId));
+        }
 
         return Result.Success(facts.Count);
     }

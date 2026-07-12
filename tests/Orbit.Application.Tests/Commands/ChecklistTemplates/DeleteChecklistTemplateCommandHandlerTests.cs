@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ChecklistTemplates.Commands;
 using Orbit.Domain.Entities;
@@ -11,13 +12,14 @@ public class DeleteChecklistTemplateCommandHandlerTests
 {
     private readonly IGenericRepository<ChecklistTemplate> _repo = Substitute.For<IGenericRepository<ChecklistTemplate>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly DeleteChecklistTemplateCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public DeleteChecklistTemplateCommandHandlerTests()
     {
-        _handler = new DeleteChecklistTemplateCommandHandler(_repo, _unitOfWork);
+        _handler = new DeleteChecklistTemplateCommandHandler(_repo, _unitOfWork, _cache);
     }
 
     [Fact]

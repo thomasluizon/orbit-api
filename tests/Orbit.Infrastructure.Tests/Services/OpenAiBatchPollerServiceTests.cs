@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -205,7 +206,7 @@ public class OpenAiBatchPollerServiceTests
                 var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
                 return new OpenAiBatchPollerService(
                     scopeFactory, NullLogger<OpenAiBatchPollerService>.Instance,
-                    new ConfigurationBuilder().Build());
+                    new ConfigurationBuilder().Build(), new MemoryCache(new MemoryCacheOptions()));
             }
         }
     }

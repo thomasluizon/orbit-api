@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -13,7 +14,8 @@ public record CreateChecklistTemplateCommand(
 
 public class CreateChecklistTemplateCommandHandler(
     IGenericRepository<ChecklistTemplate> repository,
-    IUnitOfWork unitOfWork) : IRequestHandler<CreateChecklistTemplateCommand, Result<Guid>>
+    IUnitOfWork unitOfWork,
+    IMemoryCache cache) : IRequestHandler<CreateChecklistTemplateCommand, Result<Guid>>
 {
     public async Task<Result<Guid>> Handle(CreateChecklistTemplateCommand request, CancellationToken cancellationToken)
     {
@@ -23,6 +25,8 @@ public class CreateChecklistTemplateCommandHandler(
 
         await repository.AddAsync(result.Value, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        cache.Remove(ReferenceCacheKeys.ChecklistTemplates(request.UserId));
 
         return Result.Success(result.Value.Id);
     }

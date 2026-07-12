@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -32,6 +34,7 @@ public class ApiKeyAuthenticationHandler(
         var apiKeyRepository = scope.ServiceProvider.GetRequiredService<IGenericRepository<ApiKey>>();
         var payGate = scope.ServiceProvider.GetRequiredService<IPayGateService>();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var cache = scope.ServiceProvider.GetRequiredService<IMemoryCache>();
 
         var candidates = await apiKeyRepository.FindTrackedAsync(
             k => k.KeyPrefix == keyPrefix && !k.IsRevoked);
@@ -51,6 +54,8 @@ public class ApiKeyAuthenticationHandler(
 
                 candidate.MarkUsed();
                 await unitOfWork.SaveChangesAsync();
+
+                cache.Remove(ReferenceCacheKeys.ApiKeys(candidate.UserId));
 
                 var claims = new List<Claim>
                 {

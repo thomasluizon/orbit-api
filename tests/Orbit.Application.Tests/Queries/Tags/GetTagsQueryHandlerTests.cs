@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Tags.Queries;
 using Orbit.Domain.Entities;
@@ -10,13 +11,14 @@ namespace Orbit.Application.Tests.Queries.Tags;
 public class GetTagsQueryHandlerTests
 {
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetTagsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetTagsQueryHandlerTests()
     {
-        _handler = new GetTagsQueryHandler(_tagRepo);
+        _handler = new GetTagsQueryHandler(_tagRepo, _cache);
     }
 
     [Fact]

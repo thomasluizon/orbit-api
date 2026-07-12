@@ -1,4 +1,6 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -13,10 +15,15 @@ public record TagResponse(
 public record GetTagsQuery(Guid UserId) : IRequest<Result<IReadOnlyList<TagResponse>>>;
 
 public class GetTagsQueryHandler(
-    IGenericRepository<Tag> tagRepository) : IRequestHandler<GetTagsQuery, Result<IReadOnlyList<TagResponse>>>
+    IGenericRepository<Tag> tagRepository,
+    IMemoryCache cache) : IRequestHandler<GetTagsQuery, Result<IReadOnlyList<TagResponse>>>
 {
     public async Task<Result<IReadOnlyList<TagResponse>>> Handle(GetTagsQuery request, CancellationToken cancellationToken)
     {
+        var cacheKey = ReferenceCacheKeys.Tags(request.UserId);
+        if (cache.TryGetValue(cacheKey, out IReadOnlyList<TagResponse>? cached) && cached is not null)
+            return Result.Success(cached);
+
         var tags = await tagRepository.FindAsync(
             t => t.UserId == request.UserId,
             cancellationToken);
@@ -25,6 +32,11 @@ public class GetTagsQueryHandler(
             .OrderBy(t => t.Name)
             .Select(t => new TagResponse(t.Id, t.Name, t.Color))
             .ToList();
+
+        cache.Set(cacheKey, (IReadOnlyList<TagResponse>)result, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = ReferenceCacheKeys.Ttl
+        });
 
         return Result.Success<IReadOnlyList<TagResponse>>(result);
     }

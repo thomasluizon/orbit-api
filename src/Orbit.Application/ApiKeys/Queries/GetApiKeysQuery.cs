@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -21,13 +22,18 @@ public record GetApiKeysQuery(Guid UserId) : IRequest<Result<IReadOnlyList<ApiKe
 
 public class GetApiKeysQueryHandler(
     IGenericRepository<ApiKey> apiKeyRepository,
-    IPayGateService payGate) : IRequestHandler<GetApiKeysQuery, Result<IReadOnlyList<ApiKeyResponse>>>
+    IPayGateService payGate,
+    IMemoryCache cache) : IRequestHandler<GetApiKeysQuery, Result<IReadOnlyList<ApiKeyResponse>>>
 {
     public async Task<Result<IReadOnlyList<ApiKeyResponse>>> Handle(GetApiKeysQuery request, CancellationToken cancellationToken)
     {
         var gateCheck = await payGate.CanReadApiKeys(request.UserId, cancellationToken);
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<IReadOnlyList<ApiKeyResponse>>();
+
+        var cacheKey = ReferenceCacheKeys.ApiKeys(request.UserId);
+        if (cache.TryGetValue(cacheKey, out IReadOnlyList<ApiKeyResponse>? cached) && cached is not null)
+            return Result.Success(cached);
 
         var keys = await apiKeyRepository.FindAsync(
             k => k.UserId == request.UserId,
@@ -46,6 +52,11 @@ public class GetApiKeysQueryHandler(
                 k.LastUsedAtUtc,
                 k.IsRevoked))
             .ToList();
+
+        cache.Set(cacheKey, (IReadOnlyList<ApiKeyResponse>)result, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = ReferenceCacheKeys.Ttl
+        });
 
         return Result.Success<IReadOnlyList<ApiKeyResponse>>(result);
     }

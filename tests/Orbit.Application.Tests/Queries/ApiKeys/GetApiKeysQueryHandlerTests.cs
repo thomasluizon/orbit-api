@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.ApiKeys.Queries;
 using Orbit.Domain.Common;
@@ -12,6 +13,7 @@ public class GetApiKeysQueryHandlerTests
 {
     private readonly IGenericRepository<ApiKey> _apiKeyRepo = Substitute.For<IGenericRepository<ApiKey>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetApiKeysQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -20,7 +22,7 @@ public class GetApiKeysQueryHandlerTests
     {
         _payGate.CanReadApiKeys(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
-        _handler = new GetApiKeysQueryHandler(_apiKeyRepo, _payGate);
+        _handler = new GetApiKeysQueryHandler(_apiKeyRepo, _payGate, _cache);
     }
 
     [Fact]
