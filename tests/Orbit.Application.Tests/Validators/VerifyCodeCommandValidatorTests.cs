@@ -61,4 +61,46 @@ public class VerifyCodeCommandValidatorTests
 
         result.ShouldHaveValidationErrorFor(x => x.Code);
     }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("pt-BR")]
+    public void Validate_SupportedLanguage_NoError(string language)
+    {
+        var command = ValidCommand() with { Language = language };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveValidationErrorFor(x => x.Language);
+    }
+
+    [Fact]
+    public void Validate_OverLengthLanguage_HasError()
+    {
+        var command = ValidCommand() with { Language = new string('x', 11) };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Language);
+    }
+
+    [Fact]
+    public void Validate_UnsupportedLanguage_HasError()
+    {
+        var command = ValidCommand() with { Language = "fr" };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Language);
+    }
+
+    [Fact]
+    public void Validate_EmptyLanguage_HasError()
+    {
+        var command = ValidCommand() with { Language = "" };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Language);
+    }
 }

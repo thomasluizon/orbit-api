@@ -123,6 +123,75 @@ public class OrbitDbContextTests
         suggestionGoogleEventId.GetMaxLength().Should().Be(1024);
     }
 
+    [Fact]
+    public void Model_TagUniqueIndex_FiltersSoftDeletedRowsSoNamesCanBeReusedAfterDeletion()
+    {
+        using var context = CreatePostgresContext();
+
+        var tag = context.Model.FindEntityType(typeof(Tag))!;
+        var uniqueIndex = tag.GetIndexes().Single(i =>
+            i.IsUnique && i.Properties.Select(p => p.Name).SequenceEqual(new[] { nameof(Tag.UserId), nameof(Tag.Name) }));
+
+        uniqueIndex.GetFilter().Should().Be("\"IsDeleted\" = FALSE");
+    }
+
+    [Fact]
+    public void Model_UnboundedStringColumns_AreConstrainedToMaxLengths()
+    {
+        using var context = CreatePostgresContext();
+
+        var tag = context.Model.FindEntityType(typeof(Tag))!;
+        tag.FindProperty(nameof(Tag.Name))!.GetMaxLength().Should().Be(50);
+        tag.FindProperty(nameof(Tag.Color))!.GetMaxLength().Should().Be(50);
+
+        var user = context.Model.FindEntityType(typeof(User))!;
+        user.FindProperty(nameof(User.ColorScheme))!.GetMaxLength().Should().Be(50);
+        user.FindProperty(nameof(User.Language))!.GetMaxLength().Should().Be(10);
+        user.FindProperty(nameof(User.ThemePreference))!.GetMaxLength().Should().Be(10);
+        user.FindProperty(nameof(User.TimeZone))!.GetMaxLength().Should().Be(100);
+
+        context.Model.FindEntityType(typeof(Goal))!.FindProperty(nameof(Goal.Unit))!.GetMaxLength().Should().Be(50);
+    }
+
+    [Fact]
+    public void Model_EncryptedTextColumns_CarryAdvisoryMaxLengthWithoutNarrowingStorageType()
+    {
+        var encryptionService = Substitute.For<IEncryptionService>();
+
+        using var context = CreatePostgresContext(encryptionService);
+
+        var goalTitle = context.Model.FindEntityType(typeof(Goal))!.FindProperty(nameof(Goal.Title))!;
+        goalTitle.GetMaxLength().Should().Be(200);
+        goalTitle.GetColumnType().Should().Be("text");
+        goalTitle.GetValueConverter().Should().NotBeNull();
+
+        var note = context.Model.FindEntityType(typeof(HabitLog))!.FindProperty(nameof(HabitLog.Note))!;
+        note.GetMaxLength().Should().Be(1000);
+        note.GetColumnType().Should().Be("text");
+        note.GetValueConverter().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Model_HabitsAndTags_CascadeDeleteWithTheirOwningUser()
+    {
+        using var context = CreateContext();
+
+        AssertCascadingUserForeignKey(context.Model.FindEntityType(typeof(Habit))!, nameof(Habit.UserId));
+        AssertCascadingUserForeignKey(context.Model.FindEntityType(typeof(Tag))!, nameof(Tag.UserId));
+    }
+
+    private static void AssertCascadingUserForeignKey(
+        Microsoft.EntityFrameworkCore.Metadata.IEntityType entityType,
+        string foreignKeyPropertyName)
+    {
+        var userForeignKey = entityType.GetForeignKeys().Single(fk =>
+            fk.PrincipalEntityType.ClrType == typeof(User)
+            && fk.Properties.Count == 1
+            && fk.Properties[0].Name == foreignKeyPropertyName);
+
+        userForeignKey.DeleteBehavior.Should().Be(DeleteBehavior.Cascade);
+    }
+
     private static OrbitDbContext CreateContext(IEncryptionService? encryptionService = null)
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
@@ -142,12 +211,13 @@ public class OrbitDbContextTests
         }
     }
 
-    private static OrbitDbContext CreatePostgresContext()
+    private static OrbitDbContext CreatePostgresContext(IEncryptionService? encryptionService = null)
     {
         var options = new DbContextOptionsBuilder<OrbitDbContext>()
             .UseNpgsql("Host=localhost;Database=orbit-tests;Username=test;Password=test")
+            .ReplaceService<IModelCacheKeyFactory, EncryptionAwareModelCacheKeyFactory>()
             .Options;
 
-        return new OrbitDbContext(options);
+        return new OrbitDbContext(options, encryptionService);
     }
 }
