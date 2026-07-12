@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using FirebaseAdmin.Messaging;
 using Lib.Net.Http.WebPush;
 using Lib.Net.Http.WebPush.Authentication;
@@ -33,16 +34,19 @@ public partial class PushNotificationService(
 
         if (subscriptions.Count == 0) return;
 
+        var safeTitle = SanitizeForDelivery(title, MaxTitleBytes);
+        var safeBody = SanitizeForDelivery(body, MaxBodyBytes);
+
         var fcmSubs = subscriptions.Where(s => s.Transport == PushTransport.Fcm).ToList();
         var webPushSubs = subscriptions.Where(s => s.Transport == PushTransport.WebPush).ToList();
 
         var staleSubscriptions = new List<Domain.Entities.PushSubscription>();
 
         if (fcmSubs.Count > 0)
-            await SendFcm(fcmSubs, title, body, url, staleSubscriptions, cancellationToken);
+            await SendFcm(fcmSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
 
         if (webPushSubs.Count > 0)
-            await SendWebPush(webPushSubs, title, body, url, staleSubscriptions, cancellationToken);
+            await SendWebPush(webPushSubs, safeTitle, safeBody, url, staleSubscriptions, cancellationToken);
 
         if (staleSubscriptions.Count > 0)
         {
@@ -237,6 +241,33 @@ public partial class PushNotificationService(
             or HttpStatusCode.BadGateway
             or HttpStatusCode.ServiceUnavailable
             or HttpStatusCode.GatewayTimeout;
+
+    internal const int MaxTitleBytes = 256;
+    internal const int MaxBodyBytes = 768;
+
+    /// <summary>
+    /// Strips control characters and truncates <paramref name="text"/> to a whole-rune UTF-8
+    /// byte budget so neither the FCM 4KB message payload nor the Web Push 4096-octet ceiling
+    /// (RFC 8291 §4 / RFC 8030 §7.2, https://www.rfc-editor.org/rfc/rfc8291) is exceeded once the
+    /// Web Push JSON escapes non-ASCII to \uXXXX (up to ~3x byte expansion). Never splits a rune.
+    /// </summary>
+    internal static string SanitizeForDelivery(string text, int maxBytes)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var builder = new StringBuilder(text.Length);
+        var byteCount = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (Rune.IsControl(rune)) continue;
+            var runeBytes = rune.Utf8SequenceLength;
+            if (byteCount + runeBytes > maxBytes) break;
+            byteCount += runeBytes;
+            builder.Append(rune.ToString());
+        }
+        return builder.ToString();
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).")]
     private static partial void LogFcmNotInitialized(ILogger logger, int count);
 
