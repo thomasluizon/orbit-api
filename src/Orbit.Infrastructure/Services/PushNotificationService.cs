@@ -176,39 +176,67 @@ public partial class PushNotificationService(
         List<Domain.Entities.PushSubscription> staleSubscriptions,
         CancellationToken ct)
     {
-        try
+        const int MaxRetries = 2;
+        const int BaseDelayMs = 300;
+
+        var pushSub = new Lib.Net.Http.WebPush.PushSubscription
         {
-            var pushSub = new Lib.Net.Http.WebPush.PushSubscription
+            Endpoint = sub.Endpoint,
+            Keys = new Dictionary<string, string>
             {
-                Endpoint = sub.Endpoint,
-                Keys = new Dictionary<string, string>
+                ["p256dh"] = sub.P256dh,
+                ["auth"] = sub.Auth
+            }
+        };
+
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogWebPushSent(logger, sub.Endpoint);
+                return;
+            }
+            catch (PushServiceClientException ex)
+                when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogWebPushSubscriptionGone(logger, sub.Endpoint);
+                staleSubscriptions.Add(sub);
+                return;
+            }
+            catch (PushServiceClientException ex)
+            {
+                if (!IsTransient(ex.StatusCode) || attempt >= MaxRetries)
                 {
-                    ["p256dh"] = sub.P256dh,
-                    ["auth"] = sub.Auth
+                    if (logger.IsEnabled(LogLevel.Warning))
+                        LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
+                    return;
                 }
-            };
-            await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogWebPushSent(logger, sub.Endpoint);
-        }
-        catch (PushServiceClientException ex)
-            when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogWebPushSubscriptionGone(logger, sub.Endpoint);
-            staleSubscriptions.Add(sub);
-        }
-        catch (PushServiceClientException ex)
-        {
-            if (logger.IsEnabled(LogLevel.Warning))
-                LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            if (logger.IsEnabled(LogLevel.Warning))
-                LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+                await Task.Delay(BaseDelayMs << attempt, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                if (attempt >= MaxRetries)
+                {
+                    if (logger.IsEnabled(LogLevel.Warning))
+                        LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+                    return;
+                }
+                await Task.Delay(BaseDelayMs << attempt, ct);
+            }
         }
     }
+
+    private static bool IsTransient(HttpStatusCode? status) =>
+        status is null
+            or HttpStatusCode.RequestTimeout
+            or HttpStatusCode.TooManyRequests
+            or HttpStatusCode.InternalServerError
+            or HttpStatusCode.BadGateway
+            or HttpStatusCode.ServiceUnavailable
+            or HttpStatusCode.GatewayTimeout;
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "FCM is not initialized (Firebase credentials not configured). Skipping FCM push to {Count} subscription(s).")]
     private static partial void LogFcmNotInitialized(ILogger logger, int count);
 
