@@ -93,9 +93,9 @@ public class HandleWebhookCommandHandlerTests
         var customerId = "cus_test_456";
         var user = User.Create("Thomas", "test@example.com").Value;
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var subscription = CreateMockSubscription(subscriptionId);
@@ -129,9 +129,9 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_CheckoutSessionCompleted_UserNotFound_DoesNotThrow()
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
@@ -150,9 +150,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetReferralCoupon("coupon_test");
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var subscription = CreateMockSubscription("sub_test");
@@ -175,9 +175,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
@@ -194,9 +194,9 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionDeleted_UserNotFound_DoesNotThrow()
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
@@ -215,9 +215,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
@@ -236,9 +236,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
@@ -257,9 +257,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
@@ -275,9 +275,9 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_SubscriptionUpdated_UserNotFound_DoesNotThrow()
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var (json, signature) = BuildSignedEvent("customer.subscription.updated",
@@ -296,9 +296,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var subscription = CreateMockSubscription("sub_test");
@@ -332,9 +332,9 @@ public class HandleWebhookCommandHandlerTests
     [Fact]
     public async Task Handle_InvoicePaid_UserNotFound_DoesNotProcess()
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
         var (json, signature) = BuildSignedEvent("invoice.paid",
@@ -374,9 +374,9 @@ public class HandleWebhookCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _userRepo.DidNotReceive().FindOneTrackedAsync(
+        await _userRepo.DidNotReceive().FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -384,9 +384,9 @@ public class HandleWebhookCommandHandlerTests
     public async Task Handle_ConcurrentDuplicate_SaveConflict_ReturnsSuccess()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var subscription = CreateMockSubscription("sub_test");
@@ -412,9 +412,9 @@ public class HandleWebhookCommandHandlerTests
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetPlaySubscription("stale_play_token", DateTime.UtcNow.AddMonths(1));
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var subscription = CreateMockSubscription("sub_test");
@@ -436,9 +436,9 @@ public class HandleWebhookCommandHandlerTests
     {
         var user = User.Create("Thomas", "test@example.com").Value;
 
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<CancellationToken>())
             .Returns(user);
 
         var subscription = CreateYearlySubscriptionWithoutPeriodEnd("sub_year");

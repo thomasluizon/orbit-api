@@ -133,9 +133,8 @@ public class GoogleAuthCommandHandlerTests
     {
         var existingUser = User.Create("Existing", "google@example.com").Value;
         SetupGoogleTokenResponse("Google@Example.com", "Existing");
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
@@ -155,9 +154,8 @@ public class GoogleAuthCommandHandlerTests
     {
         var racedUser = User.Create("Raced", TestEmail).Value;
         SetupGoogleTokenResponse(TestEmail, "Raced");
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns((User?)null, racedUser);
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -185,9 +183,8 @@ public class GoogleAuthCommandHandlerTests
 
     private void SetupExistingUser(User user)
     {
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
     }

@@ -39,9 +39,8 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     private void StubUser(User? user) =>
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(user);
 
@@ -171,9 +170,8 @@ public class HandlePlayNotificationCommandHandlerTests
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
-        _userRepo.FindOneTrackedAsync(
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
             Arg.Any<CancellationToken>())
             .Returns((User?)null, user);
         StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Yearly, true, "orbit_pro", "tok_old", null));

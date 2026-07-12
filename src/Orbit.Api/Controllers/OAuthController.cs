@@ -223,7 +223,7 @@ public partial class OAuthController(
                 unitOfWork,
                 async c =>
                 {
-                    var tracked = await userRepository.FindOneTrackedAsync(u => u.Id == user.Id, cancellationToken: c);
+                    var tracked = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Id == user.Id, c);
                     tracked?.CancelDeactivation();
                 },
                 ct);
@@ -240,7 +240,7 @@ public partial class OAuthController(
 
     private async Task<Result<Domain.Entities.User>> FindOrCreateGoogleUserAsync(string email, string name, CancellationToken ct)
     {
-        var existing = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
+        var existing = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Email == email, ct);
         if (existing is not null)
             return Result.Success(existing);
 
@@ -257,7 +257,7 @@ public partial class OAuthController(
         }
         catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
         {
-            var raced = await userRepository.FindOneTrackedAsync(u => u.Email == email, cancellationToken: ct);
+            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(u => u.Email == email, ct);
             if (raced is null)
                 throw;
 
