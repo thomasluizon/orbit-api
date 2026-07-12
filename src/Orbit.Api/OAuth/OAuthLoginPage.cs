@@ -1,18 +1,22 @@
-using System.Net;
+using System.Text.Json;
 
 namespace Orbit.Api.OAuth;
 
 public static class OAuthLoginPage
 {
     public static string Render(string clientId, string redirectUri, string state,
-        string codeChallenge, string codeChallengeMethod, string googleClientId)
+        string codeChallenge, string codeChallengeMethod, string googleClientId, string? nonce = null)
     {
-        clientId = WebUtility.HtmlEncode(clientId);
-        redirectUri = WebUtility.HtmlEncode(redirectUri);
-        state = WebUtility.HtmlEncode(state);
-        codeChallenge = WebUtility.HtmlEncode(codeChallenge);
-        codeChallengeMethod = WebUtility.HtmlEncode(codeChallengeMethod);
-        googleClientId = WebUtility.HtmlEncode(googleClientId);
+        var oauthParamsJson = JsonSerializer.Serialize(new
+        {
+            clientId,
+            redirectUri,
+            state,
+            codeChallenge,
+            codeChallengeMethod,
+            nonce
+        });
+        var googleClientIdJson = JsonSerializer.Serialize(googleClientId);
 
         return $$"""
 <!DOCTYPE html>
@@ -283,14 +287,8 @@ public static class OAuthLoginPage
     </div>
 
     <script>
-        const oauthParams = {
-            clientId: '{{clientId}}',
-            redirectUri: '{{redirectUri}}',
-            state: '{{state}}',
-            codeChallenge: '{{codeChallenge}}',
-            codeChallengeMethod: '{{codeChallengeMethod}}'
-        };
-        const googleClientId = '{{googleClientId}}';
+        const oauthParams = {{oauthParamsJson}};
+        const googleClientId = {{googleClientIdJson}};
         let userEmail = '';
         let resendTimer = null;
 
@@ -415,7 +413,8 @@ public static class OAuthLoginPage
                         state: oauthParams.state,
                         codeChallenge: oauthParams.codeChallenge,
                         redirectUri: oauthParams.redirectUri,
-                        clientId: oauthParams.clientId
+                        clientId: oauthParams.clientId,
+                        nonce: oauthParams.nonce
                     })
                 });
                 const data = await res.json();
@@ -458,7 +457,8 @@ public static class OAuthLoginPage
                         state: oauthParams.state,
                         codeChallenge: oauthParams.codeChallenge,
                         redirectUri: oauthParams.redirectUri,
-                        clientId: oauthParams.clientId
+                        clientId: oauthParams.clientId,
+                        nonce: oauthParams.nonce
                     })
                 });
                 const data = await res.json();
