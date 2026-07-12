@@ -25,9 +25,9 @@ namespace Orbit.Infrastructure.Migrations
                 FROM ranked
                 WHERE u.""Id"" = ranked.""Id"" AND ranked.rn > 1;");
 
-            // Handles are compared case-insensitively app-wide (LOWER(Handle) == normalized), so a plain unique index would let 'Bob'/'bob' coexist and skip the lookup; Npgsql has no fluent functional-index API, so it lives in SQL. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
+            // Idempotent: an identical IX_Users_Handle_Lower was already created by AddSocialFoundation, so a bare CREATE crashes prod migration with 42P07 (relation already exists) while tests — which never run raw-SQL migrations against real Postgres — pass. IF NOT EXISTS makes this a safe no-op on existing DBs and still correct on a fresh one. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
             migrationBuilder.Sql(@"
-                CREATE UNIQUE INDEX ""IX_Users_Handle_Lower""
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_Handle_Lower""
                     ON ""Users"" (LOWER(""Handle""))
                     WHERE ""Handle"" IS NOT NULL;");
         }
