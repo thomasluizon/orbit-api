@@ -156,6 +156,7 @@ public class GetCalendarEventsQueryHandlerTests
 
         var importedHabit = Habit.Create(new HabitCreateParams(
             user.Id, "Existing", Domain.Enums.FrequencyUnit.Week, 1,
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             GoogleEventId: "evt_already")).Value;
 
         _habitRepo.FindAsync(

@@ -188,10 +188,10 @@ public class CreateHabitTool(
 
         return Habit.Create(new HabitCreateParams(
             userId, title, frequencyUnit, frequencyQuantity,
+            JsonArgumentParser.ParseDateOnly(args, "due_date") ?? today,
             JsonArgumentParser.GetOptionalString(args, "description"),
             Days: JsonArgumentParser.ParseDays(args),
             IsBadHabit: isBadHabit,
-            DueDate: JsonArgumentParser.ParseDateOnly(args, "due_date") ?? today,
             DueTime: JsonArgumentParser.ParseTimeOnly(args, "due_time"),
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(args, "reminder_enabled") ?? false,
             ReminderTimes: JsonArgumentParser.ParseIntArray(args, "reminder_times"),
@@ -244,10 +244,10 @@ public class CreateHabitTool(
             JsonArgumentParser.GetOptionalString(sub, TitleProperty) ?? "Untitled",
             JsonArgumentParser.ParseFrequencyUnit(sub) ?? parentFreqUnit,
             JsonArgumentParser.GetOptionalInt(sub, "frequency_quantity") ?? parentFreqQty,
+            JsonArgumentParser.ParseDateOnly(sub, "due_date") ?? parentDueDate,
             JsonArgumentParser.GetOptionalString(sub, "description"),
             Days: subDays,
             IsBadHabit: JsonArgumentParser.GetOptionalBool(sub, "is_bad_habit") ?? false,
-            DueDate: JsonArgumentParser.ParseDateOnly(sub, "due_date") ?? parentDueDate,
             ParentHabitId: parentId,
             Emoji: JsonArgumentParser.GetOptionalString(sub, "emoji"),
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(sub)));

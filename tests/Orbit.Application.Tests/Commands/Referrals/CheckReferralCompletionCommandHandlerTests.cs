@@ -102,7 +102,7 @@ public class CheckReferralCompletionCommandHandlerTests
         var habits = Enumerable.Range(0, habitCount)
             .Select(_ =>
             {
-                var habit = Habit.Create(new HabitCreateParams(userId, "Test Habit", FrequencyUnit.Day, 1)).Value;
+                var habit = Habit.Create(new HabitCreateParams(userId, "Test Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
                 return habit;
             })
             .ToList();

@@ -11,7 +11,7 @@ public class HabitGoogleEventIdTests
     {
         var result = Habit.Create(new HabitCreateParams(
             Guid.NewGuid(), "Standup", FrequencyUnit.Day, 1,
-            GoogleEventId: "evt_123"));
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow), GoogleEventId: "evt_123"));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.GoogleEventId.Should().Be("evt_123");
@@ -21,7 +21,7 @@ public class HabitGoogleEventIdTests
     public void Create_WithoutGoogleEventId_IsNull()
     {
         var result = Habit.Create(new HabitCreateParams(
-            Guid.NewGuid(), "Standup", FrequencyUnit.Day, 1));
+            Guid.NewGuid(), "Standup", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow)));
 
         result.Value.GoogleEventId.Should().BeNull();
     }
@@ -30,7 +30,7 @@ public class HabitGoogleEventIdTests
     public void SetGoogleEventId_UpdatesProperty()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            Guid.NewGuid(), "Standup", FrequencyUnit.Day, 1)).Value;
+            Guid.NewGuid(), "Standup", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         habit.SetGoogleEventId("evt_456");
 
@@ -42,7 +42,7 @@ public class HabitGoogleEventIdTests
     {
         var habit = Habit.Create(new HabitCreateParams(
             Guid.NewGuid(), "Standup", FrequencyUnit.Day, 1,
-            GoogleEventId: "evt_123")).Value;
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow), GoogleEventId: "evt_123")).Value;
 
         habit.SetGoogleEventId(null);
 

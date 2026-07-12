@@ -26,8 +26,8 @@ public class ReorderHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_ValidReorder_UpdatesPositionsAndSaves()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         habit1.SetPosition(0);
         habit2.SetPosition(1);
 
@@ -91,9 +91,9 @@ public class ReorderHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_MultipleHabits_LoadsInSingleQuery()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1)).Value;
-        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -119,9 +119,9 @@ public class ReorderHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_DuplicatePositions_NormalizesToContiguousSequence()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1)).Value;
-        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -147,9 +147,9 @@ public class ReorderHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_GappedPositions_NormalizesPreservingOrder()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1)).Value;
-        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "H1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "H2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit3 = Habit.Create(new HabitCreateParams(UserId, "H3", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),

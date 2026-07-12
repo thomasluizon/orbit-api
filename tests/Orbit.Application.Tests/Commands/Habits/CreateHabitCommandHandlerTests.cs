@@ -325,6 +325,25 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_UserTimezoneAheadOfUtc_UsesUserTodayNotUtcToday()
+    {
+        var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+        var userToday = utcToday.AddDays(1);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(userToday);
+
+        var command = new CreateHabitCommand(
+            UserId, "Timezone Habit", null, FrequencyUnit.Day, 1);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.DueDate == userToday && h.DueDate != utcToday),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WithOptions_PassesDaysAndTimes()
     {
         var options = new HabitCommandOptions(

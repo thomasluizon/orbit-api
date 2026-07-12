@@ -40,8 +40,8 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_ValidIds_DeletesAllHabits()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
@@ -66,7 +66,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_SomeNotFound_ReportsPartialFailure()
     {
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var missingId = Guid.NewGuid();
 
         _habitRepo.FindTrackedAsync(
@@ -105,7 +105,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>())
