@@ -39,4 +39,25 @@ public class SkipHabitCommandValidatorTests
         var result = _validator.TestValidate(ValidCommand() with { Date = new DateOnly(2026, 4, 3) });
         result.ShouldNotHaveAnyValidationErrors();
     }
+
+    [Fact]
+    public void Validate_NullDate_NoDateError()
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Date = null });
+        result.ShouldNotHaveValidationErrorFor(x => x.Date);
+    }
+
+    [Fact]
+    public void Validate_DateOnlyMinValueSentinel_HasError()
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Date = DateOnly.MinValue });
+        result.ShouldHaveValidationErrorFor(x => x.Date);
+    }
+
+    [Fact]
+    public void Validate_RealPastDate_NoError()
+    {
+        var result = _validator.TestValidate(ValidCommand() with { Date = new DateOnly(2020, 1, 1) });
+        result.ShouldNotHaveValidationErrorFor(x => x.Date);
+    }
 }
