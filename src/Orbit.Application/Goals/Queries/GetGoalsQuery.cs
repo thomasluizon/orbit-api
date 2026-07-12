@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
@@ -49,27 +50,22 @@ public class GetGoalsQueryHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
 
-        var allGoals = await goalRepository.FindAsync(
-            g => g.UserId == request.UserId,
+        var statusFilter = request.StatusFilter;
+        Expression<Func<Goal, bool>> predicate = statusFilter.HasValue
+            ? g => g.UserId == request.UserId && g.Status == statusFilter.Value
+            : g => g.UserId == request.UserId;
+
+        var (pageGoals, totalCount) = await goalRepository.FindPagedAsync(
+            predicate,
+            q => q.OrderBy(g => g.Position).ThenBy(g => g.CreatedAtUtc),
+            request.Page,
+            request.PageSize,
             q => q.Include(g => g.Habits),
             cancellationToken);
 
-        IEnumerable<Goal> filtered = allGoals;
-
-        if (request.StatusFilter.HasValue)
-            filtered = filtered.Where(g => g.Status == request.StatusFilter.Value);
-
-        var ordered = filtered
-            .OrderBy(g => g.Position)
-            .ThenBy(g => g.CreatedAtUtc)
-            .ToList();
-
-        var totalCount = ordered.Count;
         var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
 
-        var items = ordered
-            .Skip((request.Page - 1) * request.PageSize)
-            .Take(request.PageSize)
+        var items = pageGoals
             .Select(g => MapToDto(g, userToday, ResolveCurrentValue(g, freshStreakValues)))
             .ToList();
 

@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -23,6 +22,7 @@ public record GetGoalProgressHistoryQuery(
 /// </summary>
 public class GetGoalProgressHistoryQueryHandler(
     IGenericRepository<Goal> goalRepository,
+    IGenericRepository<GoalProgressLog> progressLogRepository,
     IPayGateService payGate) : IRequestHandler<GetGoalProgressHistoryQuery, Result<GoalProgressHistoryResponse>>
 {
     public async Task<Result<GoalProgressHistoryResponse>> Handle(GetGoalProgressHistoryQuery request, CancellationToken cancellationToken)
@@ -31,21 +31,25 @@ public class GetGoalProgressHistoryQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalProgressHistoryResponse>();
 
-        var goals = await goalRepository.FindAsync(
+        var goalExists = await goalRepository.AnyAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            q => q.Include(g => g.ProgressLogs),
             cancellationToken);
-        var goal = goals.FirstOrDefault();
-        if (goal is null)
+        if (!goalExists)
             return Result.Failure<GoalProgressHistoryResponse>(ErrorMessages.GoalNotFound);
 
-        var points = goal.ProgressLogs
+        var fromUtc = request.DateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var toExclusiveUtc = request.DateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+        var logs = await progressLogRepository.FindAsync(
+            l => l.GoalId == request.GoalId && l.CreatedAtUtc >= fromUtc && l.CreatedAtUtc < toExclusiveUtc,
+            cancellationToken);
+
+        var points = logs
             .Select(l => new GoalProgressHistoryPoint(
                 DateOnly.FromDateTime(l.CreatedAtUtc), l.Value, l.PreviousValue, l.Note))
-            .Where(p => p.Date >= request.DateFrom && p.Date <= request.DateTo)
             .OrderBy(p => p.Date)
             .ToList();
 
-        return Result.Success(new GoalProgressHistoryResponse(goal.Id, points));
+        return Result.Success(new GoalProgressHistoryResponse(request.GoalId, points));
     }
 }

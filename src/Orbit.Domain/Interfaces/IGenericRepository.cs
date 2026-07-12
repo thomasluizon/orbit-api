@@ -34,6 +34,27 @@ public interface IGenericRepository<T> where T : Entity
     /// </summary>
     Task<T?> FindOneTrackedIgnoringFiltersAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<int> CountAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sums <paramref name="selector"/> over the rows matching <paramref name="predicate"/> in the
+    /// database, returning 0 when none match. Lets a caller aggregate without materializing the rows.
+    /// </summary>
+    Task<int> SumAsync(Expression<Func<T, bool>> predicate, Expression<Func<T, int>> selector, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs a filtered, ordered page entirely in the database: the predicate, ordering, and
+    /// <c>Skip</c>/<c>Take</c> translate to SQL so only one page of rows is materialized, alongside the
+    /// total count of predicate-matched rows. <paramref name="orderBy"/> must impose a deterministic
+    /// order for stable paging; <paramref name="includes"/> eager-loads navigations on the page.
+    /// </summary>
+    Task<(IReadOnlyList<T> Items, int TotalCount)> FindPagedAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IOrderedQueryable<T>> orderBy,
+        int page,
+        int pageSize,
+        Func<IQueryable<T>, IQueryable<T>>? includes = null,
+        CancellationToken cancellationToken = default);
+
     Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
 
     /// <summary>

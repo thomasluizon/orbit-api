@@ -40,13 +40,16 @@ public class GetXpHistoryQueryHandler(
         var fromUtc = request.DateFrom.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var toExclusiveUtc = request.DateTo.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
-        var rows = await xpAwardLogRepository.FindAsync(
-            x => x.UserId == request.UserId && x.AwardedAtUtc < toExclusiveUtc,
+        var baseline = await xpAwardLogRepository.SumAsync(
+            x => x.UserId == request.UserId && x.AwardedAtUtc < fromUtc,
+            x => x.Amount,
             cancellationToken);
 
-        var baseline = rows.Where(r => r.AwardedAtUtc < fromUtc).Sum(r => r.Amount);
-        var dailyByDate = rows
-            .Where(r => r.AwardedAtUtc >= fromUtc)
+        var inRangeRows = await xpAwardLogRepository.FindAsync(
+            x => x.UserId == request.UserId && x.AwardedAtUtc >= fromUtc && x.AwardedAtUtc < toExclusiveUtc,
+            cancellationToken);
+
+        var dailyByDate = inRangeRows
             .GroupBy(r => DateOnly.FromDateTime(r.AwardedAtUtc))
             .ToDictionary(g => g.Key, g => g.Sum(r => r.Amount));
 
