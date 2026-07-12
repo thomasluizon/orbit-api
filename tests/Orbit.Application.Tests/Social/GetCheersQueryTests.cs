@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Social.Queries;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
@@ -10,33 +11,36 @@ namespace Orbit.Application.Tests.Social;
 public class GetCheersQueryTests
 {
     private readonly IGenericRepository<User> _userRepository = Substitute.For<IGenericRepository<User>>();
-    private readonly IGenericRepository<Cheer> _cheerRepository = Substitute.For<IGenericRepository<Cheer>>();
-    private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
+    private readonly ISocialGraphReader _reader = Substitute.For<ISocialGraphReader>();
+    private readonly TimeProvider _timeProvider = Substitute.For<TimeProvider>();
     private readonly GetCheersQueryHandler _handler;
 
     private readonly User _caller = SocialTestHelpers.OptedInUser("Caller");
     private readonly User _friend = SocialTestHelpers.OptedInUser("Friend");
+    private readonly DateTime _now = new(2026, 7, 12, 10, 0, 0, DateTimeKind.Utc);
 
     public GetCheersQueryTests()
     {
         var guard = new SocialAccessGuard(_userRepository);
-        _handler = new GetCheersQueryHandler(guard, _cheerRepository, _blockedUserRepository, _userRepository);
+        _handler = new GetCheersQueryHandler(guard, _reader, _userRepository, _timeProvider);
         SocialTestHelpers.StubUsers(_userRepository, _caller, _friend);
-        SocialTestHelpers.StubFind(_blockedUserRepository);
+        _timeProvider.GetUtcNow().Returns(new DateTimeOffset(_now));
     }
 
+    private void StubReader(bool isReceived, params Cheer[] cheers) =>
+        _reader.ReadCheersPageAsync(Arg.Any<Guid>(), isReceived, Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<Cheer>)cheers.ToList());
+
     [Fact]
-    public async Task Received_ReturnsCheersWithSenderDisplayFields()
+    public async Task Received_MapsSenderDisplayFieldsFromReaderPage()
     {
         var received = Cheer.Create(_friend.Id, _caller.Id, Guid.NewGuid(), "proud of you").Value;
-        var sent = Cheer.Create(_caller.Id, _friend.Id, Guid.NewGuid(), "go go").Value;
-        SocialTestHelpers.StubFind(_cheerRepository, received, sent);
+        StubReader(isReceived: true, received);
 
         var result = await _handler.Handle(new GetCheersQuery(_caller.Id, "received"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Items.Should().ContainSingle();
-        var item = result.Value.Items[0];
+        var item = result.Value.Items.Should().ContainSingle().Subject;
         item.SenderId.Should().Be(_friend.Id);
         item.SenderDisplayName.Should().Be("Friend");
         item.SenderHandle.Should().Be(_friend.Handle);
@@ -44,33 +48,48 @@ public class GetCheersQueryTests
     }
 
     [Fact]
-    public async Task Sent_ReturnsOnlyCheersTheCallerSent()
+    public async Task Sent_QueriesReaderWithSentDirection()
     {
-        var received = Cheer.Create(_friend.Id, _caller.Id, Guid.NewGuid(), "a").Value;
-        var sent = Cheer.Create(_caller.Id, _friend.Id, Guid.NewGuid(), "b").Value;
-        SocialTestHelpers.StubFind(_cheerRepository, received, sent);
+        var sent = Cheer.Create(_caller.Id, _friend.Id, Guid.NewGuid(), "go go").Value;
+        StubReader(isReceived: false, sent);
 
         var result = await _handler.Handle(new GetCheersQuery(_caller.Id, "sent"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items.Should().ContainSingle(c => c.Id == sent.Id);
+        await _reader.Received(1).ReadCheersPageAsync(
+            _caller.Id, false, Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task BlockedUser_CheersExcludedFromBothDirections()
+    public async Task Handle_QueriesReaderWithLookbackWindowAndPageCap()
     {
-        var received = Cheer.Create(_friend.Id, _caller.Id, Guid.NewGuid(), "before block").Value;
-        var sent = Cheer.Create(_caller.Id, _friend.Id, Guid.NewGuid(), "before block").Value;
-        SocialTestHelpers.StubFind(_cheerRepository, received, sent);
-        SocialTestHelpers.StubFind(_blockedUserRepository, BlockedUser.Create(_caller.Id, _friend.Id).Value);
+        StubReader(isReceived: true);
 
-        var receivedResult = await _handler.Handle(new GetCheersQuery(_caller.Id, "received"), CancellationToken.None);
-        var sentResult = await _handler.Handle(new GetCheersQuery(_caller.Id, "sent"), CancellationToken.None);
+        await _handler.Handle(new GetCheersQuery(_caller.Id, "received"), CancellationToken.None);
 
-        receivedResult.IsSuccess.Should().BeTrue();
-        receivedResult.Value.Items.Should().BeEmpty();
-        sentResult.IsSuccess.Should().BeTrue();
-        sentResult.Value.Items.Should().BeEmpty();
+        await _reader.Received(1).ReadCheersPageAsync(
+            _caller.Id,
+            true,
+            _now.AddDays(-AppConstants.CheersLookbackDays),
+            AppConstants.MaxCheersReturned,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_UnknownSender_MapsEmptyDisplayFields()
+    {
+        var stranger = Guid.NewGuid();
+        var received = Cheer.Create(stranger, _caller.Id, null, null).Value;
+        StubReader(isReceived: true, received);
+
+        var result = await _handler.Handle(new GetCheersQuery(_caller.Id, "received"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.Items.Should().ContainSingle().Subject;
+        item.SenderId.Should().Be(stranger);
+        item.SenderHandle.Should().BeEmpty();
+        item.SenderDisplayName.Should().BeEmpty();
     }
 
     [Fact]
@@ -82,5 +101,7 @@ public class GetCheersQueryTests
         var result = await _handler.Handle(new GetCheersQuery(optedOut.Id, "received"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+        await _reader.DidNotReceive().ReadCheersPageAsync(
+            Arg.Any<Guid>(), Arg.Any<bool>(), Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 }

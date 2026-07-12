@@ -64,6 +64,8 @@ public static class AppConstants
     public const int MaxCheerNoteLength = DomainConstants.MaxCheerNoteLength;
     public const int MaxReportDetailsLength = DomainConstants.MaxReportDetailsLength;
     public const int MaxCheersPerDay = 20;
+    public const int MaxCheersReturned = 200;
+    public const int CheersLookbackDays = 90;
     public const int MaxFriendRequestsPerDay = 30;
     public const int MaxAccountabilityPairs = 20;
     public const int MaxAccountabilityNoteLength = DomainConstants.MaxAccountabilityNoteLength;
