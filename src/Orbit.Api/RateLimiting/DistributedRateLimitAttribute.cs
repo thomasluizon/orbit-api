@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Orbit.Api.Extensions;
@@ -102,6 +104,9 @@ public sealed partial class DistributedRateLimitFilter(
         if (TryResolveEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
             return emailPartitionKey;
 
+        if (TryResolveRefreshTokenPartitionKey(policyName, actionArguments, out var refreshPartitionKey))
+            return refreshPartitionKey;
+
         return $"ip:{context.GetClientIpAddress() ?? "unknown"}";
     }
 
@@ -146,6 +151,53 @@ public sealed partial class DistributedRateLimitFilter(
 
         return false;
     }
+
+    private static readonly HashSet<string> RefreshTokenPartitionedPolicies =
+        new(StringComparer.OrdinalIgnoreCase) { "refresh" };
+
+    /// <summary>
+    /// For unauthenticated requests under the <c>refresh</c> policy, partitions by a SHA-256 hash of the
+    /// request's refresh token instead of the caller IP. A refresh token uniquely identifies one user
+    /// session, so hashing it yields a stable per-session bucket that a stolen or targeted token cannot
+    /// escape by rotating source IPs — closing the cross-IP brute-force/replay gap that IP partitioning
+    /// leaves open. The token is hashed so the partition key (which is logged) never carries the raw
+    /// secret. Returns false when the policy isn't refresh partitioned or no non-blank refresh token is
+    /// present, so the caller falls back to IP partitioning.
+    /// </summary>
+    public static bool TryResolveRefreshTokenPartitionKey(
+        string policyName,
+        IEnumerable<object?> actionArguments,
+        out string partitionKey)
+    {
+        partitionKey = string.Empty;
+
+        if (!RefreshTokenPartitionedPolicies.Contains(policyName))
+            return false;
+
+        foreach (var argument in actionArguments)
+        {
+            if (argument is null)
+                continue;
+
+            var tokenProperty = argument.GetType().GetProperty(
+                "RefreshToken",
+                BindingFlags.Public | BindingFlags.Instance);
+
+            if (tokenProperty?.PropertyType != typeof(string))
+                continue;
+
+            if (tokenProperty.GetValue(argument) is not string rawToken || string.IsNullOrWhiteSpace(rawToken))
+                continue;
+
+            partitionKey = $"{policyName.ToLowerInvariant()}:token:{HashRefreshToken(rawToken)}";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string HashRefreshToken(string refreshToken) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
 
     [LoggerMessage(
         EventId = 1,

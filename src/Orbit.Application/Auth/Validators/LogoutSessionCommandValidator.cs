@@ -7,7 +7,6 @@ public class LogoutSessionCommandValidator : AbstractValidator<LogoutSessionComm
 {
     public LogoutSessionCommandValidator()
     {
-        RuleFor(x => x.RefreshToken)
-            .NotEmpty();
+        RefreshTokenRules.AddRefreshTokenRules(RuleFor(x => x.RefreshToken));
     }
 }

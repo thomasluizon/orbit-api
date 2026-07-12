@@ -62,10 +62,13 @@ public class AuthSessionService(
             return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         var newRefreshToken = GenerateRefreshToken();
-        session.Rotate(
+        var rotateResult = session.Rotate(
             HashToken(newRefreshToken),
             GetRefreshExpiry(nowUtc),
             nowUtc);
+
+        if (rotateResult.IsFailure)
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
 
         try
         {
@@ -93,6 +96,27 @@ public class AuthSessionService(
             return Result.Failure(ErrorMessages.InvalidSession);
 
         session.Revoke(DateTime.UtcNow);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+
+    public async Task<Result> RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty)
+            return Result.Failure(DomainErrors.UserIdRequired);
+
+        var nowUtc = DateTime.UtcNow;
+        var activeSessions = await userSessionRepository.FindTrackedAsync(
+            s => s.UserId == userId && s.RevokedAtUtc == null,
+            cancellationToken);
+
+        if (activeSessions.Count == 0)
+            return Result.Success();
+
+        foreach (var session in activeSessions)
+            session.Revoke(nowUtc);
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

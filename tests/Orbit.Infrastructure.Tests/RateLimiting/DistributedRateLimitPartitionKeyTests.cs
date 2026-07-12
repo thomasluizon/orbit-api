@@ -74,9 +74,79 @@ public class DistributedRateLimitPartitionKeyTests
         partitionKey.Should().BeEmpty();
     }
 
+    private const string RefreshTokenA =
+        "AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555";
+
+    private const string RefreshTokenB =
+        "1111AAAA2222BBBB3333CCCC4444DDDD5555EEEE6666FFFF1111AAAA2222BBBB3333CCCC4444DDDD5555EEEE6666FFFF1111AAAA2222BBBB3333CCCC4444DDDD5555EEEE";
+
+    [Fact]
+    public void TryResolveRefreshTokenPartitionKey_Refresh_HashesTokenUnderTokenPrefixWithoutLeakingSecret()
+    {
+        var resolved = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
+
+        resolved.Resolved.Should().BeTrue();
+        resolved.PartitionKey.Should().StartWith("refresh:token:");
+        resolved.PartitionKey.Should().NotContain(RefreshTokenA);
+    }
+
+    [Fact]
+    public void TryResolveRefreshTokenPartitionKey_Refresh_SameTokenMapsToSameKeyAcrossRequests()
+    {
+        var first = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
+        var second = ResolveRefreshFor("refresh", new AuthController.RefreshSessionOperationRequest(RefreshTokenA));
+
+        first.PartitionKey.Should().Be(second.PartitionKey);
+    }
+
+    [Fact]
+    public void TryResolveRefreshTokenPartitionKey_Refresh_DifferentTokensMapToDifferentKeys()
+    {
+        var first = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenA));
+        var second = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest(RefreshTokenB));
+
+        first.PartitionKey.Should().NotBe(second.PartitionKey);
+    }
+
+    [Fact]
+    public void TryResolveRefreshTokenPartitionKey_Refresh_FallsBackWhenTokenIsBlank()
+    {
+        var resolved = ResolveRefreshFor("refresh", new AuthController.RefreshSessionRequest("   "));
+
+        resolved.Resolved.Should().BeFalse();
+        resolved.PartitionKey.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void TryResolveRefreshTokenPartitionKey_Refresh_FallsBackWhenNoTokenArgument()
+    {
+        var resolved = ResolveRefreshFor("refresh", new AuthController.SendCodeRequest("a@x.com"));
+
+        resolved.Resolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryResolveRefreshTokenPartitionKey_DoesNotApplyToUnrelatedPolicy()
+    {
+        var resolved = ResolveRefreshFor("auth", new AuthController.RefreshSessionRequest(RefreshTokenA));
+
+        resolved.Resolved.Should().BeFalse();
+        resolved.PartitionKey.Should().BeEmpty();
+    }
+
     private static (bool Resolved, string PartitionKey) ResolveFor(string policyName, object request)
     {
         var resolved = DistributedRateLimitFilter.TryResolveEmailPartitionKey(
+            policyName,
+            [request],
+            out var partitionKey);
+
+        return (resolved, partitionKey);
+    }
+
+    private static (bool Resolved, string PartitionKey) ResolveRefreshFor(string policyName, object request)
+    {
+        var resolved = DistributedRateLimitFilter.TryResolveRefreshTokenPartitionKey(
             policyName,
             [request],
             out var partitionKey);

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -78,7 +79,26 @@ public class DistributedRateLimitFilterTests
         context.Result.Should().NotBeNull();
     }
 
-    private static (ActionExecutingContext Context, HttpContext HttpContext) CreateExecutingContext()
+    [Fact]
+    public async Task RefreshPolicy_PartitionsUnauthenticatedRequestByRefreshTokenNotIp()
+    {
+        const string refreshToken =
+            "AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555FFFF6666AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555";
+        string? capturedPartitionKey = null;
+        _service.TryAcquireAsync("refresh", Arg.Do<string>(key => capturedPartitionKey = key), Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 1, 10, DateTime.UtcNow.AddMinutes(1)));
+
+        var filter = new DistributedRateLimitFilter("refresh", _service, _logger);
+        var (context, _) = CreateExecutingContext(new AuthController.RefreshSessionRequest(refreshToken));
+
+        await filter.OnActionExecutionAsync(context, () => Task.FromResult(CreateExecutedContext(context)));
+
+        capturedPartitionKey.Should().StartWith("refresh:token:");
+        capturedPartitionKey.Should().NotContain(refreshToken);
+    }
+
+    private static (ActionExecutingContext Context, HttpContext HttpContext) CreateExecutingContext(
+        params object?[] actionArguments)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Request.Method = "POST";
@@ -89,10 +109,14 @@ public class DistributedRateLimitFilterTests
             new RouteData(),
             new ControllerActionDescriptor());
 
+        var arguments = new Dictionary<string, object?>();
+        for (var index = 0; index < actionArguments.Length; index++)
+            arguments[$"arg{index}"] = actionArguments[index];
+
         var executingContext = new ActionExecutingContext(
             actionContext,
             [],
-            new Dictionary<string, object?>(),
+            arguments,
             controller: new object());
 
         return (executingContext, httpContext);

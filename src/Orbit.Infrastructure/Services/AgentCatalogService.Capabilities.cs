@@ -1004,6 +1004,7 @@ public partial class AgentCatalogService
                     "AuthController.RefreshOperation",
                     "AuthController.Logout",
                     "AuthController.LogoutOperation",
+                    "AuthController.LogoutAll",
                     "OAuthController.GetMetadata",
                     "OAuthController.Register",
                     "OAuthController.GetProtectedResourceMetadata",

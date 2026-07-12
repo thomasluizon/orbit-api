@@ -35,11 +35,18 @@ public class UserSession : Entity
         RevokedAtUtc is null &&
         (!ExpiresAtUtc.HasValue || ExpiresAtUtc.Value > nowUtc);
 
-    public void Rotate(string newTokenHash, DateTime? newExpiresAtUtc, DateTime usedAtUtc)
+    public Result Rotate(string newTokenHash, DateTime? newExpiresAtUtc, DateTime usedAtUtc)
     {
+        if (string.IsNullOrWhiteSpace(newTokenHash))
+            return Result.Failure(DomainErrors.TokenHashRequired);
+
+        if (!CanUse(usedAtUtc))
+            return Result.Failure(DomainErrors.SessionNotActive);
+
         TokenHash = newTokenHash;
         ExpiresAtUtc = newExpiresAtUtc;
         LastUsedAtUtc = usedAtUtc;
+        return Result.Success();
     }
 
     public void Revoke(DateTime revokedAtUtc)
