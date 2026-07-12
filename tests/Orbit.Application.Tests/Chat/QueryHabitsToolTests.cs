@@ -454,7 +454,7 @@ public class QueryHabitsToolTests
         string? emoji = null)
     {
         var habit = Habit.Create(new HabitCreateParams(UserId, title, freq, qty,
-            DueDate: dueDate, IsBadHabit: isBadHabit, IsGeneral: isGeneral,
+            DueDate: dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow), IsBadHabit: isBadHabit, IsGeneral: isGeneral,
             ParentHabitId: parentId, Emoji: emoji)).Value;
         if (position.HasValue) habit.SetPosition(position.Value);
         return habit;

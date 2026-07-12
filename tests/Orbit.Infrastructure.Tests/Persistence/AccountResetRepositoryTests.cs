@@ -130,7 +130,7 @@ public class AccountResetRepositoryTests : IDisposable
         _dbContext.Goals.Add(goal);
 
         var habit = Habit.Create(new HabitCreateParams(
-            userId, "Habit", FrequencyUnit.Day, 1)).Value;
+            userId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         habit.Log(today, "note");
         habit.Log(today.AddDays(-1), "note");
@@ -225,7 +225,7 @@ public class AccountResetRepositoryTests : IDisposable
         SeedUser(unrelatedCounterpartId, "unrelated-counterpart@example.com");
 
         var cheeredHabit = Habit.Create(new HabitCreateParams(
-            _otherUserId, "Habit", FrequencyUnit.Day, 1)).Value;
+            _otherUserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         _dbContext.Habits.Add(cheeredHabit);
 
         SeedSocialDataForUser(_userId, _otherUserId, cheeredHabit.Id);

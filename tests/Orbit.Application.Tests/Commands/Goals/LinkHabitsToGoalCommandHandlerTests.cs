@@ -32,8 +32,8 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_ValidLink_LinksHabitsToGoal()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         _goalRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
@@ -91,7 +91,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_EmptyHabitList_ClearsExistingLinks()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1)).Value;
+        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(existingHabit);
 
         _goalRepo.FindOneTrackedAsync(
@@ -117,8 +117,8 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_ReplacesExistingLinks()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var oldHabit = Habit.Create(new HabitCreateParams(UserId, "Old", FrequencyUnit.Day, 1)).Value;
-        var newHabit = Habit.Create(new HabitCreateParams(UserId, "New", FrequencyUnit.Day, 1)).Value;
+        var oldHabit = Habit.Create(new HabitCreateParams(UserId, "Old", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var newHabit = Habit.Create(new HabitCreateParams(UserId, "New", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(oldHabit);
 
         _goalRepo.FindOneTrackedAsync(
@@ -161,7 +161,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     public async Task Handle_ForeignOrMissingHabitId_ReturnsFailureWithoutClearing()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;
-        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1)).Value;
+        var existingHabit = Habit.Create(new HabitCreateParams(UserId, "Existing", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(existingHabit);
 
         _goalRepo.FindOneTrackedAsync(

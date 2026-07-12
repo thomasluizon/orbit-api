@@ -174,7 +174,7 @@ public class GetPublicProfileQueryHandlerTests
 
     private static Habit HabitWithCompletions(Guid userId, string title, DateOnly today, int completions)
     {
-        var habit = Habit.Create(new HabitCreateParams(userId, title, FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(userId, title, FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         for (var i = 0; i < completions; i++)
             habit.Log(today.AddDays(-i), advanceDueDate: false);
         return habit;

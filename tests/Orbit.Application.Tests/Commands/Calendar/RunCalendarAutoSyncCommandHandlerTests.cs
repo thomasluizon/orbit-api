@@ -185,6 +185,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
 
         var existingHabit = Habit.Create(new HabitCreateParams(
             user.Id, "Daily standup", FrequencyUnit.Day, 1,
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
             GoogleEventId: "evt_a")).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { existingHabit }.AsReadOnly());
@@ -659,7 +660,7 @@ public class RunCalendarAutoSyncCommandHandlerTests
             .Returns(new GoogleTokenRefreshOutcome("new_access", GoogleTokenRefreshResult.Success, null));
 
         var existingHabit = Habit.Create(new HabitCreateParams(
-            user.Id, "Standup", FrequencyUnit.Day, 1, GoogleEventId: "evt_a")).Value;
+            user.Id, "Standup", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow), GoogleEventId: "evt_a")).Value;
         _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { existingHabit }.AsReadOnly());
         _fetcher.FetchAsync(Arg.Any<string>(), Arg.Any<IReadOnlyCollection<string>?>(), Arg.Any<DateTime?>(), Arg.Any<CancellationToken>())

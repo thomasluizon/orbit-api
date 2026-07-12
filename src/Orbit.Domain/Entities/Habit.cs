@@ -11,10 +11,10 @@ public record HabitCreateParams(
     string Title,
     FrequencyUnit? FrequencyUnit,
     int? FrequencyQuantity,
+    DateOnly DueDate,
     string? Description = null,
     IReadOnlyList<System.DayOfWeek>? Days = null,
     bool IsBadHabit = false,
-    DateOnly? DueDate = null,
     TimeOnly? DueTime = null,
     TimeOnly? DueEndTime = null,
     Guid? ParentHabitId = null,
@@ -129,8 +129,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (reminderValidation is not null)
             return Result.Failure<Habit>(reminderValidation);
 
-        var effectiveDueDate = p.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-
         return Result.Success(new Habit
         {
             UserId = p.UserId,
@@ -143,9 +141,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsBadHabit = p.IsBadHabit,
             IsGeneral = p.IsGeneral,
             IsFlexible = p.IsFlexible,
-            DueDate = effectiveDueDate,
+            DueDate = p.DueDate,
             OriginalDayOfMonth = p.FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year
-                ? effectiveDueDate.Day
+                ? p.DueDate.Day
                 : null,
             DueTime = p.DueTime,
             DueEndTime = p.DueEndTime,

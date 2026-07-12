@@ -41,7 +41,7 @@ internal static class HabitInvariants
     public static AppError? ValidateDateOptions(
         TimeOnly? dueTime, TimeOnly? dueEndTime,
         DateOnly? endDate, FrequencyUnit? frequencyUnit,
-        bool isGeneral, DateOnly? dueDate)
+        bool isGeneral, DateOnly dueDate)
     {
         if (dueEndTime.HasValue && dueTime.HasValue && dueEndTime.Value <= dueTime.Value)
             return DomainErrors.EndTimeBeforeStartTime;
@@ -49,8 +49,7 @@ internal static class HabitInvariants
         if (endDate.HasValue && frequencyUnit is null && !isGeneral)
             return DomainErrors.OneTimeTaskHasEndDate;
 
-        var effectiveDueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        if (endDate.HasValue && endDate.Value < effectiveDueDate)
+        if (endDate.HasValue && endDate.Value < dueDate)
             return DomainErrors.EndDateBeforeStartDate;
 
         return null;

@@ -712,7 +712,7 @@ public class GoalTests
     public void AddHabit_AddsHabit()
     {
         var goal = CreateValidGoal();
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         goal.AddHabit(habit);
 
@@ -723,7 +723,7 @@ public class GoalTests
     public void AddHabit_DuplicateHabit_NoOp()
     {
         var goal = CreateValidGoal();
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         goal.AddHabit(habit);
         goal.AddHabit(habit);
@@ -735,7 +735,7 @@ public class GoalTests
     public void RemoveHabit_ExistingHabit_Removes()
     {
         var goal = CreateValidGoal();
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(habit);
 
         goal.RemoveHabit(habit);
@@ -747,7 +747,7 @@ public class GoalTests
     public void RemoveHabit_NonExistentHabit_NoOp()
     {
         var goal = CreateValidGoal();
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
 
         goal.RemoveHabit(habit);
 
@@ -758,7 +758,7 @@ public class GoalTests
     public void RemoveHabit_LastHabitOnStreakGoal_ResetsCurrentValueToZero()
     {
         var goal = CreateStreakGoal(targetValue: 7);
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Meditate", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Meditate", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(habit);
         goal.SyncStreakProgress(5);
         goal.CurrentValue.Should().Be(5);
@@ -774,8 +774,8 @@ public class GoalTests
     public void RemoveHabit_NotLastHabitOnStreakGoal_KeepsCurrentValue()
     {
         var goal = CreateStreakGoal(targetValue: 7);
-        var habit1 = Habit.Create(new HabitCreateParams(ValidUserId, "Meditate", FrequencyUnit.Day, 1)).Value;
-        var habit2 = Habit.Create(new HabitCreateParams(ValidUserId, "Stretch", FrequencyUnit.Day, 1)).Value;
+        var habit1 = Habit.Create(new HabitCreateParams(ValidUserId, "Meditate", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(ValidUserId, "Stretch", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(habit1);
         goal.AddHabit(habit2);
         goal.SyncStreakProgress(5);
@@ -790,7 +790,7 @@ public class GoalTests
     public void RemoveHabit_LastHabitOnStandardGoal_DoesNotResetCurrentValue()
     {
         var goal = CreateValidGoal(targetValue: 100);
-        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1)).Value;
+        var habit = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         goal.AddHabit(habit);
         goal.UpdateProgress(40);
 
