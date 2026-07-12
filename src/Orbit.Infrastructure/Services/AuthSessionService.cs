@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
@@ -66,7 +67,15 @@ public class AuthSessionService(
             GetRefreshExpiry(nowUtc),
             nowUtc);
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            unitOfWork.DiscardChanges();
+            return Result.Failure<SessionTokens>(ErrorMessages.InvalidSession);
+        }
 
         return Result.Success(new SessionTokens(
             tokenService.GenerateToken(user.Id, user.Email),

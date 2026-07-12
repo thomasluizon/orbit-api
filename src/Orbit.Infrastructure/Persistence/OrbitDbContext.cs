@@ -137,17 +137,20 @@ public class OrbitDbContext : DbContext
     /// <summary>
     /// Maps the Postgres <c>xmin</c> system column as an optimistic-concurrency token on the
     /// entities with a read-modify-write path that loses updates under concurrency: <see cref="User"/>
-    /// (ad-reward grant + AI message counter), <see cref="Goal"/> (progress accumulation), and
-    /// <see cref="Referral"/> (one-time reward-grant claim). A conflicting concurrent write makes
-    /// SaveChanges throw <c>DbUpdateConcurrencyException</c>, which command handlers retry against
-    /// fresh state or treat as an already-claimed no-op. Uses the system column, so it adds no schema.
-    /// Postgres-only because <c>xmin</c> does not exist on the in-memory/SQLite test providers.
+    /// (ad-reward grant + AI message counter), <see cref="Goal"/> (progress accumulation),
+    /// <see cref="Referral"/> (one-time reward-grant claim), and <see cref="UserSession"/> (refresh-token
+    /// rotation — two concurrent refreshes of the same token must not both rotate). A conflicting
+    /// concurrent write makes SaveChanges throw <c>DbUpdateConcurrencyException</c>, which command
+    /// handlers retry against fresh state or treat as an already-claimed no-op. Uses the system column,
+    /// so it adds no schema. Postgres-only because <c>xmin</c> does not exist on the in-memory/SQLite
+    /// test providers.
     /// </summary>
     private static void ConfigureConcurrencyTokens(ModelBuilder modelBuilder)
     {
         MapXminToken(modelBuilder.Entity<User>());
         MapXminToken(modelBuilder.Entity<Goal>());
         MapXminToken(modelBuilder.Entity<Referral>());
+        MapXminToken(modelBuilder.Entity<UserSession>());
     }
 
     private static void MapXminToken<T>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<T> entity)
