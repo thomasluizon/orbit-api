@@ -67,6 +67,8 @@ public static partial class ServiceCollectionExtensions
             Stripe.StripeConfiguration.ApiKey = stripeKey;
         }
 
+        Stripe.StripeConfiguration.MaxNetworkRetries = 2;
+
         builder.Services.AddSingleton<Stripe.CustomerService>();
         builder.Services.AddSingleton<Stripe.Checkout.SessionService>();
         builder.Services.AddSingleton<Stripe.BillingPortal.SessionService>();

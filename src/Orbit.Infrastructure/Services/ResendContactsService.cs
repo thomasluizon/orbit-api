@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Common;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -14,12 +15,14 @@ public sealed partial class ResendContactsService(
     {
         var client = httpClientFactory.CreateClient("Resend");
 
-        var content = new StringContent(
-            JsonSerializer.Serialize(new { email, unsubscribed = false }),
-            Encoding.UTF8,
-            "application/json");
+        var serializedPayload = JsonSerializer.Serialize(new { email, unsubscribed = false });
 
-        var response = await client.PostAsync("/contacts", content, cancellationToken);
+        using var response = await HttpRetryPolicy.SendWithRetryAsync(
+            () => client.PostAsync(
+                "/contacts",
+                new StringContent(serializedPayload, Encoding.UTF8, "application/json"),
+                cancellationToken),
+            cancellationToken);
 
         if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Conflict)
         {

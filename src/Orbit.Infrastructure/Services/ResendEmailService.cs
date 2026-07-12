@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Common;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Email;
 
@@ -255,15 +256,17 @@ public partial class ResendEmailService(
         object payload = replyTo != null
             ? new { from = _settings.FromEmail, to = new[] { to }, subject, html, text, reply_to = replyTo }
             : new { from = _settings.FromEmail, to = new[] { to }, subject, html, text };
-
-        var content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
+        var serializedPayload = JsonSerializer.Serialize(payload);
 
         try
         {
-            var response = await client.PostAsync("/emails", content, cancellationToken);
+            using var response = await HttpRetryPolicy.SendWithRetryAsync(
+                () => client.PostAsync(
+                    "/emails",
+                    new StringContent(serializedPayload, Encoding.UTF8, "application/json"),
+                    cancellationToken),
+                cancellationToken);
+
             if (response.IsSuccessStatusCode)
             {
                 if (logger.IsEnabled(LogLevel.Information))
