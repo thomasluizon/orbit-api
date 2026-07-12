@@ -1,7 +1,10 @@
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Orbit.Api.Extensions;
+using Orbit.Application.Auth.Validators;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -16,19 +19,25 @@ public sealed class DistributedRateLimitAttribute(string policyName) : Attribute
         => new DistributedRateLimitFilter(
             policyName,
             serviceProvider.GetRequiredService<IDistributedRateLimitService>(),
+            serviceProvider.GetRequiredService<IAuthSessionService>(),
             serviceProvider.GetRequiredService<ILogger<DistributedRateLimitFilter>>());
 }
 
 public sealed partial class DistributedRateLimitFilter(
     string policyName,
     IDistributedRateLimitService distributedRateLimitService,
+    IAuthSessionService authSessionService,
     ILogger<DistributedRateLimitFilter> logger) : IAsyncActionFilter
 {
     private const string FailOpenPolicy = "support";
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        var partitionKey = ResolvePartitionKey(policyName, context.HttpContext, context.ActionArguments.Values);
+        var partitionKey = await ResolvePartitionKeyAsync(
+            policyName,
+            context.HttpContext,
+            context.ActionArguments.Values,
+            context.HttpContext.RequestAborted);
         DistributedRateLimitDecision decision;
 
         try
@@ -94,13 +103,23 @@ public sealed partial class DistributedRateLimitFilter(
         await next();
     }
 
-    private static string ResolvePartitionKey(string policyName, HttpContext context, IEnumerable<object?> actionArguments)
+    private async Task<string> ResolvePartitionKeyAsync(
+        string policyName,
+        HttpContext context,
+        IEnumerable<object?> actionArguments,
+        CancellationToken cancellationToken)
     {
         if (context.User.Identity?.IsAuthenticated == true)
             return $"user:{context.GetUserId()}";
 
         if (TryResolveEmailPartitionKey(policyName, actionArguments, out var emailPartitionKey))
             return emailPartitionKey;
+
+        if (TryExtractRefreshToken(policyName, actionArguments, out var refreshToken)
+            && await authSessionService.HasSessionForTokenAsync(refreshToken, cancellationToken))
+        {
+            return BuildRefreshTokenPartitionKey(policyName, refreshToken);
+        }
 
         return $"ip:{context.GetClientIpAddress() ?? "unknown"}";
     }
@@ -146,6 +165,62 @@ public sealed partial class DistributedRateLimitFilter(
 
         return false;
     }
+
+    private static readonly HashSet<string> RefreshTokenPartitionedPolicies =
+        new(StringComparer.OrdinalIgnoreCase) { "refresh" };
+
+    /// <summary>
+    /// For unauthenticated requests under the <c>refresh</c> policy, extracts the request's refresh token
+    /// when it matches the exact server-issued shape (<see cref="RefreshTokenRules.IsWellFormed"/>). Format
+    /// alone is not enough to earn a per-session bucket: the caller additionally confirms the token maps to
+    /// a real stored session before partitioning by it, so a malformed OR well-formed-but-forged token —
+    /// the "vary the body to mint a fresh, never-throttled bucket" bypass, which is as cheap for an attacker
+    /// as minting a real token — never yields a private bucket and instead falls back to per-IP throttling.
+    /// Returns false when the policy isn't refresh partitioned or no well-formed refresh token is present.
+    /// </summary>
+    public static bool TryExtractRefreshToken(
+        string policyName,
+        IEnumerable<object?> actionArguments,
+        out string refreshToken)
+    {
+        refreshToken = string.Empty;
+
+        if (!RefreshTokenPartitionedPolicies.Contains(policyName))
+            return false;
+
+        foreach (var argument in actionArguments)
+        {
+            if (argument is null)
+                continue;
+
+            var tokenProperty = argument.GetType().GetProperty(
+                "RefreshToken",
+                BindingFlags.Public | BindingFlags.Instance);
+
+            if (tokenProperty?.PropertyType != typeof(string))
+                continue;
+
+            if (tokenProperty.GetValue(argument) is not string rawToken || !RefreshTokenRules.IsWellFormed(rawToken))
+                continue;
+
+            refreshToken = rawToken;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Builds the per-session rate-limit partition key for a refresh token already confirmed to map to a
+    /// real stored session. The token is SHA-256 hashed so the partition key (which is logged) never carries
+    /// the raw secret; the same token always maps to the same bucket, so a stolen or targeted token cannot
+    /// escape throttling by rotating source IPs.
+    /// </summary>
+    public static string BuildRefreshTokenPartitionKey(string policyName, string refreshToken) =>
+        $"{policyName.ToLowerInvariant()}:token:{HashRefreshToken(refreshToken)}";
+
+    private static string HashRefreshToken(string refreshToken) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
 
     [LoggerMessage(
         EventId = 1,

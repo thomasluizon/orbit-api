@@ -7,7 +7,6 @@ public class RefreshSessionCommandValidator : AbstractValidator<RefreshSessionCo
 {
     public RefreshSessionCommandValidator()
     {
-        RuleFor(x => x.RefreshToken)
-            .NotEmpty();
+        RefreshTokenRules.AddRefreshTokenRules(RuleFor(x => x.RefreshToken));
     }
 }

@@ -14,6 +14,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         new Dictionary<string, RateLimitPolicy>(StringComparer.OrdinalIgnoreCase)
         {
             ["auth"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
+            ["refresh"] = new(TimeSpan.FromMinutes(1), PermitLimit: 10, SegmentCount: 1),
             ["waitlist"] = new(TimeSpan.FromMinutes(10), PermitLimit: 5, SegmentCount: 1),
             ["chat"] = new(TimeSpan.FromMinutes(1), PermitLimit: 20, SegmentCount: 4),
             ["ai-resolve"] = new(TimeSpan.FromMinutes(1), PermitLimit: 30, SegmentCount: 4),
