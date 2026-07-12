@@ -13,6 +13,8 @@ public class FriendsControllerRateLimitTests
     [InlineData(nameof(FriendsController.Report))]
     [InlineData(nameof(FriendsController.Block))]
     [InlineData(nameof(FriendsController.Unblock))]
+    [InlineData(nameof(FriendsController.AcceptRequest))]
+    [InlineData(nameof(FriendsController.RemoveFriend))]
     public void AbuseProneActions_AreRateLimited(string actionName)
     {
         var rateLimitAttributes = GetAction(actionName)
@@ -23,9 +25,8 @@ public class FriendsControllerRateLimitTests
     }
 
     [Theory]
-    [InlineData(nameof(FriendsController.AcceptRequest))]
-    [InlineData(nameof(FriendsController.RemoveFriend))]
     [InlineData(nameof(FriendsController.GetFeed))]
+    [InlineData(nameof(FriendsController.GetFriends))]
     public void NonMutatingOrLowRiskActions_AreNotRateLimited(string actionName)
     {
         var rateLimitAttributes = GetAction(actionName)

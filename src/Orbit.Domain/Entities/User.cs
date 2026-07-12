@@ -365,6 +365,9 @@ public partial class User : Entity
         IsDeactivated = true;
         DeactivatedAt = DateTime.UtcNow;
         ScheduledDeletionAt = scheduledDeletion;
+        GoogleAccessToken = null;
+        GoogleRefreshToken = null;
+        GoogleCalendarAutoSyncEnabled = false;
     }
 
     public void CancelDeactivation()
