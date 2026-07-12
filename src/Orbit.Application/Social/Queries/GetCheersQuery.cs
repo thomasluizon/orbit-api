@@ -23,9 +23,9 @@ public record GetCheersQuery(Guid UserId, string Direction) : IRequest<Result<Ch
 
 public class GetCheersQueryHandler(
     SocialAccessGuard socialAccessGuard,
-    IGenericRepository<Cheer> cheerRepository,
-    IGenericRepository<BlockedUser> blockedUserRepository,
-    IGenericRepository<User> userRepository) : IRequestHandler<GetCheersQuery, Result<CheersPage>>
+    ISocialGraphReader socialGraphReader,
+    IGenericRepository<User> userRepository,
+    TimeProvider timeProvider) : IRequestHandler<GetCheersQuery, Result<CheersPage>>
 {
     public const string ReceivedDirection = "received";
 
@@ -35,25 +35,21 @@ public class GetCheersQueryHandler(
         if (access.IsFailure)
             return access.PropagateError<CheersPage>();
 
-        var blocks = await blockedUserRepository.FindAsync(
-            b => b.BlockerId == request.UserId || b.BlockedId == request.UserId,
-            cancellationToken);
-        var blockedIds = blocks
-            .Select(b => b.BlockerId == request.UserId ? b.BlockedId : b.BlockerId)
-            .ToHashSet();
-
         var isReceived = string.Equals(request.Direction, ReceivedDirection, StringComparison.OrdinalIgnoreCase);
+        var since = timeProvider.GetUtcNow().UtcDateTime.AddDays(-AppConstants.CheersLookbackDays);
 
-        var cheers = isReceived
-            ? await cheerRepository.FindAsync(c => c.RecipientId == request.UserId && !blockedIds.Contains(c.SenderId), cancellationToken)
-            : await cheerRepository.FindAsync(c => c.SenderId == request.UserId && !blockedIds.Contains(c.RecipientId), cancellationToken);
+        var cheers = await socialGraphReader.ReadCheersPageAsync(
+            request.UserId,
+            isReceived,
+            since,
+            AppConstants.MaxCheersReturned,
+            cancellationToken);
 
         var senderIds = cheers.Select(c => c.SenderId).ToHashSet();
         var senders = await userRepository.FindAsync(u => senderIds.Contains(u.Id), cancellationToken);
         var sendersById = senders.ToDictionary(u => u.Id);
 
         var items = cheers
-            .OrderByDescending(c => c.CreatedAtUtc)
             .Select(c =>
             {
                 sendersById.TryGetValue(c.SenderId, out var sender);

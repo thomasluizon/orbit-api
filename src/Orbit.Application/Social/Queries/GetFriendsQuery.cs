@@ -21,8 +21,7 @@ public record GetFriendsQuery(Guid UserId) : IRequest<Result<FriendsResponse>>;
 
 public class GetFriendsQueryHandler(
     SocialAccessGuard socialAccessGuard,
-    IGenericRepository<Friendship> friendshipRepository,
-    IGenericRepository<BlockedUser> blockedUserRepository,
+    ISocialGraphReader socialGraphReader,
     IGenericRepository<User> userRepository) : IRequestHandler<GetFriendsQuery, Result<FriendsResponse>>
 {
     public async Task<Result<FriendsResponse>> Handle(GetFriendsQuery request, CancellationToken cancellationToken)
@@ -31,20 +30,10 @@ public class GetFriendsQueryHandler(
         if (access.IsFailure)
             return access.PropagateError<FriendsResponse>();
 
-        var friendships = await friendshipRepository.FindAsync(
-            f => f.RequesterId == request.UserId || f.AddresseeId == request.UserId,
+        var visible = await socialGraphReader.ReadVisibleFriendshipsAsync(
+            request.UserId,
+            AppConstants.MaxFriends,
             cancellationToken);
-
-        var blocks = await blockedUserRepository.FindAsync(
-            b => b.BlockerId == request.UserId || b.BlockedId == request.UserId,
-            cancellationToken);
-        var blockedIds = blocks
-            .Select(b => b.BlockerId == request.UserId ? b.BlockedId : b.BlockerId)
-            .ToHashSet();
-
-        var visible = friendships
-            .Where(f => !blockedIds.Contains(OtherId(f, request.UserId)))
-            .ToList();
 
         var otherIds = visible.Select(f => OtherId(f, request.UserId)).ToHashSet();
         var users = await userRepository.FindAsync(u => otherIds.Contains(u.Id), cancellationToken);

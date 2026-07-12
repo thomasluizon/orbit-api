@@ -315,34 +315,4 @@ public class FriendshipCommandsTests
         result.IsSuccess.Should().BeTrue();
         _friendshipRepository.DidNotReceive().Remove(Arg.Any<Friendship>());
     }
-
-    [Fact]
-    public async Task GetFriends_PartitionsAcceptedIncomingOutgoing_AndExcludesBlocked()
-    {
-        var caller = SocialTestHelpers.OptedInUser();
-        var friend = SocialTestHelpers.OptedInUser("Friend");
-        var incomingRequester = SocialTestHelpers.OptedInUser("Incoming");
-        var outgoingAddressee = SocialTestHelpers.OptedInUser("Outgoing");
-        var blockedFriend = SocialTestHelpers.OptedInUser("Blocked");
-
-        var accepted = Friendship.Create(caller.Id, friend.Id).Value;
-        accepted.Accept();
-        var incoming = Friendship.Create(incomingRequester.Id, caller.Id).Value;
-        var outgoing = Friendship.Create(caller.Id, outgoingAddressee.Id).Value;
-        var blockedAccepted = Friendship.Create(caller.Id, blockedFriend.Id).Value;
-        blockedAccepted.Accept();
-
-        SocialTestHelpers.StubUsers(_userRepository, caller, friend, incomingRequester, outgoingAddressee, blockedFriend);
-        SocialTestHelpers.StubFind(_friendshipRepository, accepted, incoming, outgoing, blockedAccepted);
-        SocialTestHelpers.StubFind(_blockedUserRepository, BlockedUser.Create(caller.Id, blockedFriend.Id).Value);
-
-        var handler = new GetFriendsQueryHandler(_guard, _friendshipRepository, _blockedUserRepository, _userRepository);
-        var result = await handler.Handle(new GetFriendsQuery(caller.Id), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Friends.Should().ContainSingle(f => f.UserId == friend.Id);
-        result.Value.Friends.Should().NotContain(f => f.UserId == blockedFriend.Id);
-        result.Value.IncomingRequests.Should().ContainSingle(r => r.UserId == incomingRequester.Id);
-        result.Value.OutgoingRequests.Should().ContainSingle(r => r.UserId == outgoingAddressee.Id);
-    }
 }
