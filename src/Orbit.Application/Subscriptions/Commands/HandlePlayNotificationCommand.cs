@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Common;
@@ -14,7 +15,7 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Subscriptions.Commands;
 
-public record HandlePlayNotificationCommand(string PushBody) : IRequest<Result>;
+public record HandlePlayNotificationCommand(string PushBody) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class HandlePlayNotificationCommandHandler(
     IGenericRepository<User> userRepository,
@@ -115,7 +116,7 @@ public partial class HandlePlayNotificationCommandHandler(
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException) when (!string.IsNullOrEmpty(decoded.MessageId))
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException && !string.IsNullOrEmpty(decoded.MessageId))
         {
             if (await processedNotificationRepository.AnyAsync(p => p.MessageId == decoded.MessageId, cancellationToken))
             {
