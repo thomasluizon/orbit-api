@@ -1,6 +1,9 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
 using Orbit.Domain.Entities;
@@ -60,5 +63,25 @@ public class SetHandleCommandTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.UserNotFound);
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentInsertLosesUniqueIndexRace_ReturnsHandleTaken()
+    {
+        var user = SocialTestHelpers.OptedInUser();
+        SocialTestHelpers.StubUsers(_userRepository, user);
+        _userRepository.AnyAsync(Arg.Any<Expression<Func<User, bool>>>(), Arg.Any<CancellationToken>()).Returns(false);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Throws(new DbUpdateException("duplicate handle", new UniqueViolationException()));
+
+        var result = await _handler.Handle(new SetHandleCommand(user.Id, "newhandle"), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.HandleTaken);
+    }
+
+    private sealed class UniqueViolationException : DbException
+    {
+        public override string? SqlState => "23505";
     }
 }

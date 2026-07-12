@@ -100,6 +100,38 @@ public class DistributedRateLimitServiceTests : IDisposable
         finalDecision.CurrentCount.Should().Be(50);
     }
 
+    [Theory]
+    [InlineData("tags", 60)]
+    [InlineData("achievements", 30)]
+    [InlineData("ai-operations", 15)]
+    [InlineData("friend-mutations", 50)]
+    [InlineData("accountability-mutations", 50)]
+    public async Task TryAcquireAsync_StateChangingSweepPolicy_BlocksAfterPermitLimit(string policyName, int permitLimit)
+    {
+        DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);
+
+        for (var attempt = 0; attempt <= permitLimit; attempt++)
+            finalDecision = await _service.TryAcquireAsync(policyName, "user:sweep");
+
+        finalDecision.Allowed.Should().BeFalse();
+        finalDecision.PermitLimit.Should().Be(permitLimit);
+        finalDecision.CurrentCount.Should().Be(permitLimit);
+    }
+
+    [Fact]
+    public async Task TryAcquireAsync_TagsPolicy_PartitionsPerUser()
+    {
+        for (var attempt = 0; attempt < 60; attempt++)
+            (await _service.TryAcquireAsync("tags", "user:one")).Allowed.Should().BeTrue();
+
+        var exhausted = await _service.TryAcquireAsync("tags", "user:one");
+        var otherUser = await _service.TryAcquireAsync("tags", "user:two");
+
+        exhausted.Allowed.Should().BeFalse();
+        otherUser.Allowed.Should().BeTrue();
+        otherUser.CurrentCount.Should().Be(1);
+    }
+
     [Fact]
     public async Task TryAcquireAsync_RelationalProvider_RetriesSerializationConflictThenSucceeds()
     {
