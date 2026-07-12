@@ -165,6 +165,67 @@ public sealed class PushNotificationServiceTests : IDisposable
         remaining.Should().ContainSingle().Which.Should().Be(liveEndpoint);
     }
 
+    [Fact]
+    public async Task SendToUserAsync_WebPushTransientThenSuccess_RetriesAndKeepsSubscription()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/retry");
+
+        var calls = 0;
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(calls++ == 0 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        handler.CallCount.Should().Be(2);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendToUserAsync_WebPushTransportErrorThenSuccess_RetriesAndKeepsSubscription()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/transport");
+
+        var calls = 0;
+        var handler = new StubHttpMessageHandler(_ => calls++ == 0
+            ? throw new HttpRequestException("connection reset")
+            : new HttpResponseMessage(HttpStatusCode.Created));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        handler.CallCount.Should().Be(2);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendToUserAsync_WebPushSubscriptionGone_MarksStaleWithoutRetry()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/gone");
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Gone));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        handler.CallCount.Should().Be(1);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SendToUserAsync_WebPushNonTransientStatus_DoesNotRetryOrPruneSubscription()
+    {
+        await SeedWebPushSubscription("https://push.example.com/sub/rejected");
+
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest));
+        var service = CreateService(handler);
+
+        await service.SendToUserAsync(_userId, "Title", "Body");
+
+        handler.CallCount.Should().Be(1);
+        (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
+    }
+
     private static (string PublicKey, string PrivateKey) GenerateVapidKeyPair()
     {
         using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);

@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
+using Hangfire;
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
-using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Auth.Commands;
 
@@ -14,11 +15,11 @@ public record VerificationEntry(string Code, int Attempts, DateTime CreatedAt);
 
 public class SendCodeCommandHandler(
     IMemoryCache cache,
-    IEmailService emailService) : IRequestHandler<SendCodeCommand, Result>
+    IBackgroundJobClient backgroundJobClient) : IRequestHandler<SendCodeCommand, Result>
 {
     private const int SmokeCodeLength = 6;
 
-    public async Task<Result> Handle(SendCodeCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(SendCodeCommand request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
         var cacheKey = $"verify:{email}";
@@ -29,7 +30,7 @@ public class SendCodeCommandHandler(
         if (isProduction)
         {
             if (TrySeedProductionSmokeCode(email, cacheKey))
-                return Result.Success();
+                return Task.FromResult(Result.Success());
         }
         else
         {
@@ -46,7 +47,7 @@ public class SendCodeCommandHandler(
                         {
                             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
                         });
-                        return Result.Success();
+                        return Task.FromResult(Result.Success());
                     }
                 }
             }
@@ -56,7 +57,7 @@ public class SendCodeCommandHandler(
         {
             var elapsed = DateTime.UtcNow - existing.CreatedAt;
             if (elapsed.TotalSeconds < 60)
-                return Result.Failure(ErrorMessages.CodeRequestCooldown);
+                return Task.FromResult(Result.Failure(ErrorMessages.CodeRequestCooldown));
         }
 
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
@@ -67,9 +68,10 @@ public class SendCodeCommandHandler(
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
         });
 
-        await emailService.SendVerificationCodeAsync(email, code, request.Language, cancellationToken);
+        backgroundJobClient.Enqueue<SendVerificationCodeEmailJob>(
+            job => job.ExecuteAsync(email, code, request.Language));
 
-        return Result.Success();
+        return Task.FromResult(Result.Success());
     }
 
     private bool TrySeedProductionSmokeCode(string email, string cacheKey)

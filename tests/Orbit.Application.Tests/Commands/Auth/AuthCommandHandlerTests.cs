@@ -1,8 +1,12 @@
 using FluentAssertions;
+using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Jobs;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -14,6 +18,7 @@ public class AuthCommandHandlerTests
 {
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
+    private readonly IBackgroundJobClient _backgroundJobClient = Substitute.For<IBackgroundJobClient>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
@@ -21,9 +26,9 @@ public class AuthCommandHandlerTests
     private const string TestEmail = "test@example.com";
 
     [Fact]
-    public async Task SendCode_Valid_CachesCodeAndSendsEmail()
+    public async Task SendCode_Valid_CachesCodeAndEnqueuesEmail()
     {
-        var handler = new SendCodeCommandHandler(_cache, _emailService);
+        var handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
         var command = new SendCodeCommand(TestEmail);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -33,26 +38,31 @@ public class AuthCommandHandlerTests
         entry.Should().NotBeNull();
         entry!.Code.Should().HaveLength(6);
         entry.Attempts.Should().Be(0);
-        await _emailService.Received(1).SendVerificationCodeAsync(
-            TestEmail, Arg.Any<string>(), "en", Arg.Any<CancellationToken>());
+        _backgroundJobClient.Received(1).Create(
+            Arg.Is<Job>(job =>
+                job.Type == typeof(SendVerificationCodeEmailJob) &&
+                job.Method.Name == nameof(SendVerificationCodeEmailJob.ExecuteAsync) &&
+                (string)job.Args[0] == TestEmail &&
+                ((string)job.Args[1]).Length == 6 &&
+                (string)job.Args[2] == "en"),
+            Arg.Is<IState>(state => state is EnqueuedState));
     }
 
     [Fact]
-    public async Task SendCode_RateLimit_ReturnsFailure()
+    public async Task SendCode_RateLimit_ReturnsFailure_AndDoesNotEnqueue()
     {
         var existingEntry = new VerificationEntry("123456", 0, DateTime.UtcNow);
         _cache.Set($"verify:{TestEmail}", existingEntry,
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
 
-        var handler = new SendCodeCommandHandler(_cache, _emailService);
+        var handler = new SendCodeCommandHandler(_cache, _backgroundJobClient);
         var command = new SendCodeCommand(TestEmail);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("wait");
-        await _emailService.DidNotReceive().SendVerificationCodeAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _backgroundJobClient.DidNotReceive().Create(Arg.Any<Job>(), Arg.Any<IState>());
     }
 
     [Fact]
