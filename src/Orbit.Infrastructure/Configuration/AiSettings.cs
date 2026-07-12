@@ -9,6 +9,13 @@ public sealed class AiSettings
     public string TranscriptionModel { get; init; } = "whisper-1";
     public string BaseUrl { get; init; } = "https://api.openai.com/v1";
     public int NetworkTimeoutSeconds { get; init; } = 15;
+
+    /// <summary>
+    /// Per-request network timeout for the Batch API file upload/download flow. Batch payloads are
+    /// whole JSONL files (far larger than a single chat turn), so they need a longer ceiling than
+    /// <see cref="NetworkTimeoutSeconds"/> to avoid spurious timeouts on multi-megabyte transfers.
+    /// </summary>
+    public int BatchNetworkTimeoutSeconds { get; init; } = 120;
     public int MaxRetries { get; init; } = 2;
     public Dictionary<string, AiModelPrice> Pricing { get; init; } = new();
 }

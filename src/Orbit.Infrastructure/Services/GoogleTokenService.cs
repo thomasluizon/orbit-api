@@ -13,6 +13,7 @@ public partial class GoogleTokenService(
     IConfiguration configuration,
     ILogger<GoogleTokenService> logger) : IGoogleTokenService
 {
+    public const string HttpClientName = "GoogleOAuth";
     private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token";
     public async Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default)
     {
@@ -38,7 +39,7 @@ public partial class GoogleTokenService(
 
         try
         {
-            var client = httpClientFactory.CreateClient();
+            var client = httpClientFactory.CreateClient(HttpClientName);
             using var response = await HttpRetryPolicy.SendWithRetryAsync(
                 () => client.PostAsync(GoogleTokenUrl,
                     new FormUrlEncodedContent(new Dictionary<string, string>

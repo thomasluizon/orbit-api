@@ -15,7 +15,7 @@ public class GoogleTokenServiceRetryTests
     {
         var client = new HttpClient(handler);
         var factory = Substitute.For<IHttpClientFactory>();
-        factory.CreateClient().Returns(client);
+        factory.CreateClient(GoogleTokenService.HttpClientName).Returns(client);
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

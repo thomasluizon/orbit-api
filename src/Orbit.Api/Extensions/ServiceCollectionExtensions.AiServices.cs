@@ -30,7 +30,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IGoalReviewService, AiGoalReviewService>();
         builder.Services.AddScoped<ITagSuggestionService, AiTagSuggestionService>();
         builder.Services.AddHttpClient<IContentModerationService, ContentModerationService>()
-            .ConfigureHttpClient(client => client.Timeout = TimeSpan.FromSeconds(5));
+            .ConfigureHttpClient(client => client.Timeout = GetDefaultHttpTimeout(builder));
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
