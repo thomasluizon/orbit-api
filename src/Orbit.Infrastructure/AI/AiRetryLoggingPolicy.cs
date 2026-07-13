@@ -40,9 +40,9 @@ public partial class AiRetryLoggingPolicy(int maxRetries, ILogger logger) : Clie
         counter.Value++;
 
         var failure = exception?.GetType().Name ?? $"HTTP {response!.Status}";
-        LogAiAttemptFailed(logger, counter.Value, failure, retriable, exception?.Message);
+        LogAiAttemptFailed(logger, counter.Value, failure, retriable);
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "AI attempt {Attempt} failed ({Failure}); retriable: {Retriable}. Detail: {Detail}")]
-    private static partial void LogAiAttemptFailed(ILogger logger, int attempt, string failure, bool retriable, string? detail);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "AI attempt {Attempt} failed ({Failure}); retriable: {Retriable}")]
+    private static partial void LogAiAttemptFailed(ILogger logger, int attempt, string failure, bool retriable);
 }

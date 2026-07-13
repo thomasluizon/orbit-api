@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -29,6 +31,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("send-code")]
     [DistributedRateLimit("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendCode(
@@ -78,6 +81,7 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
 
     [HttpPost("verify-code")]
     [DistributedRateLimit("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> VerifyCode(
@@ -108,37 +112,12 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
             new VerifyCodeCommand(request.Email, request.Code, request.Language, request.ReferralCode),
             cancellationToken);
 
-        await RecordDirectAuthAuditAsync(
-            "verify_auth_code",
-            result.IsSuccess ? result.Value.UserId : Guid.Empty,
-            request.Email,
-            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
-            result.IsSuccess ? result.Value.UserId.ToString() : null,
-            result.IsSuccess ? null : result.Error,
-            cancellationToken);
-
-        return result.IsSuccess
-            ? Ok(BuildOperationResponse(
-                "verify_auth_code",
-                AgentOperationStatus.Succeeded,
-                targetId: result.Value.UserId.ToString(),
-                payload: new
-                {
-                    access_token = result.Value.Token,
-                    refresh_token = result.Value.RefreshToken,
-                    user_id = result.Value.UserId,
-                    name = result.Value.Name,
-                    email = result.Value.Email,
-                    was_reactivated = result.Value.WasReactivated
-                }))
-            : Unauthorized(BuildOperationResponse(
-                "verify_auth_code",
-                AgentOperationStatus.Failed,
-                policyReason: result.Error));
+        return await CompleteLoginOperationAsync("verify_auth_code", request.Email, result, cancellationToken);
     }
 
     [HttpPost("google")]
     [DistributedRateLimit("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GoogleAuth(
@@ -174,37 +153,12 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
                 request.ReferralCode),
             cancellationToken);
 
-        await RecordDirectAuthAuditAsync(
-            "exchange_google_auth",
-            result.IsSuccess ? result.Value.UserId : Guid.Empty,
-            "google_oauth",
-            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
-            result.IsSuccess ? result.Value.UserId.ToString() : null,
-            result.IsSuccess ? null : result.Error,
-            cancellationToken);
-
-        return result.IsSuccess
-            ? Ok(BuildOperationResponse(
-                "exchange_google_auth",
-                AgentOperationStatus.Succeeded,
-                targetId: result.Value.UserId.ToString(),
-                payload: new
-                {
-                    access_token = result.Value.Token,
-                    refresh_token = result.Value.RefreshToken,
-                    user_id = result.Value.UserId,
-                    name = result.Value.Name,
-                    email = result.Value.Email,
-                    was_reactivated = result.Value.WasReactivated
-                }))
-            : Unauthorized(BuildOperationResponse(
-                "exchange_google_auth",
-                AgentOperationStatus.Failed,
-                policyReason: result.Error));
+        return await CompleteLoginOperationAsync("exchange_google_auth", "google_oauth", result, cancellationToken);
     }
 
     [HttpPost("refresh")]
     [DistributedRateLimit("refresh")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
@@ -435,6 +389,41 @@ public partial class AuthController(IMediator mediator, IAgentAuditService audit
                 TargetName: targetName,
                 PolicyReason: policyReason,
                 Payload: payload));
+    }
+
+    private async Task<IActionResult> CompleteLoginOperationAsync(
+        string operationId,
+        string auditSummary,
+        Result<LoginResponse> result,
+        CancellationToken cancellationToken)
+    {
+        await RecordDirectAuthAuditAsync(
+            operationId,
+            result.IsSuccess ? result.Value.UserId : Guid.Empty,
+            auditSummary,
+            result.IsSuccess ? AgentOperationStatus.Succeeded : AgentOperationStatus.Failed,
+            result.IsSuccess ? result.Value.UserId.ToString() : null,
+            result.IsSuccess ? null : result.Error,
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Ok(BuildOperationResponse(
+                operationId,
+                AgentOperationStatus.Succeeded,
+                targetId: result.Value.UserId.ToString(),
+                payload: new
+                {
+                    access_token = result.Value.Token,
+                    refresh_token = result.Value.RefreshToken,
+                    user_id = result.Value.UserId,
+                    name = result.Value.Name,
+                    email = result.Value.Email,
+                    was_reactivated = result.Value.WasReactivated
+                }))
+            : Unauthorized(BuildOperationResponse(
+                operationId,
+                AgentOperationStatus.Failed,
+                policyReason: result.Error));
     }
 
     private async Task RecordDirectAuthAuditAsync(

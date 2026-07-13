@@ -53,6 +53,34 @@ public class AiRetryLoggingPolicyTests
         logger.Entries.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Send_TransportThrows_LogsSafeClassificationWithoutRawExceptionMessage()
+    {
+        const string secretDetail = "connection to 10.0.0.5:5432 refused; internal token abc123";
+        var logger = new CollectingLogger();
+        var pipeline = BuildThrowingPipeline(logger, secretDetail, maxRetries: 1);
+        var message = CreateMessage(pipeline);
+
+        var send = () => pipeline.Send(message);
+
+        send.Should().Throw<Exception>();
+        logger.Entries.Should().NotBeEmpty();
+        logger.Entries.Should().AllSatisfy(entry =>
+        {
+            entry.Should().MatchRegex(@"^AI attempt \d+ failed \([A-Za-z]+\); retriable: (True|False)$");
+            entry.Should().NotContain(secretDetail);
+        });
+    }
+
+    private static ClientPipeline BuildThrowingPipeline(ILogger logger, string exceptionMessage, int maxRetries)
+    {
+        return ClientPipeline.Create(new ClientPipelineOptions
+        {
+            Transport = new HttpClientPipelineTransport(new HttpClient(new ThrowingHandler(exceptionMessage))),
+            RetryPolicy = new ZeroDelayRetryPolicy(maxRetries, logger),
+        });
+    }
+
     private static ClientPipeline BuildPipeline(ILogger logger, HttpStatusCode status, int maxRetries)
     {
         return ClientPipeline.Create(new ClientPipelineOptions
@@ -99,6 +127,23 @@ public class AiRetryLoggingPolicyTests
                 RequestMessage = request,
                 Content = new StringContent(string.Empty),
             };
+        }
+    }
+
+    private sealed class ThrowingHandler(string message) : HttpMessageHandler
+    {
+        protected override HttpResponseMessage Send(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            throw new HttpRequestException(message);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            throw new HttpRequestException(message);
         }
     }
 

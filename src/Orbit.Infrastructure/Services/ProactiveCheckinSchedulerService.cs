@@ -194,7 +194,7 @@ public partial class ProactiveCheckinSchedulerService(
         catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
         {
             DetachPendingEntries(dbContext);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogProactiveCheckinAlreadySent(logger, userId);
             return false;
         }
@@ -221,7 +221,7 @@ public partial class ProactiveCheckinSchedulerService(
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Sent proactive check-in to user {UserId}")]
     private static partial void LogSentProactiveCheckin(ILogger logger, Guid userId);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Proactive check-in already recorded for user {UserId}; skipping push")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Proactive check-in already recorded for user {UserId}; skipping push")]
     private static partial void LogProactiveCheckinAlreadySent(ILogger logger, Guid userId);
 
 }

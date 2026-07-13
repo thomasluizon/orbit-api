@@ -63,7 +63,7 @@ public partial class AccountDeletionService(
         if (userIds.Count == 0)
             return;
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogProcessingDeletions(logger, userIds.Count);
 
         foreach (var userId in userIds)
@@ -153,7 +153,7 @@ public partial class AccountDeletionService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in account deletion service")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Processing {Count} scheduled account deletions")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Processing {Count} scheduled account deletions")]
     private static partial void LogProcessingDeletions(ILogger logger, int count);
 
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Deleted deactivated account {UserId}")]
