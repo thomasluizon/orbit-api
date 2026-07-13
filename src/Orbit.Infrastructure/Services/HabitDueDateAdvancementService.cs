@@ -105,7 +105,7 @@ public partial class HabitDueDateAdvancementService(
         if (advanced > 0)
         {
             await dbContext.SaveChangesAsync(ct);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogDueDatesAdvanced(logger, advanced);
         }
     }
@@ -119,7 +119,7 @@ public partial class HabitDueDateAdvancementService(
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Error in habit due date advancement")]
     private static partial void LogServiceError(ILogger logger, Exception ex);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Advanced DueDate for {Count} bad habits")]
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Advanced DueDate for {Count} bad habits")]
     private static partial void LogDueDatesAdvanced(ILogger logger, int count);
 
 }
