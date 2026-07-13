@@ -18,6 +18,7 @@ public class ReorderGoalsCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<ReorderGoalsCommand, Result>
 {
     public async Task<Result> Handle(ReorderGoalsCommand request, CancellationToken cancellationToken)
@@ -50,7 +51,8 @@ public class ReorderGoalsCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

@@ -18,13 +18,16 @@ public class DuplicateHabitCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly DuplicateHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 3, 20);
 
     public DuplicateHabitCommandHandlerTests()
     {
-        _handler = new DuplicateHabitCommandHandler(_habitRepo, _habitLogRepo, _payGate, _unitOfWork, _cache);
+        _handler = new DuplicateHabitCommandHandler(_habitRepo, _habitLogRepo, _payGate, _unitOfWork, _userDateService, _cache);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
 
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -162,8 +165,7 @@ public class DuplicateHabitCommandHandlerTests
         var original = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         SetupAllHabitsForUser(new List<Habit> { original });
 
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new DuplicateHabitCommand(UserId, original.Id);

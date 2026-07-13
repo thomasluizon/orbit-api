@@ -9,7 +9,9 @@ public class ImageInstructionsSection : IPromptSection
 
     public string Build(PromptContext context)
     {
-        var today = (context.UserToday ?? DateOnly.FromDateTime(DateTime.UtcNow)).ToString("yyyy-MM-dd");
+        var today = (context.UserToday ?? throw new InvalidOperationException(
+            "PromptContext.UserToday must be set before building the image-instructions section."))
+            .ToString("yyyy-MM-dd");
         var sb = new StringBuilder();
         sb.AppendLine($$"""
             ## Image Analysis Instructions

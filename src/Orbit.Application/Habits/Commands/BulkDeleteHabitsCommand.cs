@@ -23,6 +23,7 @@ public class BulkDeleteHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUserStreakService userStreakService,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<BulkDeleteHabitsCommand, Result<BulkDeleteResult>>
 {
     public async Task<Result<BulkDeleteResult>> Handle(BulkDeleteHabitsCommand request, CancellationToken cancellationToken)
@@ -67,7 +68,8 @@ public class BulkDeleteHabitsCommandHandler(
             }
         }, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(new BulkDeleteResult(results));
     }

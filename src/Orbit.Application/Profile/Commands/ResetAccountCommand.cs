@@ -14,6 +14,7 @@ public class ResetAccountCommandHandler(
     IGenericRepository<User> userRepository,
     IAccountResetRepository accountResetRepository,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<ResetAccountCommand, Result>
 {
     public async Task<Result> Handle(ResetAccountCommand request, CancellationToken cancellationToken)
@@ -33,7 +34,8 @@ public class ResetAccountCommandHandler(
             await unitOfWork.SaveChangesAsync(ct);
         }, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

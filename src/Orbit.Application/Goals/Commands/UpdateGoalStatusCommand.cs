@@ -20,6 +20,7 @@ public partial class UpdateGoalStatusCommandHandler(
     IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache,
     ILogger<UpdateGoalStatusCommandHandler> logger) : IRequestHandler<UpdateGoalStatusCommand, Result>
 {
@@ -60,7 +61,8 @@ public partial class UpdateGoalStatusCommandHandler(
             }
         }
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

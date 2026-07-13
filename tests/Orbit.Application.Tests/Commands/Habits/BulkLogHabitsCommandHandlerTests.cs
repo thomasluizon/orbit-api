@@ -270,8 +270,7 @@ public class BulkLogHabitsCommandHandlerTests
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         SetupHabitsForUser(new List<Habit> { habit });
 
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var items = new List<BulkLogItem> { new(habit.Id) };

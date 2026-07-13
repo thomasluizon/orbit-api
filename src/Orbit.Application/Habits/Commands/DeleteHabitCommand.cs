@@ -16,6 +16,7 @@ public class DeleteHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUserStreakService userStreakService,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<DeleteHabitCommand, Result>
 {
     public async Task<Result> Handle(DeleteHabitCommand request, CancellationToken cancellationToken)
@@ -43,7 +44,8 @@ public class DeleteHabitCommandHandler(
             ct => userStreakService.RecalculateAsync(request.UserId, ct),
             cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

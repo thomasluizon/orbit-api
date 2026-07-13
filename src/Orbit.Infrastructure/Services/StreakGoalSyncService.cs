@@ -73,10 +73,9 @@ public partial class StreakGoalSyncService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-        var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays - 1);
         var goals = await dbContext.Goals
             .Where(g => g.Type == GoalType.Streak && g.Status == GoalStatus.Active && !g.IsDeleted)
-            .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart))
+            .Include(g => g.Habits).ThenInclude(h => h.Logs)
             .ToListAsync(ct);
 
         if (goals.Count == 0) return;
@@ -122,7 +121,7 @@ public partial class StreakGoalSyncService(
         catch (Exception ex) when (ex is DbUpdateConcurrencyException || DbUniqueViolation.IsUniqueViolation(ex))
         {
             await dbContext.Entry(goal).ReloadAsync(ct);
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogStreakGoalSyncConflict(logger, goal.Id);
             return false;
         }
@@ -160,6 +159,6 @@ public partial class StreakGoalSyncService(
     [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Gamification processing failed for streak goal completion by user {UserId}")]
     private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Streak goal {GoalId} sync raced a concurrent writer; skipping (already synced)")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Streak goal {GoalId} sync raced a concurrent writer; skipping (already synced)")]
     private static partial void LogStreakGoalSyncConflict(ILogger logger, Guid goalId);
 }

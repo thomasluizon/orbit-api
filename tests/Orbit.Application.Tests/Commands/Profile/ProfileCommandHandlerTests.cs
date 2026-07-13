@@ -18,6 +18,7 @@ public class ProfileCommandHandlerTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 3, 20);
 
     private static User CreateTestUser()
     {
@@ -26,6 +27,7 @@ public class ProfileCommandHandlerTests
 
     public ProfileCommandHandlerTests()
     {
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanManageAiMemory(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _payGate.CanManageAiSummary(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -319,7 +321,7 @@ public class ProfileCommandHandlerTests
         SetupUserFound(user);
         var accountResetRepo = Substitute.For<IAccountResetRepository>();
 
-        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _cache);
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _userDateService, _cache);
         var command = new ResetAccountCommand(UserId);
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -338,7 +340,7 @@ public class ProfileCommandHandlerTests
         SetupUserNotFound();
         var accountResetRepo = Substitute.For<IAccountResetRepository>();
 
-        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _cache);
+        var handler = new ResetAccountCommandHandler(_userRepo, accountResetRepo, _unitOfWork, _userDateService, _cache);
         var command = new ResetAccountCommand(UserId);
 
         var result = await handler.Handle(command, CancellationToken.None);
