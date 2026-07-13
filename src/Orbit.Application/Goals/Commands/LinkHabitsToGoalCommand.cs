@@ -19,6 +19,7 @@ public class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<LinkHabitsToGoalCommand, Result>
 {
     public async Task<Result> Handle(LinkHabitsToGoalCommand request, CancellationToken cancellationToken)
@@ -54,7 +55,8 @@ public class LinkHabitsToGoalCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

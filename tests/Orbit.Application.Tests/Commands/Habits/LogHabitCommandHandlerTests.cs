@@ -200,8 +200,7 @@ public class LogHabitCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new LogHabitCommand(UserId, habit.Id);

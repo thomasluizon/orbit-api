@@ -7,10 +7,8 @@ public static class CacheInvalidationHelper
     private static readonly string[] RetrospectivePeriods = ["week", "month", "quarter", "semester", "year"];
     private static readonly string[] SummaryTimeBuckets = ["morning", "afternoon", "evening", "night", "timeless"];
 
-    public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId)
+    public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId, DateOnly today)
     {
-        var nowAtUtc = DateTime.UtcNow;
-        var today = DateOnly.FromDateTime(nowAtUtc);
         for (int i = -2; i <= 2; i++)
         {
             var date = today.AddDays(i);
@@ -28,10 +26,8 @@ public static class CacheInvalidationHelper
     /// changes habits, logs, or goals, otherwise users see a stale 1-hour-old retrospective
     /// after logging or editing.
     /// </summary>
-    public static void InvalidateRetrospectiveCache(IMemoryCache cache, Guid userId)
+    public static void InvalidateRetrospectiveCache(IMemoryCache cache, Guid userId, DateOnly today)
     {
-        var nowAtUtc = DateTime.UtcNow;
-        var today = DateOnly.FromDateTime(nowAtUtc);
         for (int i = -2; i <= 2; i++)
         {
             var date = today.AddDays(i);
@@ -56,10 +52,10 @@ public static class CacheInvalidationHelper
     /// Convenience: invalidate the summary, retrospective, and goal-review caches for a user. Use
     /// this from any mutation command that affects habits, logs, or goals.
     /// </summary>
-    public static void InvalidateUserAiCaches(IMemoryCache cache, Guid userId)
+    public static void InvalidateUserAiCaches(IMemoryCache cache, Guid userId, DateOnly today)
     {
-        InvalidateSummaryCache(cache, userId);
-        InvalidateRetrospectiveCache(cache, userId);
+        InvalidateSummaryCache(cache, userId, today);
+        InvalidateRetrospectiveCache(cache, userId, today);
         InvalidateGoalReviewCache(cache, userId);
     }
 }

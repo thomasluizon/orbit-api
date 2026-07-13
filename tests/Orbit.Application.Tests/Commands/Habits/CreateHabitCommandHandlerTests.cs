@@ -204,8 +204,7 @@ public class CreateHabitCommandHandlerTests
     [Fact]
     public async Task Handle_InvalidatesSummaryCache()
     {
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new CreateHabitCommand(UserId, "Test habit", null, FrequencyUnit.Day, 1);

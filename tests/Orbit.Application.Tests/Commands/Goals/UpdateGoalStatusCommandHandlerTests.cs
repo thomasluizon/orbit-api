@@ -20,16 +20,19 @@ public class UpdateGoalStatusCommandHandlerTests
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly UpdateGoalStatusCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid GoalId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 3, 20);
 
     public UpdateGoalStatusCommandHandlerTests()
     {
         _handler = new UpdateGoalStatusCommandHandler(
-            _goalRepo, _payGate, _gamificationService, _unitOfWork, _cache,
+            _goalRepo, _payGate, _gamificationService, _unitOfWork, _userDateService, _cache,
             Substitute.For<ILogger<UpdateGoalStatusCommandHandler>>());
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

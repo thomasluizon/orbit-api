@@ -20,6 +20,7 @@ public partial class UpdateGoalProgressCommandHandler(
     IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache,
     ILogger<UpdateGoalProgressCommandHandler> logger) : IRequestHandler<UpdateGoalProgressCommand, Result>
 {
@@ -57,7 +58,8 @@ public partial class UpdateGoalProgressCommandHandler(
         if (justCompleted)
             await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

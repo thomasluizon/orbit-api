@@ -16,6 +16,7 @@ public class DeleteGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<DeleteGoalCommand, Result>
 {
     public async Task<Result> Handle(DeleteGoalCommand request, CancellationToken cancellationToken)
@@ -34,7 +35,8 @@ public class DeleteGoalCommandHandler(
         goal.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

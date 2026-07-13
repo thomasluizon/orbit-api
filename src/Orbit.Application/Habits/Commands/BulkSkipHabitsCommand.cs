@@ -70,7 +70,7 @@ public class BulkSkipHabitsCommandHandler(
             await unitOfWork.SaveChangesAsync(ct);
         }, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(new BulkSkipResult(results));
     }

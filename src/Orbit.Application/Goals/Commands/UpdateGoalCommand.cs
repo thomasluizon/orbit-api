@@ -35,12 +35,9 @@ public partial class UpdateGoalCommandHandler(
         if (gateCheck.IsFailure)
             return gateCheck;
 
-        if (request.Deadline is { } deadline)
-        {
-            var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-            if (deadline < today)
-                return Result.Failure(ErrorMessages.DeadlineInPast);
-        }
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        if (request.Deadline is { } deadline && deadline < today)
+            return Result.Failure(ErrorMessages.DeadlineInPast);
 
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
@@ -64,7 +61,7 @@ public partial class UpdateGoalCommandHandler(
         if (result.Value == GoalEditTransition.Completed)
             await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

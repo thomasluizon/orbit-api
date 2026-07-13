@@ -99,7 +99,8 @@ public class UpdateHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

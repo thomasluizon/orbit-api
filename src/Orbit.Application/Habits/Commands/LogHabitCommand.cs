@@ -140,7 +140,7 @@ public partial class LogHabitCommandHandler(
             async ct => streakState = await services.UserStreakService.RecalculateAsync(
                 habit.UserId, ct, awardFreezeIfEligible: false),
             cancellationToken);
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
 
         return Result.Success(new LogHabitResponse(
             unlogEntity.Id,
@@ -179,7 +179,7 @@ public partial class LogHabitCommandHandler(
             }
             catch (DbUpdateException ex) when (IsUniqueViolation(ex))
             {
-                return await BuildAlreadyLoggedResultAsync(habit, targetDate, cancellationToken);
+                return await BuildAlreadyLoggedResultAsync(habit, targetDate, today, cancellationToken);
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
             {
@@ -202,7 +202,7 @@ public partial class LogHabitCommandHandler(
         if (gamificationResult is null)
             await PersistStreakRecalcAsync(request.UserId, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
 
         await CheckReferralCompletionSafeAsync(request.UserId, cancellationToken);
 
@@ -242,7 +242,7 @@ public partial class LogHabitCommandHandler(
     }
 
     private async Task<Result<LogHabitResponse>> BuildAlreadyLoggedResultAsync(
-        Habit habit, DateOnly targetDate, CancellationToken cancellationToken)
+        Habit habit, DateOnly targetDate, DateOnly today, CancellationToken cancellationToken)
     {
         var existingLogs = await repos.HabitLogRepository.FindAsync(
             l => l.HabitId == habit.Id && l.Date == targetDate && l.Value > 0, cancellationToken);
@@ -251,7 +251,7 @@ public partial class LogHabitCommandHandler(
         var users = await repos.UserRepository.FindAsync(u => u.Id == habit.UserId, cancellationToken);
         var currentStreak = users.SingleOrDefault()?.CurrentStreak ?? 0;
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
 
         return Result.Success(new LogHabitResponse(
             winningLog.Id,

@@ -17,7 +17,7 @@ public class SystemPromptBuilderTests
         DateOnly? userToday = null, IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
     {
         ISystemPromptBuilder builder = new SystemPromptBuilder();
-        var request = new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday, HabitMetrics: habitMetrics);
+        var request = new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday ?? new DateOnly(2026, 3, 20), HabitMetrics: habitMetrics);
         return builder.BuildStatic(request) + builder.BuildDynamic(request);
     }
 
@@ -216,7 +216,7 @@ public class SystemPromptBuilderTests
     {
         ISystemPromptBuilder builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
-        var request = new PromptBuildRequest([habit], Array.Empty<UserFact>());
+        var request = new PromptBuildRequest([habit], Array.Empty<UserFact>(), UserToday: new DateOnly(2026, 3, 20));
 
         var dynamicPrompt = builder.BuildDynamic(request);
 

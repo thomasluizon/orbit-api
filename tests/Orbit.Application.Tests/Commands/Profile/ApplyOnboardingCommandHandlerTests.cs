@@ -71,7 +71,7 @@ public class ApplyOnboardingCommandHandlerTests
         new(title, null, null, FrequencyUnit.Day, 1);
 
     private static string SummaryCacheKey() =>
-        $"summary:{UserId}:{DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}:en";
+        $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
 
     [Fact]
     public async Task Apply_HappyPath_CreatesEverythingAndCompletesOnboarding()

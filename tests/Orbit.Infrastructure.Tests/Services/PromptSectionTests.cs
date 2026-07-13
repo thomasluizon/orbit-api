@@ -258,13 +258,13 @@ public class TodayDateSectionTests
     }
 
     [Fact]
-    public void Build_WithoutUserToday_UsesUtcNow()
+    public void Build_WithoutUserToday_Throws()
     {
         var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), false, null, null, null, null);
-        var result = new TodayDateSection().Build(ctx);
 
-        var utcToday = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
-        result.Should().Contain(utcToday);
+        var act = () => new TodayDateSection().Build(ctx);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }
 
@@ -330,5 +330,16 @@ public class ImageInstructionsSectionTests
 
         result.Should().Contain("Image Analysis Instructions");
         result.Should().Contain("Extract EVERYTHING visible");
+        result.Should().Contain("2026-04-10");
+    }
+
+    [Fact]
+    public void Build_WithoutUserToday_Throws()
+    {
+        var ctx = new PromptContext(new List<Habit>(), new List<UserFact>(), true, null, null, null, null);
+
+        var act = () => new ImageInstructionsSection().Build(ctx);
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }

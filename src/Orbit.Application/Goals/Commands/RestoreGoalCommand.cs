@@ -16,6 +16,7 @@ public class RestoreGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
     IUnitOfWork unitOfWork,
+    IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<RestoreGoalCommand, Result>
 {
     public async Task<Result> Handle(RestoreGoalCommand request, CancellationToken cancellationToken)
@@ -35,7 +36,8 @@ public class RestoreGoalCommandHandler(
         goal.Restore();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }

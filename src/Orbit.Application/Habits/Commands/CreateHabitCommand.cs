@@ -70,7 +70,8 @@ public partial class CreateHabitCommandHandler(
                 return slipAlertGate.PropagateError<Guid>();
         }
 
-        var dueDate = request.DueDate ?? await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var dueDate = request.DueDate ?? today;
 
         if (opts.Days is { Count: > 0 } && !opts.Days.Contains(dueDate.DayOfWeek))
         {
@@ -125,7 +126,7 @@ public partial class CreateHabitCommandHandler(
         await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitCreated, cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(habit.Id);
     }
