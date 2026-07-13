@@ -16,6 +16,7 @@ public class RestoreHabitCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly RestoreHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -23,7 +24,8 @@ public class RestoreHabitCommandHandlerTests
 
     public RestoreHabitCommandHandlerTests()
     {
-        _handler = new RestoreHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
+        _handler = new RestoreHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _userDateService, _cache);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
     }

@@ -16,14 +16,17 @@ public class DeleteGoalCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly DeleteGoalCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid GoalId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 3, 20);
 
     public DeleteGoalCommandHandlerTests()
     {
-        _handler = new DeleteGoalCommandHandler(_goalRepo, _payGate, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
+        _handler = new DeleteGoalCommandHandler(_goalRepo, _payGate, _unitOfWork, _userDateService, _cache);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
     }

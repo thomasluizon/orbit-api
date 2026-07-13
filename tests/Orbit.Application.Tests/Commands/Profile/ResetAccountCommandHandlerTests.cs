@@ -14,13 +14,16 @@ public class ResetAccountCommandHandlerTests
     private readonly IAccountResetRepository _accountResetRepo = Substitute.For<IAccountResetRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly ResetAccountCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 3, 20);
 
     public ResetAccountCommandHandlerTests()
     {
-        _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
+        _handler = new ResetAccountCommandHandler(_userRepo, _accountResetRepo, _unitOfWork, _userDateService, _cache);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task>>(),
                 Arg.Any<CancellationToken>())

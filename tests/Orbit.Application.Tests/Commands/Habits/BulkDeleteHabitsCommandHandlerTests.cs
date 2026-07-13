@@ -17,13 +17,16 @@ public class BulkDeleteHabitsCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly BulkDeleteHabitsCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 3, 20);
 
     public BulkDeleteHabitsCommandHandlerTests()
     {
-        _handler = new BulkDeleteHabitsCommandHandler(_habitRepo, _userStreakService, _unitOfWork, Substitute.For<IUserDateService>(), _cache);
+        _handler = new BulkDeleteHabitsCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _userDateService, _cache);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
         _unitOfWork.ExecuteInTransactionAsync(
@@ -111,8 +114,7 @@ public class BulkDeleteHabitsCommandHandlerTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit });
 
-        var realToday = DateOnly.FromDateTime(DateTime.UtcNow);
-        var cacheKey = $"summary:{UserId}:{realToday:yyyy-MM-dd}:en";
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
         _cache.Set(cacheKey, "cached-summary");
 
         var command = new BulkDeleteHabitsCommand(UserId, new List<Guid> { habit.Id });
