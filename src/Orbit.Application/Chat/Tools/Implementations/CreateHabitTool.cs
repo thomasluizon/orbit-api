@@ -329,7 +329,10 @@ public class CreateHabitTool(
         string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 
     private static readonly System.Text.RegularExpressions.Regex HabitWordRegex =
-        new(@"\bhabit\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(
+            @"\bhabit\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
 
     private static bool IsHabitFlavoredTitle(string title)
     {
