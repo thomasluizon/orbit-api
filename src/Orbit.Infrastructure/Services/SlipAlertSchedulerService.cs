@@ -87,7 +87,16 @@ public partial class SlipAlertSchedulerService(
             pushService, messageService, dbContext);
 
         foreach (var habit in habits)
-            await ProcessHabitSlipAlertAsync(habit, context, ct);
+        {
+            try
+            {
+                await ProcessHabitSlipAlertAsync(habit, context, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogSlipAlertProcessingFailed(logger, habit.Id, habit.UserId, ex);
+            }
+        }
     }
 
     private sealed record SlipAlertContext(
@@ -212,4 +221,7 @@ public partial class SlipAlertSchedulerService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Slip alert already recorded for habit {HabitId}; skipping push")]
     private static partial void LogSlipAlertAlreadySent(ILogger logger, Guid habitId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to process slip alert for habit {HabitId} (user {UserId}); continuing with remaining habits")]
+    private static partial void LogSlipAlertProcessingFailed(ILogger logger, Guid habitId, Guid userId, Exception ex);
 }

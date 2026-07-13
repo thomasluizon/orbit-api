@@ -80,8 +80,15 @@ public partial class GoalDeadlineNotificationService(
 
         foreach (var goal in goals)
         {
-            await ProcessGoalDeadlineAsync(
-                goal, EffectiveCurrentValue(goal, freshStreakValues), users, sentKeys, pushService, dbContext, ct);
+            try
+            {
+                await ProcessGoalDeadlineAsync(
+                    goal, EffectiveCurrentValue(goal, freshStreakValues), users, sentKeys, pushService, dbContext, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogGoalDeadlineProcessingFailed(logger, goal.Id, goal.UserId, ex);
+            }
         }
     }
 
@@ -223,5 +230,8 @@ public partial class GoalDeadlineNotificationService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Failed to record deadline notification for goal {GoalId} (user {UserId}); skipping push")]
     private static partial void LogDeadlineRecordFailed(ILogger logger, Guid goalId, Guid userId, Exception ex);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to process deadline notification for goal {GoalId} (user {UserId}); continuing with remaining goals")]
+    private static partial void LogGoalDeadlineProcessingFailed(ILogger logger, Guid goalId, Guid userId, Exception ex);
 
 }

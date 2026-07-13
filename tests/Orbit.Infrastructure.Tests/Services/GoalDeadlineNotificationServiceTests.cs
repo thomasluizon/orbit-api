@@ -443,10 +443,63 @@ public class GoalDeadlineNotificationServiceTests
         (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{healthyGoal.Id}-7d")).Should().Be(1);
     }
 
-    private static async Task<(User User, Goal Goal)> SeedDeadlineGoalAsync(
-        OrbitDbContext dbContext, int deadlineInDays)
+    [Fact]
+    public async Task ExecuteAsync_HostedLifecycle_RunsOneDeadlinePassThenStopsGracefully()
     {
-        var user = User.Create("Thomas", "thomas@test.com").Value;
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var (user, goal) = await SeedDeadlineGoalAsync(dbContext, deadlineInDays: 7);
+
+        var firstPush = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pushService
+            .SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { firstPush.TrySetResult(); return Task.CompletedTask; });
+
+        var service = CreateService(dbContext, pushService);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstPush.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await service.StopAsync(CancellationToken.None);
+
+        await pushService.Received(1).SendToUserAsync(
+            user.Id, Arg.Any<string>(), Arg.Is<string>(b => b.Contains("7 days")), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{goal.Id}-7d")).Should().Be(1);
+        service.ExecuteTask.Should().NotBeNull();
+        service.ExecuteTask!.IsCompleted.Should().BeTrue();
+        service.ExecuteTask!.IsFaulted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CheckAndSendDeadlineNotifications_OneGoalPushThrows_StillNotifiesRemainingGoals()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var (throwingUser, throwingGoal) = await SeedDeadlineGoalAsync(
+            dbContext, deadlineInDays: 7, name: "Alice", email: "alice@test.com");
+        var (healthyUser, healthyGoal) = await SeedDeadlineGoalAsync(
+            dbContext, deadlineInDays: 7, name: "Bob", email: "bob@test.com");
+
+        pushService
+            .SendToUserAsync(throwingUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("push transport down")));
+
+        var service = CreateService(dbContext, pushService);
+
+        var run = async () => await service.CheckAndSendDeadlineNotifications(CancellationToken.None);
+        await run.Should().NotThrowAsync();
+
+        await pushService.Received(1).SendToUserAsync(
+            throwingUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        await pushService.Received(1).SendToUserAsync(
+            healthyUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{healthyGoal.Id}-7d")).Should().Be(1);
+        (await dbContext.Notifications.CountAsync(n => n.Url == $"goal-deadline-{throwingGoal.Id}-7d")).Should().Be(1);
+    }
+
+    private static async Task<(User User, Goal Goal)> SeedDeadlineGoalAsync(
+        OrbitDbContext dbContext, int deadlineInDays, string name = "Thomas", string email = "thomas@test.com")
+    {
+        var user = User.Create(name, email).Value;
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id, "Run Marathon", 10, "km",
             Deadline: Today.AddDays(deadlineInDays))).Value;
