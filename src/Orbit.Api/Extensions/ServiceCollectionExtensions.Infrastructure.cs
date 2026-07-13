@@ -200,7 +200,7 @@ public static partial class ServiceCollectionExtensions
         });
     }
 
-    private static void AddCookieAndKestrelLimits(WebApplicationBuilder builder)
+    internal static void AddCookieAndKestrelLimits(WebApplicationBuilder builder)
     {
         builder.Services.Configure<CookiePolicyOptions>(options =>
         {

@@ -100,4 +100,14 @@ public class SignUploadValidatorTests
 
         _validator.Validate(command).IsValid.Should().BeFalse();
     }
+
+    [Fact]
+    public void Validate_NineMegabyteFile_RejectedBeforeRequestBodyLimit()
+    {
+        const long nineMegabytes = 9L * 1024 * 1024;
+        var command = Valid() with { SizeBytes = nineMegabytes };
+
+        _validator.Validate(command).IsValid.Should().BeFalse(
+            "the 8 MB content-type max must reject a 9 MB upload before the 10 MB Kestrel request-body limit is reached");
+    }
 }
