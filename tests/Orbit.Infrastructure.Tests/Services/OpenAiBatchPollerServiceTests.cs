@@ -164,6 +164,54 @@ public class OpenAiBatchPollerServiceTests
         harness.Logger.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("batch_1"));
     }
 
+    [Fact]
+    public async Task PollPendingBatches_CompletedAndInFlightBatches_FinalizesCompletedAndLeavesInFlight()
+    {
+        var completedBatch = AiFactExtractionBatch.Create(UserId, "batch_done", "file_in_done");
+        var inFlightBatch = AiFactExtractionBatch.Create(UserId, "batch_pending", "file_in_pending");
+
+        var harness = new PollerHarness()
+            .WithPendingBatches(completedBatch, inFlightBatch)
+            .WithBatchStatus("batch_done", new BatchStatusResult("completed", "file_out_done", null))
+            .WithBatchOutput("file_out_done", BatchOutputJsonl("User works night shifts"))
+            .WithBatchStatus("batch_pending", new BatchStatusResult("in_progress", null, null));
+
+        await harness.Service.PollPendingBatches(CancellationToken.None);
+
+        completedBatch.Status.Should().Be(AiFactExtractionBatchStatus.Completed);
+        inFlightBatch.Status.Should().Be(AiFactExtractionBatchStatus.Submitted);
+        harness.AddedFacts.Should().ContainSingle().Which.FactText.Should().Be("User works night shifts");
+        await harness.BatchClient.Received(1).DownloadFileAsync("file_out_done", Arg.Any<CancellationToken>());
+        await harness.BatchClient.Received(1).DeleteFileAsync("file_in_done", Arg.Any<CancellationToken>());
+        await harness.BatchClient.DidNotReceive().DeleteFileAsync("file_in_pending", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_HostedLifecycle_RunsOnePollTickThenStopsGracefully()
+    {
+        var batch = AiFactExtractionBatch.Create(UserId, "batch_1", "file_in_1");
+        var harness = new PollerHarness()
+            .WithPendingBatches(batch)
+            .WithBatchStatus("batch_1", new BatchStatusResult("completed", "file_out_1", null))
+            .WithBatchOutput("file_out_1", BatchOutputJsonl("User works night shifts"));
+
+        var tickSaved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.UnitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => { tickSaved.TrySetResult(); return Task.FromResult(1); });
+
+        var service = harness.Service;
+
+        await service.StartAsync(CancellationToken.None);
+        await tickSaved.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await service.StopAsync(CancellationToken.None);
+
+        batch.Status.Should().Be(AiFactExtractionBatchStatus.Completed);
+        harness.AddedFacts.Should().ContainSingle();
+        service.ExecuteTask.Should().NotBeNull();
+        service.ExecuteTask!.IsCompleted.Should().BeTrue();
+        service.ExecuteTask!.IsFaulted.Should().BeFalse();
+    }
+
     private sealed class PollerHarness
     {
         public IAiBatchClient BatchClient { get; } = Substitute.For<IAiBatchClient>();

@@ -117,6 +117,40 @@ public sealed class XpAwardLogBackfillHostedServiceTests : IDisposable
         _logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.EventId == 3);
     }
 
+    [Fact]
+    public async Task RunBackfillAsync_RunTwiceOnRestart_SecondRunSkipsAndDoesNotDoubleBackfill()
+    {
+        await SeedUserAsync(50);
+        var sut = CreateSut();
+
+        await sut.RunBackfillAsync(CancellationToken.None);
+        await sut.RunBackfillAsync(CancellationToken.None);
+
+        await using var verify = CreateContext(_dbName);
+        (await verify.XpAwardLogs.CountAsync()).Should().Be(1);
+        (await verify.AppConfigs.CountAsync(c => c.Key == BackfillFlag)).Should().Be(1);
+        _logger.Entries.Should().Contain(e => e.Level == LogLevel.Information && e.EventId == 2);
+        _logger.Entries.Should().Contain(e => e.Level == LogLevel.Information && e.EventId == 1);
+    }
+
+    [Fact]
+    public async Task StartAsync_CancelledDuringStartupDelay_StopsCleanlyWithoutRunningBackfill()
+    {
+        await SeedUserAsync(50);
+        var sut = CreateSut();
+
+        await sut.StartAsync(CancellationToken.None);
+        await sut.StopAsync(CancellationToken.None);
+
+        await using var verify = CreateContext(_dbName);
+        (await verify.XpAwardLogs.CountAsync()).Should().Be(0);
+        (await verify.AppConfigs.AnyAsync(c => c.Key == BackfillFlag)).Should().BeFalse();
+        _logger.Entries.Should().BeEmpty();
+        sut.ExecuteTask.Should().NotBeNull();
+        sut.ExecuteTask!.IsCompleted.Should().BeTrue();
+        sut.ExecuteTask!.IsFaulted.Should().BeFalse();
+    }
+
     private XpAwardLogBackfillHostedService CreateSut(IServiceScopeFactory? scopeFactory = null) =>
         new(scopeFactory ?? _scopeFactory, _logger);
 
