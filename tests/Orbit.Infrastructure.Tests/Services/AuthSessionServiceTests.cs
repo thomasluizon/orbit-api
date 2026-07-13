@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Domain.Common;
@@ -85,7 +86,34 @@ public class AuthSessionServiceTests
         result.IsSuccess.Should().BeTrue();
         result.Value.RefreshToken.Should().NotBe(existingToken);
         session.TokenHash.Should().NotBe(Hash(existingToken));
+        session.TokenHash.Should().Be(Hash(result.Value.RefreshToken));
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_LosesConcurrencyRace_ReturnsInvalidSessionDiscardsChangesAndIssuesNoToken()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var existingToken = "refresh-token";
+        var session = UserSession.Create(user.Id, Hash(existingToken), DateTime.UtcNow.AddDays(7)).Value;
+
+        _userSessionRepository.FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<UserSession, bool>>>(),
+            Arg.Any<Func<IQueryable<UserSession>, IQueryable<UserSession>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(session);
+        _userRepository.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<int>>(_ => throw new DbUpdateConcurrencyException("simulated stale xmin token"));
+
+        _tokenService.ClearReceivedCalls();
+        var act = async () => await _sut.RefreshSessionAsync(existingToken, CancellationToken.None);
+        var result = await act.Should().NotThrowAsync();
+
+        result.Which.IsFailure.Should().BeTrue();
+        result.Which.ErrorCode.Should().Be("INVALID_SESSION");
+        _unitOfWork.Received(1).DiscardChanges();
+        _tokenService.DidNotReceive().GenerateToken(Arg.Any<Guid>(), Arg.Any<string>());
     }
 
     [Fact]

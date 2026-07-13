@@ -1,5 +1,8 @@
 using System.Linq.Expressions;
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -99,8 +102,44 @@ public class AuthSessionServiceTests
         refreshResult.Value.RefreshToken.Should().NotBe(createResult.Value.RefreshToken);
         _storedSession.ExpiresAtUtc.Should().BeNull();
         _storedSession.TokenHash.Should().NotBe(originalTokenHash);
+        _storedSession.TokenHash.Should().Be(Hash(refreshResult.Value.RefreshToken));
         _storedSession.LastUsedAtUtc.Should().BeAfter(originalLastUsedAtUtc);
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_LoserReplaysRotatedOutToken_IsRejectedAndSessionRotatesExactlyOnce()
+    {
+        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        var consumedToken = createResult.Value.RefreshToken;
+        var originalTokenHash = _storedSession!.TokenHash;
+
+        var winner = await _service.RefreshSessionAsync(consumedToken, CancellationToken.None);
+        winner.IsSuccess.Should().BeTrue();
+        var winnerToken = winner.Value.RefreshToken;
+
+        var loser = await _service.RefreshSessionAsync(consumedToken, CancellationToken.None);
+
+        loser.IsFailure.Should().BeTrue();
+        loser.ErrorCode.Should().Be(ErrorCodes.InvalidSession);
+        _storedSession.TokenHash.Should().Be(Hash(winnerToken));
+        _storedSession.TokenHash.Should().NotBe(originalTokenHash);
+    }
+
+    [Fact]
+    public async Task RefreshSessionAsync_ConcurrencyConflictOnSave_ReturnsInvalidSessionAndDiscardsChanges()
+    {
+        var createResult = await _service.CreateSessionAsync(_user.Id, _user.Email, CancellationToken.None);
+        _unitOfWork
+            .SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns<Task<int>>(_ => throw new DbUpdateConcurrencyException("simulated stale xmin token"));
+
+        var act = async () => await _service.RefreshSessionAsync(createResult.Value.RefreshToken, CancellationToken.None);
+        var loser = await act.Should().NotThrowAsync();
+
+        loser.Which.IsFailure.Should().BeTrue();
+        loser.Which.ErrorCode.Should().Be(ErrorCodes.InvalidSession);
+        _unitOfWork.Received(1).DiscardChanges();
     }
 
     [Fact]
@@ -138,4 +177,7 @@ public class AuthSessionServiceTests
 
         session.CanUse(DateTime.UtcNow.AddYears(10)).Should().BeFalse();
     }
+
+    private static string Hash(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 }
