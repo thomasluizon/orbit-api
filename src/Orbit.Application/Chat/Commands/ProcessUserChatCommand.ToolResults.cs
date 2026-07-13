@@ -106,7 +106,7 @@ public partial class ProcessUserChatCommandHandler
     {
         var node = JsonNode.Parse(args.GetRawText());
         if (node is not JsonObject argsObject || argsObject["message"] is not JsonValue messageValue
-            || !messageValue.TryGetValue(out string? message) || message is null)
+            || !messageValue.TryGetValue(out string? message))
         {
             return args;
         }

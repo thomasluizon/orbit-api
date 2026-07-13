@@ -284,9 +284,11 @@ public partial class RunCalendarAutoSyncCommandHandler(
     private async Task CreateSuggestionNotification(User user, int count, CancellationToken ct)
     {
         var isPortuguese = LocaleHelper.IsPortuguese(user.Language);
-        var title = isPortuguese
-            ? (count == 1 ? "1 novo evento do calendário" : $"{count} novos eventos do calendário")
-            : (count == 1 ? "1 new calendar event" : $"{count} new calendar events");
+        string title;
+        if (isPortuguese)
+            title = count == 1 ? "1 novo evento do calendário" : $"{count} novos eventos do calendário";
+        else
+            title = count == 1 ? "1 new calendar event" : $"{count} new calendar events";
         var body = isPortuguese
             ? "Toque para revisar e importar"
             : "Tap to review and import";

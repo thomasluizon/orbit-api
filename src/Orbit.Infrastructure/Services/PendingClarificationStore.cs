@@ -94,13 +94,10 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             var actions = JsonSerializer.Deserialize<List<QuickAction>>(quickActionsJson, QuickActionDeserializerOptions);
             if (actions is null) return Array.Empty<string>();
 
-            var values = new List<string>(actions.Count);
-            foreach (var action in actions)
-            {
-                if (!string.IsNullOrEmpty(action?.Value))
-                    values.Add(action.Value);
-            }
-            return values;
+            return actions
+                .Where(action => !string.IsNullOrEmpty(action?.Value))
+                .Select(action => action.Value)
+                .ToList();
         }
         catch (JsonException)
         {

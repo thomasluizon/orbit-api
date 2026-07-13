@@ -50,6 +50,7 @@ public static class ConcurrencyRetry
             }
             catch (DbUpdateConcurrencyException) when (attempt < maxAttempts)
             {
+                // Swallowed: the loop retries the save after resetting change tracking. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
             }
         }
     }

@@ -116,13 +116,7 @@ public class GetHabitWidgetQueryHandler(
 
     private static bool HasVisibleDescendant(Guid parentId, ILookup<Guid?, Habit> lookup, DateOnly date)
     {
-        foreach (var child in lookup[parentId])
-        {
-            if (IsVisibleOnWidget(child, lookup, date))
-                return true;
-        }
-
-        return false;
+        return lookup[parentId].Any(child => IsVisibleOnWidget(child, lookup, date));
     }
 
     private static HabitWidgetItem MapItem(Habit habit, ILookup<Guid?, Habit> lookup, DateOnly date)

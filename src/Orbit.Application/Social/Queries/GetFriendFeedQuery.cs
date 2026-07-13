@@ -123,7 +123,7 @@ internal static class FeedCursor
     public static bool TryDecode(string cursor, out DateTime createdAtUtc, out Guid id)
     {
         createdAtUtc = default;
-        id = default;
+        id = Guid.Empty;
 
         var decoded = Base64UrlDecode(cursor);
         if (decoded is null)

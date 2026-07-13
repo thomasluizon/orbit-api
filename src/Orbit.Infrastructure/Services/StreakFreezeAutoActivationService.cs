@@ -153,7 +153,7 @@ public partial class StreakFreezeAutoActivationService(
         return new StagedFreeze(user, missedDate, title, body);
     }
 
-    private async Task<bool> TrySaveBatchAsync(OrbitDbContext dbContext, CancellationToken ct)
+    private static async Task<bool> TrySaveBatchAsync(OrbitDbContext dbContext, CancellationToken ct)
     {
         try
         {

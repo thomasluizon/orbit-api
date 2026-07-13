@@ -49,6 +49,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         WriteIndented = true
     };
 
+    private static string ToggleLabel(bool enabled) => enabled ? "enabled" : "disabled";
+
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -106,7 +108,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            LogAiMemoryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogAiMemoryToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -123,7 +125,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            LogAiSummaryToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogAiSummaryToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -140,7 +142,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            LogProactiveAstraToggled(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogProactiveAstraToggled(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -307,7 +309,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            LogSocialOptInChanged(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogSocialOptInChanged(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -324,7 +326,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            LogMarketingConsentChanged(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogMarketingConsentChanged(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(() => NoContent());
     }
@@ -348,7 +350,7 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         var result = await mediator.Send(command, cancellationToken);
 
         if (result.IsSuccess)
-            LogPublicProfileUpdated(logger, request.Enabled ? "enabled" : "disabled", HttpContext.GetUserId());
+            LogPublicProfileUpdated(logger, ToggleLabel(request.Enabled), HttpContext.GetUserId());
 
         return result.ToPayGateAwareResult(value => Ok(value));
     }

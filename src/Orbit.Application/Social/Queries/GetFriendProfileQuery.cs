@@ -93,7 +93,7 @@ public class GetFriendProfileQueryHandler(
             level.Level,
             level.Title,
             friend.TotalXp,
-            friendship?.RespondedAtUtc,
+            friendship.RespondedAtUtc,
             weeklyActivity,
             achievements,
             topHabits,

@@ -137,11 +137,8 @@ internal static class HabitDetailDescendantLogLoader
 
     private static void CollectDescendantIds(Habit parent, ISet<Guid> descendantIds)
     {
-        foreach (var child in parent.Children)
-        {
-            if (descendantIds.Add(child.Id))
-                CollectDescendantIds(child, descendantIds);
-        }
+        foreach (var child in parent.Children.Where(child => descendantIds.Add(child.Id)))
+            CollectDescendantIds(child, descendantIds);
     }
 }
 

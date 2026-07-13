@@ -205,9 +205,11 @@ public sealed partial class AiSummaryService(
         if (habit.IsBadHabit)
             return $"{habit.Title} ({DescribeBadHabitState(habit, dateFrom, dateTo, userToday, lastBadHabitSlipDates)}) [{DescribeTiming(habit)}]";
 
-        var status = IsDoneInRange(habit, dateFrom, dateTo)
-            ? "done"
-            : HabitScheduleService.IsOverdueOnDate(habit, userToday) ? "pending, overdue" : "pending";
+        string status;
+        if (IsDoneInRange(habit, dateFrom, dateTo))
+            status = "done";
+        else
+            status = HabitScheduleService.IsOverdueOnDate(habit, userToday) ? "pending, overdue" : "pending";
         return $"{habit.Title} ({status}) [{DescribeTiming(habit)}]";
     }
 

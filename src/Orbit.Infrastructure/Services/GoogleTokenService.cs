@@ -14,7 +14,7 @@ public partial class GoogleTokenService(
     ILogger<GoogleTokenService> logger) : IGoogleTokenService
 {
     public const string HttpClientName = "GoogleOAuth";
-    private const string GoogleTokenUrl = "https://oauth2.googleapis.com/token";
+    private readonly string _googleTokenUrl = configuration["Google:TokenUrl"]!;
     public async Task<string?> GetValidAccessTokenAsync(User user, CancellationToken ct = default)
     {
         if (user.GoogleAccessToken is null)
@@ -41,7 +41,7 @@ public partial class GoogleTokenService(
         {
             var client = httpClientFactory.CreateClient(HttpClientName);
             using var response = await HttpRetryPolicy.SendWithRetryAsync(
-                () => client.PostAsync(GoogleTokenUrl,
+                () => client.PostAsync(_googleTokenUrl,
                     new FormUrlEncodedContent(new Dictionary<string, string>
                     {
                         ["client_id"] = configuration["Google:ClientId"]!,
@@ -98,6 +98,7 @@ public partial class GoogleTokenService(
         }
         catch (JsonException)
         {
+            // Non-JSON error body: leave errorCode null and fall through to the generic classification. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
         }
 
         if (errorCode is "invalid_grant" or "unauthorized_client")

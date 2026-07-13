@@ -181,11 +181,12 @@ public abstract class ToggleProfileSettingTool(IMediator mediator) : IAiTool
 
         var result = await mediator.Send(CreateCommand(userId, enabled.Value), ct);
 
+        var entityName = $"{SettingLabel} {(enabled.Value ? EnabledState : DisabledState)}";
         return result.IsSuccess
             ? new ToolResult(
                 true,
                 EntityId: userId.ToString(),
-                EntityName: $"{SettingLabel} {(enabled.Value ? EnabledState : DisabledState)}",
+                EntityName: entityName,
                 Payload: new { enabled })
             : ToolResult.FromFailure(result, userId.ToString());
     }

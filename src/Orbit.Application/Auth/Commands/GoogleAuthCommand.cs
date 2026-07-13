@@ -39,7 +39,7 @@ public partial class GoogleAuthCommandHandler(
 
         var (user, isNewUser) = findResult.Value;
 
-        var wasReactivated = HandlePostLogin(user, request, isNewUser, cancellationToken);
+        var wasReactivated = HandlePostLogin(user, request, isNewUser);
 
         if (wasReactivated || request.GoogleAccessToken is not null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -152,7 +152,7 @@ public partial class GoogleAuthCommandHandler(
     }
 
     private bool HandlePostLogin(
-        User user, GoogleAuthCommand request, bool isNewUser, CancellationToken cancellationToken)
+        User user, GoogleAuthCommand request, bool isNewUser)
     {
         if (isNewUser && !string.IsNullOrWhiteSpace(request.ReferralCode))
             ProcessReferralInBackground(user.Id, request.ReferralCode);

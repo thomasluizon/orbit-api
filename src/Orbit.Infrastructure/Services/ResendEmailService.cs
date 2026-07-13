@@ -18,6 +18,9 @@ public partial class ResendEmailService(
     ILogger<ResendEmailService> logger) : IEmailService
 {
     private const int MaxMarketingRetries = 4;
+    private const string HeadingToken = "heading";
+    private const string IntroToken = "intro";
+    private const string FooterToken = "footer";
 
     private readonly ResendSettings _settings = options.Value;
     private readonly string _frontendBaseUrl = frontendSettings.Value.BaseUrl;
@@ -45,13 +48,13 @@ public partial class ResendEmailService(
 
         var tokens = new Dictionary<string, string>
         {
-            ["heading"] = copy.Heading,
-            ["intro"] = copy.Intro,
+            [HeadingToken] = copy.Heading,
+            [IntroToken] = copy.Intro,
             ["code"] = code,
             ["cta"] = copy.Cta,
             ["signInUrl"] = signInUrl,
             ["warning"] = copy.Warning,
-            ["footer"] = copy.Footer,
+            [FooterToken] = copy.Footer,
         };
 
         var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
@@ -68,12 +71,12 @@ public partial class ResendEmailService(
 
         var tokens = new Dictionary<string, string>
         {
-            ["heading"] = copy.Heading,
-            ["intro"] = copy.Intro,
+            [HeadingToken] = copy.Heading,
+            [IntroToken] = copy.Intro,
             ["codeLabel"] = copy.CodeLabel,
             ["code"] = code,
             ["warning"] = copy.Warning,
-            ["footer"] = copy.Footer,
+            [FooterToken] = copy.Footer,
         };
 
         var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: false);
@@ -90,12 +93,12 @@ public partial class ResendEmailService(
 
         var tokens = new Dictionary<string, string>
         {
-            ["heading"] = copy.Heading,
-            ["intro"] = copy.Intro,
+            [HeadingToken] = copy.Heading,
+            [IntroToken] = copy.Intro,
             ["cta"] = copy.Cta,
             ["confirmUrl"] = confirmUrl,
             ["warning"] = copy.Warning,
-            ["footer"] = copy.Footer,
+            [FooterToken] = copy.Footer,
         };
 
         var layout = new EmailLayout(LangCode(isPtBr), copy.Preheader, copy.Footer, LogoUrl, GradientHeader: true);
@@ -231,15 +234,15 @@ public partial class ResendEmailService(
 
     private Dictionary<string, string> WelcomeTokens(EmailCopy.WelcomeCopy copy) => new()
     {
-        ["heading"] = copy.Heading,
-        ["intro"] = copy.Intro,
+        [HeadingToken] = copy.Heading,
+        [IntroToken] = copy.Intro,
         ["featuresTitle"] = copy.FeaturesTitle,
         ["feature1"] = copy.Feature1,
         ["feature2"] = copy.Feature2,
         ["feature3"] = copy.Feature3,
         ["cta"] = copy.Cta,
         ["ctaUrl"] = _frontendBaseUrl,
-        ["footer"] = copy.Footer,
+        [FooterToken] = copy.Footer,
     };
 
     private async Task SendEmailAsync(string to, string subject, string html, string text, CancellationToken cancellationToken, string? replyTo = null)

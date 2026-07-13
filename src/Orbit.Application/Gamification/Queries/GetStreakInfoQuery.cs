@@ -75,7 +75,7 @@ public class GetStreakInfoQueryHandler(
         var daysUntilNextFreeze = currentStreak <= 0
             ? AppConstants.StreakDaysPerFreeze
             : Math.Max(0, AppConstants.StreakDaysPerFreeze - (daysSinceLastAward % AppConstants.StreakDaysPerFreeze));
-        if (daysUntilNextFreeze == 0 && currentStreak > 0 && user.StreakFreezesAccumulated >= AppConstants.MaxStreakFreezesAccumulated)
+        if (daysUntilNextFreeze == 0 && user.StreakFreezesAccumulated >= AppConstants.MaxStreakFreezesAccumulated)
         {
             daysUntilNextFreeze = AppConstants.StreakDaysPerFreeze;
         }

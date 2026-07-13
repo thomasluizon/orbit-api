@@ -21,6 +21,8 @@ namespace Orbit.Api.Mcp.Tools;
 [McpServerToolType]
 public class NotificationTools(IMediator mediator, McpExecutorBridge executorBridge)
 {
+    private const string UpdateNotificationsTool = "update_notifications";
+
     [McpServerTool(Name = "get_notifications"), Description("Get the user's notifications (up to 50, newest first) with unread count.")]
     public async Task<string> GetNotifications(
         ClaimsPrincipal user,
@@ -49,7 +51,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         [Description("The notification ID (GUID)")] string notificationId,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        var result = await executorBridge.ExecuteAsync(user, UpdateNotificationsTool, new
         {
             action = "mark_read",
             notification_id = notificationId
@@ -63,7 +65,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        var result = await executorBridge.ExecuteAsync(user, UpdateNotificationsTool, new
         {
             action = "mark_all_read"
         }, confirmationToken: null, cancellationToken);
@@ -79,7 +81,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         [Description("Client auth secret")] string auth,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        var result = await executorBridge.ExecuteAsync(user, UpdateNotificationsTool, new
         {
             action = "subscribe_push",
             endpoint,
@@ -96,7 +98,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         [Description("Push service endpoint URL to remove")] string endpoint,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        var result = await executorBridge.ExecuteAsync(user, UpdateNotificationsTool, new
         {
             action = "unsubscribe_push",
             endpoint
@@ -110,7 +112,7 @@ public class NotificationTools(IMediator mediator, McpExecutorBridge executorBri
         ClaimsPrincipal user,
         CancellationToken cancellationToken = default)
     {
-        var result = await executorBridge.ExecuteAsync(user, "update_notifications", new
+        var result = await executorBridge.ExecuteAsync(user, UpdateNotificationsTool, new
         {
             action = "test_push"
         }, confirmationToken: null, cancellationToken);

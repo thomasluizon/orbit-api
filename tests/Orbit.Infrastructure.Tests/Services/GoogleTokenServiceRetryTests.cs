@@ -22,6 +22,7 @@ public class GoogleTokenServiceRetryTests
             {
                 ["Google:ClientId"] = "client-id",
                 ["Google:ClientSecret"] = "client-secret",
+                ["Google:TokenUrl"] = "https://oauth2.googleapis.com/token",
             })
             .Build();
 

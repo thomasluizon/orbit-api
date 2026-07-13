@@ -473,7 +473,7 @@ public class OrbitDbContext : DbContext
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
                     v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
                 .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[]'::jsonb")
+                .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(
                     new ValueComparer<IReadOnlyList<string>>(
                         (l1, l2) => JsonSerializer.Serialize(l1, (JsonSerializerOptions?)null) == JsonSerializer.Serialize(l2, (JsonSerializerOptions?)null),
@@ -771,7 +771,7 @@ public class OrbitDbContext : DbContext
                     v => SerializeJson(v),
                     v => DeserializeJson(v, new List<ChecklistItem>()))
                 .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[]'::jsonb")
+                .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<ChecklistItem>());
 
             entity.Property(h => h.ReminderTimes)
@@ -787,7 +787,7 @@ public class OrbitDbContext : DbContext
                     v => SerializeJson(v),
                     v => DeserializeJson(v, new List<ScheduledReminderTime>()))
                 .HasColumnType(JsonbColumnType)
-                .HasDefaultValueSql("'[]'::jsonb")
+                .HasDefaultValueSql(EmptyJsonArraySql)
                 .Metadata.SetValueComparer(CreateReadOnlyListComparer<ScheduledReminderTime>());
 
             if (encConverter is null || nullableEncConverter is null)
