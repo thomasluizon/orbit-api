@@ -18,7 +18,8 @@ public class PendingClarification : Entity
     public string QuickActionsJson { get; private set; } = "[]";
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
-    public DateTime? ResolvedAtUtc { get; }
+    // EF Core unmaps read-only auto-properties (would DropColumn); keep the private setter so this column stays mapped. https://github.com/thomasluizon/orbit-api/pull/389
+    public DateTime? ResolvedAtUtc { get; private set; }
 
     private PendingClarification() { }
 

@@ -12,7 +12,8 @@ public class Report : Entity
     public Guid? CheerId { get; private set; }
     public ReportStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
-    public DateTime? ReviewedAtUtc { get; }
+    // EF Core unmaps read-only auto-properties (would DropColumn); keep the private setter so this column stays mapped. https://github.com/thomasluizon/orbit-api/pull/389
+    public DateTime? ReviewedAtUtc { get; private set; }
 
     private Report() { }
 
