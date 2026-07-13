@@ -1,9 +1,11 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -96,22 +98,38 @@ public class GetHabitByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WrongUser_ReturnsFailure()
+    public async Task Handle_WrongUser_CannotReadAnotherUsersHabit_ReturnsNotFound()
     {
-        _habitRepo.FindAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Habit>().AsReadOnly());
+        var databaseName = $"GetHabitByIdIsolation_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var ownerHabit = Habit.Create(new HabitCreateParams(
+                UserId, "Owner-only habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+            seed.Habits.Add(ownerHabit);
+            await seed.SaveChangesAsync();
+            habitId = ownerHabit.Id;
+        }
 
-        var wrongUserId = Guid.NewGuid();
-        var query = new GetHabitByIdQuery(wrongUserId, HabitId);
+        await using var context = CreateContext(databaseName);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        var handler = new GetHabitByIdQueryHandler(
+            new GenericRepository<Habit>(context),
+            new GenericRepository<HabitLog>(context),
+            userDateService);
 
-        var result = await _handler.Handle(query, CancellationToken.None);
+        var attackerId = Guid.NewGuid();
+        var ownerResult = await handler.Handle(new GetHabitByIdQuery(UserId, habitId), CancellationToken.None);
+        var attackerResult = await handler.Handle(new GetHabitByIdQuery(attackerId, habitId), CancellationToken.None);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("HABIT_NOT_FOUND");
+        ownerResult.IsSuccess.Should().BeTrue("the owner must be able to read their own habit");
+        attackerResult.IsFailure.Should().BeTrue("a different user must never read another user's habit");
+        attackerResult.ErrorCode.Should().Be("HABIT_NOT_FOUND");
     }
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     [Fact]
     public async Task Handle_ForeignUserHabit_DoesNotQueryLogs()

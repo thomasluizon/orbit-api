@@ -1,12 +1,14 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -400,6 +402,46 @@ public class UpdateHabitToolTests
         result.Success.Should().BeTrue();
         habit.DueTime.Should().Be(new TimeOnly(6, 0));
     }
+
+    [Fact]
+    public async Task WrongUser_CannotUpdateAnothersHabit_OwnerCan_RealContext()
+    {
+        var databaseName = $"UpdateHabitIsolation_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var ownerHabit = CreateHabit("Original title", FrequencyUnit.Day, 1);
+            seed.Habits.Add(ownerHabit);
+            await seed.SaveChangesAsync();
+            habitId = ownerHabit.Id;
+        }
+
+        await using var context = CreateContext(databaseName);
+        var tool = new UpdateHabitTool(new GenericRepository<Habit>(context));
+
+        var attackerId = Guid.NewGuid();
+        var attackerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Hijacked"), attackerId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        attackerResult.Success.Should().BeFalse();
+        attackerResult.Error.Should().Contain("not found");
+        await using (var afterAttack = CreateContext(databaseName))
+            (await afterAttack.Habits.SingleAsync(h => h.Id == habitId)).Title
+                .Should().Be("Original title", "a foreign user must not rename another user's habit");
+
+        var ownerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Owner rename"), UserId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        ownerResult.Success.Should().BeTrue("the owner can update their own habit");
+        await using (var afterOwner = CreateContext(databaseName))
+            (await afterOwner.Habits.SingleAsync(h => h.Id == habitId)).Title.Should().Be("Owner rename");
+    }
+
+    private static JsonElement RenameArgs(Guid habitId, string title) =>
+        JsonDocument.Parse($$"""{"habit_id":"{{habitId}}","title":"{{title}}"}""").RootElement;
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {

@@ -1,12 +1,14 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -66,6 +68,46 @@ public class DeleteHabitToolTests
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("habit_id is required");
     }
+
+    [Fact]
+    public async Task WrongUser_CannotDeleteAnothersHabit_OwnerCan_RealContext()
+    {
+        var databaseName = $"DeleteHabitIsolation_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var ownerHabit = CreateHabit("Owner-only habit");
+            seed.Habits.Add(ownerHabit);
+            await seed.SaveChangesAsync();
+            habitId = ownerHabit.Id;
+        }
+
+        await using var context = CreateContext(databaseName);
+        var tool = new DeleteHabitTool(new GenericRepository<Habit>(context));
+
+        var attackerId = Guid.NewGuid();
+        var attackerResult = await tool.ExecuteAsync(ArgsFor(habitId), attackerId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        attackerResult.Success.Should().BeFalse();
+        attackerResult.Error.Should().Contain("not found");
+        await using (var afterAttack = CreateContext(databaseName))
+            (await afterAttack.Habits.AnyAsync(h => h.Id == habitId))
+                .Should().BeTrue("a foreign user must not delete another user's habit");
+
+        var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        ownerResult.Success.Should().BeTrue("the owner can delete their own habit");
+        await using (var afterOwner = CreateContext(databaseName))
+            (await afterOwner.Habits.AnyAsync(h => h.Id == habitId)).Should().BeFalse();
+    }
+
+    private static JsonElement ArgsFor(Guid habitId) =>
+        JsonDocument.Parse($$"""{"habit_id":"{{habitId}}"}""").RootElement;
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title)
     {
