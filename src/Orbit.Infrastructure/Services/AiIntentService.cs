@@ -198,28 +198,10 @@ public sealed partial class AiIntentService(
             if (update.Usage is not null)
                 streamedUsage = update.Usage;
 
-            foreach (var part in update.ContentUpdate.Where(part => !string.IsNullOrEmpty(part.Text)))
-            {
-                if (!firstTokenLogged)
-                {
-                    firstTokenLogged = true;
-                    LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
-                }
+            firstTokenLogged = await AppendContentDeltasAsync(
+                update, contentBuilder, streamSink, stopwatch, firstTokenLogged);
 
-                contentBuilder.Append(part.Text);
-                await streamSink(AiStreamEvent.Delta(part.Text));
-            }
-
-            foreach (var toolCallUpdate in update.ToolCallUpdates)
-            {
-                if (!toolCallBuilders.TryGetValue(toolCallUpdate.Index, out var builder))
-                {
-                    builder = new StreamingToolCallBuilder();
-                    toolCallBuilders[toolCallUpdate.Index] = builder;
-                }
-
-                builder.Apply(toolCallUpdate);
-            }
+            ApplyToolCallUpdates(update, toolCallBuilders);
 
             if (update.FinishReason is { } reason)
                 finishReason = reason;
@@ -245,6 +227,43 @@ public sealed partial class AiIntentService(
             messages.Add(new AssistantChatMessage(text));
 
         return new CompletedRound(text, []);
+    }
+
+    private async Task<bool> AppendContentDeltasAsync(
+        StreamingChatCompletionUpdate update,
+        StringBuilder contentBuilder,
+        Func<AiStreamEvent, Task> streamSink,
+        System.Diagnostics.Stopwatch stopwatch,
+        bool firstTokenLogged)
+    {
+        foreach (var part in update.ContentUpdate.Where(part => !string.IsNullOrEmpty(part.Text)))
+        {
+            if (!firstTokenLogged)
+            {
+                firstTokenLogged = true;
+                LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
+            }
+
+            contentBuilder.Append(part.Text);
+            await streamSink(AiStreamEvent.Delta(part.Text));
+        }
+
+        return firstTokenLogged;
+    }
+
+    private static void ApplyToolCallUpdates(
+        StreamingChatCompletionUpdate update, SortedDictionary<int, StreamingToolCallBuilder> toolCallBuilders)
+    {
+        foreach (var toolCallUpdate in update.ToolCallUpdates)
+        {
+            if (!toolCallBuilders.TryGetValue(toolCallUpdate.Index, out var builder))
+            {
+                builder = new StreamingToolCallBuilder();
+                toolCallBuilders[toolCallUpdate.Index] = builder;
+            }
+
+            builder.Apply(toolCallUpdate);
+        }
     }
 
     private static List<AiToolCall> ToAiToolCalls(IReadOnlyList<ChatToolCall> toolCalls)

@@ -274,7 +274,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         IExecutionStrategy strategy,
         CancellationToken cancellationToken)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             try
             {
@@ -307,6 +308,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             {
                 dbContext.ChangeTracker.Clear();
             }
+
+            attempt++;
         }
     }
 

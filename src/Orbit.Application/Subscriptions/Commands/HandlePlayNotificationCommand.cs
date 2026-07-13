@@ -68,46 +68,12 @@ public partial class HandlePlayNotificationCommandHandler(
         if (state is null)
             return Result.Success();
 
-        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-            u => u.PlayPurchaseToken == notification.PurchaseToken, cancellationToken);
-
-        if (user is null && !string.IsNullOrEmpty(state.LinkedPurchaseToken))
-        {
-            user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-                u => u.PlayPurchaseToken == state.LinkedPurchaseToken, cancellationToken);
-        }
-
+        var user = await ResolveNotificationUserAsync(notification, state, cancellationToken);
         if (user is null)
-        {
-            LogUserNotFound(logger, notification.NotificationType);
             return Result.Success();
-        }
-
-        if (Guid.TryParse(state.ObfuscatedAccountId, out var purchaseAccountId) && purchaseAccountId != user.Id)
-        {
-            LogAccountMismatch(logger, user.Id);
-            return Result.Success();
-        }
 
         var grantsPro = state.GrantsOrbitPro(_settings);
-        string? consumedCouponId = null;
-        if (grantsPro)
-        {
-            consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, notification.PurchaseToken);
-            if (StripeCoversLaterPeriod(user, state))
-            {
-                user.LinkPlayPurchaseToken(notification.PurchaseToken);
-                LogStripeCoversLaterPeriod(logger, user.Id);
-            }
-            else
-            {
-                user.SetPlaySubscription(notification.PurchaseToken, state.ExpiresAt, state.Interval);
-            }
-        }
-        else
-        {
-            user.CancelPlaySubscription();
-        }
+        var consumedCouponId = ApplySubscriptionState(user, state, notification.PurchaseToken, grantsPro);
 
         if (!string.IsNullOrEmpty(decoded.MessageId))
             await processedNotificationRepository.AddAsync(ProcessedPlayNotification.Create(decoded.MessageId), cancellationToken);
@@ -131,6 +97,56 @@ public partial class HandlePlayNotificationCommandHandler(
 
         LogNotificationProcessed(logger, notification.NotificationType, user.Id, grantsPro);
         return Result.Success();
+    }
+
+    private async Task<User?> ResolveNotificationUserAsync(
+        SubscriptionNotification notification, PlaySubscriptionState state, CancellationToken cancellationToken)
+    {
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+            u => u.PlayPurchaseToken == notification.PurchaseToken, cancellationToken);
+
+        if (user is null && !string.IsNullOrEmpty(state.LinkedPurchaseToken))
+        {
+            user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+                u => u.PlayPurchaseToken == state.LinkedPurchaseToken, cancellationToken);
+        }
+
+        if (user is null)
+        {
+            LogUserNotFound(logger, notification.NotificationType);
+            return null;
+        }
+
+        if (Guid.TryParse(state.ObfuscatedAccountId, out var purchaseAccountId) && purchaseAccountId != user.Id)
+        {
+            LogAccountMismatch(logger, user.Id);
+            return null;
+        }
+
+        return user;
+    }
+
+    private string? ApplySubscriptionState(
+        User user, PlaySubscriptionState state, string purchaseToken, bool grantsPro)
+    {
+        if (!grantsPro)
+        {
+            user.CancelPlaySubscription();
+            return null;
+        }
+
+        var consumedCouponId = referralCouponConsumer.ConsumeOnNewPurchase(user, state, purchaseToken);
+        if (StripeCoversLaterPeriod(user, state))
+        {
+            user.LinkPlayPurchaseToken(purchaseToken);
+            LogStripeCoversLaterPeriod(logger, user.Id);
+        }
+        else
+        {
+            user.SetPlaySubscription(purchaseToken, state.ExpiresAt, state.Interval);
+        }
+
+        return consumedCouponId;
     }
 
     private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>

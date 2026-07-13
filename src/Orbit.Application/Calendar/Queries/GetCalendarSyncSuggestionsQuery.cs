@@ -67,27 +67,40 @@ public partial class GetCalendarSyncSuggestionsQueryHandler(
         var items = new List<CalendarSyncSuggestionItem>();
         foreach (var suggestion in suggestions.OrderBy(s => s.StartDateUtc))
         {
-            if (DateOnly.FromDateTime(suggestion.StartDateUtc) < userToday) continue;
-            if (importedEventIds.Contains(suggestion.GoogleEventId)) continue;
-
-            var eventItem = DeserializeEvent(suggestion);
-            if (eventItem is null) continue;
-            if (selectedCalendars is not null
-                && !string.IsNullOrEmpty(eventItem.CalendarId)
-                && !selectedCalendars.Contains(eventItem.CalendarId)) continue;
-            if (importedLegacyKeys.Contains(BuildLegacyMatchKey(
-                eventItem.Title,
-                eventItem.StartDate,
-                eventItem.StartTime))) continue;
-
-            items.Add(new CalendarSyncSuggestionItem(
-                suggestion.Id,
-                suggestion.GoogleEventId,
-                eventItem,
-                suggestion.DiscoveredAtUtc));
+            var item = TryBuildSuggestionItem(
+                suggestion, userToday, importedEventIds, importedLegacyKeys, selectedCalendars);
+            if (item is not null)
+                items.Add(item);
         }
 
         return Result.Success(items);
+    }
+
+    private CalendarSyncSuggestionItem? TryBuildSuggestionItem(
+        GoogleCalendarSyncSuggestion suggestion,
+        DateOnly userToday,
+        HashSet<string> importedEventIds,
+        HashSet<string> importedLegacyKeys,
+        HashSet<string>? selectedCalendars)
+    {
+        if (DateOnly.FromDateTime(suggestion.StartDateUtc) < userToday) return null;
+        if (importedEventIds.Contains(suggestion.GoogleEventId)) return null;
+
+        var eventItem = DeserializeEvent(suggestion);
+        if (eventItem is null) return null;
+        if (selectedCalendars is not null
+            && !string.IsNullOrEmpty(eventItem.CalendarId)
+            && !selectedCalendars.Contains(eventItem.CalendarId)) return null;
+        if (importedLegacyKeys.Contains(BuildLegacyMatchKey(
+            eventItem.Title,
+            eventItem.StartDate,
+            eventItem.StartTime))) return null;
+
+        return new CalendarSyncSuggestionItem(
+            suggestion.Id,
+            suggestion.GoogleEventId,
+            eventItem,
+            suggestion.DiscoveredAtUtc);
     }
 
     private CalendarEventItem? DeserializeEvent(GoogleCalendarSyncSuggestion suggestion)

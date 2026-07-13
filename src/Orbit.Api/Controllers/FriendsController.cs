@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,9 +16,9 @@ namespace Orbit.Api.Controllers;
 public partial class FriendsController(IMediator mediator, ILogger<FriendsController> logger) : ControllerBase
 {
     public record SendFriendRequestBody(string? Handle, string? ReferralCode);
-    public record SendCheerBody(Guid RecipientId, Guid? HabitId, string? Note);
-    public record BlockUserBody(Guid BlockedUserId);
-    public record ReportUserBody(Guid ReportedUserId, ReportReason Reason, string? Details, Guid? CheerId);
+    public record SendCheerBody([property: JsonRequired] Guid RecipientId, Guid? HabitId, string? Note);
+    public record BlockUserBody([property: JsonRequired] Guid BlockedUserId);
+    public record ReportUserBody([property: JsonRequired] Guid ReportedUserId, [property: JsonRequired] ReportReason Reason, string? Details, Guid? CheerId);
 
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]

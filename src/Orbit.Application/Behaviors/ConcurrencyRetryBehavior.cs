@@ -24,7 +24,8 @@ public sealed class ConcurrencyRetryBehavior<TRequest, TResponse>(
         if (request is not IConcurrencyRetryable)
             return await next(cancellationToken);
 
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             try
             {
@@ -34,6 +35,8 @@ public sealed class ConcurrencyRetryBehavior<TRequest, TResponse>(
             {
                 unitOfWork.ResetTracking();
             }
+
+            attempt++;
         }
     }
 }

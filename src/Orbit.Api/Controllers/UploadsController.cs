@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,7 +14,7 @@ namespace Orbit.Api.Controllers;
 [Route("api/uploads")]
 public partial class UploadsController(IMediator mediator, ILogger<UploadsController> logger) : ControllerBase
 {
-    public record SignUploadRequest(string ContentType, long SizeBytes);
+    public record SignUploadRequest(string ContentType, [property: JsonRequired] long SizeBytes);
 
     [HttpPost("sign")]
     [DistributedRateLimit("uploads")]

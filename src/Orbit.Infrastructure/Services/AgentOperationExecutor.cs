@@ -222,7 +222,8 @@ public partial class AgentOperationExecutor(
         if (tool is not IConcurrencyRetryableTool)
             return await tool.ExecuteAsync(execution.Arguments, execution.Request.UserId, cancellationToken);
 
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             try
             {
@@ -232,6 +233,8 @@ public partial class AgentOperationExecutor(
             {
                 unitOfWork.ResetTracking();
             }
+
+            attempt++;
         }
     }
 

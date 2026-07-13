@@ -162,45 +162,57 @@ public partial class ResendEmailService(
 
         for (var attempt = 0; attempt <= MaxMarketingRetries; attempt++)
         {
-            HttpResponseMessage response;
-            try
-            {
-                using var content = new StringContent(serializedPayload, Encoding.UTF8, "application/json");
-                response = await client.PostAsync("/emails", content, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                LogEmailSendException(logger, ex);
+            var outcome = await TrySendMarketingAsync(client, subject, serializedPayload, attempt, cancellationToken);
+            if (outcome == MarketingSendOutcome.Complete)
                 return;
-            }
-
-            using (response)
-            {
-                if (response.IsSuccessStatusCode)
-                {
-                    if (logger.IsEnabled(LogLevel.Debug))
-                        LogEmailSent(logger, subject);
-                    return;
-                }
-
-                var isRetriable = response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
-                if (!isRetriable || attempt == MaxMarketingRetries)
-                {
-                    if (logger.IsEnabled(LogLevel.Error))
-                        LogEmailFailed(logger, subject, response.StatusCode);
-                    return;
-                }
-            }
 
             var backoff = TimeSpan.FromMilliseconds(_settings.MarketingRetryBaseDelayMs * Math.Pow(2, attempt));
             if (logger.IsEnabled(LogLevel.Warning))
                 LogMarketingRetry(logger, attempt + 1, backoff.TotalMilliseconds);
             await Task.Delay(backoff, cancellationToken);
         }
+    }
+
+    private enum MarketingSendOutcome { Complete, ShouldRetry }
+
+    private async Task<MarketingSendOutcome> TrySendMarketingAsync(
+        HttpClient client, string subject, string serializedPayload, int attempt, CancellationToken cancellationToken)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            using var content = new StringContent(serializedPayload, Encoding.UTF8, "application/json");
+            response = await client.PostAsync("/emails", content, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogEmailSendException(logger, ex);
+            return MarketingSendOutcome.Complete;
+        }
+
+        using (response)
+        {
+            if (response.IsSuccessStatusCode)
+            {
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogEmailSent(logger, subject);
+                return MarketingSendOutcome.Complete;
+            }
+
+            var isRetriable = response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500;
+            if (!isRetriable || attempt == MaxMarketingRetries)
+            {
+                if (logger.IsEnabled(LogLevel.Error))
+                    LogEmailFailed(logger, subject, response.StatusCode);
+                return MarketingSendOutcome.Complete;
+            }
+        }
+
+        return MarketingSendOutcome.ShouldRetry;
     }
 
     public async Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default)

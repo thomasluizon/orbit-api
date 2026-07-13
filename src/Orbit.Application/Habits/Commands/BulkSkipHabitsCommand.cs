@@ -114,24 +114,26 @@ public class BulkSkipHabitsCommandHandler(
         }
 
         if (habit.IsFlexible)
-        {
-            var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
-            if (remaining <= 0)
-                return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                    Error: ErrorMessages.AllInstancesDone.Message, ErrorCode: ErrorMessages.AllInstancesDone.Code);
+            return await SkipFlexibleAsync(index, habitId, habit, targetDate, weekStartDay, cancellationToken);
 
-            var skipResult = habit.SkipFlexible(targetDate);
-            if (skipResult.IsFailure)
-                return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
-                    Error: skipResult.Error, ErrorCode: skipResult.ErrorCode);
+        habit.AdvanceDueDate(targetDate);
+        return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
+    }
 
-            await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
-        }
-        else
-        {
-            habit.AdvanceDueDate(targetDate);
-        }
+    private async Task<BulkSkipItemResult> SkipFlexibleAsync(
+        int index, Guid habitId, Habit habit, DateOnly targetDate, int weekStartDay, CancellationToken cancellationToken)
+    {
+        var remaining = HabitScheduleService.GetRemainingCompletions(habit, targetDate, habit.Logs, weekStartDay);
+        if (remaining <= 0)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: ErrorMessages.AllInstancesDone.Message, ErrorCode: ErrorMessages.AllInstancesDone.Code);
 
+        var skipResult = habit.SkipFlexible(targetDate);
+        if (skipResult.IsFailure)
+            return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Failed, HabitId: habitId,
+                Error: skipResult.Error, ErrorCode: skipResult.ErrorCode);
+
+        await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
         return new BulkSkipItemResult(Index: index, Status: BulkItemStatus.Success, HabitId: habitId);
     }
 }
