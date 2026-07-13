@@ -40,7 +40,8 @@ public class SendCheerCommandTests
         var dispatcher = new SocialNotificationDispatcher(
             _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new SendCheerCommandHandler(
-            guard, friendGraph, repos, dispatcher, _moderation, new XpAwarder(_xpAwardLogRepository), _unitOfWork,
+            new SocialInteractionServices(guard, friendGraph, dispatcher), repos, _moderation,
+            new XpAwarder(_xpAwardLogRepository), _unitOfWork,
             Substitute.For<ILogger<SendCheerCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _sender, _recipient);

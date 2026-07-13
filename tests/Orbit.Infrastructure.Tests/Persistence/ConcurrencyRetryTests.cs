@@ -346,8 +346,9 @@ public class ConcurrencyRetryTests
 
     private static UpdateGoalProgressCommandHandler CreateGoalProgressHandler(OrbitDbContext context) =>
         new(
-            new GenericRepository<Goal>(context),
-            new GenericRepository<GoalProgressLog>(context),
+            new GoalRepositories(
+                new GenericRepository<Goal>(context),
+                new GenericRepository<GoalProgressLog>(context)),
             PassingGoalGate(),
             Substitute.For<IGamificationService>(),
             new UnitOfWork(context, new DatabaseConnectionSettings()),

@@ -11,17 +11,21 @@ namespace Orbit.Domain.Interfaces;
 /// </summary>
 public record DailySummaryContent(string Summary, string Insight);
 
+/// <summary>The point-in-time user state a daily summary is generated for.</summary>
+public record DailySummaryContext(
+    DateOnly DateFrom,
+    DateOnly DateTo,
+    DateOnly UserToday,
+    string Language,
+    TimeOnly? CurrentLocalTime,
+    int CurrentStreak,
+    int StreakFreezesAccumulated,
+    IReadOnlyDictionary<Guid, DateOnly> LastBadHabitSlipDates);
+
 public interface ISummaryService
 {
     Task<Result<DailySummaryContent>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
-        DateOnly dateFrom,
-        DateOnly dateTo,
-        DateOnly userToday,
-        string language,
-        TimeOnly? currentLocalTime,
-        int currentStreak,
-        int streakFreezesAccumulated,
-        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
+        DailySummaryContext context,
         CancellationToken cancellationToken = default);
 }

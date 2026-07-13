@@ -32,7 +32,7 @@ public class GetCalendarEventsQueryHandlerTests
         _payGate.CanAccessCalendar(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new GetCalendarEventsQueryHandler(
-            _userRepo, _habitRepo, _suggestionRepo, _payGate, _googleTokenService, _eventFetcher, _unitOfWork, _logger);
+            new GetCalendarEventsRepositories(_userRepo, _habitRepo, _suggestionRepo), _payGate, _googleTokenService, _eventFetcher, _unitOfWork, _logger);
     }
 
     private static User CreateTestUser()

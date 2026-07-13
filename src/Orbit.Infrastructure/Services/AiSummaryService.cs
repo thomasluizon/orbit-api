@@ -16,24 +16,15 @@ public sealed partial class AiSummaryService(
 
     public async Task<Result<DailySummaryContent>> GenerateSummaryAsync(
         IEnumerable<Habit> allHabits,
-        DateOnly dateFrom,
-        DateOnly dateTo,
-        DateOnly userToday,
-        string language,
-        TimeOnly? currentLocalTime,
-        int currentStreak,
-        int streakFreezesAccumulated,
-        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates,
+        DailySummaryContext context,
         CancellationToken cancellationToken = default)
     {
-        var scheduledHabits = SelectScheduledHabits(allHabits, userToday, dateFrom, dateTo);
+        var scheduledHabits = SelectScheduledHabits(allHabits, context.UserToday, context.DateFrom, context.DateTo);
 
-        var prompt = BuildSummaryPrompt(
-            scheduledHabits, dateFrom, dateTo, userToday, language, currentLocalTime,
-            currentStreak, streakFreezesAccumulated, lastBadHabitSlipDates);
+        var prompt = BuildSummaryPrompt(scheduledHabits, context);
 
         if (logger.IsEnabled(LogLevel.Debug))
-            LogGeneratingDailySummary(logger, dateFrom, language);
+            LogGeneratingDailySummary(logger, context.DateFrom, context.Language);
 
         try
         {
@@ -98,26 +89,21 @@ public sealed partial class AiSummaryService(
 
     private static string BuildSummaryPrompt(
         List<Habit> scheduledHabits,
-        DateOnly date,
-        DateOnly dateTo,
-        DateOnly userToday,
-        string language,
-        TimeOnly? currentLocalTime,
-        int currentStreak,
-        int streakFreezesAccumulated,
-        IReadOnlyDictionary<Guid, DateOnly> lastBadHabitSlipDates)
+        DailySummaryContext context)
     {
-        var languageName = LocaleHelper.GetAiLanguageName(language);
+        var languageName = LocaleHelper.GetAiLanguageName(context.Language);
 
-        var habitSection = BuildHabitSection(scheduledHabits, date, dateTo, userToday, lastBadHabitSlipDates);
+        var habitSection = BuildHabitSection(
+            scheduledHabits, context.DateFrom, context.DateTo, context.UserToday, context.LastBadHabitSlipDates);
 
         var goodHabits = scheduledHabits.Where(h => h.ParentHabitId is null && !h.IsBadHabit).ToList();
-        var doneTotal = goodHabits.Count(h => IsDoneInRange(h, date, dateTo));
-        var badHabitSlips = scheduledHabits.Count(h => h.IsBadHabit && IsDoneInRange(h, date, dateTo));
-        var contextHeader = BuildContextHeader(currentLocalTime, currentStreak, streakFreezesAccumulated, badHabitSlips);
+        var doneTotal = goodHabits.Count(h => IsDoneInRange(h, context.DateFrom, context.DateTo));
+        var badHabitSlips = scheduledHabits.Count(h => h.IsBadHabit && IsDoneInRange(h, context.DateFrom, context.DateTo));
+        var contextHeader = BuildContextHeader(
+            context.CurrentLocalTime, context.CurrentStreak, context.StreakFreezesAccumulated, badHabitSlips);
 
         return $"""
-            Date: {date:MMMM d, yyyy}
+            Date: {context.DateFrom:MMMM d, yyyy}
             {contextHeader}
             Progress: {doneTotal}/{goodHabits.Count} habits completed
 

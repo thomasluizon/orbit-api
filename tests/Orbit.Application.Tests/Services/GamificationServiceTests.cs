@@ -38,7 +38,7 @@ public class GamificationServiceTests
         var repos = new GamificationRepositories(
             _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo);
         _sut = new GamificationService(
-            repos, _pushService, _userDateService, _feedEmitter, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
+            repos, new GamificationNotifiers(_pushService, _feedEmitter), _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
             _featureFlagService, Substitute.For<ILogger<GamificationService>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

@@ -13,11 +13,9 @@ namespace Orbit.Application.Accountability.Commands;
 public record CheckInAccountabilityCommand(Guid UserId, Guid PairId, string? Note) : IRequest<Result<Guid>>;
 
 public partial class CheckInAccountabilityCommandHandler(
-    SocialAccessGuard socialAccessGuard,
+    SocialInteractionServices social,
     AccountabilityPairService accountabilityPairService,
-    FriendGraphService friendGraphService,
     AccountabilityRepositories repositories,
-    SocialNotificationDispatcher notificationDispatcher,
     IContentModerationService contentModerationService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
@@ -27,7 +25,7 @@ public partial class CheckInAccountabilityCommandHandler(
 
     public async Task<Result<Guid>> Handle(CheckInAccountabilityCommand request, CancellationToken cancellationToken)
     {
-        var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
+        var access = await social.AccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
         if (access.IsFailure)
             return access.PropagateError<Guid>();
         var checker = access.Value;
@@ -38,7 +36,7 @@ public partial class CheckInAccountabilityCommandHandler(
 
         var buddyId = pair.RequesterId == request.UserId ? pair.AddresseeId : pair.RequesterId;
 
-        if (await friendGraphService.IsBlockedBetweenAsync(request.UserId, buddyId, cancellationToken))
+        if (await social.FriendGraph.IsBlockedBetweenAsync(request.UserId, buddyId, cancellationToken))
             return Result.Failure<Guid>(ErrorMessages.Blocked);
 
         var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
@@ -65,11 +63,11 @@ public partial class CheckInAccountabilityCommandHandler(
             cancellationToken: cancellationToken);
         var notification = BuildBuddyNotification(buddy, checker);
         if (notification is not null)
-            await notificationDispatcher.StageAsync(notification, cancellationToken);
+            await social.NotificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         if (notification is not null)
-            await notificationDispatcher.PushAsync(notification, cancellationToken);
+            await social.NotificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }

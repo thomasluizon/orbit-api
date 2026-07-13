@@ -20,8 +20,7 @@ public record UpdateGoalCommand(
     DateOnly? Deadline) : IRequest<Result>, IConcurrencyRetryable;
 
 public partial class UpdateGoalCommandHandler(
-    IGenericRepository<Goal> goalRepository,
-    IGenericRepository<GoalProgressLog> progressLogRepository,
+    GoalRepositories repos,
     IPayGateService payGate,
     IUserDateService userDateService,
     IGamificationService gamificationService,
@@ -39,7 +38,7 @@ public partial class UpdateGoalCommandHandler(
         if (request.Deadline is { } deadline && deadline < today)
             return Result.Failure(ErrorMessages.DeadlineInPast);
 
-        var goal = await goalRepository.FindOneTrackedAsync(
+        var goal = await repos.Goals.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken: cancellationToken);
 
@@ -53,7 +52,7 @@ public partial class UpdateGoalCommandHandler(
         if (result.Value == GoalEditTransition.Completed)
         {
             var progressLog = GoalProgressLog.Create(goal.Id, currentValue, currentValue);
-            await progressLogRepository.AddAsync(progressLog, cancellationToken);
+            await repos.ProgressLogs.AddAsync(progressLog, cancellationToken);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

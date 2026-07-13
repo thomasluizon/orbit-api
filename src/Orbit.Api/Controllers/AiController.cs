@@ -14,14 +14,18 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Api.Controllers;
 
+/// <summary>Groups the pending-agent-state stores the AI controller touches to keep its constructor small.</summary>
+public record AgentPendingStores(
+    IPendingAgentOperationStore OperationStore,
+    IPendingClarificationStore ClarificationStore);
+
 [Authorize]
 [ApiController]
 [Route("api/ai")]
 public class AiController(
     IAgentCatalogService catalogService,
     IAgentPolicyEvaluator policyEvaluator,
-    IPendingAgentOperationStore pendingOperationStore,
-    IPendingClarificationStore pendingClarificationStore,
+    AgentPendingStores pendingStores,
     IAgentStepUpService stepUpService,
     IAgentAuditService auditService,
     IAgentOperationExecutor operationExecutor,
@@ -112,7 +116,7 @@ public class AiController(
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        var confirmation = pendingOperationStore.Confirm(HttpContext.GetUserId(), id);
+        var confirmation = pendingStores.OperationStore.Confirm(HttpContext.GetUserId(), id);
         await auditService.RecordAsync(new AgentAuditEntry(
             userId,
             AgentCapabilityIds.ChatInteract,
@@ -215,7 +219,7 @@ public class AiController(
             return Forbid();
 
         var userId = HttpContext.GetUserId();
-        var pendingExecution = pendingOperationStore.GetExecution(userId, id);
+        var pendingExecution = pendingStores.OperationStore.GetExecution(userId, id);
         if (pendingExecution is null)
         {
             await auditService.RecordAsync(new AgentAuditEntry(
@@ -275,7 +279,7 @@ public class AiController(
                 cancellationToken);
         }
 
-        var pending = await pendingClarificationStore.GetForResolutionAsync(operationId, userId, cancellationToken);
+        var pending = await pendingStores.ClarificationStore.GetForResolutionAsync(operationId, userId, cancellationToken);
         if (pending is null)
         {
             return await DenyResolveClarificationAsync(
@@ -314,7 +318,7 @@ public class AiController(
                 cancellationToken);
         }
 
-        var claimed = await pendingClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
+        var claimed = await pendingStores.ClarificationStore.MarkResolvedAsync(operationId, userId, cancellationToken);
         if (!claimed)
         {
             var auditError = pending.ExpiresAtUtc <= DateTime.UtcNow
@@ -344,9 +348,7 @@ public class AiController(
             userId,
             authMethod,
             operationId,
-            AgentPolicyDecisionStatus.Denied,
-            AgentOperationStatus.Failed,
-            auditError,
+            new ResolveAuditOutcome(AgentPolicyDecisionStatus.Denied, AgentOperationStatus.Failed, auditError),
             cancellationToken);
 
         return response;
@@ -375,26 +377,30 @@ public class AiController(
             userId,
             authMethod,
             operationId,
-            result.Operation.Status == AgentOperationStatus.Succeeded
-                ? AgentPolicyDecisionStatus.Allowed
-                : AgentPolicyDecisionStatus.Denied,
-            result.Operation.Status,
-            result.Operation.PolicyReason,
-            cancellationToken,
-            targetName: result.Operation.TargetName);
+            new ResolveAuditOutcome(
+                result.Operation.Status == AgentOperationStatus.Succeeded
+                    ? AgentPolicyDecisionStatus.Allowed
+                    : AgentPolicyDecisionStatus.Denied,
+                result.Operation.Status,
+                result.Operation.PolicyReason,
+                result.Operation.TargetName),
+            cancellationToken);
 
         return Ok(result);
     }
+
+    private sealed record ResolveAuditOutcome(
+        AgentPolicyDecisionStatus PolicyDecision,
+        AgentOperationStatus Status,
+        string? Error,
+        string? TargetName = null);
 
     private Task RecordResolveAuditAsync(
         Guid userId,
         AgentAuthMethod authMethod,
         Guid operationId,
-        AgentPolicyDecisionStatus policyDecision,
-        AgentOperationStatus outcome,
-        string? error,
-        CancellationToken cancellationToken,
-        string? targetName = null)
+        ResolveAuditOutcome auditOutcome,
+        CancellationToken cancellationToken)
     {
         return auditService.RecordAsync(new AgentAuditEntry(
             userId,
@@ -403,13 +409,13 @@ public class AiController(
             AgentExecutionSurface.Chat,
             authMethod,
             AgentRiskClass.Low,
-            policyDecision,
-            outcome,
+            auditOutcome.PolicyDecision,
+            auditOutcome.Status,
             HttpContext.TraceIdentifier,
             "Resolve clarification",
             TargetId: operationId.ToString(),
-            TargetName: targetName,
-            Error: error), cancellationToken);
+            TargetName: auditOutcome.TargetName,
+            Error: auditOutcome.Error), cancellationToken);
     }
 
     private static JsonElement MergeClarificationValue(string baseJson, string value)

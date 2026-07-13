@@ -209,7 +209,8 @@ public class GetHabitScheduleQueryHandler(
         topLevel = HabitScheduleFilters.ApplyFrequencyUnitFilter(topLevel, request.FrequencyUnitFilter);
 
         if (!request.DateFrom.HasValue || !request.DateTo.HasValue)
-            return await BuildNonDateResponse(topLevel, request, lookup, today, weekStartDay, logFrom, logTo, cancellationToken);
+            return await BuildNonDateResponse(
+                topLevel, request, lookup, new HabitScheduleWindow(today, weekStartDay, logFrom, logTo), cancellationToken);
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
@@ -305,16 +306,20 @@ public class GetHabitScheduleQueryHandler(
             .ToLookup(h => h.ParentHabitId);
     }
 
+    private sealed record HabitScheduleWindow(
+        DateOnly Today,
+        int WeekStartDay,
+        DateOnly LogFrom,
+        DateOnly LogTo);
+
     private async Task<Result<PaginatedResponse<HabitScheduleItem>>> BuildNonDateResponse(
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
         ILookup<Guid?, Habit> lookup,
-        DateOnly today,
-        int weekStartDay,
-        DateOnly logFrom,
-        DateOnly logTo,
+        HabitScheduleWindow window,
         CancellationToken cancellationToken)
     {
+        var (today, weekStartDay, logFrom, logTo) = window;
         var allFiltered = topLevel.ToList();
         var allTotalCount = allFiltered.Count;
         var allTotalPages = (int)Math.Ceiling((double)allTotalCount / request.PageSize);

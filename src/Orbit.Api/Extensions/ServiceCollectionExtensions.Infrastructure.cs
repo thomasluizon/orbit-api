@@ -95,6 +95,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<Stripe.InvoiceService>();
         builder.Services.AddSingleton<Stripe.PriceService>();
         builder.Services.AddSingleton<Stripe.CouponService>();
+        builder.Services.AddSingleton<Orbit.Infrastructure.Services.StripeServiceClients>();
         builder.Services.AddScoped<Orbit.Application.Common.IBillingService, Orbit.Infrastructure.Services.StripeBillingService>();
         builder.Services.AddScoped<Orbit.Application.Subscriptions.Services.IPriceResolver, Orbit.Application.Subscriptions.Services.PriceResolver>();
     }

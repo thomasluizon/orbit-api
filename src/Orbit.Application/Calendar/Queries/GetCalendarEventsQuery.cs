@@ -25,10 +25,14 @@ public record CalendarEventItem(
 
 public record GetCalendarEventsQuery(Guid UserId) : IRequest<Result<List<CalendarEventItem>>>, IConcurrencyRetryable;
 
+/// <summary>Groups the repositories the calendar events query touches to keep the handler constructor small.</summary>
+public record GetCalendarEventsRepositories(
+    IGenericRepository<User> Users,
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<GoogleCalendarSyncSuggestion> Suggestions);
+
 public partial class GetCalendarEventsQueryHandler(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
+    GetCalendarEventsRepositories repos,
     IPayGateService payGate,
     IGoogleTokenService googleTokenService,
     ICalendarEventFetcher eventFetcher,
@@ -41,7 +45,7 @@ public partial class GetCalendarEventsQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<List<CalendarEventItem>>();
 
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var user = await repos.Users.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
             return Result.Failure<List<CalendarEventItem>>(ErrorMessages.UserNotFound);
 
@@ -107,12 +111,12 @@ public partial class GetCalendarEventsQueryHandler(
 
     private async Task<HashSet<string>> BuildImportedEventIdSet(Guid userId, CancellationToken ct)
     {
-        var habitEventIds = (await habitRepository.FindAsync(
+        var habitEventIds = (await repos.Habits.FindAsync(
                 h => h.UserId == userId && h.GoogleEventId != null, ct))
             .Select(h => h.GoogleEventId!)
             .ToList();
 
-        var pendingSuggestionEventIds = (await suggestionRepository.FindAsync(
+        var pendingSuggestionEventIds = (await repos.Suggestions.FindAsync(
                 s => s.UserId == userId && s.DismissedAtUtc == null && s.ImportedAtUtc == null, ct))
             .Select(s => s.GoogleEventId)
             .ToList();

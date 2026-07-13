@@ -15,8 +15,7 @@ public record UpdateGoalProgressCommand(
     string? Note = null) : IRequest<Result>, IIdempotentCommand;
 
 public partial class UpdateGoalProgressCommandHandler(
-    IGenericRepository<Goal> goalRepository,
-    IGenericRepository<GoalProgressLog> progressLogRepository,
+    GoalRepositories repos,
     IPayGateService payGate,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
@@ -33,9 +32,9 @@ public partial class UpdateGoalProgressCommandHandler(
         var justCompleted = false;
 
         var saved = await ConcurrencyRetry.ExecuteAsync(
-            goalRepository,
+            repos.Goals,
             unitOfWork,
-            ct => goalRepository.FindOneTrackedAsync(
+            ct => repos.Goals.FindOneTrackedAsync(
                 g => g.Id == request.GoalId && g.UserId == request.UserId, cancellationToken: ct),
             async goal =>
             {
@@ -46,7 +45,7 @@ public partial class UpdateGoalProgressCommandHandler(
 
                 justCompleted = result.Value;
                 var progressLog = GoalProgressLog.Create(goal.Id, previousValue, request.NewValue, request.Note);
-                await progressLogRepository.AddAsync(progressLog, cancellationToken);
+                await repos.ProgressLogs.AddAsync(progressLog, cancellationToken);
                 return Result.Success();
             },
             ErrorMessages.GoalNotFound,

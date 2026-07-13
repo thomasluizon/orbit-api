@@ -39,11 +39,12 @@ public class GetFriendProfileQueryHandlerTests
             guard,
             friendGraph,
             _userDateService,
-            _userRepository,
-            _achievementRepository,
-            _habitRepository,
-            _accountabilityPairRepository,
-            _challengeRepository);
+            new GetFriendProfileRepositories(
+                _userRepository,
+                _achievementRepository,
+                _habitRepository,
+                _accountabilityPairRepository,
+                _challengeRepository));
 
         SocialTestHelpers.StubUsers(_userRepository, _caller, _friend);
         SocialTestHelpers.StubFind(_achievementRepository);
