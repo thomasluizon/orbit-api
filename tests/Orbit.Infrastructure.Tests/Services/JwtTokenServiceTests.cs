@@ -83,6 +83,30 @@ public class JwtTokenServiceTests
     }
 
     [Fact]
+    public void GenerateToken_IncludesGuidJtiClaim()
+    {
+        var token = _sut.GenerateToken(Guid.NewGuid(), "user@orbit.test");
+
+        var jwt = new JwtSecurityTokenHandler().ReadJwtToken(token);
+
+        var jti = jwt.Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;
+        Guid.TryParse(jti, out _).Should().BeTrue();
+    }
+
+    [Fact]
+    public void GenerateToken_ProducesDistinctJtiPerToken()
+    {
+        var handler = new JwtSecurityTokenHandler();
+
+        var firstJti = handler.ReadJwtToken(_sut.GenerateToken(Guid.NewGuid(), "a@orbit.test"))
+            .Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;
+        var secondJti = handler.ReadJwtToken(_sut.GenerateToken(Guid.NewGuid(), "b@orbit.test"))
+            .Claims.Single(c => c.Type == JwtRegisteredClaimNames.Jti).Value;
+
+        secondJti.Should().NotBe(firstJti);
+    }
+
+    [Fact]
     public void GenerateToken_SetsCorrectExpiry()
     {
         var userId = Guid.NewGuid();
