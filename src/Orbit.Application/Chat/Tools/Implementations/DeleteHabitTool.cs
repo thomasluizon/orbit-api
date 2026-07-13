@@ -24,16 +24,12 @@ public class DeleteHabitTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        if (!args.TryGetProperty("habit_id", out var habitIdEl) ||
-            !Guid.TryParse(habitIdEl.GetString(), out var habitId))
-            return new ToolResult(false, Error: "habit_id is required and must be a valid GUID.");
+        if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
+            return HabitToolHelpers.InvalidHabitIdResult();
 
-        var habit = await habitRepository.FindOneTrackedAsync(
-            h => h.Id == habitId && h.UserId == userId,
-            cancellationToken: ct);
-
+        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
         if (habit is null)
-            return new ToolResult(false, Error: $"Habit {habitId} not found.");
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
 
         var title = habit.Title;
         habitRepository.Remove(habit);

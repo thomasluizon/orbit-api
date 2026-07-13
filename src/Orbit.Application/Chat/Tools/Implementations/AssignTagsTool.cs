@@ -86,7 +86,7 @@ public class AssignTagsTool(
         if (habit is null)
             return new ToolResult(false, Error: $"Habit {habitId} not found.");
 
-        var resolvedTags = await ResolveTagsByNameAsync(tagNames, userId, ct);
+        var resolvedTags = await HabitToolHelpers.ResolveOrCreateTagsAsync(tagRepository, tagNames, userId, ct);
         return await ReplaceTagsAsync(habit, resolvedTags, ct);
     }
 
@@ -107,43 +107,4 @@ public class AssignTagsTool(
 
         return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
     }
-
-    private async Task<List<Tag>> ResolveTagsByNameAsync(List<string> tagNames, Guid userId, CancellationToken ct)
-    {
-        var capitalizedNames = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in tagNames)
-        {
-            var capitalized = Capitalize(name.Trim());
-            if (!string.IsNullOrEmpty(capitalized) && seen.Add(capitalized))
-                capitalizedNames.Add(capitalized);
-        }
-
-        var existingByName = (await tagRepository.FindTrackedAsync(
-                t => t.UserId == userId && capitalizedNames.Contains(t.Name), ct))
-            .ToDictionary(t => t.Name, StringComparer.Ordinal);
-
-        var resolved = new List<Tag>();
-        foreach (var capitalized in capitalizedNames)
-        {
-            if (existingByName.TryGetValue(capitalized, out var existing))
-            {
-                resolved.Add(existing);
-            }
-            else
-            {
-                var createResult = Tag.Create(userId, capitalized, "#7c3aed");
-                if (createResult.IsSuccess)
-                {
-                    await tagRepository.AddAsync(createResult.Value, ct);
-                    resolved.Add(createResult.Value);
-                }
-            }
-        }
-
-        return resolved;
-    }
-
-    private static string Capitalize(string s) =>
-        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
 }
