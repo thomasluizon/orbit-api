@@ -1,12 +1,14 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -111,18 +113,50 @@ public class BulkLogHabitsToolTests
     }
 
     [Fact]
-    public async Task DifferentUserHabit_IsNotLogged()
+    public async Task WrongUser_CannotLogAnothersHabit_OwnerCan_RealContext()
     {
-        var otherUserId = Guid.NewGuid();
-        var otherUserHabit = Habit.Create(
-            new HabitCreateParams(otherUserId, "Other user habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        SetupHabitsFound(otherUserHabit);
+        var databaseName = $"BulkLogIsolation_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var ownerHabit = CreateHabit("Owner-only habit");
+            seed.Habits.Add(ownerHabit);
+            await seed.SaveChangesAsync();
+            habitId = ownerHabit.Id;
+        }
 
-        var result = await Execute($$$"""{"habit_ids": ["{{{otherUserHabit.Id}}}"]}""");
+        await using var context = CreateContext(databaseName);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        var tool = new BulkLogHabitsTool(
+            new GenericRepository<Habit>(context),
+            new GenericRepository<HabitLog>(context),
+            userDateService);
 
-        result.Success.Should().BeFalse();
-        result.Error.Should().Contain("No habits were logged");
+        var attackerId = Guid.NewGuid();
+        var attackerResult = await tool.ExecuteAsync(ArgsFor(habitId), attackerId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        attackerResult.Success.Should().BeFalse();
+        attackerResult.Error.Should().Contain("No habits were logged");
+        await using (var afterAttack = CreateContext(databaseName))
+            (await afterAttack.HabitLogs.AnyAsync())
+                .Should().BeFalse("a foreign user must not create a log against another user's habit");
+
+        var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        ownerResult.Success.Should().BeTrue("the owner can bulk-log their own habit");
+        ownerResult.EntityName.Should().Contain("Owner-only habit");
+        await using (var afterOwner = CreateContext(databaseName))
+            (await afterOwner.HabitLogs.CountAsync()).Should().Be(1);
     }
+
+    private static JsonElement ArgsFor(Guid habitId) =>
+        JsonDocument.Parse($$"""{"habit_ids":["{{habitId}}"]}""").RootElement;
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title)
     {

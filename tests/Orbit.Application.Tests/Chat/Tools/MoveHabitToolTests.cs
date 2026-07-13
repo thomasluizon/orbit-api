@@ -1,12 +1,14 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -118,6 +120,50 @@ public class MoveHabitToolTests
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("habit_id is required");
     }
+
+    [Fact]
+    public async Task WrongUser_CannotMoveAnothersHabit_OwnerCan_RealContext()
+    {
+        var databaseName = $"MoveHabitIsolation_{Guid.NewGuid()}";
+        Guid parentId;
+        Guid childId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var parent = CreateHabit("Owner parent");
+            var child = Habit.Create(new HabitCreateParams(
+                UserId, "Owner child", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: parent.Id)).Value;
+            seed.Habits.AddRange(parent, child);
+            await seed.SaveChangesAsync();
+            parentId = parent.Id;
+            childId = child.Id;
+        }
+
+        await using var context = CreateContext(databaseName);
+        var tool = new MoveHabitTool(new GenericRepository<Habit>(context));
+
+        var attackerId = Guid.NewGuid();
+        var attackerResult = await tool.ExecuteAsync(PromoteArgs(childId), attackerId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        attackerResult.Success.Should().BeFalse();
+        attackerResult.Error.Should().Contain("not found");
+        await using (var afterAttack = CreateContext(databaseName))
+            (await afterAttack.Habits.SingleAsync(h => h.Id == childId)).ParentHabitId
+                .Should().Be(parentId, "a foreign user must not re-parent another user's habit");
+
+        var ownerResult = await tool.ExecuteAsync(PromoteArgs(childId), UserId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        ownerResult.Success.Should().BeTrue("the owner can move their own habit");
+        await using (var afterOwner = CreateContext(databaseName))
+            (await afterOwner.Habits.SingleAsync(h => h.Id == childId)).ParentHabitId.Should().BeNull();
+    }
+
+    private static JsonElement PromoteArgs(Guid habitId) =>
+        JsonDocument.Parse($$"""{"habit_id":"{{habitId}}"}""").RootElement;
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title)
     {

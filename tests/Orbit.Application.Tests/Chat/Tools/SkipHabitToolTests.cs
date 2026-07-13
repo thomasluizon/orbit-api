@@ -1,12 +1,14 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
@@ -133,6 +135,52 @@ public class SkipHabitToolTests
         result.Success.Should().BeTrue();
         await _habitLogRepo.Received(1).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task WrongUser_CannotSkipAnothersHabit_OwnerCan_RealContext()
+    {
+        var databaseName = $"SkipHabitIsolation_{Guid.NewGuid()}";
+        Guid habitId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var ownerHabit = CreateHabit("Owner-only habit", FrequencyUnit.Day, 1, Today);
+            seed.Habits.Add(ownerHabit);
+            await seed.SaveChangesAsync();
+            habitId = ownerHabit.Id;
+        }
+
+        await using var context = CreateContext(databaseName);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        var tool = new SkipHabitTool(
+            new GenericRepository<Habit>(context),
+            new GenericRepository<HabitLog>(context),
+            userDateService);
+
+        var attackerId = Guid.NewGuid();
+        var attackerResult = await tool.ExecuteAsync(ArgsFor(habitId), attackerId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        attackerResult.Success.Should().BeFalse();
+        attackerResult.Error.Should().Contain("not found");
+        await using (var afterAttack = CreateContext(databaseName))
+            (await afterAttack.Habits.SingleAsync(h => h.Id == habitId)).DueDate
+                .Should().Be(Today, "a foreign user must not advance another user's schedule");
+
+        var ownerResult = await tool.ExecuteAsync(ArgsFor(habitId), UserId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        ownerResult.Success.Should().BeTrue("the owner can skip their own habit");
+        await using (var afterOwner = CreateContext(databaseName))
+            (await afterOwner.Habits.SingleAsync(h => h.Id == habitId)).DueDate
+                .Should().BeAfter(Today);
+    }
+
+    private static JsonElement ArgsFor(Guid habitId) =>
+        JsonDocument.Parse($$"""{"habit_id":"{{habitId}}"}""").RootElement;
+
+    private static OrbitDbContext CreateContext(string databaseName) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty, DateOnly dueDate)
     {
