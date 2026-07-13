@@ -4,7 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
@@ -50,30 +50,38 @@ public class OpenAiBatchPollerServiceTests
     }
 
     [Fact]
-    public void ParseExtractedFacts_ValidOutput_ReturnsFacts()
+    public void ParseExtractedFacts_ValidOutput_ReturnsFactsWithoutWarning()
     {
         var jsonl = BatchOutputJsonl("User is a vegetarian", "User works night shifts");
+        var logger = new CapturingLogger<OpenAiBatchPollerService>();
 
-        var facts = OpenAiBatchPollerService.ParseExtractedFacts(jsonl);
+        var facts = OpenAiBatchPollerService.ParseExtractedFacts(jsonl, logger, "batch_1");
 
         facts.Should().HaveCount(2);
         facts.Select(f => f.FactText).Should().Contain("User is a vegetarian");
+        logger.Entries.Should().NotContain(e => e.Level == LogLevel.Warning);
     }
 
     [Fact]
-    public void ParseExtractedFacts_MalformedLine_ReturnsEmpty()
+    public void ParseExtractedFacts_MalformedLine_LogsWarningAndReturnsEmpty()
     {
-        var facts = OpenAiBatchPollerService.ParseExtractedFacts("not json at all");
+        var logger = new CapturingLogger<OpenAiBatchPollerService>();
+
+        var facts = OpenAiBatchPollerService.ParseExtractedFacts("not json at all", logger, "batch_bad");
 
         facts.Should().BeEmpty();
+        logger.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("batch_bad"));
     }
 
     [Fact]
-    public void ParseExtractedFacts_EmptyOutput_ReturnsEmpty()
+    public void ParseExtractedFacts_EmptyOutput_LogsWarningAndReturnsEmpty()
     {
-        var facts = OpenAiBatchPollerService.ParseExtractedFacts(string.Empty);
+        var logger = new CapturingLogger<OpenAiBatchPollerService>();
+
+        var facts = OpenAiBatchPollerService.ParseExtractedFacts(string.Empty, logger, "batch_empty");
 
         facts.Should().BeEmpty();
+        logger.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("batch_empty"));
     }
 
     [Fact]
@@ -136,10 +144,31 @@ public class OpenAiBatchPollerServiceTests
         await harness.BatchClient.DidNotReceive().DownloadFileAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task PollPendingBatches_CompletedBatch_FileDeletionFailure_IsSwallowedAndLogged()
+    {
+        var batch = AiFactExtractionBatch.Create(UserId, "batch_1", "file_in_1");
+
+        var harness = new PollerHarness()
+            .WithPendingBatches(batch)
+            .WithBatchStatus("batch_1", new BatchStatusResult("completed", "file_out_1", null))
+            .WithBatchOutput("file_out_1", BatchOutputJsonl("User works night shifts"))
+            .WithFileDeletionFailure();
+        var service = harness.Service;
+
+        var act = () => service.PollPendingBatches(CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        batch.Status.Should().Be(AiFactExtractionBatchStatus.Completed);
+        harness.AddedFacts.Should().ContainSingle();
+        harness.Logger.Entries.Should().Contain(e => e.Level == LogLevel.Warning && e.Message.Contains("batch_1"));
+    }
+
     private sealed class PollerHarness
     {
         public IAiBatchClient BatchClient { get; } = Substitute.For<IAiBatchClient>();
         public IUnitOfWork UnitOfWork { get; } = Substitute.For<IUnitOfWork>();
+        public CapturingLogger<OpenAiBatchPollerService> Logger { get; } = new();
         public List<UserFact> AddedFacts { get; } = [];
 
         private readonly IGenericRepository<AiFactExtractionBatch> _batchRepository =
@@ -192,6 +221,13 @@ public class OpenAiBatchPollerServiceTests
             return this;
         }
 
+        public PollerHarness WithFileDeletionFailure()
+        {
+            BatchClient.DeleteFileAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromException(new InvalidOperationException("delete failed")));
+            return this;
+        }
+
         public OpenAiBatchPollerService Service
         {
             get
@@ -205,8 +241,30 @@ public class OpenAiBatchPollerServiceTests
                     .BuildServiceProvider();
                 var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
                 return new OpenAiBatchPollerService(
-                    scopeFactory, NullLogger<OpenAiBatchPollerService>.Instance,
+                    scopeFactory, Logger,
                     new ConfigurationBuilder().Build(), new MemoryCache(new MemoryCacheOptions()));
+            }
+        }
+    }
+
+    public sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose()
+            {
             }
         }
     }
