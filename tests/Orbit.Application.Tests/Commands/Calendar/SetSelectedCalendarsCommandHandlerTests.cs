@@ -10,6 +10,10 @@ namespace Orbit.Application.Tests.Commands.Calendar;
 
 public class SetSelectedCalendarsCommandHandlerTests
 {
+    private static readonly string[] SingleCalendarSelection = new[] { "cal_a" };
+    private static readonly string[] TwoCalendarSelection = new[] { "cal_a", "cal_b" };
+    private static readonly string[] SelectionWithEmptyId = new[] { "cal_a", "" };
+
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SetSelectedCalendarsCommandHandler _handler;
@@ -34,7 +38,7 @@ public class SetSelectedCalendarsCommandHandlerTests
         StubUser(null);
 
         var result = await _handler.Handle(
-            new SetSelectedCalendarsCommand(Guid.NewGuid(), new[] { "cal_a" }), CancellationToken.None);
+            new SetSelectedCalendarsCommand(Guid.NewGuid(), SingleCalendarSelection), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -47,10 +51,10 @@ public class SetSelectedCalendarsCommandHandlerTests
         StubUser(user);
 
         var result = await _handler.Handle(
-            new SetSelectedCalendarsCommand(user.Id, new[] { "cal_a", "cal_b" }), CancellationToken.None);
+            new SetSelectedCalendarsCommand(user.Id, TwoCalendarSelection), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        user.GetSelectedCalendarIds().Should().BeEquivalentTo(new[] { "cal_a", "cal_b" });
+        user.GetSelectedCalendarIds().Should().BeEquivalentTo(TwoCalendarSelection);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -58,7 +62,7 @@ public class SetSelectedCalendarsCommandHandlerTests
     public async Task Handle_EmptyList_ClearsSelectionToDefault()
     {
         var user = CreateUser();
-        user.SetSelectedCalendars(new[] { "cal_a" });
+        user.SetSelectedCalendars(SingleCalendarSelection);
         StubUser(user);
 
         var result = await _handler.Handle(
@@ -75,7 +79,7 @@ public class SetSelectedCalendarsCommandHandlerTests
         var validator = new SetSelectedCalendarsCommandValidator();
 
         var result = validator.Validate(
-            new SetSelectedCalendarsCommand(Guid.NewGuid(), new[] { "cal_a", "" }));
+            new SetSelectedCalendarsCommand(Guid.NewGuid(), SelectionWithEmptyId));
 
         result.IsValid.Should().BeFalse();
     }
@@ -98,7 +102,7 @@ public class SetSelectedCalendarsCommandHandlerTests
         var validator = new SetSelectedCalendarsCommandValidator();
 
         var result = validator.Validate(
-            new SetSelectedCalendarsCommand(Guid.NewGuid(), new[] { "cal_a", "cal_b" }));
+            new SetSelectedCalendarsCommand(Guid.NewGuid(), TwoCalendarSelection));
 
         result.IsValid.Should().BeTrue();
     }

@@ -21,6 +21,7 @@ public class GetUserCalendarsQueryHandlerTests
     private readonly GetUserCalendarsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly string[] SharedCalendarSelection = new[] { "shared" };
 
     public GetUserCalendarsQueryHandlerTests()
     {
@@ -81,7 +82,7 @@ public class GetUserCalendarsQueryHandlerTests
     public async Task Handle_ExplicitSelection_IsSyncedReflectsSelectedSet()
     {
         var user = CreateUser();
-        user.SetSelectedCalendars(new[] { "shared" });
+        user.SetSelectedCalendars(SharedCalendarSelection);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _googleTokenService.GetValidAccessTokenAsync(user, Arg.Any<CancellationToken>()).Returns("token");
         _eventFetcher.ListCalendarsAsync("token", Arg.Any<CancellationToken>()).Returns(SampleCalendars());

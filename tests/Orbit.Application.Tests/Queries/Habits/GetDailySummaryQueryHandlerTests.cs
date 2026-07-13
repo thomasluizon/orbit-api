@@ -23,6 +23,7 @@ public class GetDailySummaryQueryHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
+    private static readonly string[] ExpectedHabitTitles = new[] { "Read" };
 
     public GetDailySummaryQueryHandlerTests()
     {
@@ -136,7 +137,7 @@ public class GetDailySummaryQueryHandlerTests
         result.IsSuccess.Should().BeTrue();
         await _summaryService.Received(1).GenerateSummaryAsync(
             Arg.Is<IEnumerable<Habit>>(habits =>
-                habits.Select(h => h.Title).SequenceEqual(new[] { "Read" })),
+                habits.Select(h => h.Title).SequenceEqual(ExpectedHabitTitles)),
             Today, Today, Arg.Any<DateOnly>(), "en",
             Arg.Any<TimeOnly?>(),
             Arg.Any<int>(), Arg.Any<int>(),

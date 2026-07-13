@@ -14,6 +14,13 @@ public class CreateHabitCommandValidatorTests
 {
     private readonly CreateHabitCommandValidator _validator = new();
 
+    private static readonly DayOfWeek[] MondayOnly = new[] { DayOfWeek.Monday };
+    private static readonly DayOfWeek[] MondayAndWednesday = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
+    private static readonly int[] ValidReminderTimes = new[] { 0, 15, 60, 1440 };
+    private static readonly int[] DuplicateReminderTimes = new[] { 15, 15 };
+    private static readonly int[] NegativeReminderTimes = new[] { -1 };
+    private static readonly int[] OverMaxReminderTimes = new[] { AppConstants.MaxReminderMinutesBefore + 1 };
+
     private static CreateHabitCommand ValidCommand() => new(
         UserId: Guid.NewGuid(),
         Title: "My Habit",
@@ -97,7 +104,7 @@ public class CreateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             FrequencyQuantity = 2,
-            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+            Options = new HabitCommandOptions(Days: MondayOnly)
         };
 
         var result = _validator.TestValidate(command);
@@ -111,7 +118,7 @@ public class CreateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             FrequencyQuantity = 1,
-            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday, DayOfWeek.Wednesday })
+            Options = new HabitCommandOptions(Days: MondayAndWednesday)
         };
 
         var result = _validator.TestValidate(command);
@@ -126,7 +133,7 @@ public class CreateHabitCommandValidatorTests
         {
             FrequencyUnit = FrequencyUnit.Week,
             FrequencyQuantity = 1,
-            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+            Options = new HabitCommandOptions(Days: MondayOnly)
         };
 
         var result = _validator.TestValidate(command);
@@ -141,7 +148,7 @@ public class CreateHabitCommandValidatorTests
         {
             FrequencyUnit = FrequencyUnit.Week,
             FrequencyQuantity = 1,
-            Options = new HabitCommandOptions(Days: new[] { DayOfWeek.Monday }, IsFlexible: true)
+            Options = new HabitCommandOptions(Days: MondayOnly, IsFlexible: true)
         };
 
         var result = _validator.TestValidate(command);
@@ -303,7 +310,7 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            Options = new HabitCommandOptions(ReminderTimes: new[] { 0, 15, 60, 1440 })
+            Options = new HabitCommandOptions(ReminderTimes: ValidReminderTimes)
         };
 
         var result = _validator.TestValidate(command);
@@ -315,7 +322,7 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            Options = new HabitCommandOptions(ReminderTimes: new[] { 15, 15 })
+            Options = new HabitCommandOptions(ReminderTimes: DuplicateReminderTimes)
         };
 
         var result = _validator.TestValidate(command);
@@ -327,7 +334,7 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            Options = new HabitCommandOptions(ReminderTimes: new[] { -1 })
+            Options = new HabitCommandOptions(ReminderTimes: NegativeReminderTimes)
         };
 
         var result = _validator.TestValidate(command);
@@ -339,7 +346,7 @@ public class CreateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            Options = new HabitCommandOptions(ReminderTimes: new[] { AppConstants.MaxReminderMinutesBefore + 1 })
+            Options = new HabitCommandOptions(ReminderTimes: OverMaxReminderTimes)
         };
 
         var result = _validator.TestValidate(command);

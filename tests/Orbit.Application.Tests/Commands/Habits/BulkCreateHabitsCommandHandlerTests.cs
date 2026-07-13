@@ -27,6 +27,8 @@ public class BulkCreateHabitsCommandHandlerTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
+    private static readonly string[] ExpectedTagNames = new[] { "Fitness", "Health" };
+
     public BulkCreateHabitsCommandHandlerTests()
     {
         _handler = new BulkCreateHabitsCommandHandler(
@@ -281,7 +283,7 @@ public class BulkCreateHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         addedTags.Should().HaveCount(2);
-        addedTags.Select(t => t.Name).Should().BeEquivalentTo(new[] { "Fitness", "Health" });
+        addedTags.Select(t => t.Name).Should().BeEquivalentTo(ExpectedTagNames);
         addedTags.Should().AllSatisfy(t => t.Color.Should().Be("#7c3aed"));
         addedHabits.Should().ContainSingle();
         addedHabits[0].Tags.Should().HaveCount(2);

@@ -42,6 +42,9 @@ public class ProcessUserChatCommandHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 4, 3);
+    private static readonly string[] ExpectedOrderedToolNames = new[] { "assign_tags", "create_habit", "delete_habit" };
+    private static readonly string[] GamificationTodaySurfaces = new[] { "gamification", "today" };
+    private static readonly string[] HabitsSurfaces = new[] { "habits" };
 
     private static Habit CreateHabit(string title, bool isCompleted = false)
     {
@@ -646,7 +649,7 @@ public class ProcessUserChatCommandHandlerTests
         await _aiIntentService.Received(1).SendWithToolsAsync(
             Arg.Any<string>(), Arg.Any<string>(),
             Arg.Is<IReadOnlyList<object>>(declarations =>
-                ToolNames(declarations).SequenceEqual(new[] { "assign_tags", "create_habit", "delete_habit" })),
+                ToolNames(declarations).SequenceEqual(ExpectedOrderedToolNames)),
             Arg.Any<Guid>(),
             Arg.Any<byte[]?>(), Arg.Any<string?>(),
             Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
@@ -907,7 +910,7 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(new ToolResult(true, Payload: new
             {
                 key = "streaks",
-                related_surfaces = new[] { "gamification", "today" },
+                related_surfaces = GamificationTodaySurfaces,
                 markdown = "# Streaks"
             }));
 
@@ -1697,7 +1700,7 @@ public class ProcessUserChatCommandHandlerTests
             .Returns(async _ =>
             {
                 await Task.Delay(40);
-                return new ToolResult(true, Payload: new { related_surfaces = new[] { "gamification", "today" } });
+                return new ToolResult(true, Payload: new { related_surfaces = GamificationTodaySurfaces });
             });
 
         var fastSecond = Substitute.For<IAiTool>();
@@ -1706,7 +1709,7 @@ public class ProcessUserChatCommandHandlerTests
         fastSecond.IsReadOnly.Returns(true);
         fastSecond.GetParameterSchema().Returns(new { type = "object" });
         fastSecond.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
-            .Returns(new ToolResult(true, Payload: new { related_surfaces = new[] { "habits" } }));
+            .Returns(new ToolResult(true, Payload: new { related_surfaces = HabitsSurfaces }));
 
         var handler = CreateHandler(slowFirst, fastSecond);
 
