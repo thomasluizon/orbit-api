@@ -1,6 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -37,42 +35,12 @@ public class BulkLogHabitsTool(
         required = new[] { "habit_ids" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        if (!args.TryGetProperty("habit_ids", out var idsEl) || idsEl.ValueKind != JsonValueKind.Array)
-            return new ToolResult(false, Error: "habit_ids is required and must be an array of GUIDs.");
-
-        var habitIds = new List<Guid>();
-        foreach (var el in idsEl.EnumerateArray())
-        {
-            if (Guid.TryParse(el.GetString(), out var id))
-                habitIds.Add(id);
-        }
-
-        if (habitIds.Count == 0)
-            return new ToolResult(false, Error: "No valid habit IDs provided.");
-
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
-        var loggedNames = new List<string>();
-
-        var habits = await habitRepository.FindTrackedAsync(
-            h => habitIds.Contains(h.Id) && h.UserId == userId,
-            q => q.Include(h => h.Logs),
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        HabitToolHelpers.RunBulkHabitActionAsync(
+            habitRepository, userDateService, args, userId,
+            "No habits were logged. They may already be completed or not found.",
+            (habit, targetDate, _) => TryLogHabit(habit, targetDate, ct),
             ct);
-
-        foreach (var habitId in habitIds)
-        {
-            var habit = habits.FirstOrDefault(h => h.Id == habitId);
-            if (habit is not null && await TryLogHabit(habit, targetDate, ct))
-                loggedNames.Add(habit.Title);
-        }
-
-        if (loggedNames.Count == 0)
-            return new ToolResult(false, Error: "No habits were logged. They may already be completed or not found.");
-
-        return new ToolResult(true, EntityName: string.Join(", ", loggedNames));
-    }
 
     private async Task<bool> TryLogHabit(Habit habit, DateOnly targetDate, CancellationToken ct)
     {

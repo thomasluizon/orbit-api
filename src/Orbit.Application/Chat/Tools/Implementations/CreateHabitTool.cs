@@ -294,42 +294,16 @@ public class CreateHabitTool(
 
     private async Task AssignTagsToHabitAsync(Habit habit, List<string> tagNames, Guid userId, CancellationToken ct)
     {
-        var capitalizedNames = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in tagNames)
-        {
-            var capitalized = Capitalize(name.Trim());
-            if (!string.IsNullOrEmpty(capitalized) && seen.Add(capitalized))
-                capitalizedNames.Add(capitalized);
-        }
-
-        var existingByName = (await tagRepository.FindTrackedAsync(
-                t => t.UserId == userId && capitalizedNames.Contains(t.Name), ct))
-            .ToDictionary(t => t.Name, StringComparer.Ordinal);
-
-        foreach (var capitalized in capitalizedNames)
-        {
-            if (existingByName.TryGetValue(capitalized, out var existing))
-            {
-                habit.AddTag(existing);
-            }
-            else
-            {
-                var createResult = Tag.Create(userId, capitalized, "#7c3aed");
-                if (createResult.IsSuccess)
-                {
-                    await tagRepository.AddAsync(createResult.Value, ct);
-                    habit.AddTag(createResult.Value);
-                }
-            }
-        }
+        var tags = await HabitToolHelpers.ResolveOrCreateTagsAsync(tagRepository, tagNames, userId, ct);
+        foreach (var tag in tags)
+            habit.AddTag(tag);
     }
 
-    private static string Capitalize(string s) =>
-        string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..].ToLower();
-
     private static readonly System.Text.RegularExpressions.Regex HabitWordRegex =
-        new(@"\bhabit\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(
+            @"\bhabit\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
 
     private static bool IsHabitFlavoredTitle(string title)
     {

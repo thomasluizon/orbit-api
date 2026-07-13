@@ -23,8 +23,12 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
 {
     private static readonly JsonSerializerOptions ChatHistoryJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    private const long MaxChatRequestBytes = 10 * 1024 * 1024;
+
     [HttpPost]
-    [RequestSizeLimit(10_485_760)]    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)]    [ProducesResponseType(StatusCodes.Status200OK)]
+    [RequestSizeLimit(MaxChatRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -70,7 +74,9 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     }
 
     [HttpPost("stream")]
-    [RequestSizeLimit(10_485_760)]    [RequestFormLimits(MultipartBodyLengthLimit = 10_485_760)]    [ProducesResponseType(StatusCodes.Status200OK)]
+    [RequestSizeLimit(MaxChatRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ProcessChatStream(
