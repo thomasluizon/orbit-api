@@ -49,6 +49,11 @@ public partial class HandleWebhookCommandHandler(
             LogWebhookSignatureVerificationFailed(logger, ex);
             return Result.Failure(ErrorMessages.InvalidWebhookSignature);
         }
+        catch (System.Text.Json.JsonException ex)
+        {
+            LogWebhookSignatureVerificationFailed(logger, ex);
+            return Result.Failure(ErrorMessages.InvalidWebhookSignature);
+        }
 
         LogStripeEventType(logger, stripeEvent.Type, stripeEvent.Id);
 
