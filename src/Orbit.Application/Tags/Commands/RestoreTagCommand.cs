@@ -23,7 +23,7 @@ public class RestoreTagCommandHandler(
             t => t.Id == request.TagId && t.UserId == request.UserId,
             cancellationToken);
 
-        var tag = tags.FirstOrDefault();
+        var tag = tags.Count > 0 ? tags[0] : null;
         if (tag is null || !tag.IsDeleted)
             return Result.Failure(ErrorMessages.TagNotFound);
 

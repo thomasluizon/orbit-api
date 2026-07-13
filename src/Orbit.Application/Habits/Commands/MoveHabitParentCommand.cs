@@ -61,7 +61,7 @@ public class MoveHabitParentCommandHandler(
         return Result.Success();
     }
 
-    private static bool WouldCreateCycle(Guid habitId, Guid targetParentId, IReadOnlyDictionary<Guid, Habit> habitsById)
+    private static bool WouldCreateCycle(Guid habitId, Guid targetParentId, Dictionary<Guid, Habit> habitsById)
     {
         var currentId = targetParentId;
         while (habitsById.TryGetValue(currentId, out var current))
@@ -73,7 +73,7 @@ public class MoveHabitParentCommandHandler(
         return false;
     }
 
-    private static int GetDepth(Guid habitId, IReadOnlyDictionary<Guid, Habit> habitsById)
+    private static int GetDepth(Guid habitId, Dictionary<Guid, Habit> habitsById)
     {
         var depth = 0;
         var currentId = habitsById.TryGetValue(habitId, out var habit) ? habit.ParentHabitId : null;

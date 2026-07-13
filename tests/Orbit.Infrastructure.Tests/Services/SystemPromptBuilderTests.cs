@@ -16,7 +16,7 @@ public class SystemPromptBuilderTests
         bool hasImage = false, IReadOnlyList<Tag>? userTags = null,
         DateOnly? userToday = null, IReadOnlyDictionary<Guid, HabitMetrics>? habitMetrics = null)
     {
-        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var builder = new SystemPromptBuilder();
         var request = new PromptBuildRequest(habits, facts, hasImage, UserTags: userTags, UserToday: userToday ?? new DateOnly(2026, 3, 20), HabitMetrics: habitMetrics);
         return builder.BuildStatic(request) + builder.BuildDynamic(request);
     }
@@ -162,7 +162,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void BuildStatic_OrdersEncouragingToneAfterIdentityAndBeforeRules()
     {
-        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var builder = new SystemPromptBuilder();
         var staticPrompt = builder.BuildStatic(new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>()));
 
         staticPrompt.Should().Contain("Tone and Encouragement");
@@ -198,7 +198,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void BuildStatic_IsRequestInvariant_AndExcludesDynamicHabitIndex()
     {
-        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var withHabit = new PromptBuildRequest([habit], Array.Empty<UserFact>());
         var empty = new PromptBuildRequest(Array.Empty<Habit>(), Array.Empty<UserFact>());
@@ -214,7 +214,7 @@ public class SystemPromptBuilderTests
     [Fact]
     public void BuildDynamic_ContainsUserData_AndExcludesStaticRules()
     {
-        ISystemPromptBuilder builder = new SystemPromptBuilder();
+        var builder = new SystemPromptBuilder();
         var habit = Habit.Create(new HabitCreateParams(TestUserId, "Morning Run", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         var request = new PromptBuildRequest([habit], Array.Empty<UserFact>(), UserToday: new DateOnly(2026, 3, 20));
 

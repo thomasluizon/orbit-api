@@ -88,7 +88,7 @@ public partial class ProcessUserChatCommandHandler
     /// reassemble results deterministically, independent of task-completion timing.
     /// </summary>
     private async Task<IReadOnlyDictionary<string, ToolCallOutcome>> ExecuteToolCallsAsync(
-        IReadOnlyList<AiToolCall> orderedCalls,
+        List<AiToolCall> orderedCalls,
         ProcessUserChatCommand request,
         CancellationToken cancellationToken)
     {

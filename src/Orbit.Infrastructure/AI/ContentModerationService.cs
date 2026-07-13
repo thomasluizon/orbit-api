@@ -44,7 +44,7 @@ public partial class ContentModerationService(
             }
 
             var payload = await response.Content.ReadFromJsonAsync<ModerationResponse>(SerializerOptions, cancellationToken);
-            var result = payload?.Results?.FirstOrDefault();
+            var result = payload?.Results is { Count: > 0 } results ? results[0] : null;
             if (result is null)
                 return Unavailable;
 

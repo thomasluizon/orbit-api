@@ -117,6 +117,6 @@ public class UserDateServiceTests
         await secondInstanceRepo.DidNotReceive().GetByIdAsync(UserId, Arg.Any<CancellationToken>());
     }
 
-    private static IDistributedCache NewDistributedCache() =>
+    private static MemoryDistributedCache NewDistributedCache() =>
         new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 }

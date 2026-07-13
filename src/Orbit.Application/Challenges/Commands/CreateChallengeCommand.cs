@@ -86,7 +86,7 @@ public partial class CreateChallengeCommandHandler(
         return Result.Success(challenge.Id);
     }
 
-    private async Task NotifyInvitedFriendsAsync(User requester, IReadOnlyList<Guid> invitedFriendIds, CancellationToken cancellationToken)
+    private async Task NotifyInvitedFriendsAsync(User requester, List<Guid> invitedFriendIds, CancellationToken cancellationToken)
     {
         if (invitedFriendIds.Count == 0)
             return;

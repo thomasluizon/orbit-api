@@ -124,7 +124,7 @@ public sealed partial class AiHabitSuggestionService(
         return quantity is { } value && value >= 1 ? value : 1;
     }
 
-    private static IReadOnlyList<DayOfWeek> SanitizeDays(
+    private static List<DayOfWeek> SanitizeDays(
         IReadOnlyList<string>? days, FrequencyUnit? frequencyUnit, int? frequencyQuantity, bool isFlexible)
     {
         if (isFlexible || days is null || frequencyUnit != FrequencyUnit.Day || frequencyQuantity != 1)
@@ -146,7 +146,7 @@ public sealed partial class AiHabitSuggestionService(
         return time.ToString("HH\\:mm", CultureInfo.InvariantCulture);
     }
 
-    private static IReadOnlyList<string> SanitizeTitles(IReadOnlyList<string>? values, int cap, int maxLength)
+    private static List<string> SanitizeTitles(IReadOnlyList<string>? values, int cap, int maxLength)
     {
         if (values is null)
             return [];

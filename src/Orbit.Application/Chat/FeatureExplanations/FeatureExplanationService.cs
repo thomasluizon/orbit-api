@@ -111,7 +111,7 @@ public class FeatureExplanationService : IFeatureExplanationService
         return new FeatureExplanation(key, displayName, relatedCapabilities, relatedSurfaces, version, body);
     }
 
-    private static IReadOnlyList<string> ParseInlineList(string value)
+    private static List<string> ParseInlineList(string value)
     {
         var trimmed = value.Trim();
         if (trimmed.Length < 2 || trimmed[0] != '[' || trimmed[^1] != ']')

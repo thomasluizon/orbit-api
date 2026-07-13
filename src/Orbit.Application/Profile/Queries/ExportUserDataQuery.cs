@@ -162,7 +162,7 @@ public class ExportUserDataQueryHandler(
             apiKey.IsRevoked);
     }
 
-    private static ExportedHabit MapHabit(Habit habit, IReadOnlyDictionary<Guid, List<HabitLog>> logsByHabit)
+    private static ExportedHabit MapHabit(Habit habit, Dictionary<Guid, List<HabitLog>> logsByHabit)
     {
         var logs = logsByHabit.TryGetValue(habit.Id, out var habitLogs)
             ? habitLogs.Select(l => new ExportedHabitLog(l.Date, l.Value, l.Note, l.CreatedAtUtc)).ToList()
@@ -187,7 +187,7 @@ public class ExportUserDataQueryHandler(
 
     private static ExportedGoal MapGoal(
         Goal goal,
-        IReadOnlyDictionary<Guid, List<GoalProgressLog>> progressByGoal,
+        Dictionary<Guid, List<GoalProgressLog>> progressByGoal,
         IReadOnlyDictionary<Guid, int> freshStreakValues)
     {
         var progress = progressByGoal.TryGetValue(goal.Id, out var goalLogs)

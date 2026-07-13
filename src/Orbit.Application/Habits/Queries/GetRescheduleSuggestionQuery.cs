@@ -49,7 +49,7 @@ public class GetRescheduleSuggestionQueryHandler(
             q => q.Include(h => h.Logs.Where(l => l.Date >= logWindowStart && l.Date <= userToday)),
             cancellationToken);
 
-        var habit = habits.FirstOrDefault();
+        var habit = habits.Count > 0 ? habits[0] : null;
         if (habit is null)
             return Result.Failure<RescheduleSuggestionResponse>(ErrorMessages.HabitNotFound);
 

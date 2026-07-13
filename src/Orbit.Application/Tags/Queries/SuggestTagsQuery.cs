@@ -53,7 +53,7 @@ public class SuggestTagsQueryHandler(
         return Result.Success(new SuggestTagsResponse(suggestions));
     }
 
-    private static IReadOnlyList<SuggestedTag> MapSuggestions(
+    private static List<SuggestedTag> MapSuggestions(
         IReadOnlyList<string> suggestedNames,
         IReadOnlyList<Tag> existingTags)
     {
