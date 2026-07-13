@@ -322,7 +322,7 @@ public partial class OAuthController(
         await apiKeyRepository.AddAsync(apiKey, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        if (logger.IsEnabled(LogLevel.Information))
+        if (logger.IsEnabled(LogLevel.Debug))
             LogOAuthApiKeyCreated(logger, entry.UserId, entry.ClientId);
 
         var response = new Dictionary<string, object>
@@ -347,6 +347,6 @@ public partial class OAuthController(
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to create OAuth API key for user {UserId}: {Error}")]
     private static partial void LogFailedToCreateOAuthApiKey(ILogger logger, Guid userId, string? error);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "OAuth API key created for user {UserId} via {ClientId}")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "OAuth API key created for user {UserId} via {ClientId}")]
     private static partial void LogOAuthApiKeyCreated(ILogger logger, Guid userId, string? clientId);
 }

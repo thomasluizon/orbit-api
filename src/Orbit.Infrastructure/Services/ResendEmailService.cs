@@ -150,7 +150,7 @@ public partial class ResendEmailService(
     {
         if (IsTestAccount(to))
         {
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogSkippingTestEmail(logger, subject);
             return;
         }
@@ -179,7 +179,7 @@ public partial class ResendEmailService(
             {
                 if (response.IsSuccessStatusCode)
                 {
-                    if (logger.IsEnabled(LogLevel.Information))
+                    if (logger.IsEnabled(LogLevel.Debug))
                         LogEmailSent(logger, subject);
                     return;
                 }
@@ -246,7 +246,7 @@ public partial class ResendEmailService(
     {
         if (IsTestAccount(to))
         {
-            if (logger.IsEnabled(LogLevel.Information))
+            if (logger.IsEnabled(LogLevel.Debug))
                 LogSkippingTestEmail(logger, subject);
             return;
         }
@@ -269,7 +269,7 @@ public partial class ResendEmailService(
 
             if (response.IsSuccessStatusCode)
             {
-                if (logger.IsEnabled(LogLevel.Information))
+                if (logger.IsEnabled(LogLevel.Debug))
                     LogEmailSent(logger, subject);
             }
             else
@@ -305,10 +305,10 @@ public partial class ResendEmailService(
         return false;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Skipping email to test account; subject={Subject}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Skipping email to test account; subject={Subject}")]
     private static partial void LogSkippingTestEmail(ILogger logger, string subject);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Email sent; subject={Subject}")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Email sent; subject={Subject}")]
     private static partial void LogEmailSent(ILogger logger, string subject);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Email failed; subject={Subject} status={Status}")]
