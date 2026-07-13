@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
@@ -7,13 +8,15 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
-public class UserStreakService(
+public partial class UserStreakService(
     IGenericRepository<User> userRepository,
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService,
-    IFriendFeedEventEmitter friendFeedEventEmitter) : IUserStreakService
+    IFriendFeedEventEmitter friendFeedEventEmitter,
+    IFeatureFlagService featureFlagService,
+    ILogger<UserStreakService> logger) : IUserStreakService
 {
     public async Task<UserStreakState?> RecalculateAsync(
         Guid userId,
@@ -47,6 +50,14 @@ public class UserStreakService(
 
         var (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
             expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
+
+        if (await TryBridgeRecentGapWithBankedFreezeAsync(
+                user, userToday, lookbackStart, expectedDates, completionDateSet, freezeDateSet,
+                currentStreak, cancellationToken))
+        {
+            (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
+                expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
+        }
 
         var longestStreak = ComputeLongestStreak(expectedDates, completionDateSet, freezeDateSet);
         if (currentStreak > longestStreak) longestStreak = currentStreak;
@@ -92,6 +103,71 @@ public class UserStreakService(
 
         return (completionDateSet, freezeDateSet, contributingHabits);
     }
+
+    /// <summary>
+    /// Applies one banked streak freeze to bridge the user's most recent scheduled miss (their local
+    /// "yesterday") during recalculation — the same action the hourly <see cref="StreakFreezeAutoActivationService"/>
+    /// takes — so the streak is preserved regardless of which path runs first. Persisting a
+    /// <see cref="StreakFreeze"/> row makes it idempotent: a later recalculation sees the frozen date in
+    /// <paramref name="freezeDateSet"/> and neither re-consumes a freeze nor inflates the streak. Only spends a
+    /// freeze when covering the day actually raises the streak (so an over-large gap is left to break) and the
+    /// user is freeze-eligible and under the monthly cap. Returns true, extending
+    /// <paramref name="freezeDateSet"/> with the covered date, exactly when a freeze was consumed.
+    /// </summary>
+    private async Task<bool> TryBridgeRecentGapWithBankedFreezeAsync(
+        User user,
+        DateOnly userToday,
+        DateOnly lookbackStart,
+        HashSet<DateOnly> expectedDates,
+        HashSet<DateOnly> completionDateSet,
+        HashSet<DateOnly> freezeDateSet,
+        int currentStreak,
+        CancellationToken cancellationToken)
+    {
+        if (user.StreakFreezesAccumulated <= 0)
+            return false;
+
+        var missedDate = userToday.AddDays(-1);
+        if (!expectedDates.Contains(missedDate)
+            || completionDateSet.Contains(missedDate)
+            || freezeDateSet.Contains(missedDate))
+        {
+            return false;
+        }
+
+        var monthStart = new DateOnly(missedDate.Year, missedDate.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+        var freezesThisMonth = freezeDateSet.Count(date => date >= monthStart && date < monthEnd);
+        if (freezesThisMonth >= AppConstants.MaxStreakFreezesPerMonth)
+            return false;
+
+        var bridged = new HashSet<DateOnly>(freezeDateSet) { missedDate };
+        var (streakWithBridge, _) = HabitScheduleService.ComputeStreakAsOf(
+            expectedDates, completionDateSet, bridged, lookbackStart, userToday);
+        if (streakWithBridge <= currentStreak)
+            return false;
+
+        var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(user.Id, cancellationToken);
+        if (!user.HasProAccess && !enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier))
+            return false;
+
+        if (user.ConsumeStreakFreeze().IsFailure)
+            return false;
+
+        await streakFreezeRepository.AddAsync(StreakFreeze.Create(user.Id, missedDate), cancellationToken);
+        freezeDateSet.Add(missedDate);
+
+        if (logger.IsEnabled(LogLevel.Information))
+            LogBankedFreezeApplied(logger, user.Id, missedDate);
+
+        return true;
+    }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Applied banked streak freeze for user {UserId} on {FrozenDate} during recalculation to bridge a missed scheduled day")]
+    private static partial void LogBankedFreezeApplied(ILogger logger, Guid userId, DateOnly frozenDate);
 
     private static int ComputeLongestStreak(
         HashSet<DateOnly> expectedDates,
