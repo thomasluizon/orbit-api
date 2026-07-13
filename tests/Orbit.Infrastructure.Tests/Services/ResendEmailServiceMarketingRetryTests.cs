@@ -75,6 +75,16 @@ public class ResendEmailServiceMarketingRetryTests
         handler.CallCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task DoesNotRetry_On403Forbidden()
+    {
+        var (sut, handler) = Build(HttpStatusCode.Forbidden);
+
+        await Send(sut);
+
+        handler.CallCount.Should().Be(1);
+    }
+
     private sealed class SequenceHandler(params HttpStatusCode[] responses) : HttpMessageHandler
     {
         private readonly Queue<HttpStatusCode> _responses = new(responses);

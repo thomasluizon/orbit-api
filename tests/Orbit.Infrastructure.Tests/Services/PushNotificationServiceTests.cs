@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using FirebaseAdmin.Messaging;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -244,6 +245,22 @@ public sealed class PushNotificationServiceTests : IDisposable
         handler.LastRequestContentLength.Should().BeLessThanOrEqualTo(4096);
         (await _dbContext.PushSubscriptions.CountAsync()).Should().Be(1);
     }
+
+    [Theory]
+    [InlineData(MessagingErrorCode.QuotaExceeded)]
+    [InlineData(MessagingErrorCode.ThirdPartyAuthError)]
+    [InlineData(MessagingErrorCode.Internal)]
+    [InlineData(MessagingErrorCode.Unavailable)]
+    [InlineData(null)]
+    public void IsStaleFcmError_RateLimitAuthAndTransientErrors_KeepsSubscription(MessagingErrorCode? code) =>
+        PushNotificationService.IsStaleFcmError(code).Should().BeFalse();
+
+    [Theory]
+    [InlineData(MessagingErrorCode.Unregistered)]
+    [InlineData(MessagingErrorCode.InvalidArgument)]
+    [InlineData(MessagingErrorCode.SenderIdMismatch)]
+    public void IsStaleFcmError_PermanentlyInvalidTokens_PrunesSubscription(MessagingErrorCode code) =>
+        PushNotificationService.IsStaleFcmError(code).Should().BeTrue();
 
     [Fact]
     public void SanitizeForDelivery_StripsControlCharacters()
