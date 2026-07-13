@@ -22,6 +22,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Configuration;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
@@ -586,6 +587,57 @@ public class OAuthControllerTests : IDisposable
         json.Should().Contain("access_token");
         json.Should().Contain("Bearer");
         await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Token_ValidExchange_CreatesReadWriteClaudeKeyWithDefaultScopes()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
+
+        ApiKey? created = null;
+        _apiKeyRepo.When(r => r.AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>()))
+            .Do(callInfo => created = callInfo.Arg<ApiKey>());
+
+        var result = await _controller.Token(
+            "authorization_code", code, verifier,
+            "client-123", "https://claude.ai/callback", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        created.Should().NotBeNull();
+        created!.UserId.Should().Be(UserId);
+        created.Name.Should().Be("Claude.ai");
+        created.IsReadOnly.Should().BeFalse();
+        created.IsRevoked.Should().BeFalse();
+        created.Scopes.Should().BeEquivalentTo(AgentScopes.ClaudeDefaultScopes);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+
+        var ok = (OkObjectResult)result;
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value));
+        doc.RootElement.GetProperty("scope").GetString()
+            .Should().Be(string.Join(' ', AgentScopes.ClaudeDefaultScopes));
+    }
+
+    [Fact]
+    public async Task Token_ValidExchange_RevokesPriorClaudeKeysBeforeIssuingNew()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
+
+        var priorKey = ApiKey.Create(UserId, "Claude.ai", AgentScopes.ClaudeDefaultScopes).Value.Entity;
+        _apiKeyRepo.FindTrackedAsync(
+                Arg.Any<System.Linq.Expressions.Expression<Func<ApiKey, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<ApiKey> { priorKey });
+
+        var result = await _controller.Token(
+            "authorization_code", code, verifier,
+            "client-123", "https://claude.ai/callback", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        priorKey.IsRevoked.Should().BeTrue();
+        await _apiKeyRepo.Received(1).AddAsync(
+            Arg.Is<ApiKey>(k => k.Name == "Claude.ai"), Arg.Any<CancellationToken>());
     }
 
     [Fact]
