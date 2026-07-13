@@ -114,6 +114,30 @@ public class GetStreakHistoryQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_HabitLogReadFilter_ExcludesLogsFromHabitsTheUserDoesNotOwn()
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateProUser());
+        var ownedHabit = CreateDailyHabit(Today.AddDays(-2));
+        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { ownedHabit });
+
+        Expression<Func<HabitLog, bool>>? readFilter = null;
+        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
+                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+            });
+
+        await _handler.Handle(new GetStreakHistoryQuery(UserId, Today.AddDays(-2), Today), CancellationToken.None);
+
+        readFilter.Should().NotBeNull();
+        var matches = readFilter!.Compile();
+        matches(HabitLog.Create(ownedHabit.Id, Today, 1)).Should().BeTrue("the user's own habit log is in scope");
+        matches(HabitLog.Create(Guid.NewGuid(), Today, 1)).Should().BeFalse("a log for a habit the user does not own must be excluded");
+    }
+
+    [Fact]
     public async Task Handle_FreeUser_ReturnsPayGateFailure()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(CreateFreeUser());

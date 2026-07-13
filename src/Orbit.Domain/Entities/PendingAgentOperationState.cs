@@ -22,9 +22,7 @@ public class PendingAgentOperationState : Entity
     public DateTime? StepUpSatisfiedAtUtc { get; private set; }
     public DateTime? ConsumedAtUtc { get; private set; }
 
-    private PendingAgentOperationState()
-    {
-    }
+    private PendingAgentOperationState() { }
 
     public static PendingAgentOperationState Create(PendingAgentOperationStateCreateRequest request)
     {
