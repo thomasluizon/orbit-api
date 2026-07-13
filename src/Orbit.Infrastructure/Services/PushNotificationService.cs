@@ -101,10 +101,7 @@ public partial class PushNotificationService(
                 var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
                 if (resp.IsSuccess) continue;
 
-                if (resp.Exception is FirebaseMessagingException fme && (
-                    fme.MessagingErrorCode == MessagingErrorCode.Unregistered ||
-                    fme.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
-                    fme.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch))
+                if (resp.Exception is FirebaseMessagingException fme && IsStaleFcmError(fme.MessagingErrorCode))
                 {
                     if (logger.IsEnabled(LogLevel.Debug))
                         LogFcmTokenStale(logger, tokenPreview);
@@ -137,10 +134,7 @@ public partial class PushNotificationService(
             if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmPushSent(logger, tokenPreview);
         }
-        catch (FirebaseMessagingException ex) when (
-            ex.MessagingErrorCode == MessagingErrorCode.Unregistered ||
-            ex.MessagingErrorCode == MessagingErrorCode.InvalidArgument ||
-            ex.MessagingErrorCode == MessagingErrorCode.SenderIdMismatch)
+        catch (FirebaseMessagingException ex) when (IsStaleFcmError(ex.MessagingErrorCode))
         {
             if (logger.IsEnabled(LogLevel.Debug))
                 LogFcmTokenStale(logger, tokenPreview);
@@ -232,6 +226,19 @@ public partial class PushNotificationService(
             }
         }
     }
+
+    /// <summary>
+    /// A push token is pruned only when FCM reports it permanently invalid: an unregistered device,
+    /// a malformed token, or a sender-ID mismatch. Transient failures - rate limits
+    /// (<see cref="MessagingErrorCode.QuotaExceeded"/>), upstream auth faults
+    /// (<see cref="MessagingErrorCode.ThirdPartyAuthError"/>), and server errors
+    /// (<see cref="MessagingErrorCode.Internal"/> / <see cref="MessagingErrorCode.Unavailable"/>) -
+    /// keep the subscription so a later delivery can succeed, isolating one bad send from the batch.
+    /// </summary>
+    internal static bool IsStaleFcmError(MessagingErrorCode? code) =>
+        code is MessagingErrorCode.Unregistered
+            or MessagingErrorCode.InvalidArgument
+            or MessagingErrorCode.SenderIdMismatch;
 
     private static bool IsTransient(HttpStatusCode? status) =>
         status is null

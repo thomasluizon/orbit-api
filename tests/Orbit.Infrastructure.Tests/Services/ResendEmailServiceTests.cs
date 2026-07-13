@@ -84,6 +84,47 @@ public class ResendEmailServiceTests
     }
 
     [Fact]
+    public async Task SendVerificationCodeAsync_AuthError401_HandledWithoutRetry()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("{\"message\":\"Invalid API key\"}")
+        };
+
+        var act = () => _sut.SendVerificationCodeAsync("real.user@example.com", "123456");
+
+        await act.Should().NotThrowAsync();
+        _handler.LastRequest.Should().NotBeNull();
+        _handler.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_InvalidEmailAddress422_HandledWithoutRetry()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+        {
+            Content = new StringContent("{\"name\":\"validation_error\",\"message\":\"Invalid `to` field\"}")
+        };
+
+        var act = () => _sut.SendVerificationCodeAsync("not-an-email", "123456");
+
+        await act.Should().NotThrowAsync();
+        _handler.LastRequest.Should().NotBeNull();
+        _handler.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendVerificationCodeAsync_TransientServerError_RetriesUpToPolicyLimit()
+    {
+        _handler.ResponseFactory = () => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+
+        var act = () => _sut.SendVerificationCodeAsync("real.user@example.com", "123456");
+
+        await act.Should().NotThrowAsync();
+        _handler.CallCount.Should().Be(1 + Orbit.Infrastructure.Common.HttpRetryPolicy.MaxRetries);
+    }
+
+    [Fact]
     public async Task SendVerificationCodeAsync_HttpException_DoesNotThrow()
     {
         _handler.ExceptionToThrow = new HttpRequestException("Connection failed");
@@ -348,13 +389,17 @@ public class ResendEmailServiceTests
     private class FakeHttpMessageHandler : HttpMessageHandler
     {
         public HttpResponseMessage ResponseToReturn { get; set; } = new(HttpStatusCode.OK);
+        public Func<HttpResponseMessage>? ResponseFactory { get; set; }
         public Exception? ExceptionToThrow { get; set; }
         public HttpRequestMessage? LastRequest { get; private set; }
         public string LastRequestBody { get; private set; } = "";
+        public int CallCount { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            CallCount++;
+
             if (ExceptionToThrow is not null)
                 throw ExceptionToThrow;
 
@@ -362,7 +407,7 @@ public class ResendEmailServiceTests
             if (request.Content is not null)
                 LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
 
-            return ResponseToReturn;
+            return ResponseFactory?.Invoke() ?? ResponseToReturn;
         }
     }
 }
