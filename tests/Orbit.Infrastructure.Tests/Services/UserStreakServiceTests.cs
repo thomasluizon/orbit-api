@@ -1,4 +1,6 @@
+using System.Data.Common;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
@@ -18,6 +20,7 @@ public class UserStreakServiceTests
     private readonly IGenericRepository<StreakFreeze> _streakFreezeRepository = Substitute.For<IGenericRepository<StreakFreeze>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
 
     private readonly UserStreakService _sut;
@@ -35,6 +38,7 @@ public class UserStreakServiceTests
             _streakFreezeRepository,
             _userDateService,
             _feedEmitter,
+            _unitOfWork,
             _featureFlagService,
             NullLogger<UserStreakService>.Instance);
     }
@@ -395,6 +399,41 @@ public class UserStreakServiceTests
     }
 
     [Fact]
+    public async Task RecalculateAsync_ConcurrentFreezeInsertConflict_PreservesStreakConsumesOnceAndDoesNotThrow()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetStreakState(5, 5, new DateOnly(2026, 4, 5));
+        SetBankedFreezes(user, 1);
+        EnableGamificationFreeTier();
+
+        var completions = new[]
+        {
+            new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 3),
+            new DateOnly(2026, 4, 4), new DateOnly(2026, 4, 5)
+        };
+        var habit = CreateDailyHabitLoggedOn(completions, new DateOnly(2026, 4, 1));
+
+        SetupUser(user, new DateOnly(2026, 4, 7));
+        SetupHabits(new List<Habit> { habit });
+        SetupFreezes(new List<StreakFreeze>());
+
+        var uniqueViolation = new DbUpdateException("duplicate freeze", new UniqueViolationDbException());
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<int>(uniqueViolation));
+
+        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.CurrentStreak.Should().Be(5);
+        result.LastActiveDate.Should().Be(new DateOnly(2026, 4, 6));
+        user.StreakFreezesAccumulated.Should().Be(0);
+        await _streakFreezeRepository.Received(1).AddAsync(
+            Arg.Is<StreakFreeze>(f => f.UsedOnDate == new DateOnly(2026, 4, 6)),
+            Arg.Any<CancellationToken>());
+        _unitOfWork.Received(1).DiscardChanges();
+    }
+
+    [Fact]
     public async Task RecalculateAsync_MonthlyFreezeCapReached_BreaksStreakWithoutConsuming()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
@@ -424,5 +463,10 @@ public class UserStreakServiceTests
         user.StreakFreezesAccumulated.Should().Be(1);
         await _streakFreezeRepository.DidNotReceive().AddAsync(
             Arg.Any<StreakFreeze>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class UniqueViolationDbException : DbException
+    {
+        public override string SqlState => "23505";
     }
 }

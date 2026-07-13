@@ -265,6 +265,7 @@ public class GetStreakHistoryQueryHandlerTests
         var freezeRepo = Substitute.For<IGenericRepository<StreakFreeze>>();
         var userDateService = Substitute.For<IUserDateService>();
         var feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
         var featureFlagService = Substitute.For<IFeatureFlagService>();
         featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
@@ -284,7 +285,7 @@ public class GetStreakHistoryQueryHandlerTests
 
         var service = new UserStreakService(
             userRepo, habitRepo, habitLogRepo, freezeRepo, userDateService, feedEmitter,
-            featureFlagService, NullLogger<UserStreakService>.Instance);
+            unitOfWork, featureFlagService, NullLogger<UserStreakService>.Instance);
         var state = await service.RecalculateAsync(UserId, CancellationToken.None);
         return state!.CurrentStreak;
     }

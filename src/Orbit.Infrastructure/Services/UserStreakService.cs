@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -15,6 +16,7 @@ public partial class UserStreakService(
     IGenericRepository<StreakFreeze> streakFreezeRepository,
     IUserDateService userDateService,
     IFriendFeedEventEmitter friendFeedEventEmitter,
+    IUnitOfWork unitOfWork,
     IFeatureFlagService featureFlagService,
     ILogger<UserStreakService> logger) : IUserStreakService
 {
@@ -107,12 +109,16 @@ public partial class UserStreakService(
     /// <summary>
     /// Applies one banked streak freeze to bridge the user's most recent scheduled miss (their local
     /// "yesterday") during recalculation — the same action the hourly <see cref="StreakFreezeAutoActivationService"/>
-    /// takes — so the streak is preserved regardless of which path runs first. Persisting a
-    /// <see cref="StreakFreeze"/> row makes it idempotent: a later recalculation sees the frozen date in
-    /// <paramref name="freezeDateSet"/> and neither re-consumes a freeze nor inflates the streak. Only spends a
-    /// freeze when covering the day actually raises the streak (so an over-large gap is left to break) and the
-    /// user is freeze-eligible and under the monthly cap. Returns true, extending
-    /// <paramref name="freezeDateSet"/> with the covered date, exactly when a freeze was consumed.
+    /// takes — so the streak is preserved regardless of which path runs first. The consume + the
+    /// <see cref="StreakFreeze"/> insert are flushed in one guarded save so they commit atomically; a persisted row
+    /// makes the operation idempotent, since a later recalculation sees the frozen date in
+    /// <paramref name="freezeDateSet"/> and neither re-consumes a freeze nor inflates the streak. The hourly job
+    /// can insert the same <c>(UserId, UsedOnDate)</c> row concurrently: on that unique-violation the save rolls
+    /// back this consume (so exactly one freeze is spent overall), the staged rows are dropped, and the day is
+    /// still treated as covered because the winner's row already bridges it. Only spends a freeze when covering the
+    /// day actually raises the streak (so an over-large gap is left to break) and the user is freeze-eligible and
+    /// under the monthly cap. Returns true, extending <paramref name="freezeDateSet"/> with the covered date,
+    /// whenever the day ends up covered by this call or its concurrent winner.
     /// </summary>
     private async Task<bool> TryBridgeRecentGapWithBankedFreezeAsync(
         User user,
@@ -155,8 +161,21 @@ public partial class UserStreakService(
             return false;
 
         await streakFreezeRepository.AddAsync(StreakFreeze.Create(user.Id, missedDate), cancellationToken);
-        freezeDateSet.Add(missedDate);
 
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (DbUniqueViolation.IsUniqueViolation(ex))
+        {
+            unitOfWork.DiscardChanges();
+            freezeDateSet.Add(missedDate);
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogBankedFreezeAlreadyCovered(logger, user.Id, missedDate);
+            return true;
+        }
+
+        freezeDateSet.Add(missedDate);
         if (logger.IsEnabled(LogLevel.Information))
             LogBankedFreezeApplied(logger, user.Id, missedDate);
 
@@ -168,6 +187,12 @@ public partial class UserStreakService(
         Level = LogLevel.Information,
         Message = "Applied banked streak freeze for user {UserId} on {FrozenDate} during recalculation to bridge a missed scheduled day")]
     private static partial void LogBankedFreezeApplied(ILogger logger, Guid userId, DateOnly frozenDate);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Debug,
+        Message = "Banked streak freeze for user {UserId} on {FrozenDate} was already inserted by a concurrent activation; treating the day as covered")]
+    private static partial void LogBankedFreezeAlreadyCovered(ILogger logger, Guid userId, DateOnly frozenDate);
 
     private static int ComputeLongestStreak(
         HashSet<DateOnly> expectedDates,
