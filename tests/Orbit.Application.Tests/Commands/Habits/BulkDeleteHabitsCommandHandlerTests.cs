@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -125,19 +126,71 @@ public class BulkDeleteHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_UsesTransactionWrapper()
+    public async Task Handle_SaveFailsMidBatch_RollsBackWholeBatchAndSkipsRecalcAndCacheInvalidation()
     {
+        var habit1 = Habit.Create(new HabitCreateParams(UserId, "Habit 1", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         _habitRepo.FindTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<CancellationToken>())
-            .Returns(new List<Habit>());
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit1, habit2 });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db failure mid-batch"));
 
-        var command = new BulkDeleteHabitsCommand(UserId, new List<Guid> { Guid.NewGuid() });
+        var cacheKey = $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
+        _cache.Set(cacheKey, "cached-summary");
 
-        await _handler.Handle(command, CancellationToken.None);
+        var command = new BulkDeleteHabitsCommand(UserId, new List<Guid> { habit1.Id, habit2.Id });
 
+        var act = async () => await _handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        _cache.TryGetValue(cacheKey, out _).Should().BeTrue();
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
             Arg.Any<Func<CancellationToken, Task>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_PersistenceAndRecalcRunInsideTransaction_NotOutsideIt()
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit });
+
+        var insideTransaction = false;
+        var saveObservedInsideTransaction = new List<bool>();
+        var recalcObservedInsideTransaction = new List<bool>();
+
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                insideTransaction = true;
+                try
+                {
+                    await call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1));
+                }
+                finally
+                {
+                    insideTransaction = false;
+                }
+            });
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => { saveObservedInsideTransaction.Add(insideTransaction); return 1; });
+        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(_ => { recalcObservedInsideTransaction.Add(insideTransaction); return new UserStreakState(0, 0, null); });
+
+        var command = new BulkDeleteHabitsCommand(UserId, new List<Guid> { habit.Id });
+
+        await _handler.Handle(command, CancellationToken.None);
+
+        saveObservedInsideTransaction.Should().NotBeEmpty().And.OnlyContain(observed => observed);
+        recalcObservedInsideTransaction.Should().NotBeEmpty().And.OnlyContain(observed => observed);
+        habit.IsDeleted.Should().BeTrue();
     }
 }

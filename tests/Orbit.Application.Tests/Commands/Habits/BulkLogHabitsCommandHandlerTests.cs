@@ -316,6 +316,110 @@ public class BulkLogHabitsCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_InvalidItemsInterleavedWithValid_AppliesValidReportsInvalidPerItem()
+    {
+        var habitA = Habit.Create(new HabitCreateParams(UserId, "Habit A", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var habitB = Habit.Create(new HabitCreateParams(UserId, "Habit B", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { habitA, habitB });
+
+        var missingId = Guid.NewGuid();
+        var items = new List<BulkLogItem>
+        {
+            new(Guid.NewGuid(), Today.AddDays(3)),
+            new(habitA.Id),
+            new(missingId),
+            new(habitB.Id)
+        };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(4);
+
+        result.Value.Results[0].Index.Should().Be(0);
+        result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
+        result.Value.Results[0].ErrorCode.Should().Be(ErrorMessages.CannotLogFutureDate.Code);
+
+        result.Value.Results[1].Index.Should().Be(1);
+        result.Value.Results[1].Status.Should().Be(BulkItemStatus.Success);
+        result.Value.Results[1].HabitId.Should().Be(habitA.Id);
+        result.Value.Results[1].LogId.Should().NotBeNull();
+
+        result.Value.Results[2].Index.Should().Be(2);
+        result.Value.Results[2].Status.Should().Be(BulkItemStatus.Failed);
+        result.Value.Results[2].ErrorCode.Should().Be(ErrorMessages.HabitNotFound.Code);
+
+        result.Value.Results[3].Index.Should().Be(3);
+        result.Value.Results[3].Status.Should().Be(BulkItemStatus.Success);
+        result.Value.Results[3].HabitId.Should().Be(habitB.Id);
+        result.Value.Results[3].LogId.Should().NotBeNull();
+
+        await _habitLogRepo.Received(2).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        habitA.Logs.Should().ContainSingle(l => l.Date == Today);
+        habitB.Logs.Should().ContainSingle(l => l.Date == Today);
+    }
+
+    [Fact]
+    public async Task Handle_ItemPersistenceThrowsMidBatch_IsolatesFailureAndAppliesOtherItems()
+    {
+        var failingHabit = Habit.Create(new HabitCreateParams(UserId, "Failing", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var okHabit = Habit.Create(new HabitCreateParams(UserId, "Ok", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { failingHabit, okHabit });
+
+        _habitLogRepo.AddAsync(
+                Arg.Is<HabitLog>(l => l.HabitId == failingHabit.Id),
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("insert failed"));
+
+        var items = new List<BulkLogItem> { new(failingHabit.Id), new(okHabit.Id) };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(2);
+
+        var failing = result.Value.Results.Single(r => r.HabitId == failingHabit.Id);
+        failing.Status.Should().Be(BulkItemStatus.Failed);
+        failing.ErrorCode.Should().Be(ErrorMessages.BulkLogItemFailed.Code);
+        failing.Error.Should().Be(ErrorMessages.BulkLogItemFailed.Message);
+
+        var ok = result.Value.Results.Single(r => r.HabitId == okHabit.Id);
+        ok.Status.Should().Be(BulkItemStatus.Success);
+        ok.LogId.Should().NotBeNull();
+
+        await _gamificationService.Received(1).ProcessHabitsLogged(
+            UserId,
+            Arg.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == okHabit.Id),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_CompletedOneTimeTask_ReportsDomainFailurePerItemAndContinuesBatch()
+    {
+        var task = Habit.Create(new HabitCreateParams(UserId, "Task", null, null, DueDate: Today)).Value;
+        task.Log(Today.AddDays(-1));
+        task.IsCompleted.Should().BeTrue();
+
+        var okHabit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        SetupHabitsForUser(new List<Habit> { task, okHabit });
+
+        var items = new List<BulkLogItem> { new(task.Id), new(okHabit.Id) };
+        var command = new BulkLogHabitsCommand(UserId, items);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var taskResult = result.Value.Results.Single(r => r.HabitId == task.Id);
+        taskResult.Status.Should().Be(BulkItemStatus.Failed);
+        taskResult.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
+
+        result.Value.Results.Single(r => r.HabitId == okHabit.Id).Status.Should().Be(BulkItemStatus.Success);
+    }
+
     private void SetupHabitsForUser(List<Habit> habits)
     {
         _habitRepo.FindTrackedAsync(
