@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Behaviors;
@@ -14,6 +16,9 @@ public class IdempotencyBehaviorRaceTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private const string Key = "mutation-key-1";
+
+    private static readonly JsonSerializerOptions LedgerSerializerOptions =
+        new(JsonSerializerDefaults.Web) { Converters = { new ResultJsonConverterFactory() } };
 
     [Fact]
     public async Task Handle_ConcurrentDuplicateLosesUniqueRace_ReplaysWinnerResponse()
@@ -56,6 +61,45 @@ public class IdempotencyBehaviorRaceTests
         await act.Should().ThrowAsync<DbUpdateException>();
     }
 
+    [Fact]
+    public async Task Handle_ConcurrentDuplicateBatchCommand_ReplaysWinnersFullBatchResponse()
+    {
+        var winnerBatch = Result.Success(new FakeBatchResponse(new List<FakeBatchItem>
+        {
+            new(0, "Success", Guid.NewGuid()),
+            new(1, "Failed", Guid.NewGuid()),
+            new(2, "Success", Guid.NewGuid())
+        }));
+        var winnerJson = JsonSerializer.Serialize(winnerBatch, LedgerSerializerOptions);
+
+        var store = Substitute.For<IIdempotencyStore>();
+        store.FindResponseBodyAsync(UserId, Key, Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>(null), Task.FromResult<string?>(winnerJson));
+        store.Reserve(UserId, Key, Arg.Any<string>()).Returns(Substitute.For<IIdempotencyReservation>());
+
+        var unitOfWork = BuildUnitOfWorkThatThrowsUniqueViolationOnSave();
+        var behavior = new IdempotencyBehavior<FakeBatchRequest, Result<FakeBatchResponse>>(
+            BuildContextWithKey(), store, unitOfWork);
+
+        var handlerCalls = 0;
+        RequestHandlerDelegate<Result<FakeBatchResponse>> next = _ =>
+        {
+            handlerCalls++;
+            return Task.FromResult(Result.Success(new FakeBatchResponse(new List<FakeBatchItem>
+            {
+                new(0, "Failed", Guid.NewGuid())
+            })));
+        };
+
+        var result = await behavior.Handle(new FakeBatchRequest(), next, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Results.Should().HaveCount(3);
+        result.Value.Results.Should().BeEquivalentTo(
+            winnerBatch.Value.Results, options => options.WithStrictOrdering());
+        handlerCalls.Should().Be(0);
+    }
+
     private static IIdempotencyContext BuildContextWithKey()
     {
         var context = Substitute.For<IIdempotencyContext>();
@@ -82,4 +126,10 @@ public class IdempotencyBehaviorRaceTests
     }
 
     private sealed record FakeRequest : IRequest<string>, IIdempotentCommand;
+
+    private sealed record FakeBatchRequest : IRequest<Result<FakeBatchResponse>>, IIdempotentCommand;
+
+    private sealed record FakeBatchResponse(IReadOnlyList<FakeBatchItem> Results);
+
+    private sealed record FakeBatchItem(int Index, string Status, Guid HabitId);
 }
