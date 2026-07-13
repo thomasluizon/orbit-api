@@ -365,6 +365,27 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
+    public async Task UpdateDueTimedHabit_WithDayBeforeScheduledReminder_ConvertsToCrossDayOffset()
+    {
+        var habit = CreateHabitWithTime("Standup", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "day_before", "time": "21:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.ReminderTimes.Should().Contain(720);
+        habit.ScheduledReminders.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task UpdateDueTimedHabit_WithReminderTimes_ClearsStaleScheduledReminders()
     {
         var habit = CreateHabitWithTimeAndScheduledReminders(
