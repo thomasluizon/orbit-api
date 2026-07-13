@@ -25,6 +25,9 @@ public class SuggestHabitSetupCommandHandlerTests
 
     private static readonly Guid UserId = Guid.NewGuid();
 
+    private static readonly DayOfWeek[] SuggestionDays = new[] { DayOfWeek.Monday };
+    private static readonly string[] SubHabits = new[] { "Warm up" };
+
     public SuggestHabitSetupCommandHandlerTests()
     {
         _handler = new SuggestHabitSetupCommandHandler(
@@ -32,9 +35,9 @@ public class SuggestHabitSetupCommandHandlerTests
     }
 
     private static HabitSetupSuggestion SampleSuggestion() =>
-        new("R", FrequencyUnit.Day, 1, new[] { DayOfWeek.Monday },
+        new("R", FrequencyUnit.Day, 1, SuggestionDays,
             IsFlexible: false, FlexibleTarget: null, DueTime: null,
-            SubHabits: new[] { "Warm up" }, ChecklistItems: Array.Empty<string>());
+            SubHabits: SubHabits, ChecklistItems: Array.Empty<string>());
 
     private void SetupTrackedUser()
     {

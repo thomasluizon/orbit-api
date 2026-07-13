@@ -9,6 +9,10 @@ public class UpdateHabitCommandValidatorTests
 {
     private readonly UpdateHabitCommandValidator _validator = new();
 
+    private static readonly DayOfWeek[] MondayOnly = new[] { DayOfWeek.Monday };
+    private static readonly int[] DuplicateReminderTimes = new[] { 15, 15 };
+    private static readonly int[] OutOfRangeReminderTimes = new[] { -5 };
+
     private static UpdateHabitCommand ValidCommand() => new(
         UserId: Guid.NewGuid(),
         HabitId: Guid.NewGuid(),
@@ -83,7 +87,7 @@ public class UpdateHabitCommandValidatorTests
         var command = ValidCommand() with
         {
             FrequencyQuantity = 2,
-            Options = new UpdateHabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+            Options = new UpdateHabitCommandOptions(Days: MondayOnly)
         };
 
         var result = _validator.TestValidate(command);
@@ -98,7 +102,7 @@ public class UpdateHabitCommandValidatorTests
         {
             FrequencyUnit = FrequencyUnit.Week,
             FrequencyQuantity = 1,
-            Options = new UpdateHabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+            Options = new UpdateHabitCommandOptions(Days: MondayOnly)
         };
 
         var result = _validator.TestValidate(command);
@@ -113,7 +117,7 @@ public class UpdateHabitCommandValidatorTests
         {
             FrequencyUnit = FrequencyUnit.Day,
             FrequencyQuantity = 1,
-            Options = new UpdateHabitCommandOptions(Days: new[] { DayOfWeek.Monday })
+            Options = new UpdateHabitCommandOptions(Days: MondayOnly)
         };
 
         var result = _validator.TestValidate(command);
@@ -156,7 +160,7 @@ public class UpdateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            Options = new UpdateHabitCommandOptions(ReminderTimes: new[] { 15, 15 })
+            Options = new UpdateHabitCommandOptions(ReminderTimes: DuplicateReminderTimes)
         };
 
         var result = _validator.TestValidate(command);
@@ -169,7 +173,7 @@ public class UpdateHabitCommandValidatorTests
     {
         var command = ValidCommand() with
         {
-            Options = new UpdateHabitCommandOptions(ReminderTimes: new[] { -5 })
+            Options = new UpdateHabitCommandOptions(ReminderTimes: OutOfRangeReminderTimes)
         };
 
         var result = _validator.TestValidate(command);

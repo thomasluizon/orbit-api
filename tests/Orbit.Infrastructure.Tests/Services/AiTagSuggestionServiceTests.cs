@@ -5,13 +5,16 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 public class AiTagSuggestionServiceTests
 {
+    private static readonly string[] HealthFitnessTags = new[] { "Health", "Fitness" };
+    private static readonly string[] LearningTags = new[] { "Learning" };
+
     [Fact]
     public void BuildPrompt_IncludesTitleDescriptionAndExistingTags()
     {
         var prompt = AiTagSuggestionService.BuildPrompt(
             "Morning run",
             "Jog around the park",
-            new[] { "Health", "Fitness" },
+            HealthFitnessTags,
             "en");
 
         prompt.Should().Contain("Morning run");
@@ -33,7 +36,7 @@ public class AiTagSuggestionServiceTests
     [Fact]
     public void BuildPrompt_NullDescription_RendersPlaceholder()
     {
-        var prompt = AiTagSuggestionService.BuildPrompt("Read a book", null, new[] { "Learning" }, "en");
+        var prompt = AiTagSuggestionService.BuildPrompt("Read a book", null, LearningTags, "en");
 
         prompt.Should().Contain("(no description)");
     }

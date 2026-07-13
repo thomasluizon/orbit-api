@@ -19,6 +19,8 @@ public class GetPublicProfileQueryHandlerTests
 
     private const string Slug = "ABCDEFGHJKLMNPQRSTUV12";
 
+    private static readonly string[] ExpectedAchievementKeys = new[] { "first_orbit", "week_warrior" };
+
     public GetPublicProfileQueryHandlerTests()
     {
         _handler = new GetPublicProfileQueryHandler(_userRepo, _achievementRepo, _habitRepo);
@@ -88,7 +90,7 @@ public class GetPublicProfileQueryHandlerTests
         view.Level.Should().NotBeNull();
         view.LevelTitle.Should().NotBeNullOrWhiteSpace();
         view.Achievements.Should().NotBeNull();
-        view.Achievements!.Select(a => a.IconKey).Should().Contain(new[] { "first_orbit", "week_warrior" });
+        view.Achievements!.Select(a => a.IconKey).Should().Contain(ExpectedAchievementKeys);
         view.TopHabits.Should().BeNull();
     }
 

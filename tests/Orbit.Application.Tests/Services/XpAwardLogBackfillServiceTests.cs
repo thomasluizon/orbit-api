@@ -22,6 +22,8 @@ public class XpAwardLogBackfillServiceTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
+    private static readonly int[] ExpectedHabitXpAmounts = new[] { 11, 12, 13 };
+
     public XpAwardLogBackfillServiceTests()
     {
         _sut = new XpAwardLogBackfillService(_userRepo, _habitRepo, _goalRepo, _achievementRepo, _xpRepo, _unitOfWork);
@@ -79,7 +81,7 @@ public class XpAwardLogBackfillServiceTests
         processed.Should().BeTrue();
         _added.Should().HaveCount(3);
         _added.Should().OnlyContain(r => r.Source == XpAwardSource.HabitLog);
-        _added.Select(r => r.Amount).Should().BeEquivalentTo(new[] { 11, 12, 13 });
+        _added.Select(r => r.Amount).Should().BeEquivalentTo(ExpectedHabitXpAmounts);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

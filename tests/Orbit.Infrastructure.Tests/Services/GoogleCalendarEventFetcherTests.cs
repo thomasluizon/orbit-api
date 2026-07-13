@@ -16,6 +16,10 @@ public class GoogleCalendarEventFetcherTests
 
     private const string Token = "access-token";
 
+    private static readonly string[] SharedCalendarSelection = new[] { "shared" };
+    private static readonly string[] ChosenCalendarSelection = new[] { "chosen" };
+    private static readonly string[] ExpectedCalendarIds = new[] { "a", "b" };
+
     public GoogleCalendarEventFetcherTests()
     {
         _fetcher = new GoogleCalendarEventFetcher(_api, _logger);
@@ -115,7 +119,7 @@ public class GoogleCalendarEventFetcherTests
             Calendar("shared", "reader"));
         StubEvents("shared", TimedEvent("s1", "Shared event"));
 
-        var result = await _fetcher.FetchAsync(Token, new[] { "shared" }, null, CancellationToken.None);
+        var result = await _fetcher.FetchAsync(Token, SharedCalendarSelection, null, CancellationToken.None);
 
         result.Should().ContainSingle();
         result[0].CalendarId.Should().Be("shared");
@@ -128,7 +132,7 @@ public class GoogleCalendarEventFetcherTests
     {
         StubCalendars(Calendar("chosen", "owner", deleted: true));
 
-        var result = await _fetcher.FetchAsync(Token, new[] { "chosen" }, null, CancellationToken.None);
+        var result = await _fetcher.FetchAsync(Token, ChosenCalendarSelection, null, CancellationToken.None);
 
         result.Should().BeEmpty();
         await _api.DidNotReceive().ListEventsAsync(Token, "chosen", Arg.Any<DateTime?>(), Arg.Any<CancellationToken>());
@@ -147,7 +151,7 @@ public class GoogleCalendarEventFetcherTests
 
         result.Should().HaveCount(2);
         result.Should().OnlyContain(i => i.Id == "master");
-        result.Select(i => i.CalendarId).Should().BeEquivalentTo(new[] { "a", "b" });
+        result.Select(i => i.CalendarId).Should().BeEquivalentTo(ExpectedCalendarIds);
     }
 
     [Fact]

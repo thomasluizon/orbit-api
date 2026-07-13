@@ -9,6 +9,21 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class AiHabitSuggestionServiceTests
 {
     private static readonly JsonSerializerOptions DeserializeOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly string[] BrushAndShowerSubHabits = new[] { "Brush teeth", "Shower" };
+    private static readonly string[] CheeseAndBreadChecklist = new[] { "Cheese", "Bread" };
+    private static readonly string[] BrushAndMakeBedSubHabits = new[] { "Brush teeth", "Make bed" };
+    private static readonly string[] MondayAndWednesdayNames = new[] { "Monday", "Wednesday" };
+    private static readonly string[] WarmUpAndCoolDownSubHabits = new[] { "Warm up", "Cool down" };
+    private static readonly string[] MondayName = new[] { "Monday" };
+    private static readonly string[] PlaceholderSubHabits = new[] { "x" };
+    private static readonly string[] WeekdayNamesWithInvalids = new[] { "Monday", "Notaday", "monday" };
+    private static readonly string[] CheeseBreadEggsChecklist = new[] { "Cheese", "Bread", "Eggs" };
+    private static readonly string[] OkSubHabits = new[] { "ok" };
+    private static readonly string[] EggsChecklist = new[] { "Eggs" };
+    private static readonly string[] BrushTeethSubHabits = new[] { "Brush teeth" };
+    private static readonly string[] CheeseChecklist = new[] { "Cheese" };
+    private static readonly DayOfWeek[] MondayAndWednesday = new[] { DayOfWeek.Monday, DayOfWeek.Wednesday };
+    private static readonly DayOfWeek[] MondayOnly = new[] { DayOfWeek.Monday };
 
     private static Dto Deserialize(string json) => JsonSerializer.Deserialize<Dto>(json, DeserializeOptions)!;
 
@@ -17,7 +32,7 @@ public class AiHabitSuggestionServiceTests
     {
         var dto = Deserialize("""{"subHabits":["Brush teeth","Shower"]}""");
 
-        dto.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth", "Shower" });
+        dto.SubHabits.Should().BeEquivalentTo(BrushAndShowerSubHabits);
     }
 
     [Fact]
@@ -25,7 +40,7 @@ public class AiHabitSuggestionServiceTests
     {
         var dto = Deserialize("""{"subHabits":[{"title":"Brush teeth"},{"title":"Shower"}]}""");
 
-        dto.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth", "Shower" });
+        dto.SubHabits.Should().BeEquivalentTo(BrushAndShowerSubHabits);
     }
 
     [Fact]
@@ -33,7 +48,7 @@ public class AiHabitSuggestionServiceTests
     {
         var dto = Deserialize("""{"checklistItems":[{"name":"Cheese"},{"name":"Bread"}]}""");
 
-        dto.ChecklistItems.Should().BeEquivalentTo(new[] { "Cheese", "Bread" });
+        dto.ChecklistItems.Should().BeEquivalentTo(CheeseAndBreadChecklist);
     }
 
     [Fact]
@@ -60,7 +75,7 @@ public class AiHabitSuggestionServiceTests
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth", "Make bed" });
+        result.Value.SubHabits.Should().BeEquivalentTo(BrushAndMakeBedSubHabits);
     }
 
     [Fact]
@@ -93,7 +108,7 @@ public class AiHabitSuggestionServiceTests
     [Fact]
     public void MapSuggestion_ValidDailyJson_MapsAllFields()
     {
-        var dto = new Dto("R", "Day", 1, new[] { "Monday", "Wednesday" }, new[] { "Warm up", "Cool down" });
+        var dto = new Dto("R", "Day", 1, MondayAndWednesdayNames, WarmUpAndCoolDownSubHabits);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
@@ -101,8 +116,8 @@ public class AiHabitSuggestionServiceTests
         result.Value.Emoji.Should().Be("R");
         result.Value.FrequencyUnit.Should().Be(FrequencyUnit.Day);
         result.Value.FrequencyQuantity.Should().Be(1);
-        result.Value.Days.Should().BeEquivalentTo(new[] { DayOfWeek.Monday, DayOfWeek.Wednesday });
-        result.Value.SubHabits.Should().BeEquivalentTo(new[] { "Warm up", "Cool down" });
+        result.Value.Days.Should().BeEquivalentTo(MondayAndWednesday);
+        result.Value.SubHabits.Should().BeEquivalentTo(WarmUpAndCoolDownSubHabits);
         result.Value.IsFlexible.Should().BeFalse();
         result.Value.FlexibleTarget.Should().BeNull();
         result.Value.DueTime.Should().BeNull();
@@ -112,7 +127,7 @@ public class AiHabitSuggestionServiceTests
     [Fact]
     public void MapSuggestion_WeeklyWithDays_StripsDays()
     {
-        var dto = new Dto(null, "Week", 1, new[] { "Monday" }, null);
+        var dto = new Dto(null, "Week", 1, MondayName, null);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
@@ -123,7 +138,7 @@ public class AiHabitSuggestionServiceTests
     [Fact]
     public void MapSuggestion_DailyQuantityNotOne_StripsDays()
     {
-        var dto = new Dto(null, "Day", 2, new[] { "Monday" }, null);
+        var dto = new Dto(null, "Day", 2, MondayName, null);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
@@ -166,7 +181,7 @@ public class AiHabitSuggestionServiceTests
     [Fact]
     public void MapSuggestion_InvalidFrequencyUnit_BecomesNullAndDropsQuantity()
     {
-        var dto = new Dto(null, "Fortnight", 3, null, new[] { "x" });
+        var dto = new Dto(null, "Fortnight", 3, null, PlaceholderSubHabits);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
@@ -191,17 +206,17 @@ public class AiHabitSuggestionServiceTests
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
-        result.Value.SubHabits.Should().BeEquivalentTo(new[] { "ok" });
+        result.Value.SubHabits.Should().BeEquivalentTo(OkSubHabits);
     }
 
     [Fact]
     public void MapSuggestion_InvalidWeekdayNames_DroppedKeepingValidOnes()
     {
-        var dto = new Dto(null, "Day", 1, new[] { "Monday", "Notaday", "monday" }, null);
+        var dto = new Dto(null, "Day", 1, WeekdayNamesWithInvalids, null);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
-        result.Value.Days.Should().BeEquivalentTo(new[] { DayOfWeek.Monday });
+        result.Value.Days.Should().BeEquivalentTo(MondayOnly);
     }
 
     [Fact]
@@ -219,7 +234,7 @@ public class AiHabitSuggestionServiceTests
     [Fact]
     public void MapSuggestion_Flexible_KeepsTargetForcesQuantityOneAndStripsDays()
     {
-        var dto = new Dto(null, "Week", 9, new[] { "Monday" }, null, IsFlexible: true, FlexibleTarget: 4);
+        var dto = new Dto(null, "Week", 9, MondayName, null, IsFlexible: true, FlexibleTarget: 4);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
@@ -289,11 +304,11 @@ public class AiHabitSuggestionServiceTests
     [Fact]
     public void MapSuggestion_ChecklistItems_MappedWhenNoSubHabits()
     {
-        var dto = new Dto(null, null, null, null, null, ChecklistItems: new[] { "Cheese", "Bread", "Eggs" });
+        var dto = new Dto(null, null, null, null, null, ChecklistItems: CheeseBreadEggsChecklist);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
-        result.Value.ChecklistItems.Should().BeEquivalentTo(new[] { "Cheese", "Bread", "Eggs" });
+        result.Value.ChecklistItems.Should().BeEquivalentTo(CheeseBreadEggsChecklist);
         result.Value.SubHabits.Should().BeEmpty();
     }
 
@@ -315,17 +330,17 @@ public class AiHabitSuggestionServiceTests
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
-        result.Value.ChecklistItems.Should().BeEquivalentTo(new[] { "Eggs" });
+        result.Value.ChecklistItems.Should().BeEquivalentTo(EggsChecklist);
     }
 
     [Fact]
     public void MapSuggestion_SubHabitsAndChecklist_AreMutuallyExclusive_SubHabitsWin()
     {
-        var dto = new Dto(null, null, null, null, new[] { "Brush teeth" }, ChecklistItems: new[] { "Cheese" });
+        var dto = new Dto(null, null, null, null, BrushTeethSubHabits, ChecklistItems: CheeseChecklist);
 
         var result = AiHabitSuggestionService.MapSuggestion(dto);
 
-        result.Value.SubHabits.Should().BeEquivalentTo(new[] { "Brush teeth" });
+        result.Value.SubHabits.Should().BeEquivalentTo(BrushTeethSubHabits);
         result.Value.ChecklistItems.Should().BeEmpty();
     }
 }

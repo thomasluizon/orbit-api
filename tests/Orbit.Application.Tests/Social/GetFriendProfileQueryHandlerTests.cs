@@ -29,6 +29,8 @@ public class GetFriendProfileQueryHandlerTests
 
     private static readonly DateOnly Today = new(2026, 6, 15);
 
+    private static readonly string[] ExpectedAchievementKeys = new[] { "first_orbit", "week_warrior" };
+
     public GetFriendProfileQueryHandlerTests()
     {
         var guard = new SocialAccessGuard(_userRepository);
@@ -105,7 +107,7 @@ public class GetFriendProfileQueryHandlerTests
         view.Handle.Should().NotBeNullOrWhiteSpace();
         view.CurrentStreak.Should().Be(12);
         view.Level.Should().Be(5);
-        view.Achievements.Select(a => a.IconKey).Should().Contain(new[] { "first_orbit", "week_warrior" });
+        view.Achievements.Select(a => a.IconKey).Should().Contain(ExpectedAchievementKeys);
     }
 
     [Fact]

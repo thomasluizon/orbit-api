@@ -18,6 +18,7 @@ namespace Orbit.Infrastructure.Tests.Services;
 public class ReminderSchedulerServiceTests
 {
     private static readonly DateOnly UtcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+    private static readonly int[] ReminderTimes = new[] { 0 };
     private static string FormatReminderText(int minutesBefore, string lang)
     {
         var method = typeof(ReminderSchedulerService)
@@ -428,7 +429,7 @@ public class ReminderSchedulerServiceTests
             ReminderEnabled: true,
             DueDate: UtcToday,
             DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
@@ -457,7 +458,7 @@ public class ReminderSchedulerServiceTests
             ReminderEnabled: true,
             DueDate: UtcToday,
             DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
@@ -491,7 +492,7 @@ public class ReminderSchedulerServiceTests
             ReminderEnabled: true,
             DueDate: UtcToday.AddDays(-1),
             DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
@@ -525,7 +526,7 @@ public class ReminderSchedulerServiceTests
             ReminderEnabled: true,
             DueDate: UtcToday.AddDays(-1),
             DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
 
         habit.Log(userToday, advanceDueDate: false);
         dbContext.Users.Add(user);
@@ -552,7 +553,7 @@ public class ReminderSchedulerServiceTests
             ReminderEnabled: true,
             DueDate: UtcToday.AddDays(-1),
             DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
@@ -625,7 +626,7 @@ public class ReminderSchedulerServiceTests
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
         await dbContext.SaveChangesAsync();
@@ -656,12 +657,12 @@ public class ReminderSchedulerServiceTests
         var throwingHabit = Habit.Create(new HabitCreateParams(
             throwingUser.Id, "Alice workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
         var healthyUser = User.Create("Bob", "bob@test.com").Value;
         var healthyHabit = Habit.Create(new HabitCreateParams(
             healthyUser.Id, "Bob workout", FrequencyUnit.Day, 1,
             ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
-            ReminderTimes: new[] { 0 })).Value;
+            ReminderTimes: ReminderTimes)).Value;
 
         await using var dbContext = CreateInterceptingDbContext(
             new ThrowForHabitReminderInterceptor(throwingHabit.Id));
@@ -695,7 +696,7 @@ public class ReminderSchedulerServiceTests
                 ReminderEnabled: true,
                 DueDate: UtcToday,
                 DueTime: new TimeOnly(0, 0),
-                ReminderTimes: new[] { 0 })).Value;
+                ReminderTimes: ReminderTimes)).Value;
             dbContext.Users.Add(user);
             dbContext.Habits.Add(habit);
             users.Add(user);
