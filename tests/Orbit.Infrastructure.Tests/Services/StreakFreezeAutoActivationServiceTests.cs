@@ -428,6 +428,79 @@ public class StreakFreezeAutoActivationServiceTests
         }
     }
 
+    [Fact]
+    public async Task ActivateMissedDayFreezes_ExistingFreezeForMissedDate_DoesNotDoubleActivate()
+    {
+        var user = CreateEligibleProUser();
+        var missedDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.Add(user);
+        dbContext.StreakFreezes.Add(StreakFreeze.Create(user.Id, missedDate));
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id)).Should().Be(1);
+        user.StreakFreezesAccumulated.Should().Be(1);
+        await pushService.DidNotReceive().SendToUserAsync(
+            user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ActivateMissedDayFreezes_GuardAlreadyRecordedForMissedDate_DoesNotReactivateOrRepush()
+    {
+        var user = CreateEligibleProUser();
+        var missedDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.Add(user);
+        dbContext.SentStreakFreezeAlerts.Add(SentStreakFreezeAlert.Create(user.Id, missedDate));
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+        await service.ActivateMissedDayFreezes(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id)).Should().Be(0);
+        user.StreakFreezesAccumulated.Should().Be(1);
+        await pushService.DidNotReceive().SendToUserAsync(
+            user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_HostedLifecycle_RunsOneFreezePassThenStopsGracefully()
+    {
+        var user = CreateEligibleProUser();
+
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        var firstPush = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pushService
+            .SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { firstPush.TrySetResult(); return Task.CompletedTask; });
+
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstPush.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await service.StopAsync(CancellationToken.None);
+
+        (await dbContext.StreakFreezes.AsNoTracking().CountAsync(f => f.UserId == user.Id)).Should().Be(1);
+        user.StreakFreezesAccumulated.Should().Be(0);
+        service.ExecuteTask.Should().NotBeNull();
+        service.ExecuteTask!.IsCompleted.Should().BeTrue();
+        service.ExecuteTask!.IsFaulted.Should().BeFalse();
+    }
+
     private static User CreateEligibleProUser()
     {
         var user = User.Create($"User-{Guid.NewGuid():N}", $"{Guid.NewGuid():N}@test.com").Value;

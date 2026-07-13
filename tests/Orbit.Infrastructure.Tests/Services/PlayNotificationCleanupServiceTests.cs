@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
@@ -78,6 +79,30 @@ public sealed class PlayNotificationCleanupServiceTests : IDisposable
         (await _dbContext.ProcessedStripeEvents.CountAsync()).Should().Be(1);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_HostedLifecycle_RunsOnePurgePassThenStopsGracefully()
+    {
+        AddPlayNotification("play-old", DaysAgo(31));
+        AddPlayNotification("play-recent", DaysAgo(1));
+        AddStripeEvent("stripe-old", DaysAgo(91));
+        AddStripeEvent("stripe-recent", DaysAgo(1));
+        await _dbContext.SaveChangesAsync();
+
+        var logger = new SignalOnStripePurgeLogger();
+        var service = new PlayNotificationCleanupService(_scopeFactory, logger);
+
+        await service.StartAsync(CancellationToken.None);
+        await logger.StripePurged.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await service.StopAsync(CancellationToken.None);
+
+        (await _dbContext.ProcessedPlayNotifications.Select(n => n.MessageId).ToListAsync())
+            .Should().ContainSingle().Which.Should().Be("play-recent");
+        (await _dbContext.ProcessedStripeEvents.Select(e => e.EventId).ToListAsync())
+            .Should().ContainSingle().Which.Should().Be("stripe-recent");
+        service.ExecuteTask.Should().NotBeNull();
+        service.ExecuteTask!.IsFaulted.Should().BeFalse();
+    }
+
     private static DateTime DaysAgo(int days) => DateTime.UtcNow.AddDays(-days);
 
     private void AddPlayNotification(string messageId, DateTime processedAtUtc)
@@ -98,6 +123,36 @@ public sealed class PlayNotificationCleanupServiceTests : IDisposable
         typeof(ProcessedExternalEvent)
             .GetProperty(nameof(ProcessedExternalEvent.ProcessedAtUtc))!
             .SetValue(target, processedAtUtc);
+
+    /// <summary>
+    /// Completes <see cref="StripePurged"/> when the Stripe-events purge log (EventId 5) fires, which is
+    /// the tick's final DB operation. Waiting on that signal lets the test read the shared context only
+    /// after the purge finishes, avoiding a concurrent access with the background loop.
+    /// </summary>
+    private sealed class SignalOnStripePurgeLogger : ILogger<PlayNotificationCleanupService>
+    {
+        public TaskCompletionSource StripePurged { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (eventId.Id == 5)
+                StripePurged.TrySetResult();
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
+    }
 
     private sealed class SqliteCompatOrbitDbContext(DbContextOptions<OrbitDbContext> options)
         : OrbitDbContext(options)
