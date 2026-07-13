@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -614,6 +615,75 @@ public class ReminderSchedulerServiceTests
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_HostedLifecycle_RunsOneReminderPassThenStopsGracefully()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Workout", FrequencyUnit.Day, 1,
+            ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
+            ReminderTimes: new[] { 0 })).Value;
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        await dbContext.SaveChangesAsync();
+
+        var firstPush = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        pushService
+            .SendToUserAsync(user.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { firstPush.TrySetResult(); return Task.CompletedTask; });
+
+        var service = CreateService(dbContext, pushService);
+
+        await service.StartAsync(CancellationToken.None);
+        await firstPush.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await service.StopAsync(CancellationToken.None);
+
+        await pushService.Received(1).SendToUserAsync(
+            user.Id, habit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == habit.Id)).Should().Be(1);
+        service.ExecuteTask.Should().NotBeNull();
+        service.ExecuteTask!.IsCompleted.Should().BeTrue();
+        service.ExecuteTask!.IsFaulted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CheckAndSendReminders_OneHabitRecordFails_StillDeliversRemainingHabits()
+    {
+        var throwingUser = User.Create("Alice", "alice@test.com").Value;
+        var throwingHabit = Habit.Create(new HabitCreateParams(
+            throwingUser.Id, "Alice workout", FrequencyUnit.Day, 1,
+            ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
+            ReminderTimes: new[] { 0 })).Value;
+        var healthyUser = User.Create("Bob", "bob@test.com").Value;
+        var healthyHabit = Habit.Create(new HabitCreateParams(
+            healthyUser.Id, "Bob workout", FrequencyUnit.Day, 1,
+            ReminderEnabled: true, DueDate: UtcToday, DueTime: new TimeOnly(0, 0),
+            ReminderTimes: new[] { 0 })).Value;
+
+        await using var dbContext = CreateInterceptingDbContext(
+            new ThrowForHabitReminderInterceptor(throwingHabit.Id));
+        var pushService = Substitute.For<IPushNotificationService>();
+
+        dbContext.Users.AddRange(throwingUser, healthyUser);
+        dbContext.Habits.AddRange(throwingHabit, healthyHabit);
+        await dbContext.SaveChangesAsync();
+
+        var service = CreateService(dbContext, pushService);
+
+        var run = async () => await service.CheckAndSendReminders(CancellationToken.None);
+        await run.Should().NotThrowAsync();
+
+        await pushService.Received(1).SendToUserAsync(
+            healthyUser.Id, healthyHabit.Title, Arg.Any<string>(), "/", Arg.Any<CancellationToken>());
+        await pushService.DidNotReceive().SendToUserAsync(
+            throwingUser.Id, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == healthyHabit.Id)).Should().Be(1);
+        (await dbContext.SentReminders.CountAsync(r => r.HabitId == throwingHabit.Id)).Should().Be(0);
+    }
+
     private static List<User> SeedDueRelativeReminders(OrbitDbContext dbContext, int count)
     {
         var users = new List<User>(count);
@@ -649,5 +719,27 @@ public class ReminderSchedulerServiceTests
         return new ReminderSchedulerService(
             scopeFactory, NullLogger<ReminderSchedulerService>.Instance,
             new ConfigurationBuilder().Build());
+    }
+
+    private static OrbitDbContext CreateInterceptingDbContext(ISaveChangesInterceptor interceptor) =>
+        new(new DbContextOptionsBuilder<OrbitDbContext>()
+            .UseInMemoryDatabase($"ReminderSchedulerServiceTests_{Guid.NewGuid()}")
+            .AddInterceptors(interceptor)
+            .Options);
+
+    private sealed class ThrowForHabitReminderInterceptor(Guid habitId) : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            var addsThrowingHabitReminder = eventData.Context?.ChangeTracker
+                .Entries<SentReminder>()
+                .Any(e => e.State == EntityState.Added && e.Entity.HabitId == habitId) == true;
+
+            if (addsThrowingHabitReminder)
+                throw new InvalidOperationException("reminder store unavailable");
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

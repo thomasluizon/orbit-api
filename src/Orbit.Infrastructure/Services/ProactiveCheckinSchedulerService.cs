@@ -64,7 +64,16 @@ public partial class ProactiveCheckinSchedulerService(
         var context = await BuildContext(dbContext, pushService, messageService, candidates, ct);
 
         foreach (var user in candidates)
-            await ProcessUserCheckinAsync(user, context, ct);
+        {
+            try
+            {
+                await ProcessUserCheckinAsync(user, context, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogUserCheckinFailed(logger, user.Id, ex);
+            }
+        }
     }
 
     private sealed record ProactiveCheckinContext(
@@ -223,5 +232,8 @@ public partial class ProactiveCheckinSchedulerService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Proactive check-in already recorded for user {UserId}; skipping push")]
     private static partial void LogProactiveCheckinAlreadySent(ILogger logger, Guid userId);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Error, Message = "Failed to process proactive check-in for user {UserId}; continuing with remaining users")]
+    private static partial void LogUserCheckinFailed(ILogger logger, Guid userId, Exception ex);
 
 }
