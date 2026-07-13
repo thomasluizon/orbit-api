@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -63,21 +64,29 @@ public static partial class WebApplicationExtensions
 
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
-            ResponseWriter = async (context, report) =>
-            {
-                context.Response.ContentType = "application/json";
-                var result = new
-                {
-                    status = report.Status.ToString(),
-                    checks = report.Entries.Select(e => new
-                    {
-                        name = e.Key,
-                        status = e.Value.Status.ToString()
-                    })
-                };
-                await context.Response.WriteAsJsonAsync(result);
-            }
+            ResponseWriter = WriteHealthCheckResponseAsync
         }).AllowAnonymous();
+    }
+
+    internal static async Task WriteHealthCheckResponseAsync(HttpContext context, HealthReport report)
+    {
+        context.Response.StatusCode = report.Status == HealthStatus.Healthy
+            ? StatusCodes.Status200OK
+            : StatusCodes.Status503ServiceUnavailable;
+        context.Response.ContentType = "application/json";
+
+        var result = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description
+            })
+        };
+
+        await context.Response.WriteAsJsonAsync(result);
     }
 
     private static void UseMcpSelectiveAuth(this WebApplication app)
