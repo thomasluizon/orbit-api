@@ -65,7 +65,11 @@ public partial class AiUsageSummaryService(
             .Where(usage => usage.Date == yesterday)
             .ToListAsync(cancellationToken);
 
-        LogAiUsageSummary(logger, BuildSummaryLine(yesterday, rows, _pricing));
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var summaryLine = BuildSummaryLine(yesterday, rows, _pricing);
+            LogAiUsageSummary(logger, summaryLine);
+        }
         _lastSummarizedDate = yesterday;
     }
 

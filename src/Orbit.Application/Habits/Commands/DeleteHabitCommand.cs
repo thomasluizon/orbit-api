@@ -41,7 +41,7 @@ public class DeleteHabitCommandHandler(
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await ConcurrencyRetry.SaveWithRetryAsync(
             unitOfWork,
-            ct => userStreakService.RecalculateAsync(request.UserId, ct),
+            ct => userStreakService.RecalculateAsync(request.UserId, cancellationToken: ct),
             cancellationToken);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);

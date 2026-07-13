@@ -132,7 +132,7 @@ public class SubscriptionControllerTests
         _mediator.Send(Arg.Any<CreateCheckoutCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(default(CheckoutResponse)!));
 
-        _controller.HttpContext.Request.Headers["Accept-Language"] = "pt-BR,pt;q=0.9,en;q=0.8";
+        _controller.HttpContext.Request.Headers.AcceptLanguage = "pt-BR,pt;q=0.9,en;q=0.8";
 
         var request = new SubscriptionController.CreateCheckoutRequest("month");
 
@@ -317,7 +317,7 @@ public class SubscriptionControllerTests
         _mediator.Send(Arg.Any<GetPlansQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(default(PlansResponse)!));
 
-        _controller.HttpContext.Request.Headers["Accept-Language"] = "pt-BR,pt;q=0.9,en;q=0.8";
+        _controller.HttpContext.Request.Headers.AcceptLanguage = "pt-BR,pt;q=0.9,en;q=0.8";
 
         await _controller.GetPlans(CancellationToken.None);
 

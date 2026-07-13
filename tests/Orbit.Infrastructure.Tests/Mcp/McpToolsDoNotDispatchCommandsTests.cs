@@ -9,11 +9,10 @@ namespace Orbit.Infrastructure.Tests.Mcp;
 /// (mutation) via <c>mediator.Send</c> from an MCP tool bypasses that layer, so it is banned. Read
 /// queries (<c>mediator.Send(new *Query(...))</c>) are permitted and stay on MediatR by design.
 /// </summary>
-public class McpToolsDoNotDispatchCommandsTests
+public partial class McpToolsDoNotDispatchCommandsTests
 {
-    private static readonly Regex CommandDispatchPattern = new(
-        @"mediator\s*\.\s*Send\s*\(\s*(new\s+\w*Command\b|\w*[Cc]ommand)\b",
-        RegexOptions.Compiled | RegexOptions.Singleline);
+    [GeneratedRegex(@"mediator\s*\.\s*Send\s*\(\s*(new\s+\w*Command\b|\w*[Cc]ommand)\b", RegexOptions.Singleline)]
+    private static partial Regex CommandDispatchPattern();
 
     [Fact]
     public void McpTools_DoNotDispatchCommandsThroughMediator()
@@ -26,7 +25,7 @@ public class McpToolsDoNotDispatchCommandsTests
             var lines = File.ReadAllLines(file);
             for (var index = 0; index < lines.Length; index++)
             {
-                if (CommandDispatchPattern.IsMatch(lines[index]))
+                if (CommandDispatchPattern().IsMatch(lines[index]))
                     offenders.Add($"{Path.GetFileName(file)}:{index + 1}: {lines[index].Trim()}");
             }
         }

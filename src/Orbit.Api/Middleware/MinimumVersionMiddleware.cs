@@ -44,7 +44,11 @@ public sealed partial class MinimumVersionMiddleware(
             return;
         }
 
-        LogUpgradeRequired(logger, clientVersion, minimumVersion, context.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var requestId = context.GetRequestId();
+            LogUpgradeRequired(logger, clientVersion, minimumVersion, requestId);
+        }
 
         context.Response.StatusCode = StatusCodes.Status426UpgradeRequired;
         context.Response.ContentType = "application/json";

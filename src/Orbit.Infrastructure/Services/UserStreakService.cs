@@ -26,8 +26,8 @@ public partial class UserStreakService(
 {
     public async Task<UserStreakState?> RecalculateAsync(
         Guid userId,
-        CancellationToken cancellationToken = default,
-        bool awardFreezeIfEligible = true)
+        bool awardFreezeIfEligible = true,
+        CancellationToken cancellationToken = default)
     {
         var user = await repos.Users.FindOneTrackedAsync(
             u => u.Id == userId,

@@ -43,7 +43,7 @@ public class LogHabitCommandHandlerTests
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
-        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
 
         var user = User.Create("Test", "test@test.com").Value;
@@ -468,7 +468,7 @@ public class LogHabitCommandHandlerTests
         await _gamificationService.DidNotReceive().ProcessHabitLogged(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _userStreakService.DidNotReceive().RecalculateAsync(
-            Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>());
     }
 
     private sealed class FakeUniqueViolationException : DbException

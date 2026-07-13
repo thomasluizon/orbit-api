@@ -44,7 +44,7 @@ public class GetStreakInfoQueryHandler(
             return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
 
         var recalculatedStreak = await userStreakService.RecalculateAsync(
-            request.UserId, cancellationToken, awardFreezeIfEligible: false);
+            request.UserId, awardFreezeIfEligible: false, cancellationToken);
         if (recalculatedStreak is not null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
 

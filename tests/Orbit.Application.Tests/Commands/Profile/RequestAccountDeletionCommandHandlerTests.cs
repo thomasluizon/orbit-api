@@ -85,7 +85,7 @@ public class RequestAccountDeletionCommandHandlerTests
         _backgroundJobClient.Received(1).Create(
             Arg.Any<Job>(), Arg.Is<IState>(state => state is EnqueuedState));
         _enqueuedJob.Should().NotBeNull();
-        _enqueuedJob!.Type.Should().Be(typeof(SendAccountDeletionCodeEmailJob));
+        _enqueuedJob!.Type.Should().Be<SendAccountDeletionCodeEmailJob>();
         _enqueuedJob.Method.Name.Should().Be(nameof(SendAccountDeletionCodeEmailJob.ExecuteAsync));
         _enqueuedJob.Args.Should().Equal(expectedEmail, expectedCode, expectedLanguage);
     }

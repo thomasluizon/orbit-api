@@ -47,7 +47,7 @@ public sealed partial class AiSlipAlertMessageService(
                 "You are a supportive habit coach sending a push notification to help someone avoid a bad habit slip-up.",
                 prompt,
                 temperature: 0.9,
-                cancellationToken,
+                cancellationToken: cancellationToken,
                 purpose: "slip_alert");
 
             if (string.IsNullOrWhiteSpace(text))

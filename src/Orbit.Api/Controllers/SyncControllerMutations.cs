@@ -48,7 +48,7 @@ public partial class SyncController
         Action<TEntity> mutate,
         CancellationToken ct) where TEntity : class
     {
-        if (mutation.Action.ToLowerInvariant() != supportedAction)
+        if (!string.Equals(mutation.Action, supportedAction, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Unsupported action: {mutation.Action} for {entityNoun}.");
 
         if (mutation.Id is null)

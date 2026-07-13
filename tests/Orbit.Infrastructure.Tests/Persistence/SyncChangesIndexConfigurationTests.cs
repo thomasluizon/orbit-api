@@ -24,16 +24,16 @@ public class SyncChangesIndexConfigurationTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    public static IEnumerable<object[]> ChangeQueryIndexCases()
+    public static TheoryData<Type, string[]> ChangeQueryIndexCases() => new()
     {
-        yield return new object[] { typeof(Habit), new[] { "UserId", "UpdatedAtUtc" } };
-        yield return new object[] { typeof(HabitLog), new[] { "HabitId", "UpdatedAtUtc" } };
-        yield return new object[] { typeof(Goal), new[] { "UserId", "UpdatedAtUtc" } };
-        yield return new object[] { typeof(GoalProgressLog), new[] { "GoalId", "UpdatedAtUtc" } };
-        yield return new object[] { typeof(Tag), new[] { "UserId", "UpdatedAtUtc" } };
-        yield return new object[] { typeof(Notification), new[] { "UserId", "UpdatedAtUtc" } };
-        yield return new object[] { typeof(ChecklistTemplate), new[] { "UserId", "UpdatedAtUtc" } };
-    }
+        { typeof(Habit), new[] { "UserId", "UpdatedAtUtc" } },
+        { typeof(HabitLog), new[] { "HabitId", "UpdatedAtUtc" } },
+        { typeof(Goal), new[] { "UserId", "UpdatedAtUtc" } },
+        { typeof(GoalProgressLog), new[] { "GoalId", "UpdatedAtUtc" } },
+        { typeof(Tag), new[] { "UserId", "UpdatedAtUtc" } },
+        { typeof(Notification), new[] { "UserId", "UpdatedAtUtc" } },
+        { typeof(ChecklistTemplate), new[] { "UserId", "UpdatedAtUtc" } },
+    };
 
     [Theory]
     [MemberData(nameof(ChangeQueryIndexCases))]

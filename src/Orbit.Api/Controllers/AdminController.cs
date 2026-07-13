@@ -37,7 +37,11 @@ public partial class AdminController(IMediator mediator, ILogger<AdminController
         if (result.IsFailure)
             return result.ToErrorResult();
 
-        LogBroadcastRequested(logger, HttpContext.GetUserId(), result.Value.RecipientCount, result.Value.WasTest);
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var adminUserId = HttpContext.GetUserId();
+            LogBroadcastRequested(logger, adminUserId, result.Value.RecipientCount, result.Value.WasTest);
+        }
         return Accepted(new { recipientCount = result.Value.RecipientCount, test = result.Value.WasTest });
     }
 

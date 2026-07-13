@@ -21,6 +21,8 @@ public class GetPublicProfileQueryHandlerTests
 
     private static readonly string[] ExpectedAchievementKeys = new[] { "first_orbit", "week_warrior" };
 
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
+
     public GetPublicProfileQueryHandlerTests()
     {
         _handler = new GetPublicProfileQueryHandler(_userRepo, _achievementRepo, _habitRepo);
@@ -166,7 +168,7 @@ public class GetPublicProfileQueryHandlerTests
         StubAchievements(AchievementDefinitions.FirstOrbit);
 
         var result = await _handler.Handle(new GetPublicProfileQuery(Slug), CancellationToken.None);
-        var json = JsonSerializer.Serialize(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var json = JsonSerializer.Serialize(result.Value, WebJsonOptions);
 
         json.Should().NotContain("ana@example.com");
         json.Should().NotContain("email");

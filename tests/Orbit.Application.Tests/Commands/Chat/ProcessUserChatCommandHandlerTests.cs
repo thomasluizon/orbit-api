@@ -86,7 +86,7 @@ public class ProcessUserChatCommandHandlerTests
         _catalogService.BuildDynamicSupplement(Arg.Any<AgentContextSnapshot>()).Returns("dynamic supplement");
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
         _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());

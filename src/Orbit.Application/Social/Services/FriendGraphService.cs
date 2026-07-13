@@ -20,9 +20,12 @@ public class FriendGraphService(
         if (!string.IsNullOrWhiteSpace(handle))
         {
             var normalized = handle.Trim().ToLowerInvariant();
+            // EF Core cannot translate string.Equals(StringComparison) to SQL; the case-insensitive handle match stays as ToLower(). https://github.com/dotnet/efcore/issues/1222
+#pragma warning disable CA1862
             var matches = await userRepository.FindAsync(
                 u => u.Handle != null && u.Handle.ToLower() == normalized,
                 cancellationToken);
+#pragma warning restore CA1862
             return matches.Count > 0 ? matches[0] : null;
         }
 

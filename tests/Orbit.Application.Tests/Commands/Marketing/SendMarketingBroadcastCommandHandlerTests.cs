@@ -121,7 +121,7 @@ public class SendMarketingBroadcastCommandHandlerTests
         _backgroundJobClient.Received(1).Create(
             Arg.Any<Job>(), Arg.Is<IState>(state => state is EnqueuedState));
         _enqueuedJob.Should().NotBeNull();
-        _enqueuedJob!.Type.Should().Be(typeof(SendMarketingEmailJob));
+        _enqueuedJob!.Type.Should().Be<SendMarketingEmailJob>();
         _enqueuedJob.Method.Name.Should().Be(nameof(SendMarketingEmailJob.ExecuteAsync));
         _enqueuedJob.Args.Should().Equal(
             "preview@example.com",

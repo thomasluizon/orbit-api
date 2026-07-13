@@ -84,7 +84,7 @@ public class GetStreakInfoQueryHandlerTests
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), awardFreezeIfEligible: false)
+        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(11, 43, Today));
 
         _streakFreezeRepo.FindAsync(

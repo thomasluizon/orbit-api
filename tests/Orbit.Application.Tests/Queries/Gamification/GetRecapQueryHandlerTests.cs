@@ -60,7 +60,7 @@ public class GetRecapQueryHandlerTests
     {
         var habit = CreateLoggedDailyHabit();
         StubHabits(habit);
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), awardFreezeIfEligible: false)
+        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(7, 20, DateTo));
 
         var query = new GetRecapQuery(UserId, DateFrom, DateTo, "week");
@@ -79,7 +79,7 @@ public class GetRecapQueryHandlerTests
     public async Task Handle_ShareDeepLink_ContainsReferralCodeAndPeriod()
     {
         StubHabits(CreateLoggedDailyHabit());
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), awardFreezeIfEligible: false)
+        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, DateTo));
 
         var query = new GetRecapQuery(UserId, DateFrom, DateTo, "month");
@@ -94,7 +94,7 @@ public class GetRecapQueryHandlerTests
     public async Task Handle_EmptyPeriod_ReturnsZeroedMetrics_NotFailure()
     {
         StubHabits();
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), awardFreezeIfEligible: false)
+        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
             .Returns((UserStreakState?)null);
 
         var query = new GetRecapQuery(UserId, DateFrom, DateTo, "week");
