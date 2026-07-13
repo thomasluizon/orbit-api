@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentValidation.TestHelper;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Application.Habits.Validators;
 using Orbit.Domain.Enums;
@@ -39,6 +40,33 @@ public class BulkCreateHabitsCommandValidatorTests
         var result = _validator.TestValidate(command);
 
         result.ShouldHaveValidationErrorFor(x => x.Habits);
+    }
+
+    [Fact]
+    public void BulkCreate_ExactlyMaxItems_NoBulkSizeError()
+    {
+        var habits = Enumerable.Range(0, AppConstants.MaxBulkOperationSize)
+            .Select(i => new BulkHabitItem($"Habit {i}", null, FrequencyUnit.Day, 1))
+            .ToList();
+        var command = ValidCommand() with { Habits = habits };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void BulkCreate_OverMax_ErrorMessageStatesConfiguredMax()
+    {
+        var habits = Enumerable.Range(0, AppConstants.MaxBulkOperationSize + 1)
+            .Select(i => new BulkHabitItem($"Habit {i}", null, FrequencyUnit.Day, 1))
+            .ToList();
+        var command = ValidCommand() with { Habits = habits };
+
+        var result = _validator.TestValidate(command);
+
+        result.Errors.Should().Contain(e =>
+            e.ErrorMessage == $"Cannot create more than {AppConstants.MaxBulkOperationSize} habits at once");
     }
 
     [Fact]
@@ -89,6 +117,29 @@ public class BulkDeleteHabitsCommandValidatorTests
         var result = _validator.TestValidate(command);
 
         result.Errors.Should().Contain(e => e.ErrorMessage.Contains("Habit ID must not be empty"));
+    }
+
+    [Fact]
+    public void BulkDelete_ExactlyMaxItems_NoBulkSizeError()
+    {
+        var ids = Enumerable.Range(0, AppConstants.MaxBulkOperationSize).Select(_ => Guid.NewGuid()).ToList();
+        var command = ValidCommand() with { HabitIds = ids };
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Fact]
+    public void BulkDelete_OverMax_ErrorMessageStatesConfiguredMax()
+    {
+        var ids = Enumerable.Range(0, AppConstants.MaxBulkOperationSize + 1).Select(_ => Guid.NewGuid()).ToList();
+        var command = ValidCommand() with { HabitIds = ids };
+
+        var result = _validator.TestValidate(command);
+
+        result.Errors.Should().Contain(e =>
+            e.ErrorMessage == $"Cannot delete more than {AppConstants.MaxBulkOperationSize} habits at once");
     }
 
     [Fact]

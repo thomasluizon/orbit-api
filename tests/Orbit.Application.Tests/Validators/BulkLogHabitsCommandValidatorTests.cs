@@ -63,6 +63,18 @@ public class BulkLogHabitsCommandValidatorTests
     }
 
     [Fact]
+    public void Validate_OverMaxItems_ErrorMessageStatesConfiguredMax()
+    {
+        var items = Enumerable.Range(0, AppConstants.MaxBulkOperationSize + 1)
+            .Select(_ => new BulkLogItem(Guid.NewGuid())).ToList();
+
+        var result = _validator.TestValidate(ValidCommand() with { Items = items });
+
+        result.Errors.Should().Contain(e =>
+            e.ErrorMessage == $"Bulk log cannot exceed {AppConstants.MaxBulkOperationSize} items");
+    }
+
+    [Fact]
     public void Validate_ItemWithEmptyHabitId_HasError()
     {
         var items = new List<BulkLogItem> { new(Guid.Empty) };

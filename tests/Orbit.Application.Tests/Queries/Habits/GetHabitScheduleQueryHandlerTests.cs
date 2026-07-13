@@ -618,4 +618,95 @@ public class GetHabitScheduleQueryHandlerTests
         result.Value.Items[0].Children[0].Title.Should().Be("Weekly step");
         result.Value.Items[0].Children[0].IsOverdue.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Handle_ZeroTotalCount_TotalPagesIsZeroAndPageOne()
+    {
+        SetupHabits();
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), PageSize: 20, Page: 1);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().BeEmpty();
+        result.Value.TotalCount.Should().Be(0);
+        result.Value.TotalPages.Should().Be(0);
+        result.Value.Page.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_TotalCountExactlyDivisibleByPageSize_ComputesExactTotalPages()
+    {
+        var habits = Enumerable.Range(1, 6).Select(i => CreateTestHabit(title: "Habit" + i, dueDate: Today)).ToArray();
+        SetupHabits(habits);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), PageSize: 3, Page: 1);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalCount.Should().Be(6);
+        result.Value.TotalPages.Should().Be(2);
+        result.Value.Page.Should().Be(1);
+        result.Value.Items.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task Handle_TotalCountWithRemainder_RoundsTotalPagesUpAndLastPageHoldsRemainder()
+    {
+        var habits = Enumerable.Range(1, 7).Select(i => CreateTestHabit(title: "Habit" + i, dueDate: Today)).ToArray();
+        SetupHabits(habits);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), PageSize: 3, Page: 3);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalCount.Should().Be(7);
+        result.Value.TotalPages.Should().Be(3);
+        result.Value.Page.Should().Be(3);
+        result.Value.Items.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Handle_PageFarBeyondLast_ClampsToLastPageWithRemainderItem()
+    {
+        var habits = Enumerable.Range(1, 5).Select(i => CreateTestHabit(title: "Habit" + i, dueDate: Today)).ToArray();
+        SetupHabits(habits);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6), PageSize: 2, Page: 999);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalCount.Should().Be(5);
+        result.Value.TotalPages.Should().Be(3);
+        result.Value.Page.Should().Be(3);
+        result.Value.Items.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task Handle_SearchAndFrequencyFilterWithPagination_ReturnsFilteredPagedSubset()
+    {
+        var runA = CreateTestHabit(title: "Run A", frequencyUnit: FrequencyUnit.Day, dueDate: Today);
+        runA.SetPosition(1);
+        var runB = CreateTestHabit(title: "Run B", frequencyUnit: FrequencyUnit.Day, dueDate: Today);
+        runB.SetPosition(2);
+        var runC = CreateTestHabit(title: "Run C", frequencyUnit: FrequencyUnit.Day, dueDate: Today);
+        runC.SetPosition(3);
+        var runWeekly = CreateTestHabit(title: "Run Weekly", frequencyUnit: FrequencyUnit.Week, dueDate: Today);
+        runWeekly.SetPosition(4);
+        var walk = CreateTestHabit(title: "Walk", frequencyUnit: FrequencyUnit.Day, dueDate: Today);
+        walk.SetPosition(5);
+        SetupHabits(runA, runB, runC, runWeekly, walk);
+
+        var query = new GetHabitScheduleQuery(
+            UserId, Today, Today.AddDays(6),
+            Search: "Run", FrequencyUnitFilter: "Day", PageSize: 2, Page: 2);
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalCount.Should().Be(3);
+        result.Value.TotalPages.Should().Be(2);
+        result.Value.Page.Should().Be(2);
+        result.Value.Items.Should().ContainSingle();
+        result.Value.Items[0].Title.Should().Be("Run C");
+    }
 }
