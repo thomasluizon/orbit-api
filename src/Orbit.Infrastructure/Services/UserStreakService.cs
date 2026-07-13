@@ -253,23 +253,19 @@ public partial class UserStreakService(
                     ? currentStreak + 1
                     : 1;
                 lastActiveDate = date;
-                if (currentStreak > longestStreak) longestStreak = currentStreak;
+                longestStreak = Math.Max(longestStreak, currentStreak);
                 continue;
             }
 
             if (!freezeDateSet.Contains(date))
                 continue;
 
-            if (lastActiveDate.HasValue
-                && (date.DayNumber - lastActiveDate.Value.DayNumber) <= 2)
-            {
-                lastActiveDate = date;
-            }
-            else
+            if (!lastActiveDate.HasValue
+                || (date.DayNumber - lastActiveDate.Value.DayNumber) > 2)
             {
                 currentStreak = 0;
-                lastActiveDate = date;
             }
+            lastActiveDate = date;
         }
 
         user.SetStreakState(currentStreak, longestStreak, lastActiveDate);

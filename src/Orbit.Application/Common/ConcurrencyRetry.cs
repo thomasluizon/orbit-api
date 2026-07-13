@@ -36,7 +36,8 @@ public static class ConcurrencyRetry
         CancellationToken cancellationToken,
         int maxAttempts = DefaultMaxAttempts)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             if (attempt > 1)
                 unitOfWork.ResetTracking();
@@ -52,6 +53,8 @@ public static class ConcurrencyRetry
             {
                 // Swallowed: the loop retries the save after resetting change tracking. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
             }
+
+            attempt++;
         }
     }
 

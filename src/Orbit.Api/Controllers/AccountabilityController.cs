@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +15,7 @@ namespace Orbit.Api.Controllers;
 [Route("api/accountability")]
 public partial class AccountabilityController(IMediator mediator, ILogger<AccountabilityController> logger) : ControllerBase
 {
-    public record InviteAccountabilityBuddyBody(Guid BuddyUserId, AccountabilityCadence Cadence, IReadOnlyList<Guid> HabitIds);
+    public record InviteAccountabilityBuddyBody([property: JsonRequired] Guid BuddyUserId, [property: JsonRequired] AccountabilityCadence Cadence, IReadOnlyList<Guid> HabitIds);
     public record AcceptAccountabilityPairBody(IReadOnlyList<Guid> HabitIds);
     public record SetAccountabilityHabitsBody(IReadOnlyList<Guid> HabitIds);
     public record CheckInAccountabilityBody(string? Note);

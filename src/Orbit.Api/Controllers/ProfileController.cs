@@ -31,11 +31,11 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
     public record UpdateMarketingConsentRequest([property: JsonRequired] bool Enabled);
     public record UpdatePublicProfileRequest(
         [property: JsonRequired] bool Enabled,
-        bool ShowStreak,
-        bool ShowLevel,
-        bool ShowAchievements,
-        bool ShowTopHabits,
-        bool Regenerate);
+        [property: JsonRequired] bool ShowStreak,
+        [property: JsonRequired] bool ShowLevel,
+        [property: JsonRequired] bool ShowAchievements,
+        [property: JsonRequired] bool ShowTopHabits,
+        [property: JsonRequired] bool Regenerate);
 
     public record ApplyOnboardingRequest(
         IReadOnlyList<ApplyHabitInput>? Habits,

@@ -145,23 +145,8 @@ public partial class ProcessUserChatCommandHandler(
         saveStopwatch.Stop();
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
 
-        var aiMessage = StripJsonWrapper(aiResponse.TextMessage);
-
-        HabitListCard? habitList = null;
-        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage))
-        {
-            aiMessage = strippedMessage;
-            if (request.ClientContext?.SupportsHabitListCard == true)
-                habitList = HabitListCardBuilder.Build(context.ActiveHabits, context.UserToday, habitListScope);
-        }
-
-        GoalListCard? goalList = null;
-        if (GoalListCardBuilder.TryExtractDirective(aiMessage, out var strippedGoalMessage))
-        {
-            aiMessage = strippedGoalMessage;
-            if (request.ClientContext?.SupportsGoalListCard == true)
-                goalList = GoalListCardBuilder.Build(context.ActiveGoals);
-        }
+        var (aiMessage, habitList, goalList) = BuildResponseCards(
+            StripJsonWrapper(aiResponse.TextMessage), request, context);
 
         if (faqMatch is { } faqToCache && !string.IsNullOrWhiteSpace(aiMessage) && IsShareableFaqTurn(executionResults))
             ChatFaqCache.StoreAnswer(faqToCache.Key, faqToCache.Locale, aiMessage);
@@ -190,6 +175,28 @@ public partial class ProcessUserChatCommandHandler(
             executionResults.RelatedSurfaces.Count > 0 ? executionResults.RelatedSurfaces : null,
             habitList,
             goalList));
+    }
+
+    private (string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList) BuildResponseCards(
+        string? aiMessage, ProcessUserChatCommand request, ChatContext context)
+    {
+        HabitListCard? habitList = null;
+        if (HabitListCardBuilder.TryExtractScope(aiMessage, out var habitListScope, out var strippedMessage))
+        {
+            aiMessage = strippedMessage;
+            if (request.ClientContext?.SupportsHabitListCard == true)
+                habitList = HabitListCardBuilder.Build(context.ActiveHabits, context.UserToday, habitListScope);
+        }
+
+        GoalListCard? goalList = null;
+        if (GoalListCardBuilder.TryExtractDirective(aiMessage, out var strippedGoalMessage))
+        {
+            aiMessage = strippedGoalMessage;
+            if (request.ClientContext?.SupportsGoalListCard == true)
+                goalList = GoalListCardBuilder.Build(context.ActiveGoals);
+        }
+
+        return (aiMessage, habitList, goalList);
     }
 
     /// <summary>

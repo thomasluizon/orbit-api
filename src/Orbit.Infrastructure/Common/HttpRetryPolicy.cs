@@ -33,7 +33,8 @@ public static class HttpRetryPolicy
         int maxRetries = MaxRetries,
         int baseDelayMs = BaseDelayMs)
     {
-        for (var attempt = 0; ; attempt++)
+        var attempt = 0;
+        while (true)
         {
             HttpResponseMessage response;
             try
@@ -47,6 +48,7 @@ public static class HttpRetryPolicy
             catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException && attempt < maxRetries)
             {
                 await Task.Delay(baseDelayMs << attempt, cancellationToken);
+                attempt++;
                 continue;
             }
 
@@ -55,6 +57,7 @@ public static class HttpRetryPolicy
 
             response.Dispose();
             await Task.Delay(baseDelayMs << attempt, cancellationToken);
+            attempt++;
         }
     }
 }

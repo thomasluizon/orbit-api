@@ -110,7 +110,8 @@ public partial class LogHabitCommandHandler(
     {
         HabitLog unlogEntity;
         LinkedGoalSyncResult goalSync;
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             var unlogResult = habit.Unlog(targetDate);
             if (unlogResult.IsFailure)
@@ -132,6 +133,8 @@ public partial class LogHabitCommandHandler(
                     return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
                 habit = reloaded;
             }
+
+            attempt++;
         }
 
         UserStreakState? streakState = null;
@@ -161,7 +164,8 @@ public partial class LogHabitCommandHandler(
         var shouldAdvanceDueDate = targetDate >= today;
         HabitLog logEntity;
         LinkedGoalSyncResult goalSync;
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             var logResult = habit.Log(targetDate, advanceDueDate: shouldAdvanceDueDate);
             if (logResult.IsFailure)
@@ -189,6 +193,8 @@ public partial class LogHabitCommandHandler(
                     return Result.Failure<LogHabitResponse>(ErrorMessages.HabitNotFound);
                 habit = reloaded;
             }
+
+            attempt++;
         }
 
         var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
@@ -226,7 +232,8 @@ public partial class LogHabitCommandHandler(
 
     private async Task PersistStreakRecalcAsync(Guid userId, CancellationToken cancellationToken)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             try
             {
@@ -238,6 +245,8 @@ public partial class LogHabitCommandHandler(
                 unitOfWork.ResetTracking();
                 await services.UserStreakService.RecalculateAsync(userId, cancellationToken);
             }
+
+            attempt++;
         }
     }
 

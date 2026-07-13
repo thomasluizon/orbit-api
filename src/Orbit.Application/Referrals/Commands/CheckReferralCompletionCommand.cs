@@ -103,7 +103,8 @@ public partial class CheckReferralCompletionCommandHandler(
     private async Task PersistCouponPointersWithRetryAsync(
         IReadOnlyList<(User User, string CouponId)> pointerAssignments, CancellationToken cancellationToken)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             try
             {
@@ -118,6 +119,8 @@ public partial class CheckReferralCompletionCommandHandler(
                     user.SetReferralCoupon(couponId);
                 }
             }
+
+            attempt++;
         }
     }
 

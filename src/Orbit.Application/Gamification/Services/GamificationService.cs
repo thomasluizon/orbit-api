@@ -56,7 +56,8 @@ public partial class GamificationService(
     public async Task<IReadOnlyList<HabitLogGamificationResult>> ProcessHabitsLogged(
         Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken ct = default)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             if (attempt > 1)
                 unitOfWork.ResetTracking();
@@ -72,6 +73,7 @@ public partial class GamificationService(
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
             {
+                attempt++;
                 continue;
             }
 
@@ -308,7 +310,8 @@ public partial class GamificationService(
     public async Task ProcessOnboardingChecklistAsync(
         Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             if (attempt > 1)
                 unitOfWork.ResetTracking();
@@ -324,6 +327,7 @@ public partial class GamificationService(
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
             {
+                attempt++;
                 continue;
             }
 
@@ -390,7 +394,8 @@ public partial class GamificationService(
     public async Task<IReadOnlyList<string>> TryGrantAchievementsAsync(
         Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             if (attempt > 1)
                 unitOfWork.ResetTracking();
@@ -406,6 +411,7 @@ public partial class GamificationService(
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
             {
+                attempt++;
                 continue;
             }
 
@@ -461,7 +467,8 @@ public partial class GamificationService(
         Func<User, HashSet<string>, List<(UserAchievement Entity, AchievementDefinition Definition)>, Task> checkAchievements,
         CancellationToken ct)
     {
-        for (var attempt = 1; ; attempt++)
+        var attempt = 1;
+        while (true)
         {
             if (attempt > 1)
                 unitOfWork.ResetTracking();
@@ -477,6 +484,7 @@ public partial class GamificationService(
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
             {
+                attempt++;
                 continue;
             }
 

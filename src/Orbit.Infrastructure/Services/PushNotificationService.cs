@@ -94,23 +94,31 @@ public partial class PushNotificationService(
                 continue;
             }
 
-            for (int i = 0; i < response.Responses.Count; i++)
-            {
-                var resp = response.Responses[i];
-                var sub = chunk[i];
-                var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
-                if (resp.IsSuccess) continue;
+            RecordBatchOutcomes(response, chunk, staleSubscriptions);
+        }
+    }
 
-                if (resp.Exception is FirebaseMessagingException fme && IsStaleFcmError(fme.MessagingErrorCode))
-                {
-                    if (logger.IsEnabled(LogLevel.Debug))
-                        LogFcmTokenStale(logger, tokenPreview);
-                    staleSubscriptions.Add(sub);
-                }
-                else if (resp.Exception is not null && logger.IsEnabled(LogLevel.Warning))
-                {
-                    LogFcmPushFailed(logger, resp.Exception, tokenPreview);
-                }
+    private void RecordBatchOutcomes(
+        BatchResponse response,
+        List<Domain.Entities.PushSubscription> chunk,
+        List<Domain.Entities.PushSubscription> staleSubscriptions)
+    {
+        for (int i = 0; i < response.Responses.Count; i++)
+        {
+            var resp = response.Responses[i];
+            var sub = chunk[i];
+            var tokenPreview = sub.Endpoint[..Math.Min(20, sub.Endpoint.Length)] + "...";
+            if (resp.IsSuccess) continue;
+
+            if (resp.Exception is FirebaseMessagingException fme && IsStaleFcmError(fme.MessagingErrorCode))
+            {
+                if (logger.IsEnabled(LogLevel.Debug))
+                    LogFcmTokenStale(logger, tokenPreview);
+                staleSubscriptions.Add(sub);
+            }
+            else if (resp.Exception is not null && logger.IsEnabled(LogLevel.Warning))
+            {
+                LogFcmPushFailed(logger, resp.Exception, tokenPreview);
             }
         }
     }
@@ -187,44 +195,71 @@ public partial class PushNotificationService(
             }
         };
 
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
         {
-            try
-            {
-                await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
-                if (logger.IsEnabled(LogLevel.Debug))
-                    LogWebPushSent(logger, sub.Endpoint);
-                return;
-            }
-            catch (PushServiceClientException ex)
-                when (ex.StatusCode == HttpStatusCode.Gone || ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                if (logger.IsEnabled(LogLevel.Debug))
-                    LogWebPushSubscriptionGone(logger, sub.Endpoint);
+            var outcome = await TryDeliverWebPushAsync(client, pushSub, sub, message, attempt, MaxRetries, ct);
+            if (outcome == WebPushAttemptOutcome.Stale)
                 staleSubscriptions.Add(sub);
+            if (outcome != WebPushAttemptOutcome.Retry)
                 return;
-            }
-            catch (PushServiceClientException ex)
-            {
-                if (!IsTransient(ex.StatusCode) || attempt >= MaxRetries)
-                {
-                    if (logger.IsEnabled(LogLevel.Warning))
-                        LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
-                    return;
-                }
-                await Task.Delay(BaseDelayMs << attempt, ct);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                if (attempt >= MaxRetries)
-                {
-                    if (logger.IsEnabled(LogLevel.Warning))
-                        LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
-                    return;
-                }
-                await Task.Delay(BaseDelayMs << attempt, ct);
-            }
+
+            await Task.Delay(BaseDelayMs << attempt, ct);
         }
+    }
+
+    private enum WebPushAttemptOutcome { Delivered, Stale, GaveUp, Retry }
+
+    private async Task<WebPushAttemptOutcome> TryDeliverWebPushAsync(
+        PushServiceClient client,
+        Lib.Net.Http.WebPush.PushSubscription pushSub,
+        Domain.Entities.PushSubscription sub,
+        PushMessage message,
+        int attempt,
+        int maxRetries,
+        CancellationToken ct)
+    {
+        try
+        {
+            await client.RequestPushMessageDeliveryAsync(pushSub, message, ct);
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogWebPushSent(logger, sub.Endpoint);
+            return WebPushAttemptOutcome.Delivered;
+        }
+        catch (PushServiceClientException ex)
+            when (ex.StatusCode is HttpStatusCode.Gone or HttpStatusCode.NotFound)
+        {
+            if (logger.IsEnabled(LogLevel.Debug))
+                LogWebPushSubscriptionGone(logger, sub.Endpoint);
+            return WebPushAttemptOutcome.Stale;
+        }
+        catch (PushServiceClientException ex)
+        {
+            return ClassifyTransientPushFailure(ex, sub, attempt, maxRetries);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            if (attempt >= maxRetries)
+            {
+                if (logger.IsEnabled(LogLevel.Warning))
+                    LogWebPushFailedGeneric(logger, ex, sub.Endpoint);
+                return WebPushAttemptOutcome.GaveUp;
+            }
+            return WebPushAttemptOutcome.Retry;
+        }
+    }
+
+    private WebPushAttemptOutcome ClassifyTransientPushFailure(
+        PushServiceClientException ex,
+        Domain.Entities.PushSubscription sub,
+        int attempt,
+        int maxRetries)
+    {
+        if (IsTransient(ex.StatusCode) && attempt < maxRetries)
+            return WebPushAttemptOutcome.Retry;
+
+        if (logger.IsEnabled(LogLevel.Warning))
+            LogWebPushFailed(logger, sub.Endpoint, ex.StatusCode, ex.Message);
+        return WebPushAttemptOutcome.GaveUp;
     }
 
     /// <summary>

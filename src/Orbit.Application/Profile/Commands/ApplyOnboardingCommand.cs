@@ -74,56 +74,8 @@ public class ApplyOnboardingCommandHandler(
     public async Task<Result<ApplyOnboardingResponse>> Handle(
         ApplyOnboardingCommand request, CancellationToken cancellationToken)
     {
-        var result = await unitOfWork.ExecuteInTransactionAsync(async ct =>
-        {
-            await unitOfWork.AcquireAdvisoryLockAsync($"onboarding-apply:{request.UserId}", ct);
-
-            var user = await repos.Users.FindOneTrackedAsync(
-                u => u.Id == request.UserId, cancellationToken: ct);
-
-            if (user is null)
-                return Result.Failure<ApplyOnboardingResponse>(ErrorMessages.UserNotFound);
-
-            if (user.HasCompletedOnboarding)
-                return Result.Success(new ApplyOnboardingResponse(false, 0, false, false));
-
-            var today = await userDateService.GetUserTodayAsync(request.UserId, ct);
-
-            var habitsToCreate = await TrimToAllowanceAsync(user, request.Habits, ct);
-
-            var createResult = await CreateHabitsAsync(request.UserId, habitsToCreate, today, ct);
-            if (createResult.IsFailure)
-                return createResult.PropagateError<ApplyOnboardingResponse>();
-
-            var createdHabits = createResult.Value;
-
-            var loggedFirstHabit = false;
-            if (request.FirstLog is { } firstLog
-                && firstLog.HabitIndex >= 0
-                && firstLog.HabitIndex < createdHabits.Count)
-            {
-                var logResult = createdHabits[firstLog.HabitIndex].Log(firstLog.Date);
-                if (logResult.IsFailure)
-                    return logResult.PropagateError<ApplyOnboardingResponse>();
-                loggedFirstHabit = true;
-            }
-
-            var goalResult = await CreateGoalIfAllowedAsync(request.UserId, request.Goal, today, ct);
-            if (goalResult.IsFailure)
-                return goalResult.PropagateError<ApplyOnboardingResponse>();
-            var createdGoal = goalResult.Value;
-
-            var prefsResult = ApplyPreferences(user, request.WeekStartDay, request.ColorScheme);
-            if (prefsResult.IsFailure)
-                return prefsResult.PropagateError<ApplyOnboardingResponse>();
-
-            user.CompleteOnboarding();
-
-            await unitOfWork.SaveChangesAsync(ct);
-
-            return Result.Success(
-                new ApplyOnboardingResponse(true, createdHabits.Count, createdGoal, loggedFirstHabit));
-        }, cancellationToken);
+        var result = await unitOfWork.ExecuteInTransactionAsync(
+            ct => ApplyOnboardingTransactionAsync(request, ct), cancellationToken);
 
         if (result.IsSuccess && result.Value.Applied)
         {
@@ -132,6 +84,58 @@ public class ApplyOnboardingCommandHandler(
         }
 
         return result;
+    }
+
+    private async Task<Result<ApplyOnboardingResponse>> ApplyOnboardingTransactionAsync(
+        ApplyOnboardingCommand request, CancellationToken ct)
+    {
+        await unitOfWork.AcquireAdvisoryLockAsync($"onboarding-apply:{request.UserId}", ct);
+
+        var user = await repos.Users.FindOneTrackedAsync(
+            u => u.Id == request.UserId, cancellationToken: ct);
+
+        if (user is null)
+            return Result.Failure<ApplyOnboardingResponse>(ErrorMessages.UserNotFound);
+
+        if (user.HasCompletedOnboarding)
+            return Result.Success(new ApplyOnboardingResponse(false, 0, false, false));
+
+        var today = await userDateService.GetUserTodayAsync(request.UserId, ct);
+
+        var habitsToCreate = await TrimToAllowanceAsync(user, request.Habits, ct);
+
+        var createResult = await CreateHabitsAsync(request.UserId, habitsToCreate, today, ct);
+        if (createResult.IsFailure)
+            return createResult.PropagateError<ApplyOnboardingResponse>();
+
+        var createdHabits = createResult.Value;
+
+        var loggedFirstHabit = false;
+        if (request.FirstLog is { } firstLog
+            && firstLog.HabitIndex >= 0
+            && firstLog.HabitIndex < createdHabits.Count)
+        {
+            var logResult = createdHabits[firstLog.HabitIndex].Log(firstLog.Date);
+            if (logResult.IsFailure)
+                return logResult.PropagateError<ApplyOnboardingResponse>();
+            loggedFirstHabit = true;
+        }
+
+        var goalResult = await CreateGoalIfAllowedAsync(request.UserId, request.Goal, today, ct);
+        if (goalResult.IsFailure)
+            return goalResult.PropagateError<ApplyOnboardingResponse>();
+        var createdGoal = goalResult.Value;
+
+        var prefsResult = ApplyPreferences(user, request.WeekStartDay, request.ColorScheme);
+        if (prefsResult.IsFailure)
+            return prefsResult.PropagateError<ApplyOnboardingResponse>();
+
+        user.CompleteOnboarding();
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return Result.Success(
+            new ApplyOnboardingResponse(true, createdHabits.Count, createdGoal, loggedFirstHabit));
     }
 
     private async Task<IReadOnlyList<ApplyHabitInput>> TrimToAllowanceAsync(

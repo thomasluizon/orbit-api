@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -68,93 +69,14 @@ public partial class SyncCleanupService(
         var cutoff = DateTime.UtcNow - RetentionPeriod;
         var totalPurged = 0;
 
-        var deletedHabits = await dbContext.Habits
-            .IgnoreQueryFilters()
-            .Where(h => h.IsDeleted && h.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedHabits.Count > 0)
-        {
-            dbContext.Habits.RemoveRange(deletedHabits);
-            totalPurged += deletedHabits.Count;
-        }
-
-        var deletedGoals = await dbContext.Goals
-            .IgnoreQueryFilters()
-            .Where(g => g.IsDeleted && g.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedGoals.Count > 0)
-        {
-            dbContext.Goals.RemoveRange(deletedGoals);
-            totalPurged += deletedGoals.Count;
-        }
-
-        var deletedTags = await dbContext.Tags
-            .IgnoreQueryFilters()
-            .Where(t => t.IsDeleted && t.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedTags.Count > 0)
-        {
-            dbContext.Tags.RemoveRange(deletedTags);
-            totalPurged += deletedTags.Count;
-        }
-
-        var deletedFacts = await dbContext.UserFacts
-            .IgnoreQueryFilters()
-            .Where(f => f.IsDeleted && f.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedFacts.Count > 0)
-        {
-            dbContext.UserFacts.RemoveRange(deletedFacts);
-            totalPurged += deletedFacts.Count;
-        }
-
-        var deletedHabitLogs = await dbContext.HabitLogs
-            .IgnoreQueryFilters()
-            .Where(l => l.IsDeleted && l.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedHabitLogs.Count > 0)
-        {
-            dbContext.HabitLogs.RemoveRange(deletedHabitLogs);
-            totalPurged += deletedHabitLogs.Count;
-        }
-
-        var deletedGoalProgressLogs = await dbContext.GoalProgressLogs
-            .IgnoreQueryFilters()
-            .Where(l => l.IsDeleted && l.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedGoalProgressLogs.Count > 0)
-        {
-            dbContext.GoalProgressLogs.RemoveRange(deletedGoalProgressLogs);
-            totalPurged += deletedGoalProgressLogs.Count;
-        }
-
-        var deletedNotifications = await dbContext.Notifications
-            .IgnoreQueryFilters()
-            .Where(n => n.IsDeleted && n.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedNotifications.Count > 0)
-        {
-            dbContext.Notifications.RemoveRange(deletedNotifications);
-            totalPurged += deletedNotifications.Count;
-        }
-
-        var deletedChecklistTemplates = await dbContext.ChecklistTemplates
-            .IgnoreQueryFilters()
-            .Where(ct2 => ct2.IsDeleted && ct2.DeletedAtUtc < cutoff)
-            .ToListAsync(ct);
-
-        if (deletedChecklistTemplates.Count > 0)
-        {
-            dbContext.ChecklistTemplates.RemoveRange(deletedChecklistTemplates);
-            totalPurged += deletedChecklistTemplates.Count;
-        }
+        totalPurged += await PurgeAsync(dbContext.Habits, h => h.IsDeleted && h.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.Goals, g => g.IsDeleted && g.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.Tags, t => t.IsDeleted && t.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.UserFacts, f => f.IsDeleted && f.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.HabitLogs, l => l.IsDeleted && l.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.GoalProgressLogs, l => l.IsDeleted && l.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.Notifications, n => n.IsDeleted && n.DeletedAtUtc < cutoff, ct);
+        totalPurged += await PurgeAsync(dbContext.ChecklistTemplates, c => c.IsDeleted && c.DeletedAtUtc < cutoff, ct);
 
         var suggestionCutoff = DateTime.UtcNow - SuggestionRetentionPeriod;
         var abandonedSuggestions = await dbContext.GoogleCalendarSyncSuggestions
@@ -172,6 +94,18 @@ public partial class SyncCleanupService(
             await dbContext.SaveChangesAsync(ct);
             LogEntitiesPurged(logger, totalPurged);
         }
+    }
+
+    private static async Task<int> PurgeAsync<TEntity>(
+        DbSet<TEntity> set, Expression<Func<TEntity, bool>> predicate, CancellationToken ct)
+        where TEntity : class
+    {
+        var deleted = await set.IgnoreQueryFilters().Where(predicate).ToListAsync(ct);
+        if (deleted.Count == 0)
+            return 0;
+
+        set.RemoveRange(deleted);
+        return deleted.Count;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "SyncCleanupService started")]

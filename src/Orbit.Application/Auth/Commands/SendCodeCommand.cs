@@ -32,25 +32,9 @@ public class SendCodeCommandHandler(
             if (TrySeedProductionSmokeCode(email, cacheKey))
                 return Task.FromResult(Result.Success());
         }
-        else
+        else if (TrySeedTestAccountCode(email, cacheKey))
         {
-            var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
-            if (!string.IsNullOrEmpty(testAccountsEnv))
-            {
-                foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var parts = pair.Split(':', 2);
-                    if (parts.Length == 2 && string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
-                    {
-                        var testEntry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
-                        cache.Set(cacheKey, testEntry, new MemoryCacheEntryOptions
-                        {
-                            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-                        });
-                        return Task.FromResult(Result.Success());
-                    }
-                }
-            }
+            return Task.FromResult(Result.Success());
         }
 
         if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) && existing is not null)
@@ -72,6 +56,29 @@ public class SendCodeCommandHandler(
             job => job.ExecuteAsync(email, code, request.Language));
 
         return Task.FromResult(Result.Success());
+    }
+
+    private bool TrySeedTestAccountCode(string email, string cacheKey)
+    {
+        var testAccountsEnv = Environment.GetEnvironmentVariable("TEST_ACCOUNTS");
+        if (string.IsNullOrEmpty(testAccountsEnv))
+            return false;
+
+        foreach (var pair in testAccountsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split(':', 2);
+            if (parts.Length != 2 || !string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var entry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
+            cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+            });
+            return true;
+        }
+
+        return false;
     }
 
     private bool TrySeedProductionSmokeCode(string email, string cacheKey)

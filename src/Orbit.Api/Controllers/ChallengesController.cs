@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,11 +16,11 @@ namespace Orbit.Api.Controllers;
 public partial class ChallengesController(IMediator mediator, ILogger<ChallengesController> logger) : ControllerBase
 {
     public record CreateChallengeBody(
-        ChallengeType Type,
+        [property: JsonRequired] ChallengeType Type,
         string Title,
         string? Description,
         int? TargetCount,
-        DateOnly PeriodStartUtc,
+        [property: JsonRequired] DateOnly PeriodStartUtc,
         DateOnly? PeriodEndUtc,
         IReadOnlyList<Guid>? LinkedHabitIds,
         IReadOnlyList<Guid>? InvitedFriendUserIds);

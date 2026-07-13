@@ -45,30 +45,9 @@ public partial class CreateHabitCommandHandler(
     {
         var opts = request.Options ?? new HabitCommandOptions();
 
-        var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<Guid>();
-
-        if (request.SubHabits is { Count: > 0 })
-        {
-            var subGateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
-            if (subGateCheck.IsFailure)
-                return subGateCheck.PropagateError<Guid>();
-        }
-
-        if (request.GoalIds is { Count: > 0 })
-        {
-            var goalLinkGate = await payGate.CanLinkGoalsToHabits(request.UserId, cancellationToken);
-            if (goalLinkGate.IsFailure)
-                return goalLinkGate.PropagateError<Guid>();
-        }
-
-        if (opts.SlipAlertEnabled)
-        {
-            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
-            if (slipAlertGate.IsFailure)
-                return slipAlertGate.PropagateError<Guid>();
-        }
+        var gateResult = await CheckCreationGatesAsync(request, opts, cancellationToken);
+        if (gateResult.IsFailure)
+            return gateResult.PropagateError<Guid>();
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var dueDate = request.DueDate ?? today;
@@ -129,6 +108,37 @@ public partial class CreateHabitCommandHandler(
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(habit.Id);
+    }
+
+    private async Task<Result> CheckCreationGatesAsync(
+        CreateHabitCommand request, HabitCommandOptions opts, CancellationToken cancellationToken)
+    {
+        var gateCheck = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
+        if (gateCheck.IsFailure)
+            return gateCheck;
+
+        if (request.SubHabits is { Count: > 0 })
+        {
+            var subGateCheck = await payGate.CanCreateSubHabits(request.UserId, cancellationToken);
+            if (subGateCheck.IsFailure)
+                return subGateCheck;
+        }
+
+        if (request.GoalIds is { Count: > 0 })
+        {
+            var goalLinkGate = await payGate.CanLinkGoalsToHabits(request.UserId, cancellationToken);
+            if (goalLinkGate.IsFailure)
+                return goalLinkGate;
+        }
+
+        if (opts.SlipAlertEnabled)
+        {
+            var slipAlertGate = await payGate.CanUseSlipAlerts(request.UserId, cancellationToken);
+            if (slipAlertGate.IsFailure)
+                return slipAlertGate;
+        }
+
+        return Result.Success();
     }
 
     private async Task<Result> CreateSubHabitsAsync(
