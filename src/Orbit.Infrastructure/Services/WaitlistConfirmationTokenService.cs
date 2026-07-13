@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Orbit.Application.Common;
@@ -23,9 +22,7 @@ public sealed class WaitlistConfirmationTokenService(
 
         var payload = $"{email}|{language}|{expiresAtUnix}";
         var payloadBytes = Encoding.UTF8.GetBytes(payload);
-        var signature = ComputeSignature(payloadBytes);
-
-        return $"{Base64UrlEncode(payloadBytes)}.{Base64UrlEncode(signature)}";
+        return SignedTokenCodec.Encode(payloadBytes, _settings.SigningKey);
     }
 
     public bool TryValidateToken(string token, out string email, out string language)
@@ -36,24 +33,7 @@ public sealed class WaitlistConfirmationTokenService(
         if (string.IsNullOrWhiteSpace(_settings.SigningKey) || string.IsNullOrWhiteSpace(token))
             return false;
 
-        var separatorIndex = token.IndexOf('.');
-        if (separatorIndex <= 0 || separatorIndex == token.Length - 1)
-            return false;
-
-        byte[] payloadBytes;
-        byte[] providedSignature;
-        try
-        {
-            payloadBytes = Base64UrlDecode(token[..separatorIndex]);
-            providedSignature = Base64UrlDecode(token[(separatorIndex + 1)..]);
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-
-        var expectedSignature = ComputeSignature(payloadBytes);
-        if (!CryptographicOperations.FixedTimeEquals(providedSignature, expectedSignature))
+        if (!SignedTokenCodec.TryDecode(token, _settings.SigningKey, out var payloadBytes))
             return false;
 
         var parts = Encoding.UTF8.GetString(payloadBytes).Split('|');
@@ -66,27 +46,5 @@ public sealed class WaitlistConfirmationTokenService(
         email = parts[0];
         language = parts[1];
         return true;
-    }
-
-    private byte[] ComputeSignature(byte[] payloadBytes)
-    {
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_settings.SigningKey));
-        return hmac.ComputeHash(payloadBytes);
-    }
-
-    private static string Base64UrlEncode(byte[] bytes)
-        => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static byte[] Base64UrlDecode(string value)
-    {
-        var padded = value.Replace('-', '+').Replace('_', '/');
-        padded = (padded.Length % 4) switch
-        {
-            2 => padded + "==",
-            3 => padded + "=",
-            0 => padded,
-            _ => throw new FormatException("Invalid base64url length."),
-        };
-        return Convert.FromBase64String(padded);
     }
 }
