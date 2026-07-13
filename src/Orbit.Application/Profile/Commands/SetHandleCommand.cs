@@ -25,9 +25,12 @@ public class SetHandleCommandHandler(
         var normalized = request.Handle.Trim();
         var lowered = normalized.ToLowerInvariant();
 
+        // EF Core cannot translate string.Equals(StringComparison) to SQL; the case-insensitive handle match stays as ToLower(). https://github.com/dotnet/efcore/issues/1222
+#pragma warning disable CA1862
         var taken = await userRepository.AnyAsync(
             u => u.Id != request.UserId && u.Handle != null && u.Handle.ToLower() == lowered,
             cancellationToken);
+#pragma warning restore CA1862
         if (taken)
             return Result.Failure(ErrorMessages.HandleTaken);
 

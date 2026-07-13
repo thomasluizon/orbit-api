@@ -141,7 +141,7 @@ public partial class LogHabitCommandHandler(
         await ConcurrencyRetry.SaveWithRetryAsync(
             unitOfWork,
             async ct => streakState = await services.UserStreakService.RecalculateAsync(
-                habit.UserId, ct, awardFreezeIfEligible: false),
+                habit.UserId, awardFreezeIfEligible: false, ct),
             cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, habit.UserId, today);
 
@@ -197,7 +197,7 @@ public partial class LogHabitCommandHandler(
             attempt++;
         }
 
-        var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken);
+        var streakState = await services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: cancellationToken);
         var gamificationResult = await ProcessGamificationSafeAsync(request.UserId, request.HabitId, cancellationToken);
         await ProcessChallengeProgressSafeAsync(request.UserId, request.HabitId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitLogged, cancellationToken);
@@ -243,7 +243,7 @@ public partial class LogHabitCommandHandler(
             catch (DbUpdateConcurrencyException) when (attempt < MaxLogAttempts)
             {
                 unitOfWork.ResetTracking();
-                await services.UserStreakService.RecalculateAsync(userId, cancellationToken);
+                await services.UserStreakService.RecalculateAsync(userId, cancellationToken: cancellationToken);
             }
 
             attempt++;

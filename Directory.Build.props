@@ -8,8 +8,12 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Orbit.Analyzers'">
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Orbit.Analyzers' And '$(MSBuildProjectName)' != 'Orbit.Analyzers.CodeFixes'">
     <ProjectReference Include="$(MSBuildThisFileDirectory)src/Orbit.Analyzers/Orbit.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)src/Orbit.Analyzers.CodeFixes/Orbit.Analyzers.CodeFixes.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />

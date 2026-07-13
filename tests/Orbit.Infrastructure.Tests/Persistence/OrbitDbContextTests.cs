@@ -276,7 +276,7 @@ public class OrbitDbContextTests
                 entityType.Name, string.Join(", ", keyProperties));
     }
 
-    public static IEnumerable<object[]> ForeignKeyDeleteBehaviorCases()
+    public static TheoryData<Type, string, Type, DeleteBehavior> ForeignKeyDeleteBehaviorCases()
     {
         (Type Dependent, string ForeignKey, Type Principal, DeleteBehavior Behavior)[] cases =
         {
@@ -319,10 +319,13 @@ public class OrbitDbContextTests
             (typeof(Challenge), nameof(Challenge.CreatorId), typeof(User), DeleteBehavior.Restrict),
             (typeof(ChallengeParticipant), nameof(ChallengeParticipant.UserId), typeof(User), DeleteBehavior.Restrict),
         };
-        return cases.Select(entry => new object[] { entry.Dependent, entry.ForeignKey, entry.Principal, entry.Behavior });
+        var data = new TheoryData<Type, string, Type, DeleteBehavior>();
+        foreach (var entry in cases)
+            data.Add(entry.Dependent, entry.ForeignKey, entry.Principal, entry.Behavior);
+        return data;
     }
 
-    public static IEnumerable<object[]> UniqueIndexCases()
+    public static TheoryData<Type, string[]> UniqueIndexCases()
     {
         (Type Entity, string[] Keys)[] cases =
         {
@@ -382,10 +385,13 @@ public class OrbitDbContextTests
                 nameof(AccountabilityCheckIn.PairId), nameof(AccountabilityCheckIn.UserId), nameof(AccountabilityCheckIn.Date),
             }),
         };
-        return cases.Select(entry => new object[] { entry.Entity, entry.Keys });
+        var data = new TheoryData<Type, string[]>();
+        foreach (var entry in cases)
+            data.Add(entry.Entity, entry.Keys);
+        return data;
     }
 
-    public static IEnumerable<object[]> FilteredIndexCases()
+    public static TheoryData<Type, string[], string> FilteredIndexCases()
     {
         (Type Entity, string[] Keys, string Filter)[] cases =
         {
@@ -401,10 +407,13 @@ public class OrbitDbContextTests
             (typeof(FriendFeedEvent), new[] { nameof(FriendFeedEvent.ActorUserId), nameof(FriendFeedEvent.Type), nameof(FriendFeedEvent.Value) }, "\"AchievementId\" IS NULL"),
             (typeof(ChallengeParticipant), new[] { nameof(ChallengeParticipant.ChallengeId), nameof(ChallengeParticipant.UserId) }, "\"LeftAtUtc\" IS NULL"),
         };
-        return cases.Select(entry => new object[] { entry.Entity, entry.Keys, entry.Filter });
+        var data = new TheoryData<Type, string[], string>();
+        foreach (var entry in cases)
+            data.Add(entry.Entity, entry.Keys, entry.Filter);
+        return data;
     }
 
-    public static IEnumerable<object[]> SoftDeleteQueryFilterCases()
+    public static TheoryData<Type, string> SoftDeleteQueryFilterCases()
     {
         (Type Entity, string Flag)[] cases =
         {
@@ -419,10 +428,13 @@ public class OrbitDbContextTests
             (typeof(ChecklistTemplate), nameof(ChecklistTemplate.IsDeleted)),
             (typeof(Challenge), nameof(Challenge.IsDeleted)),
         };
-        return cases.Select(entry => new object[] { entry.Entity, entry.Flag });
+        var data = new TheoryData<Type, string>();
+        foreach (var entry in cases)
+            data.Add(entry.Entity, entry.Flag);
+        return data;
     }
 
-    public static IEnumerable<object[]> PerformanceIndexCases()
+    public static TheoryData<Type, string[]> PerformanceIndexCases()
     {
         (Type Entity, string[] Keys)[] cases =
         {
@@ -446,7 +458,10 @@ public class OrbitDbContextTests
             (typeof(ProcessedRequest), new[] { nameof(ProcessedRequest.CreatedAtUtc) }),
             (typeof(Cheer), new[] { nameof(Cheer.SenderId), nameof(Cheer.CreatedAtUtc) }),
         };
-        return cases.Select(entry => new object[] { entry.Entity, entry.Keys });
+        var data = new TheoryData<Type, string[]>();
+        foreach (var entry in cases)
+            data.Add(entry.Entity, entry.Keys);
+        return data;
     }
 
     private static IEnumerable<string> KeyOf(IReadOnlyIndex index)

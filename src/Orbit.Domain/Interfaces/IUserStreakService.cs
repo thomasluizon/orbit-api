@@ -16,6 +16,6 @@ public interface IUserStreakService
     /// <param name="cancellationToken">Cancellation.</param>
     Task<UserStreakState?> RecalculateAsync(
         Guid userId,
-        CancellationToken cancellationToken = default,
-        bool awardFreezeIfEligible = true);
+        bool awardFreezeIfEligible = true,
+        CancellationToken cancellationToken = default);
 }

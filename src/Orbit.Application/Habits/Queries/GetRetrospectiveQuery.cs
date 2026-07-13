@@ -75,7 +75,7 @@ public class GetRetrospectiveQueryHandler(
             return Result.Failure<RetrospectiveResponse>(ErrorMessages.NoHabitsForPeriod);
 
         var streakState = await userStreakService.RecalculateAsync(
-            request.UserId, cancellationToken, awardFreezeIfEligible: false);
+            request.UserId, awardFreezeIfEligible: false, cancellationToken);
 
         var metrics = RetrospectiveMetricsCalculator.Compute(
             habitList,

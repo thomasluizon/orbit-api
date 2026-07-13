@@ -37,7 +37,7 @@ public class BulkLogHabitsCommandHandlerTests
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
-        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task>>(),
@@ -221,7 +221,7 @@ public class BulkLogHabitsCommandHandlerTests
             Arg.Any<CancellationToken>());
         await _gamificationService.DidNotReceive().ProcessHabitLogged(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
-        await _userStreakService.Received(1).RecalculateAsync(UserId, Arg.Any<CancellationToken>());
+        await _userStreakService.Received(1).RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class BulkLogHabitsCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Results[0].Status.Should().Be(BulkItemStatus.Failed);
-        await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>());
         await _gamificationService.DidNotReceive().ProcessHabitsLogged(
             Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
     }

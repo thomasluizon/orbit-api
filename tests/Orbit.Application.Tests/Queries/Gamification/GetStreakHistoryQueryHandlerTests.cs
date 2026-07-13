@@ -286,7 +286,7 @@ public class GetStreakHistoryQueryHandlerTests
         var service = new UserStreakService(
             new UserStreakRepositories(userRepo, habitRepo, habitLogRepo, freezeRepo), userDateService, feedEmitter,
             unitOfWork, featureFlagService, NullLogger<UserStreakService>.Instance);
-        var state = await service.RecalculateAsync(UserId, CancellationToken.None);
+        var state = await service.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
         return state!.CurrentStreak;
     }
 }

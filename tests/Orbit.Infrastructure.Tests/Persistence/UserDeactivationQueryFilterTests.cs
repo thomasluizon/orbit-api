@@ -37,7 +37,7 @@ public class UserDeactivationQueryFilterTests
     {
         using var context = CreateContext();
 
-        context.Model.FindEntityType(typeof(User))!.GetQueryFilter().Should().NotBeNull();
+        context.Model.FindEntityType(typeof(User))!.GetDeclaredQueryFilters().Should().NotBeEmpty();
     }
 
     [Fact]

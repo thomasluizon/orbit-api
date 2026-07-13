@@ -42,7 +42,7 @@ public sealed partial class AiGoalReviewService(
                 "You are a goal progress coach. Review the user's active goals and provide a concise summary.",
                 prompt,
                 temperature: 0.7,
-                cancellationToken,
+                cancellationToken: cancellationToken,
                 purpose: "goal_review");
 
             if (string.IsNullOrWhiteSpace(text))

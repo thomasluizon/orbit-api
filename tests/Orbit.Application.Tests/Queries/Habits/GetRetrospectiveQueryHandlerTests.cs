@@ -31,7 +31,7 @@ public class GetRetrospectiveQueryHandlerTests
     {
         _handler = new GetRetrospectiveQueryHandler(_habitRepo, _payGate, _retroService, _streakService, _cache);
         _payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
-        _streakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>(), false)
+        _streakService.RecalculateAsync(UserId, false, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(4, 9, DateTo));
     }
 

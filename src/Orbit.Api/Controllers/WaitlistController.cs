@@ -33,7 +33,11 @@ public partial class WaitlistController(
     {
         await mediator.Send(new JoinWaitlistCommand(request.Email, request.Language), cancellationToken);
 
-        LogWaitlistJoinRequested(logger, HttpContext.GetRequestId());
+        if (logger.IsEnabled(LogLevel.Information))
+        {
+            var requestId = HttpContext.GetRequestId();
+            LogWaitlistJoinRequested(logger, requestId);
+        }
         return Ok(new { message = "Check your inbox to confirm your spot." });
     }
 

@@ -239,11 +239,9 @@ public static partial class ServiceCollectionExtensions
             };
         });
 
-        builder.Services.AddAuthorization(options =>
-        {
-            options.AddPolicy(AdminPolicy.Name, policy =>
+        builder.Services.AddAuthorizationBuilder()
+            .AddPolicy(AdminPolicy.Name, policy =>
                 policy.Requirements.Add(new AdminRequirement()));
-        });
         builder.Services.AddScoped<IAuthorizationHandler, AdminAuthorizationHandler>();
 
         return builder;
