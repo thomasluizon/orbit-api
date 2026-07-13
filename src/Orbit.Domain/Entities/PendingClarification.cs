@@ -18,7 +18,7 @@ public class PendingClarification : Entity
     public string QuickActionsJson { get; private set; } = "[]";
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
-    public DateTime? ResolvedAtUtc { get; private set; }
+    public DateTime? ResolvedAtUtc { get; }
 
     private PendingClarification() { }
 

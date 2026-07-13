@@ -39,7 +39,7 @@ public partial class SyncController
         }
     }
 
-    private async Task ApplyEntityMutationAsync<TEntity>(
+    private static async Task ApplyEntityMutationAsync<TEntity>(
         SyncMutation mutation,
         string entityNoun,
         string supportedAction,

@@ -49,19 +49,14 @@ public static class ChatToolGroups
         var normalized = Normalize(conversationText);
         var active = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var name in allToolNames)
-        {
-            if (!ExtendedToolNames.Contains(name))
-                active.Add(name);
-        }
+        foreach (var name in allToolNames.Where(name => !ExtendedToolNames.Contains(name)))
+            active.Add(name);
 
-        foreach (var group in Groups)
+        foreach (var group in Groups.Where(group =>
+                     group.Keywords.Any(keyword => normalized.Contains(keyword, StringComparison.Ordinal))))
         {
-            if (group.Keywords.Any(keyword => normalized.Contains(keyword, StringComparison.Ordinal)))
-            {
-                foreach (var name in group.ToolNames)
-                    active.Add(name);
-            }
+            foreach (var name in group.ToolNames)
+                active.Add(name);
         }
 
         return active;

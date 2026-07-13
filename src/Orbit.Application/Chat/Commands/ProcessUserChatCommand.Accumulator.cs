@@ -60,11 +60,8 @@ public partial class ProcessUserChatCommandHandler
             if (operationResult.Status != AgentOperationStatus.Succeeded)
                 return;
 
-            foreach (var surface in ExtractRelatedSurfaces(operationResult.Payload))
-            {
-                if (_seenRelatedSurfaces.Add(surface))
-                    _relatedSurfaces.Add(surface);
-            }
+            foreach (var surface in ExtractRelatedSurfaces(operationResult.Payload).Where(_seenRelatedSurfaces.Add))
+                _relatedSurfaces.Add(surface);
         }
     }
 

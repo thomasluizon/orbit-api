@@ -153,13 +153,8 @@ public class BulkUpdateHabitEmojisTool(
     private static string InferEmoji(Habit habit)
     {
         var text = $"{habit.Title} {habit.Description}".ToLowerInvariant();
-        foreach (var rule in InferenceRules)
-        {
-            if (rule.Keywords.Any(text.Contains))
-                return rule.Emoji;
-        }
-
-        return "✨";
+        var match = InferenceRules.FirstOrDefault(rule => rule.Keywords.Any(text.Contains));
+        return match?.Emoji ?? "✨";
     }
 
     private static readonly IReadOnlyList<EmojiInferenceRule> InferenceRules =

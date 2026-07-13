@@ -35,8 +35,6 @@ public partial class GetCalendarEventsQueryHandler(
     IUnitOfWork unitOfWork,
     ILogger<GetCalendarEventsQueryHandler> logger) : IRequestHandler<GetCalendarEventsQuery, Result<List<CalendarEventItem>>>
 {
-    private const string GoogleCalendarReconnectMessage = "Google Calendar connection expired. Please reconnect.";
-
     public async Task<Result<List<CalendarEventItem>>> Handle(GetCalendarEventsQuery request, CancellationToken cancellationToken)
     {
         var gateCheck = await payGate.CanAccessCalendar(request.UserId, cancellationToken);

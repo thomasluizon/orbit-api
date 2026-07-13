@@ -242,9 +242,11 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         var isPayGateDenial = !result.Success && result.ErrorCode == Result.PayGateErrorCode;
-        var outcomeStatus = result.Success
-            ? AgentOperationStatus.Succeeded
-            : isPayGateDenial ? AgentOperationStatus.Denied : AgentOperationStatus.Failed;
+        AgentOperationStatus outcomeStatus;
+        if (result.Success)
+            outcomeStatus = AgentOperationStatus.Succeeded;
+        else
+            outcomeStatus = isPayGateDenial ? AgentOperationStatus.Denied : AgentOperationStatus.Failed;
 
         await TryAuditAsync(
             CreateAuditContext(

@@ -198,11 +198,8 @@ public sealed partial class AiIntentService(
             if (update.Usage is not null)
                 streamedUsage = update.Usage;
 
-            foreach (var part in update.ContentUpdate)
+            foreach (var part in update.ContentUpdate.Where(part => !string.IsNullOrEmpty(part.Text)))
             {
-                if (string.IsNullOrEmpty(part.Text))
-                    continue;
-
                 if (!firstTokenLogged)
                 {
                     firstTokenLogged = true;

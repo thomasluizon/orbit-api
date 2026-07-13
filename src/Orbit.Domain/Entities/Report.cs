@@ -12,7 +12,7 @@ public class Report : Entity
     public Guid? CheerId { get; private set; }
     public ReportStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
-    public DateTime? ReviewedAtUtc { get; private set; }
+    public DateTime? ReviewedAtUtc { get; }
 
     private Report() { }
 

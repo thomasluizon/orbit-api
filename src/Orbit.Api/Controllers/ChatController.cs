@@ -161,6 +161,7 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Client disconnected mid-stream; there is nothing left to write back. https://github.com/thomasluizon/orbit-ui-mobile/issues/243
         }
         catch (ValidationException ex)
         {

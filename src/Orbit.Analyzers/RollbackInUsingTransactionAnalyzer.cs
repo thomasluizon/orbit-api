@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -106,11 +107,8 @@ public sealed class RollbackInUsingTransactionAnalyzer : DiagnosticAnalyzer
             if (SymbolEqualityComparer.Default.Equals(type, transactionType))
                 return true;
 
-            foreach (var implemented in type.AllInterfaces)
-            {
-                if (SymbolEqualityComparer.Default.Equals(implemented, transactionType))
-                    return true;
-            }
+            if (type.AllInterfaces.Any(implemented => SymbolEqualityComparer.Default.Equals(implemented, transactionType)))
+                return true;
         }
 
         return false;

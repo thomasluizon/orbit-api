@@ -64,11 +64,8 @@ public static class AgentAuditRedactor
                 }
                 break;
             case JsonArray array:
-                foreach (var item in array)
-                {
-                    if (item is not null)
-                        RedactNode(item);
-                }
+                foreach (var item in array.OfType<JsonNode>())
+                    RedactNode(item);
                 break;
         }
     }

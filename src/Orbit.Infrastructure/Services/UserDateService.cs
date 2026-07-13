@@ -15,7 +15,7 @@ public class UserDateService(
         AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15)
     };
 
-    private record UserDatePreferences(string? TimeZone, int WeekStartDay);
+    private sealed record UserDatePreferences(string? TimeZone, int WeekStartDay);
 
     private static string CacheKey(Guid userId) => $"user-tz:{userId}";
 
