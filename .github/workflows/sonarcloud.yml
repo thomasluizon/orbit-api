@@ -68,6 +68,9 @@ jobs:
       # DROPPED (now in coverage): Services/AppConfigService.cs (pure ConvertValue<T> + injectable cache/repo) and
       # Services/UserDateService.cs (user-timezone "today" + week-start, injectable deps) — both live in
       # Orbit.Infrastructure, which is in the coverage run, so they are unit-testable and should count.
+      # sonar.exclusions additions — non-product / false-positive sources:
+      #   Email/Templates/**  HTML-email templates. Web:S1827/S6819/S5257 (drop cellspacing, use <img> not role=presentation, replace layout tables with CSS) are false positives for email: table layout + cellspacing/cellpadding + role="presentation" are the required cross-client techniques (Outlook/legacy clients lack CSS layout support). Static assets with no maintainability value.
+      #   load-tests/**       k6 load-test scenario scripts — developer tooling, not shipped product code (parity with **/.claude/**).
       - name: SonarScanner Begin
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -77,7 +80,7 @@ jobs:
             /o:"thomasluizon" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**" \
+            /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**" \
             /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/AI/AiCompletionClient.cs,**/Services/GeoLocationService.cs,**/Orbit.Analyzers/**"
 
       - name: Build
