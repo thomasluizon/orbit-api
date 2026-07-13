@@ -9,6 +9,7 @@ using Orbit.Application.Subscriptions.Commands;
 using Orbit.Application.Subscriptions.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Stripe;
 
 namespace Orbit.Application.Tests.Commands.Subscriptions;
 
@@ -194,6 +195,57 @@ public class CreateCheckoutCommandHandlerTests
             Arg.Any<CancellationToken>());
         await _geoLocationService.DidNotReceive()
             .GetCountryCodeAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_StripeCustomerCreationFails_ReturnsFailureAndDoesNotPersistPartialState()
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        SetupExistingUser(user);
+
+        _billingService.CreateCustomerAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException(
+                "Failed to create customer", new StripeException("Stripe returned HTTP 500")));
+
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("temporarily unavailable");
+        user.StripeCustomerId.Should().BeNull();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("http_500")]
+    [InlineData("network_timeout")]
+    [InlineData("malformed_response")]
+    public async Task Handle_StripeFailureDuringCheckout_FailsGracefullyWithoutThrowing(string scenario)
+    {
+        var user = User.Create("Test", "test@example.com").Value;
+        user.SetStripeCustomerId("cus_existing");
+        SetupExistingUser(user);
+
+        Exception inner = scenario switch
+        {
+            "http_500" => new StripeException("Stripe returned HTTP 500"),
+            "network_timeout" => new TaskCanceledException("The request to Stripe timed out"),
+            _ => new System.Text.Json.JsonException("Unexpected end of Stripe response body")
+        };
+
+        _billingService.CreateCheckoutSessionAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BillingProviderException("Failed to create checkout session", inner));
+
+        var command = new CreateCheckoutCommand(UserId, "monthly", null, null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain("temporarily unavailable");
     }
 
     private void SetupExistingUser(User user)
