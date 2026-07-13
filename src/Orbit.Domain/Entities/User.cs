@@ -273,13 +273,15 @@ public partial class User : Entity
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;
 
-    public void IncrementAiMessageCount()
+    public void IncrementAiMessageCount() => IncrementAiMessageCount(DateTime.UtcNow);
+
+    public void IncrementAiMessageCount(DateTime utcNow)
     {
-        if (!AiMessagesResetAt.HasValue || AiMessagesResetAt.Value <= DateTime.UtcNow)
+        if (!AiMessagesResetAt.HasValue || AiMessagesResetAt.Value <= utcNow)
         {
             AiMessagesUsedThisMonth = 0;
             AdRewardBonusMessages = 0;
-            AiMessagesResetAt = DateTime.UtcNow.AddDays(30);
+            AiMessagesResetAt = utcNow.AddDays(30);
         }
         AiMessagesUsedThisMonth++;
     }
@@ -413,6 +415,14 @@ public partial class User : Entity
     /// admin dashboard uses to grant admin.
     /// </summary>
     public void GrantAdmin() => IsAdmin = true;
+
+    /// <summary>
+    /// Grants permanent Pro entitlement that never expires and outranks any subscription or trial
+    /// state (see <see cref="IsPro"/>). Idempotent. Lifetime Pro has no self-serve purchase flow; it is
+    /// bootstrapped by a direct DB update, and this mutator is the domain seam a future comp/grant path
+    /// (or admin dashboard) uses instead of writing the column directly.
+    /// </summary>
+    public void GrantLifetimePro() => IsLifetimePro = true;
 
     /// <summary>
     /// Records the user's explicit product-marketing-email consent decision (<c>true</c> = opted in,
