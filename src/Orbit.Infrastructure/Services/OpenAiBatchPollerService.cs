@@ -100,7 +100,7 @@ public sealed partial class OpenAiBatchPollerService(
         CancellationToken ct)
     {
         var outputJsonl = await batchClient.DownloadFileAsync(outputFileId, ct);
-        var facts = ParseExtractedFacts(outputJsonl);
+        var facts = ParseExtractedFacts(outputJsonl, logger, batch.BatchId);
 
         var persistedFactCount = await PersistFactsAsync(batch.UserId, facts, userFactRepository, appConfig, ct);
 
@@ -110,7 +110,7 @@ public sealed partial class OpenAiBatchPollerService(
         if (persistedFactCount > 0)
             cache.Remove(ReferenceCacheKeys.UserFacts(batch.UserId));
 
-        await DeleteFilesAsync(batchClient, batch.InputFileId, outputFileId, ct);
+        await DeleteBatchFilesAsync(batchClient, batch.BatchId, batch.InputFileId, outputFileId, ct);
 
         if (logger.IsEnabled(LogLevel.Information))
             LogBatchCompleted(logger, batch.BatchId, facts.Count);
@@ -126,7 +126,7 @@ public sealed partial class OpenAiBatchPollerService(
         batch.MarkFailed();
         await unitOfWork.SaveChangesAsync(ct);
 
-        await DeleteFilesAsync(batchClient, batch.InputFileId, status.OutputFileId ?? status.ErrorFileId, ct);
+        await DeleteBatchFilesAsync(batchClient, batch.BatchId, batch.InputFileId, status.OutputFileId ?? status.ErrorFileId, ct);
 
         LogBatchFailed(logger, batch.BatchId, status.Status);
     }
@@ -173,17 +173,23 @@ public sealed partial class OpenAiBatchPollerService(
         return added;
     }
 
-    internal static IReadOnlyList<FactCandidate> ParseExtractedFacts(string outputJsonl)
+    internal static IReadOnlyList<FactCandidate> ParseExtractedFacts(string outputJsonl, ILogger logger, string batchId)
     {
         var line = outputJsonl
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault();
         if (string.IsNullOrWhiteSpace(line))
+        {
+            LogBatchParseEmpty(logger, batchId, "no output lines");
             return [];
+        }
 
         var content = ExtractMessageContent(line);
         if (string.IsNullOrWhiteSpace(content))
+        {
+            LogBatchParseEmpty(logger, batchId, "missing message content");
             return [];
+        }
 
         try
         {
@@ -192,6 +198,7 @@ public sealed partial class OpenAiBatchPollerService(
         }
         catch (JsonException)
         {
+            LogBatchParseEmpty(logger, batchId, "malformed facts JSON");
             return [];
         }
     }
@@ -215,12 +222,20 @@ public sealed partial class OpenAiBatchPollerService(
         }
     }
 
-    private static async Task DeleteFilesAsync(IAiBatchClient batchClient, string? inputFileId, string? resultFileId, CancellationToken ct)
+    private async Task DeleteBatchFilesAsync(
+        IAiBatchClient batchClient, string batchId, string? inputFileId, string? resultFileId, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(inputFileId))
-            await batchClient.DeleteFileAsync(inputFileId, ct);
-        if (!string.IsNullOrWhiteSpace(resultFileId))
-            await batchClient.DeleteFileAsync(resultFileId, ct);
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(inputFileId))
+                await batchClient.DeleteFileAsync(inputFileId, ct);
+            if (!string.IsNullOrWhiteSpace(resultFileId))
+                await batchClient.DeleteFileAsync(resultFileId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogBatchFileDeleteFailed(logger, batchId, ex);
+        }
     }
 
     private static bool IsTerminalFailure(string status)
@@ -243,4 +258,10 @@ public sealed partial class OpenAiBatchPollerService(
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Polling fact-extraction batch {BatchId} failed - will retry next tick")]
     private static partial void LogBatchPollFailed(ILogger logger, string batchId, Exception ex);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Best-effort cleanup of fact-extraction batch {BatchId} files failed")]
+    private static partial void LogBatchFileDeleteFailed(ILogger logger, string batchId, Exception ex);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Fact-extraction batch {BatchId} produced no parseable facts: {Reason}")]
+    private static partial void LogBatchParseEmpty(ILogger logger, string batchId, string reason);
 }

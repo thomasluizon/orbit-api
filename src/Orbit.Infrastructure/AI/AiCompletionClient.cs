@@ -80,6 +80,14 @@ public sealed partial class AiCompletionClient
     /// </summary>
     public ChatClient ChatClient => _chatClient;
 
+    /// <summary>
+    /// Requests a plain-text chat completion from the configured model tier.
+    /// </summary>
+    /// <remarks>
+    /// Error-handling contract: propagates exceptions on API, network, or cancellation failures - the
+    /// caller is the trust boundary and must handle them. Returns <c>null</c> only when the model
+    /// yields no content, never to signal a failure.
+    /// </remarks>
     public async Task<string?> CompleteTextAsync(
         string systemPrompt,
         string userPrompt,
@@ -116,6 +124,14 @@ public sealed partial class AiCompletionClient
         return text;
     }
 
+    /// <summary>
+    /// Requests a JSON chat completion and deserializes it into <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// Error-handling contract: propagates exceptions on API, network, cancellation, or JSON
+    /// deserialization failures - the caller is the trust boundary and must handle them. Returns
+    /// <c>default</c> only when the model yields no content, never to signal a failure.
+    /// </remarks>
     public async Task<T?> CompleteJsonAsync<T>(
         string systemPrompt,
         string userPrompt,

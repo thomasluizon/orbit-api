@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Common;
@@ -155,16 +156,28 @@ public partial class ProcessUserChatCommandHandler
         if (text is null || !text.TrimStart().StartsWith('{'))
             return text;
 
+        if (!TryParseJsonObject(text, out var document))
+            return text;
+
+        using (document)
+        {
+            return document.RootElement.TryGetProperty("aiMessage", out var messageElement)
+                ? messageElement.GetString()
+                : text;
+        }
+    }
+
+    private static bool TryParseJsonObject(string text, [NotNullWhen(true)] out JsonDocument? document)
+    {
         try
         {
-            using var doc = JsonDocument.Parse(text);
-            if (doc.RootElement.TryGetProperty("aiMessage", out var msgEl))
-                return msgEl.GetString();
+            document = JsonDocument.Parse(text);
+            return true;
         }
         catch (JsonException)
         {
+            document = null;
+            return false;
         }
-
-        return text;
     }
 }
