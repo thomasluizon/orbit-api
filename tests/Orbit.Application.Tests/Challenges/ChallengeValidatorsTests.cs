@@ -10,7 +10,7 @@ public class ChallengeValidatorsTests
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid ChallengeId = Guid.NewGuid();
 
-    private static IReadOnlyList<Guid> Habits(int count) =>
+    private static List<Guid> Habits(int count) =>
         Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
 
     [Theory]

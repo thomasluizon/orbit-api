@@ -29,7 +29,7 @@ public class RestoreGoalCommandHandler(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken);
 
-        var goal = goals.FirstOrDefault();
+        var goal = goals.Count > 0 ? goals[0] : null;
         if (goal is null || !goal.IsDeleted)
             return Result.Failure(ErrorMessages.GoalNotFound);
 

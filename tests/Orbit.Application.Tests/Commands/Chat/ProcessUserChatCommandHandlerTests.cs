@@ -246,7 +246,7 @@ public class ProcessUserChatCommandHandlerTests
         return tool;
     }
 
-    private static IReadOnlyList<string> ToolNames(IReadOnlyList<object> declarations) =>
+    private static List<string> ToolNames(IReadOnlyList<object> declarations) =>
         declarations.Select(declaration => (string)declaration.GetType().GetProperty("name")!.GetValue(declaration)!).ToList();
 
     [Fact]

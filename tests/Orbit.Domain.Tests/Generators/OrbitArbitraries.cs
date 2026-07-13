@@ -81,7 +81,7 @@ public static class OrbitArbitraries
             HabitOwnerId, "Property Habit", unit, quantity,
             Days: days, IsBadHabit: isBadHabit, DueDate: dueDate, IsFlexible: isFlexible)).Value;
 
-    private static IReadOnlyList<DayOfWeek> DaysFromMask(int mask) =>
+    private static List<DayOfWeek> DaysFromMask(int mask) =>
         Enumerable.Range(0, 7).Where(bit => (mask & (1 << bit)) != 0).Select(bit => (DayOfWeek)bit).ToList();
 
     private static Gen<Habit> OneTimeGen =>

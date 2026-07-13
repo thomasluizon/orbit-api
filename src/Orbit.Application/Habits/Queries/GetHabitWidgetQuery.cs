@@ -90,7 +90,7 @@ public class GetHabitWidgetQueryHandler(
             cancellationToken);
     }
 
-    private static bool ShouldShowTomorrow(IReadOnlyList<HabitWidgetItem> todayItems)
+    private static bool ShouldShowTomorrow(List<HabitWidgetItem> todayItems)
     {
         return todayItems.Count == 0 || todayItems.All(item => item.IsCompleted);
     }

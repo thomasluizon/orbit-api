@@ -36,7 +36,7 @@ public class GetGoalDetailQueryHandler(
             q => q.Include(g => g.ProgressLogs)
                   .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);
-        var goal = goals.FirstOrDefault();
+        var goal = goals.Count > 0 ? goals[0] : null;
 
         if (goal is null)
             return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);

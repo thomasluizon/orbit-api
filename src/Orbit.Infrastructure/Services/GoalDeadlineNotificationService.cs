@@ -125,7 +125,7 @@ public partial class GoalDeadlineNotificationService(
         return freshValues;
     }
 
-    private static decimal EffectiveCurrentValue(Goal goal, IReadOnlyDictionary<Guid, int> freshStreakValues) =>
+    private static decimal EffectiveCurrentValue(Goal goal, Dictionary<Guid, int> freshStreakValues) =>
         freshStreakValues.TryGetValue(goal.Id, out var fresh) ? fresh : goal.CurrentValue;
 
     private async Task ProcessGoalDeadlineAsync(

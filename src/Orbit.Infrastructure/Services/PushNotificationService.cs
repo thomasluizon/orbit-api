@@ -69,7 +69,7 @@ public partial class PushNotificationService(
         }
 
         const int FcmBatchSize = 500;
-        var subsList = subs as IList<Domain.Entities.PushSubscription> ?? subs.ToList();
+        var subsList = subs as List<Domain.Entities.PushSubscription> ?? subs.ToList();
         for (int offset = 0; offset < subsList.Count; offset += FcmBatchSize)
         {
             var chunk = subsList.Skip(offset).Take(FcmBatchSize).ToList();

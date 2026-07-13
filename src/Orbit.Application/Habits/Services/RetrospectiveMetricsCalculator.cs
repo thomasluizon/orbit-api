@@ -121,7 +121,7 @@ public static class RetrospectiveMetricsCalculator
             scheduledCount,
             habit.FrequencyUnit is null);
 
-    private static IReadOnlyList<int> BuildWeeklyConsistency(int[] weekdayScheduled, int[] weekdayCompleted)
+    private static int[] BuildWeeklyConsistency(int[] weekdayScheduled, int[] weekdayCompleted)
     {
         var consistency = new int[7];
         for (var i = 0; i < 7; i++)

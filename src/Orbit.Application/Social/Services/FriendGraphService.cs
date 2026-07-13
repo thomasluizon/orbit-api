@@ -23,7 +23,7 @@ public class FriendGraphService(
             var matches = await userRepository.FindAsync(
                 u => u.Handle != null && u.Handle.ToLower() == normalized,
                 cancellationToken);
-            return matches.FirstOrDefault();
+            return matches.Count > 0 ? matches[0] : null;
         }
 
         if (!string.IsNullOrWhiteSpace(referralCode))
@@ -32,7 +32,7 @@ public class FriendGraphService(
             var matches = await userRepository.FindAsync(
                 u => u.ReferralCode == normalized,
                 cancellationToken);
-            return matches.FirstOrDefault();
+            return matches.Count > 0 ? matches[0] : null;
         }
 
         return null;

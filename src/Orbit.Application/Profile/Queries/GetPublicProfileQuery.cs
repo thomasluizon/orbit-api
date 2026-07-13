@@ -39,7 +39,7 @@ public class GetPublicProfileQueryHandler(
             return Result.Failure<PublicProfileView>(ErrorMessages.UserNotFound);
 
         var matches = await userRepository.FindAsync(u => u.PublicProfileSlug == request.Slug, cancellationToken);
-        var user = matches.FirstOrDefault();
+        var user = matches.Count > 0 ? matches[0] : null;
         if (user is null)
             return Result.Failure<PublicProfileView>(ErrorMessages.UserNotFound);
 

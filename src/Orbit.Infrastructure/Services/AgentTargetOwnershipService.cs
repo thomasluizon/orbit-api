@@ -36,7 +36,7 @@ public class AgentTargetOwnershipService(OrbitDbContext dbContext) : IAgentTarge
     private static async Task<OwnershipResult> AllOwnedAsync<TEntity>(
         IQueryable<TEntity> queryable,
         Guid userId,
-        IReadOnlyCollection<Guid> ids,
+        List<Guid> ids,
         CancellationToken cancellationToken)
         where TEntity : class
     {

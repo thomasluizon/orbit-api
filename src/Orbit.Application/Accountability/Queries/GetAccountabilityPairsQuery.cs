@@ -99,8 +99,8 @@ public class GetAccountabilityPairsQueryHandler(
         Guid userId,
         Guid buddyId,
         User buddy,
-        IReadOnlyDictionary<Guid, List<AccountabilityPairHabit>> habitsByPair,
-        IReadOnlyDictionary<(Guid PairId, Guid UserId), DateOnly> lastCheckInByPairUser)
+        Dictionary<Guid, List<AccountabilityPairHabit>> habitsByPair,
+        Dictionary<(Guid PairId, Guid UserId), DateOnly> lastCheckInByPairUser)
     {
         var linkedHabits = habitsByPair.TryGetValue(pair.Id, out var habits)
             ? habits

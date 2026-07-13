@@ -73,7 +73,7 @@ public partial class ProcessUserChatCommandHandler
     /// (e.g. describe_feature) by round-tripping it through JSON. Returns an empty sequence
     /// when the payload is null, not an object, or carries no usable surface IDs.
     /// </summary>
-    private static IEnumerable<string> ExtractRelatedSurfaces(object? payload)
+    private static List<string> ExtractRelatedSurfaces(object? payload)
     {
         if (payload is null)
             return [];

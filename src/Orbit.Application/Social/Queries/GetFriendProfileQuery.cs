@@ -60,7 +60,7 @@ public class GetFriendProfileQueryHandler(
             return Result.Failure<FriendProfileView>(ErrorMessages.UserNotFound);
 
         var matches = await userRepository.FindAsync(u => u.Id == request.FriendUserId, cancellationToken);
-        var friend = matches.FirstOrDefault();
+        var friend = matches.Count > 0 ? matches[0] : null;
         if (friend is null)
             return Result.Failure<FriendProfileView>(ErrorMessages.UserNotFound);
 
@@ -101,7 +101,7 @@ public class GetFriendProfileQueryHandler(
             sharedChallenges));
     }
 
-    private static IReadOnlyList<int> BuildWeeklyActivity(IEnumerable<Habit> habits, DateOnly today)
+    private static int[] BuildWeeklyActivity(IEnumerable<Habit> habits, DateOnly today)
     {
         var windowStart = today.AddDays(-(ActivityWindowDays - 1));
         var counts = new int[ActivityWindowDays];
