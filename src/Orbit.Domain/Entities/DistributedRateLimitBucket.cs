@@ -12,9 +12,7 @@ public class DistributedRateLimitBucket : Entity
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; private set; }
 
-    private DistributedRateLimitBucket()
-    {
-    }
+    private DistributedRateLimitBucket() { }
 
     public static DistributedRateLimitBucket Create(
         string policyName,

@@ -20,9 +20,7 @@ public class PendingClarification : Entity
     public DateTime ExpiresAtUtc { get; private set; }
     public DateTime? ResolvedAtUtc { get; private set; }
 
-    private PendingClarification()
-    {
-    }
+    private PendingClarification() { }
 
     public static PendingClarification Create(
         Guid userId,
