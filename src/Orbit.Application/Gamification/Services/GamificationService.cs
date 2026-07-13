@@ -21,11 +21,15 @@ public record GamificationRepositories(
     IGenericRepository<UserAchievement> AchievementRepository,
     IGenericRepository<Notification> NotificationRepository);
 
+/// <summary>Groups the outbound notification channels gamification emits through to keep the service constructor small.</summary>
+public record GamificationNotifiers(
+    IPushNotificationService PushService,
+    IFriendFeedEventEmitter FriendFeedEventEmitter);
+
 public partial class GamificationService(
     GamificationRepositories repos,
-    IPushNotificationService pushService,
+    GamificationNotifiers notifiers,
     IUserDateService userDateService,
-    IFriendFeedEventEmitter friendFeedEventEmitter,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     IFeatureFlagService featureFlagService,
@@ -163,7 +167,8 @@ public partial class GamificationService(
 
         var xpEarned = habit.IsBadHabit
             ? 0
-            : await AwardLoggedHabitXpAndAchievementsAsync(user, habit, earned, context, today, newAchievements, metrics.CurrentStreak, ct);
+            : await AwardLoggedHabitXpAndAchievementsAsync(
+                user, habit, new AchievementAccumulator(earned, newAchievements), context, today, metrics.CurrentStreak, ct);
 
         if (habit.IsBadHabit
             && user.HasProAccess
@@ -191,6 +196,10 @@ public partial class GamificationService(
             newAchievements.Select(a => a.Definition.Id).ToList());
     }
 
+    private sealed record AchievementAccumulator(
+        HashSet<string> Earned,
+        List<(UserAchievement Entity, AchievementDefinition Definition)> New);
+
     /// <summary>
     /// Grants the base + streak XP and runs every generic completion achievement check for a good
     /// habit log. Bad-habit logs never reach this — logging a habit you are trying to quit is a slip,
@@ -200,10 +209,10 @@ public partial class GamificationService(
     /// XP and level up, but the achievement catalog stays Pro-gated. Returns the XP awarded.
     /// </summary>
     private async Task<int> AwardLoggedHabitXpAndAchievementsAsync(
-        User user, Habit habit, HashSet<string> earned, LoggedHabitsContext context, DateOnly today,
-        List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements, int currentStreak,
-        CancellationToken ct)
+        User user, Habit habit, AchievementAccumulator accumulator, LoggedHabitsContext context, DateOnly today,
+        int currentStreak, CancellationToken ct)
     {
+        var (earned, newAchievements) = accumulator;
         var xp = 10 + currentStreak;
         var habitLogId = habit.Logs
             .Where(l => l.Date == today && l.Value > 0)
@@ -568,7 +577,7 @@ public partial class GamificationService(
         if (definition.Category == AchievementCategory.Consistency)
             return;
 
-        await friendFeedEventEmitter.EmitAchievementEventAsync(user, entity.AchievementId, definition.Category, ct);
+        await notifiers.FriendFeedEventEmitter.EmitAchievementEventAsync(user, entity.AchievementId, definition.Category, ct);
     }
 
     private static readonly Dictionary<string, (string Name, string Description)> AchievementTranslationsPt = new()
@@ -681,7 +690,7 @@ public partial class GamificationService(
         {
             try
             {
-                await pushService.SendToUserAsync(push.UserId, push.Title, push.Body, cancellationToken: ct);
+                await notifiers.PushService.SendToUserAsync(push.UserId, push.Title, push.Body, cancellationToken: ct);
             }
             catch (Exception ex)
             {

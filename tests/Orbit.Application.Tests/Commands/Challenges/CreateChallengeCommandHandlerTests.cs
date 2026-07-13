@@ -41,7 +41,7 @@ public class CreateChallengeCommandHandlerTests
             .BuildServiceProvider()
             .GetRequiredService<IServiceScopeFactory>();
         _handler = new CreateChallengeCommandHandler(
-            guard, friendGraph, _challengeRepository, _habitRepository, _userRepository,
+            guard, friendGraph, new CreateChallengeRepositories(_challengeRepository, _habitRepository, _userRepository),
             scopeFactory, _unitOfWork, Substitute.For<ILogger<CreateChallengeCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _creator, _friend);

@@ -29,7 +29,7 @@ public class UpdateGoalProgressCommandHandlerTests
     public UpdateGoalProgressCommandHandlerTests()
     {
         _handler = new UpdateGoalProgressCommandHandler(
-            _goalRepo, _progressLogRepo, _payGate, _gamificationService, _unitOfWork, _userDateService, _cache,
+            new GoalRepositories(_goalRepo, _progressLogRepo), _payGate, _gamificationService, _unitOfWork, _userDateService, _cache,
             Substitute.For<ILogger<UpdateGoalProgressCommandHandler>>());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

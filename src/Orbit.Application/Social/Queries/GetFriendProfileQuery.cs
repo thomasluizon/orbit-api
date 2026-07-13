@@ -37,15 +37,19 @@ public record FriendSharedChallenge(Guid Id, string Title);
 
 public record GetFriendProfileQuery(Guid UserId, Guid FriendUserId) : IRequest<Result<FriendProfileView>>;
 
+/// <summary>Groups the repositories the friend-profile query touches to keep the handler constructor small.</summary>
+public record GetFriendProfileRepositories(
+    IGenericRepository<User> Users,
+    IGenericRepository<UserAchievement> Achievements,
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<AccountabilityPair> AccountabilityPairs,
+    IGenericRepository<Challenge> Challenges);
+
 public class GetFriendProfileQueryHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
     IUserDateService userDateService,
-    IGenericRepository<User> userRepository,
-    IGenericRepository<UserAchievement> achievementRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<AccountabilityPair> accountabilityPairRepository,
-    IGenericRepository<Challenge> challengeRepository) : IRequestHandler<GetFriendProfileQuery, Result<FriendProfileView>>
+    GetFriendProfileRepositories repos) : IRequestHandler<GetFriendProfileQuery, Result<FriendProfileView>>
 {
     private const int ActivityWindowDays = 7;
 
@@ -59,15 +63,15 @@ public class GetFriendProfileQueryHandler(
         if (friendship is null || friendship.Status != FriendshipStatus.Accepted)
             return Result.Failure<FriendProfileView>(ErrorMessages.UserNotFound);
 
-        var matches = await userRepository.FindAsync(u => u.Id == request.FriendUserId, cancellationToken);
+        var matches = await repos.Users.FindAsync(u => u.Id == request.FriendUserId, cancellationToken);
         var friend = matches.Count > 0 ? matches[0] : null;
         if (friend is null)
             return Result.Failure<FriendProfileView>(ErrorMessages.UserNotFound);
 
         var level = LevelDefinitions.GetLevelForXp(friend.TotalXp);
-        var achievements = await PublicAchievementsBuilder.BuildAsync(achievementRepository, friend.Id, cancellationToken);
+        var achievements = await PublicAchievementsBuilder.BuildAsync(repos.Achievements, friend.Id, cancellationToken);
 
-        var friendHabits = await habitRepository.FindAsync(
+        var friendHabits = await repos.Habits.FindAsync(
             h => h.UserId == friend.Id,
             q => q.Include(h => h.Logs.Where(l => l.Value > 0)),
             cancellationToken);
@@ -76,7 +80,7 @@ public class GetFriendProfileQueryHandler(
         var weeklyActivity = BuildWeeklyActivity(friendHabits, friendToday);
         var topHabits = TopHabitsBuilder.Build(friendHabits);
 
-        var isAccountabilityPartner = await accountabilityPairRepository.AnyAsync(
+        var isAccountabilityPartner = await repos.AccountabilityPairs.AnyAsync(
             p => p.Status == AccountabilityPairStatus.Accepted
                  && ((p.RequesterId == request.UserId && p.AddresseeId == request.FriendUserId)
                      || (p.RequesterId == request.FriendUserId && p.AddresseeId == request.UserId)),
@@ -122,7 +126,7 @@ public class GetFriendProfileQueryHandler(
     private async Task<IReadOnlyList<FriendSharedChallenge>> BuildSharedChallengesAsync(
         Guid callerId, Guid friendId, CancellationToken cancellationToken)
     {
-        var challenges = await challengeRepository.FindAsync(
+        var challenges = await repos.Challenges.FindAsync(
             c => c.Status == ChallengeStatus.Active
                  && c.Participants.Any(p => p.UserId == callerId && p.LeftAtUtc == null)
                  && c.Participants.Any(p => p.UserId == friendId && p.LeftAtUtc == null),

@@ -791,8 +791,9 @@ public class AiSummaryServiceTests
 
     private static Task<Result<DailySummaryContent>> InvokeGenerateSummaryAsync(AiSummaryService service) =>
         service.GenerateSummaryAsync(
-            new List<Habit>(), Today, Today, Today, "en", null, 0, 0,
-            new Dictionary<Guid, DateOnly>(), CancellationToken.None);
+            new List<Habit>(),
+            new DailySummaryContext(Today, Today, Today, "en", null, 0, 0, new Dictionary<Guid, DateOnly>()),
+            CancellationToken.None);
 
     private sealed class JsonResponseHandler(string modelJsonContent) : HttpMessageHandler
     {
@@ -878,8 +879,9 @@ public class AiSummaryServiceTests
         var method = typeof(AiSummaryService)
             .GetMethod("BuildSummaryPrompt", PrivateStatic)!;
         return (string)method.Invoke(null,
-            [scheduledHabits, date, date, date, language, currentLocalTime, currentStreak, streakFreezesAccumulated,
-             lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>()])!;
+            [scheduledHabits, new DailySummaryContext(
+                date, date, date, language, currentLocalTime, currentStreak, streakFreezesAccumulated,
+                lastBadHabitSlipDates ?? new Dictionary<Guid, DateOnly>())])!;
     }
 
     private static string InvokeBuildHabitSection(

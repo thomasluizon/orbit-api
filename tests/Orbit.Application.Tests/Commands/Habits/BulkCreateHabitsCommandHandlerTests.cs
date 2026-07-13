@@ -32,7 +32,7 @@ public class BulkCreateHabitsCommandHandlerTests
     public BulkCreateHabitsCommandHandlerTests()
     {
         _handler = new BulkCreateHabitsCommandHandler(
-            _habitRepo, _suggestionRepo, _tagRepo, _payGate, _userDateService, _unitOfWork, _cache,
+            new BulkCreateHabitsRepositories(_habitRepo, _suggestionRepo, _tagRepo), _payGate, _userDateService, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkCreateHabitsCommandHandler>>());
 
         _tagRepo.FindTrackedAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())

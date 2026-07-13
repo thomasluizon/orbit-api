@@ -49,10 +49,14 @@ public record BulkCreateItemResult(
 
 public enum BulkItemStatus { Success, Failed }
 
+/// <summary>Groups the repositories a bulk habit create touches to keep the handler constructor small.</summary>
+public record BulkCreateHabitsRepositories(
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<GoogleCalendarSyncSuggestion> Suggestions,
+    IGenericRepository<Tag> Tags);
+
 public partial class BulkCreateHabitsCommandHandler(
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<GoogleCalendarSyncSuggestion> suggestionRepository,
-    IGenericRepository<Tag> tagRepository,
+    BulkCreateHabitsRepositories repos,
     IPayGateService payGate,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
@@ -79,7 +83,7 @@ public partial class BulkCreateHabitsCommandHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
 
-        var existingRoots = await habitRepository.FindAsync(
+        var existingRoots = await repos.Habits.FindAsync(
             h => h.UserId == request.UserId && h.ParentHabitId == null && !h.IsDeleted,
             cancellationToken);
         var rootPositionCursor = existingRoots.Count == 0
@@ -149,7 +153,7 @@ public partial class BulkCreateHabitsCommandHandler(
             }
 
             var parentHabit = habitResult.Value;
-            await habitRepository.AddAsync(parentHabit, cancellationToken);
+            await repos.Habits.AddAsync(parentHabit, cancellationToken);
 
             await AttachTagsAsync(parentHabit, userId, item.Tags, tagsByName, cancellationToken);
 
@@ -175,7 +179,7 @@ public partial class BulkCreateHabitsCommandHandler(
 
                     if (childResult.IsFailure)
                     {
-                        habitRepository.Remove(parentHabit);
+                        repos.Habits.Remove(parentHabit);
                         return new BulkCreateItemResult(
                             Index: index,
                             Status: BulkItemStatus.Failed,
@@ -184,7 +188,7 @@ public partial class BulkCreateHabitsCommandHandler(
                             Field: "SubHabits");
                     }
 
-                    await habitRepository.AddAsync(childResult.Value, cancellationToken);
+                    await repos.Habits.AddAsync(childResult.Value, cancellationToken);
                 }
             }
 
@@ -212,7 +216,7 @@ public partial class BulkCreateHabitsCommandHandler(
         if (!request.Habits.Any(h => h.Tags is { Count: > 0 }))
             return tagsByName;
 
-        var existingTags = await tagRepository.FindTrackedAsync(t => t.UserId == request.UserId, cancellationToken);
+        var existingTags = await repos.Tags.FindTrackedAsync(t => t.UserId == request.UserId, cancellationToken);
         foreach (var tag in existingTags)
             tagsByName[tag.Name] = tag;
 
@@ -239,7 +243,7 @@ public partial class BulkCreateHabitsCommandHandler(
                     continue;
 
                 tag = created.Value;
-                await tagRepository.AddAsync(tag, cancellationToken);
+                await repos.Tags.AddAsync(tag, cancellationToken);
                 tagsByName[tag.Name] = tag;
             }
 
@@ -271,7 +275,7 @@ public partial class BulkCreateHabitsCommandHandler(
         if (createdHabitIds.Count == 0)
             return;
 
-        var createdHabits = await habitRepository.FindAsync(
+        var createdHabits = await repos.Habits.FindAsync(
             h => createdHabitIds.Contains(h.Id) && h.GoogleEventId != null,
             cancellationToken);
 
@@ -283,7 +287,7 @@ public partial class BulkCreateHabitsCommandHandler(
             return;
 
         var eventIds = habitsByEventId.Keys.ToList();
-        var suggestions = await suggestionRepository.FindAsync(
+        var suggestions = await repos.Suggestions.FindAsync(
             s => s.UserId == userId && eventIds.Contains(s.GoogleEventId) && s.ImportedAtUtc == null,
             cancellationToken);
 

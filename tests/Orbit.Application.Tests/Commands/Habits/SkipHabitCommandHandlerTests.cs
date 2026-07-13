@@ -29,7 +29,7 @@ public class SkipHabitCommandHandlerTests
     public SkipHabitCommandHandlerTests()
     {
         _handler = new SkipHabitCommandHandler(
-            _habitRepo, _habitLogRepo, _goalRepo, _userDateService, _gamificationService, _unitOfWork, _cache,
+            new SkipHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo), _userDateService, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<SkipHabitCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

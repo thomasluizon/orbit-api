@@ -39,9 +39,10 @@ public class ExportUserDataQueryHandlerTests
     public ExportUserDataQueryHandlerTests()
     {
         _handler = new ExportUserDataQueryHandler(
-            _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo, _userFactRepo,
-            _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
-            _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo,
+            new ExportUserDataRepositories(
+                _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _goalProgressLogRepo, _tagRepo, _userFactRepo,
+                _notificationRepo, _checklistTemplateRepo, _userAchievementRepo, _streakFreezeRepo, _referralRepo, _apiKeyRepo,
+                _friendshipRepo, _cheerRepo, _blockedUserRepo, _reportRepo, _friendFeedEventRepo),
             _userDateService, _streakGoalReadSyncer);
 
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);

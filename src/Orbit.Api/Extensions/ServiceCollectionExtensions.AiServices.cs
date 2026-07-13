@@ -34,6 +34,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAgentCatalogService, AgentCatalogService>();
         builder.Services.AddScoped<IPendingAgentOperationStore, PendingAgentOperationStore>();
         builder.Services.AddScoped<IPendingClarificationStore, PendingClarificationStore>();
+        builder.Services.AddScoped<Orbit.Api.Controllers.AgentPendingStores>();
         builder.Services.AddScoped<IAgentStepUpService, AgentStepUpService>();
         builder.Services.AddScoped<IAgentPolicyEvaluator, AgentPolicyEvaluator>();
         builder.Services.AddScoped<IAgentAuditService, AgentAuditService>();

@@ -2,6 +2,15 @@ using Orbit.Domain.Common;
 
 namespace Orbit.Domain.Entities;
 
+/// <summary>Token counts and computed dollar cost aggregated for one AI-usage row.</summary>
+public record AiUsageTotals(
+    long Calls,
+    long CachedTokens,
+    long PromptTokens,
+    long CompletionTokens,
+    long TotalTokens,
+    decimal CostUsd);
+
 /// <summary>
 /// Aggregated AI token usage and computed dollar cost for a single (UTC date, model, purpose) triple.
 /// Rows are UPSERTed at the AI completion chokepoint and read once per day by the usage-summary job.
@@ -24,24 +33,19 @@ public class AiUsageDaily : Entity
         DateOnly date,
         string model,
         string purpose,
-        long calls,
-        long cachedTokens,
-        long promptTokens,
-        long completionTokens,
-        long totalTokens,
-        decimal costUsd)
+        AiUsageTotals totals)
     {
         return new AiUsageDaily
         {
             Date = date,
             Model = model,
             Purpose = purpose,
-            Calls = calls,
-            CachedTokens = cachedTokens,
-            PromptTokens = promptTokens,
-            CompletionTokens = completionTokens,
-            TotalTokens = totalTokens,
-            CostUsd = costUsd
+            Calls = totals.Calls,
+            CachedTokens = totals.CachedTokens,
+            PromptTokens = totals.PromptTokens,
+            CompletionTokens = totals.CompletionTokens,
+            TotalTokens = totals.TotalTokens,
+            CostUsd = totals.CostUsd
         };
     }
 }

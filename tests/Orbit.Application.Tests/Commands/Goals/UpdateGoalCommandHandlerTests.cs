@@ -31,7 +31,7 @@ public class UpdateGoalCommandHandlerTests
     public UpdateGoalCommandHandlerTests()
     {
         _handler = new UpdateGoalCommandHandler(
-            _goalRepo, _progressLogRepo, _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
+            new GoalRepositories(_goalRepo, _progressLogRepo), _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<UpdateGoalCommandHandler>>());
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());

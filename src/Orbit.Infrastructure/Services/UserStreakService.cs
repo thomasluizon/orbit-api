@@ -9,11 +9,15 @@ using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Services;
 
+/// <summary>Groups the repositories the streak service touches to keep its constructor small.</summary>
+public record UserStreakRepositories(
+    IGenericRepository<User> Users,
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<HabitLog> HabitLogs,
+    IGenericRepository<StreakFreeze> StreakFreezes);
+
 public partial class UserStreakService(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<StreakFreeze> streakFreezeRepository,
+    UserStreakRepositories repos,
     IUserDateService userDateService,
     IFriendFeedEventEmitter friendFeedEventEmitter,
     IUnitOfWork unitOfWork,
@@ -25,7 +29,7 @@ public partial class UserStreakService(
         CancellationToken cancellationToken = default,
         bool awardFreezeIfEligible = true)
     {
-        var user = await userRepository.FindOneTrackedAsync(
+        var user = await repos.Users.FindOneTrackedAsync(
             u => u.Id == userId,
             cancellationToken: cancellationToken);
         if (user is null)
@@ -54,8 +58,9 @@ public partial class UserStreakService(
             expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
 
         if (await TryBridgeRecentGapWithBankedFreezeAsync(
-                user, userToday, lookbackStart, expectedDates, completionDateSet, freezeDateSet,
-                currentStreak, cancellationToken))
+                user,
+                new StreakBridgeContext(userToday, lookbackStart, expectedDates, completionDateSet),
+                freezeDateSet, currentStreak, cancellationToken))
         {
             (currentStreak, lastActiveDate) = HabitScheduleService.ComputeStreakAsOf(
                 expectedDates, completionDateSet, freezeDateSet, lookbackStart, userToday);
@@ -78,7 +83,7 @@ public partial class UserStreakService(
     private async Task<(HashSet<DateOnly> CompletionDates, HashSet<DateOnly> FreezeDates, List<Habit> ContributingHabits)>
         LoadStreakDataAsync(Guid userId, DateOnly lookbackStart, CancellationToken cancellationToken)
     {
-        var allHabits = await habitRepository.FindAsync(h => h.UserId == userId, cancellationToken);
+        var allHabits = await repos.Habits.FindAsync(h => h.UserId == userId, cancellationToken);
         var streakEligibleHabitIds = allHabits
             .Where(h => !h.IsDeleted && !h.IsBadHabit)
             .Select(h => h.Id)
@@ -86,13 +91,13 @@ public partial class UserStreakService(
 
         var completionDateSet = streakEligibleHabitIds.Count == 0
             ? new HashSet<DateOnly>()
-            : (await habitLogRepository.FindAsync(
+            : (await repos.HabitLogs.FindAsync(
                 l => streakEligibleHabitIds.Contains(l.HabitId) && l.Value > 0 && l.Date >= lookbackStart,
                 cancellationToken))
                 .Select(log => log.Date)
                 .ToHashSet();
 
-        var freezeDateSet = (await streakFreezeRepository.FindAsync(
+        var freezeDateSet = (await repos.StreakFreezes.FindAsync(
             sf => sf.UserId == userId && sf.UsedOnDate >= lookbackStart,
             cancellationToken))
             .Select(freeze => freeze.UsedOnDate)
@@ -105,6 +110,12 @@ public partial class UserStreakService(
 
         return (completionDateSet, freezeDateSet, contributingHabits);
     }
+
+    private sealed record StreakBridgeContext(
+        DateOnly UserToday,
+        DateOnly LookbackStart,
+        HashSet<DateOnly> ExpectedDates,
+        HashSet<DateOnly> CompletionDates);
 
     /// <summary>
     /// Applies one banked streak freeze to bridge the user's most recent scheduled miss (their local
@@ -122,14 +133,13 @@ public partial class UserStreakService(
     /// </summary>
     private async Task<bool> TryBridgeRecentGapWithBankedFreezeAsync(
         User user,
-        DateOnly userToday,
-        DateOnly lookbackStart,
-        HashSet<DateOnly> expectedDates,
-        HashSet<DateOnly> completionDateSet,
+        StreakBridgeContext context,
         HashSet<DateOnly> freezeDateSet,
         int currentStreak,
         CancellationToken cancellationToken)
     {
+        var (userToday, lookbackStart, expectedDates, completionDateSet) = context;
+
         if (user.StreakFreezesAccumulated <= 0)
             return false;
 
@@ -160,7 +170,7 @@ public partial class UserStreakService(
         if (user.ConsumeStreakFreeze().IsFailure)
             return false;
 
-        await streakFreezeRepository.AddAsync(StreakFreeze.Create(user.Id, missedDate), cancellationToken);
+        await repos.StreakFreezes.AddAsync(StreakFreeze.Create(user.Id, missedDate), cancellationToken);
 
         try
         {

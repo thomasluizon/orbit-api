@@ -90,6 +90,6 @@ public class AiUsageSummaryServiceTests
 
     private static AiUsageDaily Row(string purpose, string model, long calls, decimal costUsd) =>
         AiUsageDaily.Create(
-            Date, model, purpose, calls,
-            cachedTokens: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: costUsd);
+            Date, model, purpose,
+            new AiUsageTotals(calls, CachedTokens: 0, PromptTokens: 0, CompletionTokens: 0, TotalTokens: 0, CostUsd: costUsd));
 }

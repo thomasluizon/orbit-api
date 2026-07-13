@@ -32,8 +32,7 @@ public class AiControllerTests
         _controller = new AiController(
             _catalogService,
             _policyEvaluator,
-            _pendingOperationStore,
-            _pendingClarificationStore,
+            new AgentPendingStores(_pendingOperationStore, _pendingClarificationStore),
             _stepUpService,
             _auditService,
             _operationExecutor,

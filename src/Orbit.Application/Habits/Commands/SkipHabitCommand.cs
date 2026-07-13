@@ -18,10 +18,14 @@ public record SkipHabitCommand(
     Guid HabitId,
     DateOnly? Date = null) : IRequest<Result>, IConcurrencyRetryable, IIdempotentCommand;
 
+/// <summary>Groups the repositories a habit skip touches to keep the handler constructor small.</summary>
+public record SkipHabitRepositories(
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<HabitLog> HabitLogs,
+    IGenericRepository<Goal> Goals);
+
 public partial class SkipHabitCommandHandler(
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<Goal> goalRepository,
+    SkipHabitRepositories repos,
     IUserDateService userDateService,
     IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
@@ -33,7 +37,7 @@ public partial class SkipHabitCommandHandler(
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
 
-        var habit = await habitRepository.FindOneTrackedAsync(
+        var habit = await repos.Habits.FindOneTrackedAsync(
             h => h.Id == request.HabitId,
             q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)).Include(h => h.Goals),
             cancellationToken);
@@ -114,7 +118,7 @@ public partial class SkipHabitCommandHandler(
             if (skipResult.IsFailure)
                 return skipResult.PropagateError();
 
-            await habitLogRepository.AddAsync(skipResult.Value, cancellationToken);
+            await repos.HabitLogs.AddAsync(skipResult.Value, cancellationToken);
         }
         else
         {
@@ -130,7 +134,7 @@ public partial class SkipHabitCommandHandler(
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
         var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
-        var trackedGoals = await goalRepository.FindTrackedAsync(
+        var trackedGoals = await repos.Goals.FindTrackedAsync(
             g => goalIds.Contains(g.Id),
             q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
             cancellationToken);

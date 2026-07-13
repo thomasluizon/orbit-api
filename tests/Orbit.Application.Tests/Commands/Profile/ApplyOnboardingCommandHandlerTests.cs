@@ -44,7 +44,8 @@ public class ApplyOnboardingCommandHandlerTests
     }
 
     private ApplyOnboardingCommandHandler CreateHandler() => new(
-        _userRepo, _habitRepo, _goalRepo, _payGate, _userDateService, _appConfig, _unitOfWork, _cache);
+        new ApplyOnboardingRepositories(_userRepo, _habitRepo, _goalRepo),
+        _payGate, _userDateService, _appConfig, _unitOfWork, _cache);
 
     private void SetupUser(User user)
     {
