@@ -284,7 +284,7 @@ public class GetStreakHistoryQueryHandlerTests
             .Returns(new List<StreakFreeze>());
 
         var service = new UserStreakService(
-            userRepo, habitRepo, habitLogRepo, freezeRepo, userDateService, feedEmitter,
+            new UserStreakRepositories(userRepo, habitRepo, habitLogRepo, freezeRepo), userDateService, feedEmitter,
             unitOfWork, featureFlagService, NullLogger<UserStreakService>.Instance);
         var state = await service.RecalculateAsync(UserId, CancellationToken.None);
         return state!.CurrentStreak;

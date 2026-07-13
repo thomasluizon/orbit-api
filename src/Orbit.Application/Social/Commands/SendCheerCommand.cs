@@ -21,10 +21,8 @@ public record SendCheerRepositories(
 public record SendCheerCommand(Guid UserId, Guid RecipientId, Guid? HabitId, string? Note) : IRequest<Result<Guid>>;
 
 public partial class SendCheerCommandHandler(
-    SocialAccessGuard socialAccessGuard,
-    FriendGraphService friendGraphService,
+    SocialInteractionServices social,
     SendCheerRepositories repositories,
-    SocialNotificationDispatcher notificationDispatcher,
     IContentModerationService contentModerationService,
     IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
@@ -36,7 +34,7 @@ public partial class SendCheerCommandHandler(
 
     public async Task<Result<Guid>> Handle(SendCheerCommand request, CancellationToken cancellationToken)
     {
-        var access = await socialAccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
+        var access = await social.AccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
         if (access.IsFailure)
             return access.PropagateError<Guid>();
         var sender = access.Value;
@@ -47,10 +45,10 @@ public partial class SendCheerCommandHandler(
         if (recipient is null || !recipient.SocialOptIn)
             return Result.Failure<Guid>(ErrorMessages.NotFriends);
 
-        if (!await friendGraphService.AreAcceptedFriendsAsync(request.UserId, request.RecipientId, cancellationToken))
+        if (!await social.FriendGraph.AreAcceptedFriendsAsync(request.UserId, request.RecipientId, cancellationToken))
             return Result.Failure<Guid>(ErrorMessages.NotFriends);
 
-        if (await friendGraphService.IsBlockedBetweenAsync(request.UserId, request.RecipientId, cancellationToken))
+        if (await social.FriendGraph.IsBlockedBetweenAsync(request.UserId, request.RecipientId, cancellationToken))
             return Result.Failure<Guid>(ErrorMessages.Blocked);
 
         if (request.HabitId.HasValue)
@@ -76,10 +74,10 @@ public partial class SendCheerCommandHandler(
         await AwardCheerleaderAsync(sender, cancellationToken);
 
         var notification = BuildRecipientNotification(recipient, sender);
-        await notificationDispatcher.StageAsync(notification, cancellationToken);
+        await social.NotificationDispatcher.StageAsync(notification, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await notificationDispatcher.PushAsync(notification, cancellationToken);
+        await social.NotificationDispatcher.PushAsync(notification, cancellationToken);
 
         return Result.Success(createResult.Value.Id);
     }

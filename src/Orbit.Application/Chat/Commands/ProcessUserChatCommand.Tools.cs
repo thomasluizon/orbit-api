@@ -160,7 +160,9 @@ public partial class ProcessUserChatCommandHandler
         if (operationResult.Status == AgentOperationStatus.Succeeded
             && operationResult.Payload is NeedsClarificationPayload payload)
         {
-            return await StashClarificationAsync(call, request, clarificationStore, toolResult, operationResult, executionResponse, payload, cancellationToken);
+            return await StashClarificationAsync(
+                call, request, clarificationStore,
+                new ClarificationToolResult(toolResult, operationResult, executionResponse, payload), cancellationToken);
         }
 
         return operationResult.Status switch
@@ -267,16 +269,20 @@ public partial class ProcessUserChatCommandHandler
         }
     }
 
+    private sealed record ClarificationToolResult(
+        AiToolCallResult ToolResult,
+        AgentOperationResult OperationResult,
+        AgentExecuteOperationResponse ExecutionResponse,
+        NeedsClarificationPayload Payload);
+
     private async Task<ToolCallOutcome> StashClarificationAsync(
         AiToolCall call,
         ProcessUserChatCommand request,
         IPendingClarificationStore clarificationStore,
-        AiToolCallResult toolResult,
-        AgentOperationResult operationResult,
-        AgentExecuteOperationResponse executionResponse,
-        NeedsClarificationPayload payload,
+        ClarificationToolResult toolCallResult,
         CancellationToken cancellationToken)
     {
+        var (toolResult, operationResult, executionResponse, payload) = toolCallResult;
         var quickActionsJson = payload.QuickActions is null
             ? "[]"
             : JsonSerializer.Serialize(payload.QuickActions);

@@ -121,6 +121,70 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+        builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>
+            new Orbit.Application.Goals.Commands.GoalRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoalProgressLog>>()));
+        builder.Services.AddScoped<Orbit.Application.Habits.Commands.BulkCreateHabitsRepositories>(sp =>
+            new Orbit.Application.Habits.Commands.BulkCreateHabitsRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoogleCalendarSyncSuggestion>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>()));
+        builder.Services.AddScoped<Orbit.Application.Habits.Commands.SkipHabitRepositories>(sp =>
+            new Orbit.Application.Habits.Commands.SkipHabitRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
+        builder.Services.AddScoped<Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories>(sp =>
+            new Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoogleCalendarSyncSuggestion>>()));
+        builder.Services.AddScoped<Orbit.Application.Profile.Commands.ApplyOnboardingRepositories>(sp =>
+            new Orbit.Application.Profile.Commands.ApplyOnboardingRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
+        builder.Services.AddScoped<Orbit.Application.Challenges.Commands.CreateChallengeRepositories>(sp =>
+            new Orbit.Application.Challenges.Commands.CreateChallengeRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>()));
+        builder.Services.AddScoped<Orbit.Application.Social.Queries.GetFriendProfileRepositories>(sp =>
+            new Orbit.Application.Social.Queries.GetFriendProfileRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>()));
+        builder.Services.AddScoped<Orbit.Infrastructure.Services.UserStreakRepositories>(sp =>
+            new Orbit.Infrastructure.Services.UserStreakRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.StreakFreeze>>()));
+        builder.Services.AddScoped<Orbit.Application.Profile.Queries.ExportUserDataRepositories>(sp =>
+            new Orbit.Application.Profile.Queries.ExportUserDataRepositories(
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.GoalProgressLog>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Tag>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserFact>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChecklistTemplate>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.StreakFreeze>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Referral>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ApiKey>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Friendship>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.BlockedUser>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Report>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.FriendFeedEvent>>()));
+        builder.Services.AddScoped<Orbit.Application.Social.Services.SocialInteractionServices>();
+        builder.Services.AddScoped<Orbit.Application.Gamification.Services.GamificationNotifiers>();
         builder.Services.AddScoped<IGoogleTokenService, GoogleTokenService>();
         builder.Services.AddGoogleCalendarServices(GetDefaultHttpTimeout(builder));
         builder.Services.AddSingleton(TimeProvider.System);

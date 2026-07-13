@@ -87,14 +87,15 @@ public class GetDailySummaryQueryHandler(
 
         var summaryResult = await summaryService.GenerateSummaryAsync(
             summaryHabits,
-            request.DateFrom,
-            request.DateTo,
-            userToday,
-            effectiveLanguage,
-            currentLocalTime,
-            user.CurrentStreak,
-            user.StreakFreezesAccumulated,
-            lastBadHabitSlipDates,
+            new DailySummaryContext(
+                request.DateFrom,
+                request.DateTo,
+                userToday,
+                effectiveLanguage,
+                currentLocalTime,
+                user.CurrentStreak,
+                user.StreakFreezesAccumulated,
+                lastBadHabitSlipDates),
             cancellationToken);
 
         if (summaryResult.IsFailure)

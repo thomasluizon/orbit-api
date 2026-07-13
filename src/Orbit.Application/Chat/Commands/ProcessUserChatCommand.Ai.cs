@@ -26,11 +26,12 @@ public partial class ProcessUserChatCommandHandler
         var agentSnapshot = BuildAgentContextSnapshot(
             context.User,
             request.ClientContext,
-            context.EnabledFeatureFlags,
-            context.UserTags,
-            context.ChecklistTemplates,
-            context.ActiveHabits,
-            context.ActiveGoals,
+            new AgentSnapshotInputs(
+                context.EnabledFeatureFlags,
+                context.UserTags,
+                context.ChecklistTemplates,
+                context.ActiveHabits,
+                context.ActiveGoals),
             context.HasProAccess);
 
         var systemPrompt = string.Join(
@@ -85,16 +86,20 @@ public partial class ProcessUserChatCommandHandler
         return request.Message + " " + string.Join(" ", request.History.Select(message => message.Content));
     }
 
+    private sealed record AgentSnapshotInputs(
+        IReadOnlyList<string> FeatureFlags,
+        IReadOnlyCollection<Tag> UserTags,
+        IReadOnlyCollection<ChecklistTemplate> ChecklistTemplates,
+        IReadOnlyCollection<Habit> ActiveHabits,
+        IReadOnlyCollection<Goal> ActiveGoals);
+
     private static AgentContextSnapshot BuildAgentContextSnapshot(
         User? user,
         AgentClientContext? clientContext,
-        IReadOnlyList<string> featureFlags,
-        IReadOnlyCollection<Tag> userTags,
-        IReadOnlyCollection<ChecklistTemplate> checklistTemplates,
-        IReadOnlyCollection<Habit> activeHabits,
-        IReadOnlyCollection<Goal> activeGoals,
+        AgentSnapshotInputs inputs,
         bool hasProAccess)
     {
+        var (featureFlags, userTags, checklistTemplates, activeHabits, activeGoals) = inputs;
         return new AgentContextSnapshot(
             hasProAccess ? "pro" : "free",
             user?.Language,

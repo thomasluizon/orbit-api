@@ -32,10 +32,11 @@ public class UserStreakServiceTests
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
         _sut = new UserStreakService(
-            _userRepository,
-            _habitRepository,
-            _habitLogRepository,
-            _streakFreezeRepository,
+            new UserStreakRepositories(
+                _userRepository,
+                _habitRepository,
+                _habitLogRepository,
+                _streakFreezeRepository),
             _userDateService,
             _feedEmitter,
             _unitOfWork,

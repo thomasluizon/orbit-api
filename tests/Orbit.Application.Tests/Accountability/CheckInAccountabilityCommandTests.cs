@@ -43,7 +43,8 @@ public class CheckInAccountabilityCommandTests
         var dispatcher = new SocialNotificationDispatcher(
             _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new CheckInAccountabilityCommandHandler(
-            guard, pairService, friendGraph, repositories, dispatcher, _moderation, _userDateService, _unitOfWork,
+            new SocialInteractionServices(guard, friendGraph, dispatcher), pairService, repositories,
+            _moderation, _userDateService, _unitOfWork,
             Substitute.For<ILogger<CheckInAccountabilityCommandHandler>>());
 
         _pair = AccountabilityPair.Create(_caller.Id, _buddy.Id, AccountabilityCadence.Daily).Value;

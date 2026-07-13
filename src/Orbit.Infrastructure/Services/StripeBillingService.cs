@@ -10,21 +10,25 @@ namespace Orbit.Infrastructure.Services;
 /// Stripe-backed implementation of <see cref="IBillingService"/>. All Stripe SDK calls
 /// are isolated here so the Application layer stays SDK-free.
 /// </summary>
+/// <summary>Groups the Stripe SDK service clients the billing service uses to keep its constructor small.</summary>
+public record StripeServiceClients(
+    CustomerService Customers,
+    Stripe.Checkout.SessionService CheckoutSessions,
+    Stripe.BillingPortal.SessionService PortalSessions,
+    SubscriptionService Subscriptions,
+    InvoiceService Invoices,
+    PriceService Prices,
+    CouponService Coupons);
+
 public sealed partial class StripeBillingService(
-    CustomerService customerService,
-    Stripe.Checkout.SessionService checkoutSessionService,
-    Stripe.BillingPortal.SessionService portalSessionService,
-    SubscriptionService subscriptionService,
-    InvoiceService invoiceService,
-    PriceService priceService,
-    CouponService couponService,
+    StripeServiceClients clients,
     ILogger<StripeBillingService> logger) : IBillingService
 {
     public async Task<string> CreateCustomerAsync(string email, string name, Guid userId, CancellationToken cancellationToken)
     {
         try
         {
-            var customer = await customerService.CreateAsync(new CustomerCreateOptions
+            var customer = await clients.Customers.CreateAsync(new CustomerCreateOptions
             {
                 Email = email,
                 Name = name,
@@ -68,7 +72,7 @@ public sealed partial class StripeBillingService(
                 options.AllowPromotionCodes = true;
             }
 
-            var session = await checkoutSessionService.CreateAsync(options, cancellationToken: cancellationToken);
+            var session = await clients.CheckoutSessions.CreateAsync(options, cancellationToken: cancellationToken);
             return session.Url;
         }
         catch (StripeException ex)
@@ -81,7 +85,7 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var session = await portalSessionService.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
+            var session = await clients.PortalSessions.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
             {
                 Customer = customerId,
                 ReturnUrl = returnUrl,
@@ -100,7 +104,7 @@ public sealed partial class StripeBillingService(
         {
             var options = new SubscriptionGetOptions();
             options.AddExpand("default_payment_method");
-            var subscription = await subscriptionService.GetAsync(subscriptionId, options, cancellationToken: cancellationToken);
+            var subscription = await clients.Subscriptions.GetAsync(subscriptionId, options, cancellationToken: cancellationToken);
 
             BillingPaymentMethod? paymentMethod = null;
             if (subscription.DefaultPaymentMethod?.Card is not null)
@@ -136,7 +140,7 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var invoices = await invoiceService.ListAsync(new InvoiceListOptions
+            var invoices = await clients.Invoices.ListAsync(new InvoiceListOptions
             {
                 Customer = customerId,
                 Limit = limit,
@@ -162,7 +166,7 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var price = await priceService.GetAsync(priceId, cancellationToken: cancellationToken);
+            var price = await clients.Prices.GetAsync(priceId, cancellationToken: cancellationToken);
             return price.UnitAmount ?? 0;
         }
         catch (StripeException ex)
@@ -175,7 +179,7 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var coupon = await couponService.GetAsync(couponId, cancellationToken: cancellationToken);
+            var coupon = await clients.Coupons.GetAsync(couponId, cancellationToken: cancellationToken);
             return (int)(coupon.PercentOff ?? 0);
         }
         catch (StripeException ex)

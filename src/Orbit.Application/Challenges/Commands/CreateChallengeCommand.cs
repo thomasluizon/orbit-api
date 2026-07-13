@@ -22,12 +22,16 @@ public record CreateChallengeCommand(
     IReadOnlyList<Guid> LinkedHabitIds,
     IReadOnlyList<Guid> InvitedFriendUserIds) : IRequest<Result<Guid>>;
 
+/// <summary>Groups the repositories a challenge create touches to keep the handler constructor small.</summary>
+public record CreateChallengeRepositories(
+    IGenericRepository<Challenge> Challenges,
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<User> Users);
+
 public partial class CreateChallengeCommandHandler(
     SocialAccessGuard socialAccessGuard,
     FriendGraphService friendGraphService,
-    IGenericRepository<Challenge> challengeRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<User> userRepository,
+    CreateChallengeRepositories repos,
     IServiceScopeFactory scopeFactory,
     IUnitOfWork unitOfWork,
     ILogger<CreateChallengeCommandHandler> logger) : IRequestHandler<CreateChallengeCommand, Result<Guid>>
@@ -78,7 +82,7 @@ public partial class CreateChallengeCommandHandler(
         foreach (var friendId in invitedFriendIds)
             challenge.AddParticipant(friendId, []);
 
-        await challengeRepository.AddAsync(challenge, cancellationToken);
+        await repos.Challenges.AddAsync(challenge, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await NotifyInvitedFriendsAsync(requester, invitedFriendIds, cancellationToken);
@@ -91,7 +95,7 @@ public partial class CreateChallengeCommandHandler(
         if (invitedFriendIds.Count == 0)
             return;
 
-        var invitedUsers = await userRepository.FindAsync(u => invitedFriendIds.Contains(u.Id), cancellationToken);
+        var invitedUsers = await repos.Users.FindAsync(u => invitedFriendIds.Contains(u.Id), cancellationToken);
 
         using var throttle = new SemaphoreSlim(MaxInvitePushConcurrency);
         await Task.WhenAll(invitedUsers.Select(user => NotifyOneAsync(requester, user, throttle, cancellationToken)));
@@ -128,7 +132,7 @@ public partial class CreateChallengeCommandHandler(
     private async Task<Result> VerifyOwnedHabitsAsync(Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken cancellationToken)
     {
         var distinctIds = habitIds.Distinct().ToList();
-        var owned = await habitRepository.CountAsync(
+        var owned = await repos.Habits.CountAsync(
             h => h.UserId == userId && distinctIds.Contains(h.Id),
             cancellationToken);
 
@@ -156,7 +160,7 @@ public partial class CreateChallengeCommandHandler(
         while (true)
         {
             var code = GenerateJoinCode();
-            var exists = await challengeRepository.AnyAsync(c => c.JoinCode == code, cancellationToken);
+            var exists = await repos.Challenges.AnyAsync(c => c.JoinCode == code, cancellationToken);
             if (!exists)
                 return code;
         }

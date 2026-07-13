@@ -57,10 +57,14 @@ public record ApplyOnboardingCommand(
 /// by construction — an already-onboarded user is a no-op (<c>Applied:false</c>) — so the client can
 /// flush unconditionally after any successful auth and retry safely under the concurrency pipeline.
 /// </summary>
+/// <summary>Groups the repositories the onboarding-apply handler touches to keep its constructor small.</summary>
+public record ApplyOnboardingRepositories(
+    IGenericRepository<User> Users,
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<Goal> Goals);
+
 public class ApplyOnboardingCommandHandler(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<Goal> goalRepository,
+    ApplyOnboardingRepositories repos,
     IPayGateService payGate,
     IUserDateService userDateService,
     IAppConfigService appConfig,
@@ -74,7 +78,7 @@ public class ApplyOnboardingCommandHandler(
         {
             await unitOfWork.AcquireAdvisoryLockAsync($"onboarding-apply:{request.UserId}", ct);
 
-            var user = await userRepository.FindOneTrackedAsync(
+            var user = await repos.Users.FindOneTrackedAsync(
                 u => u.Id == request.UserId, cancellationToken: ct);
 
             if (user is null)
@@ -138,7 +142,7 @@ public class ApplyOnboardingCommandHandler(
 
         var maxHabits = await appConfig.GetAsync(
             AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, cancellationToken);
-        var existingRoots = await habitRepository.CountAsync(
+        var existingRoots = await repos.Habits.CountAsync(
             h => h.UserId == user.Id && h.ParentHabitId == null, cancellationToken);
         var allowance = Math.Max(0, maxHabits - existingRoots);
 
@@ -174,7 +178,7 @@ public class ApplyOnboardingCommandHandler(
             if (habitResult.IsFailure)
                 return habitResult.PropagateError<List<Habit>>();
 
-            await habitRepository.AddAsync(habitResult.Value, cancellationToken);
+            await repos.Habits.AddAsync(habitResult.Value, cancellationToken);
             createdHabits.Add(habitResult.Value);
         }
 
@@ -207,7 +211,7 @@ public class ApplyOnboardingCommandHandler(
         if (goalResult.IsFailure)
             return goalResult.PropagateError<bool>();
 
-        await goalRepository.AddAsync(goalResult.Value, cancellationToken);
+        await repos.Goals.AddAsync(goalResult.Value, cancellationToken);
         return Result.Success(true);
     }
 

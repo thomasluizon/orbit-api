@@ -106,7 +106,8 @@ public partial class StreakFreezeAutoActivationService(
 
         dbContext.ChangeTracker.Clear();
         await ActivatePerUserFallbackAsync(
-            candidateIds, gamificationFreeTierEnabled, freezesByUser, guardedByUser, completionsByUser, pushService, dbContext, ct);
+            candidateIds, gamificationFreeTierEnabled,
+            new PerUserStreakLookups(freezesByUser, guardedByUser, completionsByUser), pushService, dbContext, ct);
     }
 
     private sealed record StagedFreeze(User User, DateOnly MissedDate, string Title, string Body);
@@ -193,16 +194,21 @@ public partial class StreakFreezeAutoActivationService(
             LogFreezeActivated(logger, freeze.User.Id, freeze.MissedDate);
     }
 
+    private sealed record PerUserStreakLookups(
+        Dictionary<Guid, List<StreakFreeze>> Freezes,
+        Dictionary<Guid, HashSet<DateOnly>> Guarded,
+        Dictionary<Guid, HashSet<DateOnly>> Completions);
+
     private async Task ActivatePerUserFallbackAsync(
         List<Guid> candidateIds,
         bool gamificationFreeTierEnabled,
-        Dictionary<Guid, List<StreakFreeze>> freezesByUser,
-        Dictionary<Guid, HashSet<DateOnly>> guardedByUser,
-        Dictionary<Guid, HashSet<DateOnly>> completionsByUser,
+        PerUserStreakLookups lookups,
         IPushNotificationService pushService,
         OrbitDbContext dbContext,
         CancellationToken ct)
     {
+        var (freezesByUser, guardedByUser, completionsByUser) = lookups;
+
         var users = await dbContext.Users
             .Where(u => candidateIds.Contains(u.Id))
             .ToListAsync(ct);

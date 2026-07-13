@@ -10,32 +10,36 @@ namespace Orbit.Application.Profile.Queries;
 
 public record ExportUserDataQuery(Guid UserId) : IRequest<Result<UserDataExport>>;
 
+/// <summary>Groups every repository the data-export read touches to keep the handler constructor small.</summary>
+public record ExportUserDataRepositories(
+    IGenericRepository<User> Users,
+    IGenericRepository<Habit> Habits,
+    IGenericRepository<HabitLog> HabitLogs,
+    IGenericRepository<Goal> Goals,
+    IGenericRepository<GoalProgressLog> GoalProgressLogs,
+    IGenericRepository<Tag> Tags,
+    IGenericRepository<UserFact> UserFacts,
+    IGenericRepository<Notification> Notifications,
+    IGenericRepository<ChecklistTemplate> ChecklistTemplates,
+    IGenericRepository<UserAchievement> UserAchievements,
+    IGenericRepository<StreakFreeze> StreakFreezes,
+    IGenericRepository<Referral> Referrals,
+    IGenericRepository<ApiKey> ApiKeys,
+    IGenericRepository<Friendship> Friendships,
+    IGenericRepository<Cheer> Cheers,
+    IGenericRepository<BlockedUser> BlockedUsers,
+    IGenericRepository<Report> Reports,
+    IGenericRepository<FriendFeedEvent> FriendFeedEvents);
+
 public class ExportUserDataQueryHandler(
-    IGenericRepository<User> userRepository,
-    IGenericRepository<Habit> habitRepository,
-    IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<Goal> goalRepository,
-    IGenericRepository<GoalProgressLog> goalProgressLogRepository,
-    IGenericRepository<Tag> tagRepository,
-    IGenericRepository<UserFact> userFactRepository,
-    IGenericRepository<Notification> notificationRepository,
-    IGenericRepository<ChecklistTemplate> checklistTemplateRepository,
-    IGenericRepository<UserAchievement> userAchievementRepository,
-    IGenericRepository<StreakFreeze> streakFreezeRepository,
-    IGenericRepository<Referral> referralRepository,
-    IGenericRepository<ApiKey> apiKeyRepository,
-    IGenericRepository<Friendship> friendshipRepository,
-    IGenericRepository<Cheer> cheerRepository,
-    IGenericRepository<BlockedUser> blockedUserRepository,
-    IGenericRepository<Report> reportRepository,
-    IGenericRepository<FriendFeedEvent> friendFeedEventRepository,
+    ExportUserDataRepositories repos,
     IUserDateService userDateService,
     IStreakGoalReadSyncer streakGoalReadSyncer)
     : IRequestHandler<ExportUserDataQuery, Result<UserDataExport>>
 {
     public async Task<Result<UserDataExport>> Handle(ExportUserDataQuery request, CancellationToken cancellationToken)
     {
-        var user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+        var user = await repos.Users.GetByIdAsync(request.UserId, cancellationToken);
 
         if (user is null)
             return Result.Failure<UserDataExport>(ErrorMessages.UserNotFound);
@@ -43,37 +47,37 @@ public class ExportUserDataQueryHandler(
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var freshStreakValues = await streakGoalReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
 
-        var habits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
+        var habits = await repos.Habits.FindAsync(h => h.UserId == request.UserId, cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToHashSet();
-        var habitLogs = await habitLogRepository.FindAsync(l => habitIds.Contains(l.HabitId), cancellationToken);
+        var habitLogs = await repos.HabitLogs.FindAsync(l => habitIds.Contains(l.HabitId), cancellationToken);
         var logsByHabit = habitLogs
             .GroupBy(l => l.HabitId)
             .ToDictionary(g => g.Key, g => g.OrderBy(l => l.Date).ToList());
 
-        var goals = await goalRepository.FindAsync(g => g.UserId == request.UserId, cancellationToken);
+        var goals = await repos.Goals.FindAsync(g => g.UserId == request.UserId, cancellationToken);
         var goalIds = goals.Select(g => g.Id).ToHashSet();
-        var progressLogs = await goalProgressLogRepository.FindAsync(p => goalIds.Contains(p.GoalId), cancellationToken);
+        var progressLogs = await repos.GoalProgressLogs.FindAsync(p => goalIds.Contains(p.GoalId), cancellationToken);
         var progressByGoal = progressLogs
             .GroupBy(p => p.GoalId)
             .ToDictionary(g => g.Key, g => g.OrderBy(p => p.CreatedAtUtc).ToList());
 
-        var tags = await tagRepository.FindAsync(t => t.UserId == request.UserId, cancellationToken);
-        var facts = await userFactRepository.FindAsync(f => f.UserId == request.UserId, cancellationToken);
-        var notifications = await notificationRepository.FindAsync(n => n.UserId == request.UserId, cancellationToken);
-        var checklistTemplates = await checklistTemplateRepository.FindAsync(c => c.UserId == request.UserId, cancellationToken);
-        var achievements = await userAchievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
-        var streakFreezes = await streakFreezeRepository.FindAsync(s => s.UserId == request.UserId, cancellationToken);
-        var referrals = await referralRepository.FindAsync(r => r.ReferrerId == request.UserId, cancellationToken);
-        var apiKeys = await apiKeyRepository.FindAsync(k => k.UserId == request.UserId, cancellationToken);
-        var friendships = await friendshipRepository.FindAsync(
+        var tags = await repos.Tags.FindAsync(t => t.UserId == request.UserId, cancellationToken);
+        var facts = await repos.UserFacts.FindAsync(f => f.UserId == request.UserId, cancellationToken);
+        var notifications = await repos.Notifications.FindAsync(n => n.UserId == request.UserId, cancellationToken);
+        var checklistTemplates = await repos.ChecklistTemplates.FindAsync(c => c.UserId == request.UserId, cancellationToken);
+        var achievements = await repos.UserAchievements.FindAsync(a => a.UserId == request.UserId, cancellationToken);
+        var streakFreezes = await repos.StreakFreezes.FindAsync(s => s.UserId == request.UserId, cancellationToken);
+        var referrals = await repos.Referrals.FindAsync(r => r.ReferrerId == request.UserId, cancellationToken);
+        var apiKeys = await repos.ApiKeys.FindAsync(k => k.UserId == request.UserId, cancellationToken);
+        var friendships = await repos.Friendships.FindAsync(
             f => f.RequesterId == request.UserId || f.AddresseeId == request.UserId, cancellationToken);
-        var cheers = await cheerRepository.FindAsync(
+        var cheers = await repos.Cheers.FindAsync(
             c => c.SenderId == request.UserId || c.RecipientId == request.UserId, cancellationToken);
-        var blockedUsers = await blockedUserRepository.FindAsync(
+        var blockedUsers = await repos.BlockedUsers.FindAsync(
             b => b.BlockerId == request.UserId, cancellationToken);
-        var reports = await reportRepository.FindAsync(
+        var reports = await repos.Reports.FindAsync(
             r => r.ReporterId == request.UserId, cancellationToken);
-        var friendFeedEvents = await friendFeedEventRepository.FindAsync(
+        var friendFeedEvents = await repos.FriendFeedEvents.FindAsync(
             e => e.ActorUserId == request.UserId, cancellationToken);
 
         var exportedAtUtc = DateTime.UtcNow;
