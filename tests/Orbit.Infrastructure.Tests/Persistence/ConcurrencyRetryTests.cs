@@ -17,11 +17,13 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 
 /// <summary>
 /// Exercises the optimistic-concurrency conflict handling that backs the xmin-tokened User/Goal
-/// mutations. The EF in-memory provider does not enforce xmin, so the conflict is injected with a
-/// save interceptor that throws <see cref="DbUpdateConcurrencyException"/> on the first save (the
-/// same shape Postgres raises on a stale token). Tests assert the HANDLERS' response to a conflict —
-/// retry-with-re-evaluation for counters/progress, and a clean conflict result when it persists —
-/// not real database token behavior, which is unreachable in this harness.
+/// mutations. The EF in-memory provider does not enforce xmin, so the stale-token conflict is
+/// injected with a save interceptor that throws <see cref="DbUpdateConcurrencyException"/> (the same
+/// shape Postgres raises on a stale token); a lost-delete race is reproduced without an interceptor
+/// because the provider does raise a genuine conflict when a tracked row is deleted underneath.
+/// Tests assert the HANDLERS' response to a conflict — retry-with-re-evaluation for counters/progress,
+/// a clean conflict result when it persists, and that a non-concurrency failure is never retried —
+/// not real xmin token behavior, which is unreachable in this harness.
 /// </summary>
 public class ConcurrencyRetryTests
 {
@@ -255,6 +257,78 @@ public class ConcurrencyRetryTests
         interceptor.SaveAttempts.Should().Be(3);
     }
 
+    [Fact]
+    public async Task SaveChangesAsync_WhenRowDeletedByParallelWriter_RaisesRealConcurrencyConflict()
+    {
+        var dbName = NewDbName();
+        Guid goalId;
+
+        await using (var seed = CreateContext(dbName))
+        {
+            var seedGoal = CreateGoal(targetValue: 100, out _);
+            seed.Goals.Add(seedGoal);
+            await seed.SaveChangesAsync();
+            goalId = seedGoal.Id;
+        }
+
+        await using var context = CreateContext(dbName);
+        var goalRepository = new GenericRepository<Goal>(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+
+        var goal = await goalRepository.FindOneTrackedAsync(g => g.Id == goalId);
+        goal!.UpdatePosition(5);
+
+        await using (var racer = CreateContext(dbName))
+        {
+            var raced = racer.Goals.Single(g => g.Id == goalId);
+            racer.Goals.Remove(raced);
+            await racer.SaveChangesAsync();
+        }
+
+        var act = async () => await unitOfWork.SaveChangesAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+        await using var verify = CreateContext(dbName);
+        verify.Goals.Any(g => g.Id == goalId).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SaveWithRetryAsync_WhenNonConcurrencyDbUpdateException_PropagatesWithoutRetry()
+    {
+        var dbName = NewDbName();
+        Guid userId;
+
+        await using (var seed = CreateContext(dbName))
+        {
+            var seedUser = CreateFreeUser();
+            seed.Users.Add(seedUser);
+            await seed.SaveChangesAsync();
+            userId = seedUser.Id;
+        }
+
+        var interceptor = new NonConcurrencyFailureInterceptor();
+        await using var context = CreateContext(dbName, interceptor);
+        var userRepository = new GenericRepository<User>(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+
+        var mutateRuns = 0;
+        var act = async () => await ConcurrencyRetry.SaveWithRetryAsync(
+            unitOfWork,
+            async ct =>
+            {
+                mutateRuns++;
+                var user = await userRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
+                user!.SetStreakState(7, 7, null);
+            },
+            CancellationToken.None);
+
+        (await act.Should().ThrowAsync<DbUpdateException>())
+            .Which.Should().NotBeOfType<DbUpdateConcurrencyException>();
+        interceptor.SaveAttempts.Should().Be(1);
+        mutateRuns.Should().Be(1);
+    }
+
     private static string NewDbName() => $"ConcurrencyRetryTests_{Guid.NewGuid()}";
 
     private static User CreateFreeUser()
@@ -336,6 +410,18 @@ public class ConcurrencyRetryTests
         {
             SaveAttempts++;
             throw new DbUpdateConcurrencyException("simulated stale token");
+        }
+    }
+
+    private sealed class NonConcurrencyFailureInterceptor : SaveChangesInterceptor
+    {
+        public int SaveAttempts { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            SaveAttempts++;
+            throw new DbUpdateException("simulated unique-constraint violation");
         }
     }
 }
