@@ -256,6 +256,31 @@ public class DuplicateHabitCommandHandlerTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_CompletionLogReadFilter_ExcludesLogsFromHabitsTheUserDoesNotOwn()
+    {
+        var original = Habit.Create(new HabitCreateParams(
+            UserId, "Buy hiking boots", null, null,
+            DueDate: new DateOnly(2026, 6, 1))).Value;
+        original.Log(new DateOnly(2026, 6, 2)).IsSuccess.Should().BeTrue();
+        SetupAllHabitsForUser(new List<Habit> { original });
+
+        Expression<Func<HabitLog, bool>>? readFilter = null;
+        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
+                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+            });
+
+        await _handler.Handle(new DuplicateHabitCommand(UserId, original.Id), CancellationToken.None);
+
+        readFilter.Should().NotBeNull();
+        var matches = readFilter!.Compile();
+        matches(HabitLog.Create(original.Id, new DateOnly(2026, 6, 2), 1)).Should().BeTrue("the user's own completion log is in scope");
+        matches(HabitLog.Create(Guid.NewGuid(), new DateOnly(2026, 6, 2), 1)).Should().BeFalse("a completion log for a habit the user does not own must be excluded");
+    }
+
     private void SetupAllHabitsForUser(List<Habit> habits)
     {
         _habitRepo.FindTrackedAsync(

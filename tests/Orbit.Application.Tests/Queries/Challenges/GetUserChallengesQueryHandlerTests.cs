@@ -115,6 +115,28 @@ public class GetUserChallengesQueryHandlerTests
     }
 
     [Fact]
+    public async Task ProgressReadFilter_CountsEveryParticipantHabitButExcludesUnlinkedHabits()
+    {
+        StubChallenges(BuildChallenge(ChallengeType.CoopGoal, target: 5, PeriodEnd));
+
+        Expression<Func<HabitLog, bool>>? readFilter = null;
+        _habitLogRepository.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
+                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+            });
+
+        await _handler.Handle(new GetUserChallengesQuery(_callerId), CancellationToken.None);
+
+        readFilter.Should().NotBeNull();
+        var matches = readFilter!.Compile();
+        matches(HabitLog.Create(_callerHabit, Today, 1)).Should().BeTrue("the caller's linked habit contributes to shared progress");
+        matches(HabitLog.Create(_memberHabit, Today, 1)).Should().BeTrue("every participant's linked habit contributes to shared progress");
+        matches(HabitLog.Create(Guid.NewGuid(), Today, 1)).Should().BeFalse("a habit linked to no participant must be excluded");
+    }
+
+    [Fact]
     public async Task OrdersActiveBeforeCompleted()
     {
         var active = BuildChallenge(ChallengeType.StreakTogether, target: null, periodEnd: null);

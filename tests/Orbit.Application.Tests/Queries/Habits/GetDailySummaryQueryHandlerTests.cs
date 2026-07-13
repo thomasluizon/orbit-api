@@ -191,6 +191,46 @@ public class GetDailySummaryQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_BadHabitSlipReadFilter_ExcludesLogsFromHabitsTheUserDoesNotOwn()
+    {
+        var user = CreateTestUser();
+        _payGate.CanUseDailySummary(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            UserId, "Skip Gym", FrequencyUnit.Day, 1, DueDate: Today, IsBadHabit: true)).Value;
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { badHabit }.AsReadOnly());
+
+        Expression<Func<HabitLog, bool>>? readFilter = null;
+        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                readFilter = call.Arg<Expression<Func<HabitLog, bool>>>();
+                return (IReadOnlyList<HabitLog>)new List<HabitLog>();
+            });
+
+        _summaryService.GenerateSummaryAsync(
+            Arg.Any<IEnumerable<Habit>>(),
+            Today, Today, Arg.Any<DateOnly>(), "en",
+            Arg.Any<TimeOnly?>(),
+            Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<Guid, DateOnly>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new DailySummaryContent("Summary", "")));
+
+        await _handler.Handle(new GetDailySummaryQuery(UserId, Today, Today, "en"), CancellationToken.None);
+
+        readFilter.Should().NotBeNull();
+        var matches = readFilter!.Compile();
+        matches(HabitLog.Create(badHabit.Id, Today.AddDays(-1), 1)).Should().BeTrue("the user's own bad-habit slip is in scope");
+        matches(HabitLog.Create(Guid.NewGuid(), Today.AddDays(-1), 1)).Should().BeFalse("a slip on a habit the user does not own must be excluded");
+    }
+
+    [Fact]
     public async Task Handle_NoBadHabits_SkipsSlipQueryAndPassesEmptyMap()
     {
         var user = CreateTestUser();

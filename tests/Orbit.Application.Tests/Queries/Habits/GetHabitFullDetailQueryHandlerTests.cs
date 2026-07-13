@@ -87,6 +87,22 @@ public class GetHabitFullDetailQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ForeignUserHabit_DoesNotQueryLogs()
+    {
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit>().AsReadOnly());
+
+        var result = await _handler.Handle(new GetHabitFullDetailQuery(Guid.NewGuid(), HabitId), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        await _habitLogRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_UserNotFound_ReturnsFailure()
     {
         var habit = CreateTestHabit();
