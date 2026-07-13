@@ -102,7 +102,7 @@ public class UserTests
     public void IsPro_LifetimePro_ReturnsTrue()
     {
         var user = CreateValidUser();
-        typeof(User).GetProperty("IsLifetimePro")!.SetValue(user, true);
+        user.GrantLifetimePro();
 
         user.IsPro.Should().BeTrue();
     }
@@ -431,13 +431,12 @@ public class UserTests
     public void IncrementAiMessageCount_PastReset_ResetsCounter()
     {
         var user = CreateValidUser();
-        user.IncrementAiMessageCount();
-        user.IncrementAiMessageCount();
+        var now = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        user.IncrementAiMessageCount(now);
+        user.IncrementAiMessageCount(now);
         user.AiMessagesUsedThisMonth.Should().Be(2);
 
-        typeof(User).GetProperty("AiMessagesResetAt")!.SetValue(user, DateTime.UtcNow.AddDays(-1));
-
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(now.AddDays(31));
 
         user.AiMessagesUsedThisMonth.Should().Be(1);
     }
@@ -446,15 +445,14 @@ public class UserTests
     public void IncrementAiMessageCount_PastReset_ZeroesAdRewardBonus()
     {
         var user = CreateValidUser();
+        var now = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        typeof(User).GetProperty("AiMessagesResetAt")!.SetValue(user, DateTime.UtcNow.AddDays(30));
-        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), bonusMessages: 5);
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(now);
+        user.GrantAdReward(DateOnly.FromDateTime(now), bonusMessages: 5);
+        user.IncrementAiMessageCount(now);
         user.AdRewardBonusMessages.Should().Be(5);
 
-        typeof(User).GetProperty("AiMessagesResetAt")!.SetValue(user, DateTime.UtcNow.AddDays(-1));
-
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(now.AddDays(31));
 
         user.AiMessagesUsedThisMonth.Should().Be(1);
         user.AdRewardBonusMessages.Should().Be(0);
@@ -908,7 +906,7 @@ public class UserTests
     public void Deactivate_ClearsGoogleCalendarConnection()
     {
         var user = CreateValidUser();
-        typeof(User).GetProperty(nameof(User.IsLifetimePro))!.SetValue(user, true);
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
         user.SetGoogleTokens("access-token", "refresh-token");
         user.EnableCalendarAutoSync().IsSuccess.Should().BeTrue();
 
