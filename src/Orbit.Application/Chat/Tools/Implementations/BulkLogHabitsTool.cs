@@ -35,25 +35,12 @@ public class BulkLogHabitsTool(
         required = new[] { "habit_ids" }
     };
 
-    public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
-    {
-        var (habitIds, parseError) = HabitToolHelpers.ParseHabitIds(args);
-        if (parseError is not null)
-            return parseError;
-
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
-        var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
-
-        var loggedNames = await HabitToolHelpers.ApplyToHabitsAsync(
-            habitRepository, userId, habitIds,
-            habit => TryLogHabit(habit, targetDate, ct),
+    public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
+        HabitToolHelpers.RunBulkHabitActionAsync(
+            habitRepository, userDateService, args, userId,
+            "No habits were logged. They may already be completed or not found.",
+            (habit, targetDate, _) => TryLogHabit(habit, targetDate, ct),
             ct);
-
-        if (loggedNames.Count == 0)
-            return new ToolResult(false, Error: "No habits were logged. They may already be completed or not found.");
-
-        return new ToolResult(true, EntityName: string.Join(", ", loggedNames));
-    }
 
     private async Task<bool> TryLogHabit(Habit habit, DateOnly targetDate, CancellationToken ct)
     {

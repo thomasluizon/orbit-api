@@ -33,7 +33,7 @@ internal static class HabitToolHelpers
             h => h.Id == habitId && h.UserId == userId,
             cancellationToken: ct);
 
-    public static (List<Guid> HabitIds, ToolResult? Error) ParseHabitIds(JsonElement args)
+    private static (List<Guid> HabitIds, ToolResult? Error) ParseHabitIds(JsonElement args)
     {
         if (!args.TryGetProperty("habit_ids", out var idsEl) || idsEl.ValueKind != JsonValueKind.Array)
             return (new List<Guid>(), new ToolResult(false, Error: "habit_ids is required and must be an array of GUIDs."));
@@ -52,16 +52,27 @@ internal static class HabitToolHelpers
     }
 
     /// <summary>
-    /// Loads the requested habits (with their logs) for the user, applies <paramref name="tryApply"/>
-    /// to each in request order, and returns the titles of the habits the action succeeded on.
+    /// Runs a bulk habit action end to end: parses <c>habit_ids</c>, resolves the target date, loads the
+    /// requested habits with their logs, applies <paramref name="tryApply"/> (given the habit, target date,
+    /// and today) to each in request order, and returns a result naming the habits the action succeeded on,
+    /// or <paramref name="noneAppliedError"/> when none did.
     /// </summary>
-    public static async Task<List<string>> ApplyToHabitsAsync(
+    public static async Task<ToolResult> RunBulkHabitActionAsync(
         IGenericRepository<Habit> habitRepository,
+        IUserDateService userDateService,
+        JsonElement args,
         Guid userId,
-        List<Guid> habitIds,
-        Func<Habit, Task<bool>> tryApply,
+        string noneAppliedError,
+        Func<Habit, DateOnly, DateOnly, Task<bool>> tryApply,
         CancellationToken ct)
     {
+        var (habitIds, parseError) = ParseHabitIds(args);
+        if (parseError is not null)
+            return parseError;
+
+        var today = await userDateService.GetUserTodayAsync(userId, ct);
+        var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
+
         var habits = await habitRepository.FindTrackedAsync(
             h => habitIds.Contains(h.Id) && h.UserId == userId,
             q => q.Include(h => h.Logs),
@@ -71,11 +82,14 @@ internal static class HabitToolHelpers
         foreach (var habitId in habitIds)
         {
             var habit = habits.FirstOrDefault(h => h.Id == habitId);
-            if (habit is not null && await tryApply(habit))
+            if (habit is not null && await tryApply(habit, targetDate, today))
                 appliedTitles.Add(habit.Title);
         }
 
-        return appliedTitles;
+        if (appliedTitles.Count == 0)
+            return new ToolResult(false, Error: noneAppliedError);
+
+        return new ToolResult(true, EntityName: string.Join(", ", appliedTitles));
     }
 
     /// <summary>

@@ -38,23 +38,13 @@ public class BulkSkipHabitsTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        var (habitIds, parseError) = HabitToolHelpers.ParseHabitIds(args);
-        if (parseError is not null)
-            return parseError;
-
-        var today = await userDateService.GetUserTodayAsync(userId, ct);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, ct);
-        var targetDate = JsonArgumentParser.ParseDateOnly(args, "date") ?? today;
 
-        var skippedNames = await HabitToolHelpers.ApplyToHabitsAsync(
-            habitRepository, userId, habitIds,
-            habit => TrySkipHabit(habit, targetDate, today, weekStartDay, ct),
+        return await HabitToolHelpers.RunBulkHabitActionAsync(
+            habitRepository, userDateService, args, userId,
+            "No habits were skipped. They may be completed, not yet due, or not found.",
+            (habit, targetDate, today) => TrySkipHabit(habit, targetDate, today, weekStartDay, ct),
             ct);
-
-        if (skippedNames.Count == 0)
-            return new ToolResult(false, Error: "No habits were skipped. They may be completed, not yet due, or not found.");
-
-        return new ToolResult(true, EntityName: string.Join(", ", skippedNames));
     }
 
     private async Task<bool> TrySkipHabit(Habit habit, DateOnly targetDate, DateOnly today, int weekStartDay, CancellationToken ct)
