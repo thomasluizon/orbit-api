@@ -12,8 +12,18 @@ public class Report : Entity
     public Guid? CheerId { get; private set; }
     public ReportStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
-    // EF Core unmaps read-only auto-properties (would DropColumn); keep the private setter so this column stays mapped. https://github.com/thomasluizon/orbit-api/pull/389
-    public DateTime? ReviewedAtUtc { get; private set; }
+
+#pragma warning disable CS0649 // EF writes this backing field via reflection on materialization; there is no C# writer, which is what removes the S1144 unused-private-setter finding. https://github.com/thomasluizon/orbit-api/pull/390
+    private DateTime? _reviewedAtUtc;
+#pragma warning restore CS0649
+
+    /// <summary>
+    /// UTC instant an admin reviewed this report; null until reviewed. Exposed as a read-only
+    /// property over an explicitly-mapped backing field (see ConfigureReportEntity) so the column
+    /// stays mapped without a private setter -- read-only auto-properties get dropped by EF
+    /// convention. https://github.com/thomasluizon/orbit-api/pull/390
+    /// </summary>
+    public DateTime? ReviewedAtUtc => _reviewedAtUtc;
 
     private Report() { }
 

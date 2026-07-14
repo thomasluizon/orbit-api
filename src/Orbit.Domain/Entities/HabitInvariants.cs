@@ -74,6 +74,17 @@ internal static class HabitInvariants
         return null;
     }
 
+    public static AppError? ValidateReminderTimes(IReadOnlyList<int>? reminderTimes)
+    {
+        if (reminderTimes is null)
+            return null;
+
+        if (reminderTimes.Count > DomainConstants.MaxReminderTimes)
+            return DomainErrors.MaxReminderTimes.Format(DomainConstants.MaxReminderTimes);
+
+        return null;
+    }
+
     public static AppError? ValidateEmoji(string? emoji)
     {
         if (emoji is null)

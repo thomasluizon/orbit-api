@@ -18,8 +18,18 @@ public class PendingClarification : Entity
     public string QuickActionsJson { get; private set; } = "[]";
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
-    // EF Core unmaps read-only auto-properties (would DropColumn); keep the private setter so this column stays mapped. https://github.com/thomasluizon/orbit-api/pull/389
-    public DateTime? ResolvedAtUtc { get; private set; }
+
+#pragma warning disable CS0649 // Written only at the SQL layer via ExecuteUpdate and read back via reflection on materialization; there is no C# writer, which is what removes the S1144 unused-private-setter finding. https://github.com/thomasluizon/orbit-api/pull/390
+    private DateTime? _resolvedAtUtc;
+#pragma warning restore CS0649
+
+    /// <summary>
+    /// UTC instant this clarification was resolved; null while still open. Exposed as a read-only
+    /// property over an explicitly-mapped backing field (see ConfigurePendingClarificationEntity) so
+    /// the column stays mapped without a private setter -- read-only auto-properties get dropped by
+    /// EF convention. The one-shot resolve flips it atomically via ExecuteUpdate. https://github.com/thomasluizon/orbit-api/pull/390
+    /// </summary>
+    public DateTime? ResolvedAtUtc => _resolvedAtUtc;
 
     private PendingClarification() { }
 
