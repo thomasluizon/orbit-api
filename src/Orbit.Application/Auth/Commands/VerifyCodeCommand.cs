@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
@@ -90,43 +89,10 @@ public partial class VerifyCodeCommandHandler(
 
     private static string FailedAttemptCacheKey(string email) => $"verify-attempts:{email}";
 
-    private async Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
-        string email, string language, CancellationToken cancellationToken)
-    {
-        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-            u => u.Email == email,
-            cancellationToken);
-
-        if (user is not null)
-            return Result.Success((user, false));
-
-        var namePart = email.Split('@')[0];
-        var createResult = User.Create(namePart, email);
-        if (createResult.IsFailure)
-            return createResult.PropagateError<(User, bool)>();
-
-        user = createResult.Value;
-        user.SetLanguage(language);
-        user.SeedDefaultHandle();
-        await userRepository.AddAsync(user, cancellationToken);
-
-        try
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
-        {
-            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-                u => u.Email == email,
-                cancellationToken);
-            if (raced is null)
-                throw;
-
-            return Result.Success((raced, false));
-        }
-
-        return Result.Success((user, true));
-    }
+    private Task<Result<(User User, bool IsNew)>> FindOrCreateUserAsync(
+        string email, string language, CancellationToken cancellationToken) =>
+        AuthUserProvisioning.FindOrCreateUserAsync(
+            userRepository, unitOfWork, email, email.Split('@')[0], language, cancellationToken);
 
     private async Task<bool> HandlePostLoginAsync(
         User user, bool isNewUser, VerifyCodeCommand request, CancellationToken cancellationToken)

@@ -91,7 +91,7 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         return action switch
         {
             "set_auto_sync" => await SetAutoSyncAsync(args, userId, ct),
-            "dismiss_import" => await ExecuteAsync(new DismissCalendarImportCommand(userId), userId, "Dismissed calendar import prompt", new { action }, ct),
+            "dismiss_import" => await ChatToolMediator.RunAsync(mediator, new DismissCalendarImportCommand(userId), userId, "Dismissed calendar import prompt", new { action }, ct),
             "dismiss_suggestion" => await DismissSuggestionAsync(args, userId, ct),
             "run_sync" => await RunSyncAsync(userId, ct),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
@@ -104,7 +104,8 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         if (!enabled.HasValue)
             return new ToolResult(false, Error: "enabled is required.");
 
-        return await ExecuteAsync(
+        return await ChatToolMediator.RunAsync(
+            mediator,
             new SetCalendarAutoSyncCommand(userId, enabled.Value),
             userId,
             enabled.Value ? "Calendar auto-sync enabled" : "Calendar auto-sync disabled",
@@ -118,7 +119,8 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         if (!Guid.TryParse(suggestionId, out var parsedId))
             return new ToolResult(false, Error: "suggestion_id must be a valid GUID.");
 
-        return await ExecuteAsync(
+        return await ChatToolMediator.RunAsync(
+            mediator,
             new DismissCalendarSuggestionCommand(userId, parsedId),
             parsedId,
             "Dismissed calendar sync suggestion",
@@ -132,13 +134,5 @@ public class ManageCalendarSyncTool(IMediator mediator) : IAiTool
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Calendar sync requested", Payload: result.Value)
             : ToolResult.FromFailure(result, userId.ToString());
-    }
-
-    private async Task<ToolResult> ExecuteAsync(IRequest<Result> command, Guid entityId, string entityName, object payload, CancellationToken ct)
-    {
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess
-            ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)
-            : ToolResult.FromFailure(result, entityId.ToString());
     }
 }

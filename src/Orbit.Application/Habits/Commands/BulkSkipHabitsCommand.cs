@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
@@ -9,11 +8,11 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
-public record BulkSkipItem(Guid HabitId, DateOnly? Date = null);
+public record BulkSkipItem(Guid HabitId, DateOnly? Date = null) : IBulkHabitItem;
 
 public record BulkSkipHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>;
+    IReadOnlyList<BulkSkipItem> Items) : IRequest<Result<BulkSkipResult>>, IBulkHabitCommand<BulkSkipItem>;
 
 public record BulkSkipResult(IReadOnlyList<BulkSkipItemResult> Results);
 
@@ -37,13 +36,8 @@ public class BulkSkipHabitsCommandHandler(
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
         var results = new List<BulkSkipItemResult>();
 
-        var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
-        var habits = await habitRepository.FindTrackedAsync(
-            h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)),
-            cancellationToken);
-        var habitMap = habits.ToDictionary(h => h.Id);
+        var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
+            habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
 
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {

@@ -1,7 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Auth.Queries;
@@ -100,40 +99,16 @@ public partial class GoogleAuthCommandHandler(
     {
         var email = rawEmail.Trim().ToLowerInvariant();
 
-        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-            u => u.Email == email,
-            cancellationToken);
+        var result = await AuthUserProvisioning.FindOrCreateUserAsync(
+            userRepository, unitOfWork, email, name, language, cancellationToken);
 
-        if (user is not null)
-            return Result.Success((user, false));
-
-        var createResult = User.Create(name, email);
-        if (createResult.IsFailure)
-            return createResult.PropagateError<(User, bool)>();
-
-        user = createResult.Value;
-        user.SetLanguage(language);
-        user.SeedDefaultHandle();
-        await userRepository.AddAsync(user, cancellationToken);
-
-        try
+        if (result.IsSuccess && result.Value.IsNew)
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (DbUniqueViolation.IsUniqueViolation(exception))
-        {
-            var raced = await userRepository.FindOneTrackedIgnoringFiltersAsync(
-                u => u.Email == email,
-                cancellationToken);
-            if (raced is null)
-                throw;
-
-            return Result.Success((raced, false));
+            var newUser = result.Value.User;
+            SendWelcomeEmailInBackground(newUser.Id, newUser.Email, newUser.Name, language);
         }
 
-        SendWelcomeEmailInBackground(user.Id, user.Email, user.Name, language);
-
-        return Result.Success((user, true));
+        return result;
     }
 
     private void SendWelcomeEmailInBackground(Guid userId, string email, string name, string language)

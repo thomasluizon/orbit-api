@@ -17,22 +17,14 @@ public class SkipHabitTool(
     public string Description =>
         "Skip a habit for a specific date (defaults to today). For recurring habits, advances the due date to the next scheduled occurrence. For one-time tasks, postpones to tomorrow. Does not log completion. Works on habits that are DUE or OVERDUE. Use when the user says 'skip', 'pass on', 'not today', 'postpone', or 'dismiss' for a habit.";
 
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new
-        {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to skip" },
-            date = new { type = JsonSchemaTypes.String, description = "ISO date (YYYY-MM-DD) to skip a specific instance. Defaults to today." }
-        },
-        required = new[] { "habit_id" }
-    };
+    public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
+        "ID of the habit to skip",
+        "ISO date (YYYY-MM-DD) to skip a specific instance. Defaults to today.");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        if (!args.TryGetProperty("habit_id", out var habitIdEl) ||
-            !Guid.TryParse(habitIdEl.GetString(), out var habitId))
-            return new ToolResult(false, Error: "habit_id is required and must be a valid GUID.");
+        if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
+            return HabitToolHelpers.InvalidHabitIdResult();
 
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == habitId && h.UserId == userId,
@@ -40,7 +32,7 @@ public class SkipHabitTool(
             ct);
 
         if (habit is null)
-            return new ToolResult(false, Error: $"Habit {habitId} not found.");
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
 
         if (habit.IsCompleted)
             return new ToolResult(false, Error: "Cannot skip a completed habit.");

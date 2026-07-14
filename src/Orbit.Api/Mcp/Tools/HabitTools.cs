@@ -401,42 +401,34 @@ public class HabitTools(IMediator mediator, IUserDateService userDateService, Mc
     }
 
     [McpServerTool(Name = "bulk_log_habits"), Description("Log multiple habits as completed at once.")]
-    public async Task<string> BulkLogHabits(
+    public Task<string> BulkLogHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs)")] string habitIds,
         [Description("Date to log for in YYYY-MM-DD format (defaults to today)")] string? date = null,
-        CancellationToken cancellationToken = default)
-    {
-        var ids = McpToolHelpers.ParseGuidCsv(habitIds);
-
-        var result = await executorBridge.ExecuteAsync(user, "bulk_log_habits", new
-        {
-            habit_ids = ids.Select(id => id.ToString()),
-            date
-        }, confirmationToken: null, cancellationToken);
-
-        return result.Succeeded
-            ? $"Bulk log: {ids.Count} habit(s) processed ({result.TargetName})"
-            : result.Message;
-    }
+        CancellationToken cancellationToken = default) =>
+        ExecuteBulkHabitOperationAsync(user, "bulk_log_habits", "Bulk log", habitIds, date, cancellationToken);
 
     [McpServerTool(Name = "bulk_skip_habits"), Description("Skip multiple habits at once.")]
-    public async Task<string> BulkSkipHabits(
+    public Task<string> BulkSkipHabits(
         ClaimsPrincipal user,
         [Description("Comma-separated habit IDs (GUIDs)")] string habitIds,
         [Description("Date to skip in YYYY-MM-DD format (defaults to today)")] string? date = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ExecuteBulkHabitOperationAsync(user, "bulk_skip_habits", "Bulk skip", habitIds, date, cancellationToken);
+
+    private async Task<string> ExecuteBulkHabitOperationAsync(
+        ClaimsPrincipal user, string operation, string resultLabel, string habitIds, string? date, CancellationToken cancellationToken)
     {
         var ids = McpToolHelpers.ParseGuidCsv(habitIds);
 
-        var result = await executorBridge.ExecuteAsync(user, "bulk_skip_habits", new
+        var result = await executorBridge.ExecuteAsync(user, operation, new
         {
             habit_ids = ids.Select(id => id.ToString()),
             date
         }, confirmationToken: null, cancellationToken);
 
         return result.Succeeded
-            ? $"Bulk skip: {ids.Count} habit(s) processed ({result.TargetName})"
+            ? $"{resultLabel}: {ids.Count} habit(s) processed ({result.TargetName})"
             : result.Message;
     }
 
