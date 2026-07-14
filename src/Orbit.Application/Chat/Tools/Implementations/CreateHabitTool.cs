@@ -186,20 +186,26 @@ public class CreateHabitTool(
             ?? (frequencyUnit is not null ? 1 : null);
         bool isBadHabit = JsonArgumentParser.GetOptionalBool(args, "is_bad_habit") ?? false;
 
+        var dueTime = JsonArgumentParser.ParseTimeOnly(args, "due_time");
+        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.Normalize(
+            dueTime,
+            JsonArgumentParser.ParseIntArray(args, "reminder_times"),
+            JsonArgumentParser.ParseScheduledReminders(args));
+
         return Habit.Create(new HabitCreateParams(
             userId, title, frequencyUnit, frequencyQuantity,
             JsonArgumentParser.ParseDateOnly(args, "due_date") ?? today,
             JsonArgumentParser.GetOptionalString(args, "description"),
             Days: JsonArgumentParser.ParseDays(args),
             IsBadHabit: isBadHabit,
-            DueTime: JsonArgumentParser.ParseTimeOnly(args, "due_time"),
+            DueTime: dueTime,
             ReminderEnabled: JsonArgumentParser.GetOptionalBool(args, "reminder_enabled") ?? false,
-            ReminderTimes: JsonArgumentParser.ParseIntArray(args, "reminder_times"),
+            ReminderTimes: reminderTimes,
             SlipAlertEnabled: JsonArgumentParser.GetOptionalBool(args, "slip_alert_enabled") ?? isBadHabit,
             ChecklistItems: JsonArgumentParser.ParseChecklistItems(args),
             IsFlexible: JsonArgumentParser.GetOptionalBool(args, "is_flexible") ?? false,
             EndDate: JsonArgumentParser.ParseDateOnly(args, "end_date"),
-            ScheduledReminders: JsonArgumentParser.ParseScheduledReminders(args),
+            ScheduledReminders: scheduledReminders,
             Emoji: JsonArgumentParser.GetOptionalString(args, "emoji")));
     }
 

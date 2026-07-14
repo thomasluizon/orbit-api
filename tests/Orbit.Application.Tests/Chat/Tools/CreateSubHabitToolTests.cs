@@ -139,6 +139,91 @@ public class CreateSubHabitToolTests
         result.Error.Should().Contain("parent_habit_id is required");
     }
 
+    [Fact]
+    public async Task DueTimedSubHabit_WithScheduledReminders_ConvertsToOffsetsAndClearsScheduledStore()
+    {
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Guid.NewGuid()));
+
+        var result = await Execute($$$"""
+        {
+            "parent_habit_id": "{{{ParentId}}}",
+            "title": "Warm up",
+            "due_time": "08:00",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "same_day", "time": "07:30"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd =>
+                cmd.Options != null &&
+                cmd.Options.ReminderTimes != null &&
+                cmd.Options.ReminderTimes.Contains(30) &&
+                cmd.Options.ScheduledReminders != null &&
+                cmd.Options.ScheduledReminders.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DueTimedSubHabit_WithDayBeforeScheduledReminder_ConvertsToCrossDayOffset()
+    {
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Guid.NewGuid()));
+
+        var result = await Execute($$$"""
+        {
+            "parent_habit_id": "{{{ParentId}}}",
+            "title": "Warm up",
+            "due_time": "08:00",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "day_before", "time": "20:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd =>
+                cmd.Options != null &&
+                cmd.Options.ReminderTimes != null &&
+                cmd.Options.ReminderTimes.Contains(720) &&
+                cmd.Options.ScheduledReminders != null &&
+                cmd.Options.ScheduledReminders.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NoDueTimeSubHabit_KeepsScheduledReminderStore()
+    {
+        _mediator.Send(Arg.Any<CreateSubHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(Guid.NewGuid()));
+
+        var result = await Execute($$$"""
+        {
+            "parent_habit_id": "{{{ParentId}}}",
+            "title": "Appointment",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "same_day", "time": "09:00"},
+                {"when": "day_before", "time": "18:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<CreateSubHabitCommand>(cmd =>
+                cmd.Options != null &&
+                cmd.Options.ScheduledReminders != null &&
+                cmd.Options.ScheduledReminders.Count == 2),
+            Arg.Any<CancellationToken>());
+    }
+
     private async Task<ToolResult> Execute(string json)
     {
         var args = JsonDocument.Parse(json).RootElement;

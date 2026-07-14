@@ -345,6 +345,74 @@ public class CreateHabitToolTests
     }
 
     [Fact]
+    public async Task WithDueTimeAndScheduledReminders_PersistsOffsetsAndEmptiesScheduledStore()
+    {
+        var result = await Execute("""
+        {
+            "title": "Standup",
+            "due_time": "08:00",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "same_day", "time": "07:30"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit =>
+                habit.Title == "Standup"
+                && habit.ReminderTimes.Contains(30)
+                && habit.ScheduledReminders.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WithDueTimeAndDayBeforeScheduledReminder_ConvertsToCrossDayOffset()
+    {
+        var result = await Execute("""
+        {
+            "title": "Standup",
+            "due_time": "08:00",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "day_before", "time": "20:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit =>
+                habit.Title == "Standup"
+                && habit.ReminderTimes.Contains(720)
+                && habit.ScheduledReminders.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WithoutDueTime_KeepsScheduledReminderStore()
+    {
+        var result = await Execute("""
+        {
+            "title": "Appointment",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "same_day", "time": "09:00"},
+                {"when": "day_before", "time": "20:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(habit =>
+                habit.Title == "Appointment"
+                && habit.ScheduledReminders.Count == 2),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task WithMultipleTagsAndGoals_CreatesAndAssignsAll()
     {
         _tagRepo.FindOneTrackedAsync(

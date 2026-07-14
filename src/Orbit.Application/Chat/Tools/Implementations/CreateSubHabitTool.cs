@@ -80,9 +80,11 @@ public class CreateSubHabitTool(
         var days = JsonArgumentParser.ParseDays(args);
         var (dueTime, dueEndTime) = ParseTimeOptions(args);
         var (isBadHabit, reminderEnabled, slipAlertEnabled, isFlexible) = ParseBooleanFlags(args);
-        var reminderTimes = JsonArgumentParser.ParseIntArray(args, "reminder_times");
         var dueDate = JsonArgumentParser.ParseDateOnly(args, "due_date");
-        var scheduledReminders = JsonArgumentParser.ParseScheduledReminders(args);
+        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.Normalize(
+            dueTime,
+            JsonArgumentParser.ParseIntArray(args, "reminder_times"),
+            JsonArgumentParser.ParseScheduledReminders(args));
         string? description = JsonArgumentParser.GetOptionalString(args, "description");
         string? emoji = JsonArgumentParser.GetOptionalString(args, "emoji");
 
