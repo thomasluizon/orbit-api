@@ -105,9 +105,7 @@ public class AcceptFriendRequestCommandHandler(
                 awardedAtUtc: DateTime.UtcNow, cancellationToken);
         }
 
-        var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-        if (newLevel.Level != user.Level)
-            user.SetLevel(newLevel.Level);
+        LevelDefinitions.SyncLevel(user);
     }
 
     private static Notification? BuildRequesterNotification(User? requester, User accepter)

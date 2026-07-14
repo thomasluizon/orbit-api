@@ -118,9 +118,7 @@ public class ChallengeProgressService(
                 user, newAchievements[0].Definition.XpReward, XpAwardSource.Achievement,
                 newAchievements[0].Entity.Id, awardedAtUtc: DateTime.UtcNow, cancellationToken);
 
-            var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-            if (newLevel.Level != user.Level)
-                user.SetLevel(newLevel.Level);
+            LevelDefinitions.SyncLevel(user);
         }
     }
 }

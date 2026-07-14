@@ -1,4 +1,5 @@
 using Orbit.Application.Gamification.Models;
+using Orbit.Domain.Entities;
 
 namespace Orbit.Application.Gamification;
 
@@ -70,6 +71,17 @@ public static class LevelDefinitions
         while (XpRequiredForLevel(level + 1) <= totalXp) level++;
         while (XpRequiredForLevel(level) > totalXp) level--;
         return new LevelDefinition(level, TitleForLevel(level), XpRequiredForLevel(level));
+    }
+
+    /// <summary>
+    /// Recomputes <paramref name="user"/>'s level from their current <see cref="User.TotalXp"/> and
+    /// applies it when it changed. The single level-sync every XP-awarding flow calls after granting XP.
+    /// </summary>
+    public static void SyncLevel(User user)
+    {
+        var newLevel = GetLevelForXp(user.TotalXp);
+        if (newLevel.Level != user.Level)
+            user.SetLevel(newLevel.Level);
     }
 
     /// <summary>
