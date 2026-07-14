@@ -13,6 +13,7 @@ public static class AppConstants
     public const int MaxTagsPerHabit = 5;
     public const int MaxUserFacts = 50;
     public const int MaxRangeDays = 366;
+    public const int MaxInstanceHorizonDays = 90;
     public const int HabitLogsLookbackDays = 365;
     public const int MaxHabitLogsReturned = 1000;
     public const int DefaultReminderMinutes = 15;
