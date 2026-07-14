@@ -91,6 +91,13 @@ jobs:
       #   Services/SlipAlertSchedulerService.cs           } sibling scheduled services already share ScheduledServiceBase; the residual
       #   Services/ProactiveCheckinSchedulerService.cs    } duplication is per-class [LoggerMessage] source-generator partial-method boilerplate
       #                                                     (Started/Stopped/Error), which the compiler requires to live in each class.
+      #   Accountability/Commands/AcceptAccountabilityPairCommand.cs } the shared level-sync tail is extracted to
+      #   Social/Commands/AcceptFriendRequestCommand.cs             } LevelDefinitions.SyncLevel; the residual is the
+      #                                                     BuildRequesterNotification parallel mirror — a null-guard + isPortuguese ternary skeleton
+      #                                                     emitting DISTINCT localized copy for two independent accept events in separate bounded
+      #                                                     contexts (accountability invite vs friend request). CPD normalizes the differing string
+      #                                                     literals so the skeletons match; a shared builder would couple the two contexts and leave
+      #                                                     CPD-flagged per-event title/body ternaries at each call site without improving readability.
       - name: SonarScanner Begin
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -101,7 +108,7 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**" \
-            /d:sonar.cpd.exclusions="**/Chat/Tools/Implementations/CreateHabitTool.cs,**/Chat/Tools/Implementations/UpdateHabitTool.cs,**/Services/AgentCatalogService.UserDataCatalog.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/ProactiveCheckinSchedulerService.cs" \
+            /d:sonar.cpd.exclusions="**/Chat/Tools/Implementations/CreateHabitTool.cs,**/Chat/Tools/Implementations/UpdateHabitTool.cs,**/Services/AgentCatalogService.UserDataCatalog.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/ProactiveCheckinSchedulerService.cs,**/Accountability/Commands/AcceptAccountabilityPairCommand.cs,**/Social/Commands/AcceptFriendRequestCommand.cs" \
             /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/Services/StripeBillingService.cs,**/Services/GooglePlayBillingService.cs,**/Services/Calendar/**,**/AI/AiCompletionClient.cs,**/AI/AiBatchClient.cs,**/AI/AudioTranscriptionService.cs,**/Services/GeoLocationService.cs,**/BackgroundJobs/HangfireRecurringJobRegistrar.cs,**/Orbit.Analyzers/**,**/Orbit.Analyzers.CodeFixes/**,**/.github/**"
 
       - name: Build

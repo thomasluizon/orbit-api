@@ -39,17 +39,7 @@ public static class HabitScheduleService
 
         if (target < anchor) return false;
 
-        if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
-            return false;
-
-        return unit switch
-        {
-            FrequencyUnit.Day => qty == 1 || TrueMod(target.DayNumber - anchor.DayNumber, qty) == 0,
-            FrequencyUnit.Week => target.DayOfWeek == anchor.DayOfWeek && TrueMod(WeekDiff(target, anchor), qty) == 0,
-            FrequencyUnit.Month => IsMonthlyMatch(target, anchor, qty),
-            FrequencyUnit.Year => IsYearlyMatch(target, anchor, qty),
-            _ => false
-        };
+        return MatchesFrequency(habit, target, anchor, unit, qty);
     }
 
     /// <summary>
@@ -239,17 +229,7 @@ public static class HabitScheduleService
 
         if (target < habitCreationDate) return false;
 
-        if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
-            return false;
-
-        return unit switch
-        {
-            FrequencyUnit.Day => qty == 1 || TrueMod(target.DayNumber - anchor.DayNumber, qty) == 0,
-            FrequencyUnit.Week => target.DayOfWeek == anchor.DayOfWeek && TrueMod(WeekDiff(target, anchor), qty) == 0,
-            FrequencyUnit.Month => IsMonthlyMatch(target, anchor, qty),
-            FrequencyUnit.Year => IsYearlyMatch(target, anchor, qty),
-            _ => false
-        };
+        return MatchesFrequency(habit, target, anchor, unit, qty);
     }
 
     private static List<DateOnly> GetHistoricalScheduledDates(
@@ -509,6 +489,27 @@ public static class HabitScheduleService
                 habit.CatchUpDueDate(today);
             await unitOfWork.SaveChangesAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// The schedule tail shared by <see cref="IsHabitDueOnDate"/> and
+    /// <see cref="IsHabitHistoricallyDueOnDate"/>: applies the active-days filter, then resolves the
+    /// frequency-unit modulo against <paramref name="anchor"/>. Both callers reach this only after
+    /// establishing a non-null <paramref name="unit"/> and their own earliest-date gate.
+    /// </summary>
+    private static bool MatchesFrequency(Habit habit, DateOnly target, DateOnly anchor, FrequencyUnit? unit, int qty)
+    {
+        if (habit.Days.Count > 0 && !habit.Days.Contains(target.DayOfWeek))
+            return false;
+
+        return unit switch
+        {
+            FrequencyUnit.Day => qty == 1 || TrueMod(target.DayNumber - anchor.DayNumber, qty) == 0,
+            FrequencyUnit.Week => target.DayOfWeek == anchor.DayOfWeek && TrueMod(WeekDiff(target, anchor), qty) == 0,
+            FrequencyUnit.Month => IsMonthlyMatch(target, anchor, qty),
+            FrequencyUnit.Year => IsYearlyMatch(target, anchor, qty),
+            _ => false
+        };
     }
 
     /// <summary>

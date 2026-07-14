@@ -180,7 +180,7 @@ public partial class GamificationService(
 
         await PersistNewAchievementsAsync(user, newAchievements, ct);
 
-        UpdateLevel(user);
+        LevelDefinitions.SyncLevel(user);
 
         foreach (var (_, definition) in newAchievements)
             await QueueAchievementNotification(user.Id, definition, user.Language, pushes, ct);
@@ -361,7 +361,7 @@ public partial class GamificationService(
 
         await PersistNewAchievementsAsync(user, newAchievements, ct);
 
-        UpdateLevel(user);
+        LevelDefinitions.SyncLevel(user);
 
         foreach (var (_, definition) in newAchievements)
             await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
@@ -443,7 +443,7 @@ public partial class GamificationService(
 
         await PersistNewAchievementsAsync(user, newAchievements, ct);
 
-        UpdateLevel(user);
+        LevelDefinitions.SyncLevel(user);
 
         foreach (var (_, definition) in newAchievements)
             await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
@@ -510,7 +510,7 @@ public partial class GamificationService(
 
         await PersistNewAchievementsAsync(user, newAchievements, ct);
 
-        UpdateLevel(user);
+        LevelDefinitions.SyncLevel(user);
 
         foreach (var (_, definition) in newAchievements)
             await QueueAchievementNotification(userId, definition, user.Language, pushes, ct);
@@ -540,13 +540,6 @@ public partial class GamificationService(
         if (user.HasProAccess) return true;
         var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(user.Id, ct);
         return enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
-    }
-
-    private static void UpdateLevel(User user)
-    {
-        var newLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
-        if (newLevel.Level != user.Level)
-            user.SetLevel(newLevel.Level);
     }
 
     private Task AwardXpAsync(
