@@ -4,6 +4,21 @@ namespace Orbit.Domain.Models;
 
 public record AiToolCall(string Name, string Id, JsonElement Args);
 
+/// <summary>
+/// A single tool-enabled AI turn: the user message, system prompt, and tool declarations plus the
+/// optional per-request routing (<see cref="UserId"/>), multimodal (<see cref="ImageData"/> /
+/// <see cref="ImageMimeType"/>), and prior <see cref="History"/> inputs. Bundled so the streaming
+/// sink and cancellation token stay as the only standalone arguments to SendWithToolsAsync.
+/// </summary>
+public sealed record AiToolRequest(
+    string UserMessage,
+    string SystemPrompt,
+    IReadOnlyList<object> ToolDeclarations,
+    Guid UserId = default,
+    byte[]? ImageData = null,
+    string? ImageMimeType = null,
+    IReadOnlyList<ChatHistoryMessage>? History = null);
+
 public record AiToolCallResult(
     string Name,
     string Id,

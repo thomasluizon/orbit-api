@@ -79,14 +79,14 @@ public partial class AgentOperationExecutor(
         var summary = $"{execution.Operation.DisplayName} requires a direct client flow.";
 
         await TryAuditAsync(
-            CreateAuditContext(
+            new AuditContext(
                 execution.Request,
                 execution.Capability,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Denied,
                 summary,
                 RedactArguments(execution.Arguments),
-                error: "direct_user_flow_required"),
+                Error: "direct_user_flow_required"),
             cancellationToken);
 
         return DeniedResponse(execution, summary, "direct_user_flow_required", "direct_user_flow_required");
@@ -98,14 +98,14 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         await TryAuditAsync(
-            CreateAuditContext(
+            new AuditContext(
                 execution.Request,
                 execution.Capability,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Denied,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                error: denialReason),
+                Error: denialReason),
             cancellationToken);
 
         return DeniedResponse(execution, execution.Summary, denialReason, denialReason);
@@ -138,16 +138,16 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         await TryAuditAsync(
-            CreateAuditContext(
+            new AuditContext(
                 execution.Request,
                 execution.Capability,
                 AgentPolicyDecisionStatus.Denied,
                 AgentOperationStatus.Denied,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                error: policyDecision.Reason,
-                shadowPolicyDecision: policyDecision.ShadowStatus,
-                shadowReason: policyDecision.ShadowReason),
+                Error: policyDecision.Reason,
+                ShadowPolicyDecision: policyDecision.ShadowStatus,
+                ShadowReason: policyDecision.ShadowReason),
             cancellationToken);
 
         return DeniedResponse(execution, execution.Summary, policyDecision.Reason, policyDecision.Reason ?? "denied");
@@ -159,16 +159,16 @@ public partial class AgentOperationExecutor(
         CancellationToken cancellationToken)
     {
         await TryAuditAsync(
-            CreateAuditContext(
+            new AuditContext(
                 execution.Request,
                 execution.Capability,
                 AgentPolicyDecisionStatus.ConfirmationRequired,
                 AgentOperationStatus.PendingConfirmation,
                 execution.Summary,
                 RedactArguments(execution.Arguments),
-                error: policyDecision.Reason,
-                shadowPolicyDecision: policyDecision.ShadowStatus,
-                shadowReason: policyDecision.ShadowReason),
+                Error: policyDecision.Reason,
+                ShadowPolicyDecision: policyDecision.ShadowStatus,
+                ShadowReason: policyDecision.ShadowReason),
             cancellationToken);
 
         return AgentOperationResponseFactory.ConfirmationRequired(
@@ -194,16 +194,16 @@ public partial class AgentOperationExecutor(
         catch (Exception ex)
         {
             await TryAuditAsync(
-                CreateAuditContext(
+                new AuditContext(
                     execution.Request,
                     execution.Capability,
                     AgentPolicyDecisionStatus.Allowed,
                     AgentOperationStatus.Failed,
                     execution.Summary,
                     RedactArguments(execution.Arguments),
-                    error: ex.Message,
-                    shadowPolicyDecision: policyDecision.ShadowStatus,
-                    shadowReason: policyDecision.ShadowReason),
+                    Error: ex.Message,
+                    ShadowPolicyDecision: policyDecision.ShadowStatus,
+                    ShadowReason: policyDecision.ShadowReason),
                 cancellationToken);
 
             return AgentOperationResponseFactory.Failed(
@@ -252,7 +252,7 @@ public partial class AgentOperationExecutor(
             outcomeStatus = isPayGateDenial ? AgentOperationStatus.Denied : AgentOperationStatus.Failed;
 
         await TryAuditAsync(
-            CreateAuditContext(
+            new AuditContext(
                 execution.Request,
                 execution.Capability,
                 AgentPolicyDecisionStatus.Allowed,
@@ -305,33 +305,6 @@ public partial class AgentOperationExecutor(
             .ToList();
     }
 
-    private static AuditContext CreateAuditContext(
-        AgentExecuteOperationRequest request,
-        AgentCapability capability,
-        AgentPolicyDecisionStatus policyDecision,
-        AgentOperationStatus outcomeStatus,
-        string summary,
-        string? redactedArguments,
-        string? targetId = null,
-        string? targetName = null,
-        string? error = null,
-        AgentPolicyDecisionStatus? shadowPolicyDecision = null,
-        string? shadowReason = null)
-    {
-        return new AuditContext(
-            request,
-            capability,
-            policyDecision,
-            outcomeStatus,
-            summary,
-            redactedArguments,
-            targetId,
-            targetName,
-            error,
-            shadowPolicyDecision,
-            shadowReason);
-    }
-
     private async Task TryAuditAsync(
         AuditContext context,
         CancellationToken cancellationToken)
@@ -382,9 +355,9 @@ public partial class AgentOperationExecutor(
         AgentOperationStatus OutcomeStatus,
         string Summary,
         string? RedactedArguments,
-        string? TargetId,
-        string? TargetName,
-        string? Error,
-        AgentPolicyDecisionStatus? ShadowPolicyDecision,
-        string? ShadowReason);
+        string? TargetId = null,
+        string? TargetName = null,
+        string? Error = null,
+        AgentPolicyDecisionStatus? ShadowPolicyDecision = null,
+        string? ShadowReason = null);
 }

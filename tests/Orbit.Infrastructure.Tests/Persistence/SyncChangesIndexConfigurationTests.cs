@@ -24,15 +24,19 @@ public class SyncChangesIndexConfigurationTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    private static readonly string[] UserIdUpdatedAtColumns = ["UserId", "UpdatedAtUtc"];
+    private static readonly string[] HabitIdUpdatedAtColumns = ["HabitId", "UpdatedAtUtc"];
+    private static readonly string[] GoalIdUpdatedAtColumns = ["GoalId", "UpdatedAtUtc"];
+
     public static TheoryData<Type, string[]> ChangeQueryIndexCases() => new()
     {
-        { typeof(Habit), new[] { "UserId", "UpdatedAtUtc" } },
-        { typeof(HabitLog), new[] { "HabitId", "UpdatedAtUtc" } },
-        { typeof(Goal), new[] { "UserId", "UpdatedAtUtc" } },
-        { typeof(GoalProgressLog), new[] { "GoalId", "UpdatedAtUtc" } },
-        { typeof(Tag), new[] { "UserId", "UpdatedAtUtc" } },
-        { typeof(Notification), new[] { "UserId", "UpdatedAtUtc" } },
-        { typeof(ChecklistTemplate), new[] { "UserId", "UpdatedAtUtc" } },
+        { typeof(Habit), UserIdUpdatedAtColumns },
+        { typeof(HabitLog), HabitIdUpdatedAtColumns },
+        { typeof(Goal), UserIdUpdatedAtColumns },
+        { typeof(GoalProgressLog), GoalIdUpdatedAtColumns },
+        { typeof(Tag), UserIdUpdatedAtColumns },
+        { typeof(Notification), UserIdUpdatedAtColumns },
+        { typeof(ChecklistTemplate), UserIdUpdatedAtColumns },
     };
 
     [Theory]

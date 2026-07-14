@@ -26,16 +26,12 @@ public sealed partial class AiIntentService(
     };
 
     public async Task<Result<AiResponse>> SendWithToolsAsync(
-        string userMessage,
-        string systemPrompt,
-        IReadOnlyList<object> toolDeclarations,
-        Guid userId = default,
-        byte[]? imageData = null,
-        string? imageMimeType = null,
-        IReadOnlyList<ChatHistoryMessage>? history = null,
+        AiToolRequest request,
         Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default)
     {
+        var (userMessage, systemPrompt, toolDeclarations, userId, imageData, imageMimeType, history) = request;
+
         var messages = new List<ChatMessage>
         {
             new SystemChatMessage(systemPrompt)
@@ -236,7 +232,7 @@ public sealed partial class AiIntentService(
         System.Diagnostics.Stopwatch stopwatch,
         bool firstTokenLogged)
     {
-        foreach (var part in update.ContentUpdate.Where(part => !string.IsNullOrEmpty(part.Text)))
+        foreach (var text in update.ContentUpdate.Select(part => part.Text).Where(text => !string.IsNullOrEmpty(text)))
         {
             if (!firstTokenLogged)
             {
@@ -244,8 +240,8 @@ public sealed partial class AiIntentService(
                 LogFirstContentToken(logger, stopwatch.ElapsedMilliseconds);
             }
 
-            contentBuilder.Append(part.Text);
-            await streamSink(AiStreamEvent.Delta(part.Text));
+            contentBuilder.Append(text);
+            await streamSink(AiStreamEvent.Delta(text));
         }
 
         return firstTokenLogged;

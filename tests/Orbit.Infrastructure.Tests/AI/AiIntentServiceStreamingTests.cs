@@ -24,7 +24,7 @@ public class AiIntentServiceStreamingTests
         var body = RoleChunk() + ContentChunk("Hel") + ContentChunk("lo!") + FinishChunk("stop") + Done();
         var (service, sink) = BuildService(new SseHandler(body));
 
-        var result = await service.SendWithToolsAsync("hello", "system", [], streamSink: sink.Handle);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TextMessage.Should().Be("Hello!");
@@ -45,7 +45,7 @@ public class AiIntentServiceStreamingTests
             + Done();
         var (service, sink) = BuildService(new SseHandler(body));
 
-        var result = await service.SendWithToolsAsync("create it", "system", [], streamSink: sink.Handle);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("create it", "system", []), streamSink: sink.Handle);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.HasToolCalls.Should().BeTrue();
@@ -68,7 +68,7 @@ public class AiIntentServiceStreamingTests
             + Done();
         var (service, sink) = BuildService(new SseHandler(body));
 
-        var result = await service.SendWithToolsAsync("check goals", "system", [], streamSink: sink.Handle);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("check goals", "system", []), streamSink: sink.Handle);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.HasToolCalls.Should().BeTrue();
@@ -83,7 +83,7 @@ public class AiIntentServiceStreamingTests
         var prefix = RoleChunk() + ContentChunk("Hel");
         var (service, sink) = BuildService(new DroppingHandler(prefix));
 
-        var result = await service.SendWithToolsAsync("hello", "system", [], streamSink: sink.Handle);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("AI service temporarily unavailable");
@@ -100,7 +100,7 @@ public class AiIntentServiceStreamingTests
         var handler = new JsonHandler(completion);
         var (service, sink) = BuildService(handler);
 
-        var result = await service.SendWithToolsAsync("hello", "system", []);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TextMessage.Should().Be("Hi there");
@@ -118,7 +118,7 @@ public class AiIntentServiceStreamingTests
             """;
         var (service, logger) = BuildServiceWithRecordingLogger(new JsonHandler(completion));
 
-        var result = await service.SendWithToolsAsync("hello", "system", []);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TextMessage.Should().Be("partial list");
@@ -132,7 +132,7 @@ public class AiIntentServiceStreamingTests
         var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body));
         var sink = new CollectingSink();
 
-        var result = await service.SendWithToolsAsync("hello", "system", [], streamSink: sink.Handle);
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", []), streamSink: sink.Handle);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.TextMessage.Should().Be("partial");
@@ -147,7 +147,7 @@ public class AiIntentServiceStreamingTests
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
-        await service.SendWithToolsAsync("hello", "system", [], userId);
+        await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
 
         handler.LastRequestBody.Should().Contain(userId.ToString("N"));
     }
@@ -159,7 +159,7 @@ public class AiIntentServiceStreamingTests
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
 
-        await service.SendWithToolsAsync("hello", "system", [], Guid.NewGuid(), history: BuildHistory(40));
+        await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(40)));
 
         handler.RequestCount.Should().Be(1);
     }
@@ -171,7 +171,7 @@ public class AiIntentServiceStreamingTests
         var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
         var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
 
-        await service.SendWithToolsAsync("hello", "system", [], Guid.NewGuid(), history: BuildHistory(50));
+        await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
         handler.RequestCount.Should().Be(2);
     }

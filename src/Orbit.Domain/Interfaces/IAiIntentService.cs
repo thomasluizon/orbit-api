@@ -6,13 +6,7 @@ namespace Orbit.Domain.Interfaces;
 public interface IAiIntentService
 {
     Task<Result<AiResponse>> SendWithToolsAsync(
-        string userMessage,
-        string systemPrompt,
-        IReadOnlyList<object> toolDeclarations,
-        Guid userId = default,
-        byte[]? imageData = null,
-        string? imageMimeType = null,
-        IReadOnlyList<ChatHistoryMessage>? history = null,
+        AiToolRequest request,
         Func<AiStreamEvent, Task>? streamSink = null,
         CancellationToken cancellationToken = default);
 

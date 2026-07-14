@@ -22,18 +22,20 @@ public class ScheduledJobRegistryTests
 {
     private static readonly IConfiguration EmptyConfiguration = new ConfigurationBuilder().Build();
 
-    public static TheoryData<IScheduledJob> AllScheduledJobs()
+    public static TheoryData<Type> AllScheduledJobTypes()
     {
-        var data = new TheoryData<IScheduledJob>();
+        var data = new TheoryData<Type>();
         foreach (var job in BuildAll())
-            data.Add(job);
+            data.Add(job.GetType());
         return data;
     }
 
     [Theory]
-    [MemberData(nameof(AllScheduledJobs))]
-    public void Job_HasNameAndCronExpression(IScheduledJob job)
+    [MemberData(nameof(AllScheduledJobTypes))]
+    public void Job_HasNameAndCronExpression(Type jobType)
     {
+        var job = BuildAll().Single(scheduledJob => scheduledJob.GetType() == jobType);
+
         job.Name.Should().NotBeNullOrWhiteSpace();
         job.CronExpression.Should().NotBeNullOrWhiteSpace();
     }
