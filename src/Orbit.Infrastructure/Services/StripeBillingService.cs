@@ -75,8 +75,10 @@ public sealed partial class StripeBillingService(
                 options.AllowPromotionCodes = true;
             }
 
+            var idempotencyKey = $"orbit-checkout-{Guid.NewGuid():N}";
             var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
-                () => clients.CheckoutSessions.CreateAsync(options, cancellationToken: cancellationToken),
+                () => clients.CheckoutSessions.CreateAsync(
+                    options, new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken),
                 cancellationToken);
             return session.Url;
         }
@@ -90,12 +92,13 @@ public sealed partial class StripeBillingService(
     {
         try
         {
+            var idempotencyKey = $"orbit-portal-{Guid.NewGuid():N}";
             var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
                 () => clients.PortalSessions.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
                 {
                     Customer = customerId,
                     ReturnUrl = returnUrl,
-                }, cancellationToken: cancellationToken),
+                }, new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken),
                 cancellationToken);
             return session.Url;
         }
