@@ -801,6 +801,32 @@ public class HabitScheduleServiceTests
     }
 
     [Fact]
+    public void GetInstances_RangeExceedingHorizon_CapsForwardWindow()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        var dateTo = Anchor.AddDays(200);
+
+        var instances = HabitScheduleService.GetInstances(habit, Anchor, dateTo, Anchor);
+
+        var horizonEnd = Anchor.AddDays(Orbit.Application.Common.AppConstants.MaxInstanceHorizonDays);
+        instances.Should().HaveCount(Orbit.Application.Common.AppConstants.MaxInstanceHorizonDays + 1);
+        instances.Should().OnlyContain(i => i.Date <= horizonEnd);
+        instances[^1].Date.Should().Be(horizonEnd);
+    }
+
+    [Fact]
+    public void GetInstances_RangeWithinHorizon_ReturnsEveryScheduledDate()
+    {
+        var habit = CreateHabit(FrequencyUnit.Day, 1, dueDate: Anchor);
+        var dateTo = Anchor.AddDays(30);
+
+        var instances = HabitScheduleService.GetInstances(habit, Anchor, dateTo, Anchor);
+
+        instances.Should().HaveCount(31);
+        instances[^1].Date.Should().Be(dateTo);
+    }
+
+    [Fact]
     public void GetSkippedInWindow_CountsOnlySkipLogs()
     {
         var monday = new DateOnly(2025, 1, 6);

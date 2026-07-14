@@ -400,6 +400,10 @@ public static class HabitScheduleService
     /// <summary>
     /// Computes per-date instances for a habit within a date range, including an overdue lookback window.
     /// Each instance has its own status (Pending, Completed, Overdue) based on logs and the user's today.
+    /// The forward horizon is capped at <see cref="AppConstants.MaxInstanceHorizonDays"/> days from
+    /// <paramref name="dateFrom"/> so the array stays bounded when a caller requests the full allowed
+    /// range (the schedule query permits up to <see cref="AppConstants.MaxRangeDays"/> days); the cap
+    /// exceeds every real caller's window (calendar-month ≤ 62 days, schedule interval ≤ 14 days).
     /// </summary>
     public static List<HabitInstanceItem> GetInstances(
         Habit habit,
@@ -410,6 +414,9 @@ public static class HabitScheduleService
     {
         if (habit.IsCompleted || habit.IsFlexible)
             return [];
+
+        if (dateTo.DayNumber - dateFrom.DayNumber > AppConstants.MaxInstanceHorizonDays)
+            dateTo = dateFrom.AddDays(AppConstants.MaxInstanceHorizonDays);
 
         if (habit.FrequencyUnit is null)
             return GetOneTimeTaskInstance(habit, dateFrom, dateTo, userToday);
