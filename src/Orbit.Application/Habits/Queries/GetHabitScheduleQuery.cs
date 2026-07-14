@@ -214,6 +214,8 @@ public class GetHabitScheduleQueryHandler(
 
         var dateFrom = request.DateFrom.Value;
         var dateTo = request.DateTo.Value;
+        if (dateTo.DayNumber - dateFrom.DayNumber > AppConstants.MaxInstanceHorizonDays)
+            dateTo = dateFrom.AddDays(AppConstants.MaxInstanceHorizonDays);
 
         var filtered = HabitScheduleFilters.FilterScheduledHabits(topLevel, dateFrom, dateTo, request.IncludeOverdue, lookup, weekStartDay);
 
