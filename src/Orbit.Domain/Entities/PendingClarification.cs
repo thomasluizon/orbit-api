@@ -19,9 +19,9 @@ public class PendingClarification : Entity
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
 
-#pragma warning disable CS0649 // Written only at the SQL layer via ExecuteUpdate and read back via reflection on materialization; there is no C# writer, which is what removes the S1144 unused-private-setter finding. https://github.com/thomasluizon/orbit-api/pull/390
+#pragma warning disable CS0649, S3459 // Written only at the SQL layer via ExecuteUpdate and read back via reflection on materialization; there is no C# writer, so both CS0649 (never-assigned) and Sonar S3459 (unassigned field) are false positives here. https://github.com/thomasluizon/orbit-api/pull/390
     private DateTime? _resolvedAtUtc;
-#pragma warning restore CS0649
+#pragma warning restore CS0649, S3459
 
     /// <summary>
     /// UTC instant this clarification was resolved; null while still open. Exposed as a read-only
