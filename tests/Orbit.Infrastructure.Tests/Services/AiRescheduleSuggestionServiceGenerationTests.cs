@@ -21,6 +21,7 @@ public class AiRescheduleSuggestionServiceGenerationTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 7, 13);
+    private static readonly string[] SuggestedDayNames = new[] { "Monday", "Tuesday" };
 
     [Fact]
     public async Task GenerateAsync_ValidPayload_ReturnsClampedSuggestion()
@@ -31,7 +32,7 @@ public class AiRescheduleSuggestionServiceGenerationTests
             frequencyQuantity = 1,
             dueDate = "2026-07-20",
             dueTime = "08:00",
-            days = new[] { "Monday", "Tuesday" },
+            days = SuggestedDayNames,
             rationale = "  Let's ease back in gently.  "
         }));
 
