@@ -143,9 +143,7 @@ public partial class SendCheerCommandHandler(
             sender, newAchievements[0].Definition.XpReward, XpAwardSource.Achievement,
             newAchievements[0].Entity.Id, awardedAtUtc: DateTime.UtcNow, cancellationToken);
 
-        var newLevel = LevelDefinitions.GetLevelForXp(sender.TotalXp);
-        if (newLevel.Level != sender.Level)
-            sender.SetLevel(newLevel.Level);
+        LevelDefinitions.SyncLevel(sender);
     }
 
     private static Notification BuildRecipientNotification(User recipient, User sender)
