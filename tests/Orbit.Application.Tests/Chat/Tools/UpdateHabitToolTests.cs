@@ -407,6 +407,58 @@ public class UpdateHabitToolTests
     }
 
     [Fact]
+    public async Task UpdateNoDueTimeHabit_AddDueTime_ConvertsScheduledRemindersToOffsets()
+    {
+        var habit = CreateHabitWithScheduledReminders(
+            "Appointment",
+            new ScheduledReminderTime(ScheduledReminderWhen.SameDay, new TimeOnly(8, 0)));
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": "09:00"}""");
+
+        result.Success.Should().BeTrue();
+        habit.DueTime.Should().Be(new TimeOnly(9, 0));
+        habit.ReminderTimes.Should().Contain(60);
+        habit.ScheduledReminders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task UpdateDueTimedHabit_ClearDueTime_ConvertsReminderTimesToScheduledReminders()
+    {
+        var habit = CreateHabitWithTimeAndReminderTimes("Standup", new TimeOnly(9, 0), 30);
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "due_time": null}""");
+
+        result.Success.Should().BeTrue();
+        habit.DueTime.Should().BeNull();
+        habit.ReminderTimes.Should().BeEmpty();
+        habit.ScheduledReminders.Should().ContainSingle(reminder =>
+            reminder.When == ScheduledReminderWhen.SameDay && reminder.Time == new TimeOnly(8, 30));
+    }
+
+    [Fact]
+    public async Task UpdateDueTimedHabit_SameDayReminderAfterDueTime_ClampsOffsetToZeroNotDropped()
+    {
+        var habit = CreateHabitWithTime("Standup", FrequencyUnit.Day, 1, new TimeOnly(9, 0));
+        SetupHabitFound(habit);
+
+        var result = await Execute($$$"""
+        {
+            "habit_id": "{{{habit.Id}}}",
+            "reminder_enabled": true,
+            "scheduled_reminders": [
+                {"when": "same_day", "time": "10:00"}
+            ]
+        }
+        """);
+
+        result.Success.Should().BeTrue();
+        habit.ReminderTimes.Should().Contain(0);
+        habit.ScheduledReminders.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task UpdateNoDueTimeHabit_KeepsScheduledReminderStore()
     {
         var habit = CreateHabit("Appointment", null, null);
@@ -550,6 +602,22 @@ public class UpdateHabitToolTests
         return Habit.Create(new HabitCreateParams(
             UserId, title, FrequencyUnit.Day, 1, DueDate: Today,
             DueTime: dueTime, ScheduledReminders: scheduledReminders)).Value;
+    }
+
+    private static Habit CreateHabitWithScheduledReminders(
+        string title, params ScheduledReminderTime[] scheduledReminders)
+    {
+        return Habit.Create(new HabitCreateParams(
+            UserId, title, FrequencyUnit.Day, 1, DueDate: Today,
+            ScheduledReminders: scheduledReminders)).Value;
+    }
+
+    private static Habit CreateHabitWithTimeAndReminderTimes(
+        string title, TimeOnly dueTime, params int[] reminderTimes)
+    {
+        return Habit.Create(new HabitCreateParams(
+            UserId, title, FrequencyUnit.Day, 1, DueDate: Today,
+            DueTime: dueTime, ReminderEnabled: true, ReminderTimes: reminderTimes)).Value;
     }
 
     private void SetupHabitFound(Habit habit)

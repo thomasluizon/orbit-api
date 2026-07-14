@@ -118,10 +118,13 @@ public class UpdateHabitTool(
         var dueTime = ResolveDueTime(args, habit);
         var (endDate, clearEndDate) = ResolveEndDate(args);
 
-        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.Normalize(
-            dueTime,
-            ResolveOptionalArray(args, "reminder_times"),
-            ResolveOptionalScheduledReminders(args));
+        var (reminderTimes, scheduledReminders) = ReminderStoreNormalizer.NormalizeForUpdate(
+            newDueTime: dueTime,
+            previousDueTime: habit.DueTime,
+            suppliedReminderTimes: ResolveOptionalArray(args, "reminder_times"),
+            suppliedScheduledReminders: ResolveOptionalScheduledReminders(args),
+            existingReminderTimes: habit.ReminderTimes,
+            existingScheduledReminders: habit.ScheduledReminders);
 
         return new HabitUpdateParams(
             title, description, frequencyUnit, frequencyQuantity, days, isBadHabit, dueDate,
