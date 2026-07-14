@@ -25,18 +25,12 @@ public class DeleteGoalTool(
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        if (!args.TryGetProperty("goal_id", out var goalIdEl)
-            || !Guid.TryParse(goalIdEl.GetString(), out var goalId))
-        {
-            return new ToolResult(false, Error: "goal_id is required and must be a valid GUID.");
-        }
+        if (!GoalToolHelpers.TryParseGoalId(args, out var goalId))
+            return GoalToolHelpers.InvalidGoalIdResult();
 
-        var goal = await goalRepository.FindOneTrackedAsync(
-            g => g.Id == goalId && g.UserId == userId && !g.IsDeleted,
-            cancellationToken: ct);
-
+        var goal = await GoalToolHelpers.FindGoalAsync(goalRepository, goalId, userId, ct);
         if (goal is null)
-            return new ToolResult(false, Error: $"Goal {goalId} not found.");
+            return GoalToolHelpers.GoalNotFoundResult(goalId);
 
         goal.SoftDelete();
         await unitOfWork.SaveChangesAsync(ct);

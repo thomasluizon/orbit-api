@@ -1,7 +1,5 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
-using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -47,37 +45,11 @@ public class GetGoalByIdQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalDetailDto>();
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-
-        var goals = await goalRepository.FindAsync(
-            g => g.Id == request.GoalId && g.UserId == request.UserId,
-            q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
-            cancellationToken);
-        var goal = goals.Count > 0 ? goals[0] : null;
-
-        if (goal is null)
+        var loaded = await GoalDetailLoader.BuildGoalDetailAsync(
+            goalRepository, userDateService, request.GoalId, request.UserId, cancellationToken);
+        if (loaded is null)
             return Result.Failure<GoalDetailDto>(ErrorMessages.GoalNotFound);
 
-        GoalStreakSyncService.ApplyReadValue(goal, userToday);
-
-        var progressPercentage = goal.TargetValue > 0
-            ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
-            : 0;
-
-        var progressHistory = goal.ProgressLogs
-            .OrderByDescending(l => l.CreatedAtUtc)
-            .Select(l => new GoalProgressEntryDto(l.Value, l.PreviousValue, l.Note, l.CreatedAtUtc))
-            .ToList();
-
-        var linkedHabits = goal.Habits
-            .Select(h => new LinkedHabitDto(h.Id, h.Title))
-            .ToList();
-
-        return Result.Success(new GoalDetailDto(
-            goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.CurrentValue,
-            goal.Unit, goal.Status, goal.Type, goal.Deadline, goal.Position, goal.CreatedAtUtc,
-            goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits));
+        return Result.Success(loaded.Dto);
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Domain.Enums;
+using Orbit.Infrastructure.Common;
 using Stripe;
 using Stripe.Checkout;
 
@@ -28,12 +29,14 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var customer = await clients.Customers.CreateAsync(new CustomerCreateOptions
-            {
-                Email = email,
-                Name = name,
-                Metadata = new Dictionary<string, string> { ["userId"] = userId.ToString() },
-            }, new RequestOptions { IdempotencyKey = $"orbit-customer-create-{userId}" }, cancellationToken);
+            var customer = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Customers.CreateAsync(new CustomerCreateOptions
+                {
+                    Email = email,
+                    Name = name,
+                    Metadata = new Dictionary<string, string> { ["userId"] = userId.ToString() },
+                }, new RequestOptions { IdempotencyKey = $"orbit-customer-create-{userId}" }, cancellationToken),
+                cancellationToken);
             return customer.Id;
         }
         catch (StripeException ex)
@@ -72,7 +75,11 @@ public sealed partial class StripeBillingService(
                 options.AllowPromotionCodes = true;
             }
 
-            var session = await clients.CheckoutSessions.CreateAsync(options, cancellationToken: cancellationToken);
+            var idempotencyKey = $"orbit-checkout-{userId}-{priceId}-{referralCouponId ?? "std"}";
+            var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.CheckoutSessions.CreateAsync(
+                    options, new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken),
+                cancellationToken);
             return session.Url;
         }
         catch (StripeException ex)
@@ -85,11 +92,14 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var session = await clients.PortalSessions.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
-            {
-                Customer = customerId,
-                ReturnUrl = returnUrl,
-            }, cancellationToken: cancellationToken);
+            var idempotencyKey = $"orbit-portal-{customerId}";
+            var session = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.PortalSessions.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
+                {
+                    Customer = customerId,
+                    ReturnUrl = returnUrl,
+                }, new RequestOptions { IdempotencyKey = idempotencyKey }, cancellationToken),
+                cancellationToken);
             return session.Url;
         }
         catch (StripeException ex)
@@ -104,7 +114,9 @@ public sealed partial class StripeBillingService(
         {
             var options = new SubscriptionGetOptions();
             options.AddExpand("default_payment_method");
-            var subscription = await clients.Subscriptions.GetAsync(subscriptionId, options, cancellationToken: cancellationToken);
+            var subscription = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Subscriptions.GetAsync(subscriptionId, options, cancellationToken: cancellationToken),
+                cancellationToken);
 
             BillingPaymentMethod? paymentMethod = null;
             if (subscription.DefaultPaymentMethod?.Card is not null)
@@ -140,11 +152,13 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var invoices = await clients.Invoices.ListAsync(new InvoiceListOptions
-            {
-                Customer = customerId,
-                Limit = limit,
-            }, cancellationToken: cancellationToken);
+            var invoices = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Invoices.ListAsync(new InvoiceListOptions
+                {
+                    Customer = customerId,
+                    Limit = limit,
+                }, cancellationToken: cancellationToken),
+                cancellationToken);
 
             return invoices.Data.Select(inv => new BillingInvoice(
                 inv.Id,
@@ -166,7 +180,9 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var price = await clients.Prices.GetAsync(priceId, cancellationToken: cancellationToken);
+            var price = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Prices.GetAsync(priceId, cancellationToken: cancellationToken),
+                cancellationToken);
             return price.UnitAmount ?? 0;
         }
         catch (StripeException ex)
@@ -179,7 +195,9 @@ public sealed partial class StripeBillingService(
     {
         try
         {
-            var coupon = await clients.Coupons.GetAsync(couponId, cancellationToken: cancellationToken);
+            var coupon = await StripeRetryPolicy.ExecuteWithRetryAsync(
+                () => clients.Coupons.GetAsync(couponId, cancellationToken: cancellationToken),
+                cancellationToken);
             return (int)(coupon.PercentOff ?? 0);
         }
         catch (StripeException ex)

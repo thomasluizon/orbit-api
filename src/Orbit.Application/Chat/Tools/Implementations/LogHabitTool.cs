@@ -16,22 +16,14 @@ public class LogHabitTool(
     public string Description =>
         "Log a habit as completed for a specific date (defaults to today). If already logged for that date, this will unlog it (toggle behavior). Use the date parameter to log overdue instances.";
 
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new
-        {
-            habit_id = new { type = JsonSchemaTypes.String, description = "ID of the habit to log" },
-            date = new { type = JsonSchemaTypes.String, description = "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today." }
-        },
-        required = new[] { "habit_id" }
-    };
+    public object GetParameterSchema() => HabitToolHelpers.SingleHabitDateSchema(
+        "ID of the habit to log",
+        "ISO date (YYYY-MM-DD) to log for a specific date, e.g. an overdue instance. Defaults to today.");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct)
     {
-        if (!args.TryGetProperty("habit_id", out var habitIdEl) ||
-            !Guid.TryParse(habitIdEl.GetString(), out var habitId))
-            return new ToolResult(false, Error: "habit_id is required and must be a valid GUID.");
+        if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
+            return HabitToolHelpers.InvalidHabitIdResult();
 
         var habit = await habitRepository.GetByIdAsync(habitId, ct);
         if (habit is null)

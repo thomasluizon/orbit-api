@@ -33,6 +33,40 @@ internal static class HabitToolHelpers
             h => h.Id == habitId && h.UserId == userId,
             cancellationToken: ct);
 
+    /// <summary>Schema for a single-habit action taking a required <c>habit_id</c> and an optional <c>date</c>.</summary>
+    public static object SingleHabitDateSchema(string habitIdDescription, string dateDescription) => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
+        {
+            habit_id = new { type = JsonSchemaTypes.String, description = habitIdDescription },
+            date = new { type = JsonSchemaTypes.String, description = dateDescription }
+        },
+        required = new[] { "habit_id" }
+    };
+
+    /// <summary>Schema for a bulk-habit action taking a required <c>habit_ids</c> array and an optional <c>date</c>.</summary>
+    public static object BulkHabitActionSchema(string idsDescription, string dateDescription) => new
+    {
+        type = JsonSchemaTypes.Object,
+        properties = new
+        {
+            habit_ids = new
+            {
+                type = JsonSchemaTypes.Array,
+                items = new { type = JsonSchemaTypes.String },
+                description = idsDescription
+            },
+            date = new
+            {
+                type = JsonSchemaTypes.String,
+                nullable = true,
+                description = dateDescription
+            }
+        },
+        required = new[] { "habit_ids" }
+    };
+
     private static (List<Guid> HabitIds, ToolResult? Error) ParseHabitIds(JsonElement args)
     {
         if (!args.TryGetProperty("habit_ids", out var idsEl) || idsEl.ValueKind != JsonValueKind.Array)

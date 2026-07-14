@@ -84,6 +84,26 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_RangeExceedingHorizon_BoundsScheduledDatesAndInstancesConsistently()
+    {
+        var habit = CreateTestHabit(dueDate: Today);
+        SetupHabits(habit);
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(200));
+
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        var item = result.Value.Items[0];
+        var horizonEnd = Today.AddDays(AppConstants.MaxInstanceHorizonDays);
+
+        item.ScheduledDates.Should().NotBeEmpty();
+        item.ScheduledDates.Max().Should().Be(horizonEnd);
+        item.Instances.Should().NotBeEmpty();
+        item.Instances.Select(i => i.Date).Max().Should().Be(horizonEnd);
+    }
+
+    [Fact]
     public async Task Handle_OneTimeTaskOverdue_WhenIncludeOverdue_ReturnsAsOverdue()
     {
         var pastDate = Today.AddDays(-5);

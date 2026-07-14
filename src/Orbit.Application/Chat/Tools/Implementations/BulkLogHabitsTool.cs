@@ -14,26 +14,9 @@ public class BulkLogHabitsTool(
     public string Description =>
         "Log multiple habits as completed for today in a single operation. Use this only for habits the user EXPLICITLY mentioned completing - never include extra habits that share a tag, parent, routine, or theme but were not named.";
 
-    public object GetParameterSchema() => new
-    {
-        type = JsonSchemaTypes.Object,
-        properties = new
-        {
-            habit_ids = new
-            {
-                type = JsonSchemaTypes.Array,
-                items = new { type = JsonSchemaTypes.String },
-                description = "Array of habit IDs to log as completed"
-            },
-            date = new
-            {
-                type = JsonSchemaTypes.String,
-                nullable = true,
-                description = "Date to log for in YYYY-MM-DD format (defaults to today)"
-            }
-        },
-        required = new[] { "habit_ids" }
-    };
+    public object GetParameterSchema() => HabitToolHelpers.BulkHabitActionSchema(
+        "Array of habit IDs to log as completed",
+        "Date to log for in YYYY-MM-DD format (defaults to today)");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, Guid userId, CancellationToken ct) =>
         HabitToolHelpers.RunBulkHabitActionAsync(

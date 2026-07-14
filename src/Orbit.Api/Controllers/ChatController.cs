@@ -40,28 +40,17 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null)
     {
-        if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
-            return BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody());
-
-        var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
-        if (imageError is not null)
-            return imageError;
-
-        var (chatHistory, historyError) = ParseChatHistory(history);
-        if (historyError is not null)
-            return historyError;
-
-        var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
-        if (clientContextError is not null)
-            return clientContextError;
+        var parsed = await ParseChatInputsAsync(message, history, image, clientContext, cancellationToken);
+        if (parsed.Error is not null)
+            return parsed.Error;
 
         var command = new ProcessUserChatCommand(
             HttpContext.GetUserId(),
             message,
-            imageData,
-            imageMimeType,
-            chatHistory,
-            parsedClientContext,
+            parsed.ImageData,
+            parsed.ImageMimeType,
+            parsed.ChatHistory,
+            parsed.ClientContext,
             confirmationToken,
             HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(),
@@ -87,30 +76,19 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
         [FromForm] string? clientContext = null,
         [FromForm] string? confirmationToken = null)
     {
-        if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
-            return BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody());
-
-        var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
-        if (imageError is not null)
-            return imageError;
-
-        var (chatHistory, historyError) = ParseChatHistory(history);
-        if (historyError is not null)
-            return historyError;
-
-        var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
-        if (clientContextError is not null)
-            return clientContextError;
+        var parsed = await ParseChatInputsAsync(message, history, image, clientContext, cancellationToken);
+        if (parsed.Error is not null)
+            return parsed.Error;
 
         await StartEventStreamAsync(cancellationToken);
 
         var command = new ProcessUserChatCommand(
             HttpContext.GetUserId(),
             message,
-            imageData,
-            imageMimeType,
-            chatHistory,
-            parsedClientContext,
+            parsed.ImageData,
+            parsed.ImageMimeType,
+            parsed.ChatHistory,
+            parsed.ClientContext,
             confirmationToken,
             HttpContext.User.GetAgentAuthMethod(),
             HttpContext.User.GetGrantedAgentScopes(),
@@ -190,6 +168,43 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     {
         await Response.WriteAsync($"data: {streamEvent.ToJson()}\n\n", cancellationToken);
         await Response.Body.FlushAsync(cancellationToken);
+    }
+
+    private async Task<ChatInputParseResult> ParseChatInputsAsync(
+        string message, string? history, IFormFile? image, string? clientContext, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(message) || message.Length > AppConstants.MaxChatMessageLength)
+            return ChatInputParseResult.Failed(BadRequest(ErrorMessages.MessageTooLong.Format(AppConstants.MaxChatMessageLength).ToErrorBody()));
+
+        var (imageData, imageMimeType, imageError) = await ProcessImageAsync(image, cancellationToken);
+        if (imageError is not null)
+            return ChatInputParseResult.Failed(imageError);
+
+        var (chatHistory, historyError) = ParseChatHistory(history);
+        if (historyError is not null)
+            return ChatInputParseResult.Failed(historyError);
+
+        var (parsedClientContext, clientContextError) = ParseClientContext(clientContext);
+        if (clientContextError is not null)
+            return ChatInputParseResult.Failed(clientContextError);
+
+        return ChatInputParseResult.Ok(imageData, imageMimeType, chatHistory, parsedClientContext);
+    }
+
+    private sealed record ChatInputParseResult(
+        byte[]? ImageData,
+        string? ImageMimeType,
+        List<ChatHistoryMessage>? ChatHistory,
+        AgentClientContext? ClientContext,
+        IActionResult? Error)
+    {
+        public static ChatInputParseResult Failed(IActionResult error) =>
+            new(null, null, null, null, error);
+
+        public static ChatInputParseResult Ok(
+            byte[]? imageData, string? imageMimeType,
+            List<ChatHistoryMessage>? chatHistory, AgentClientContext? clientContext) =>
+            new(imageData, imageMimeType, chatHistory, clientContext, null);
     }
 
     private async Task<(byte[]? Data, string? MimeType, IActionResult? Error)> ProcessImageAsync(
