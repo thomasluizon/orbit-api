@@ -222,6 +222,8 @@ public sealed partial class DistributedRateLimitFilter(
     private static string HashRefreshToken(string refreshToken) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
 
+    // S107 false positive: [LoggerMessage] source-gen binds each parameter to a named {placeholder} in the template, so folding these into a parameter object would drop the structured-log fields. https://learn.microsoft.com/dotnet/core/extensions/logger-message-generator
+#pragma warning disable S107
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,
@@ -236,6 +238,7 @@ public sealed partial class DistributedRateLimitFilter(
         string method,
         string path,
         string requestId);
+#pragma warning restore S107
 
     [LoggerMessage(
         EventId = 2,

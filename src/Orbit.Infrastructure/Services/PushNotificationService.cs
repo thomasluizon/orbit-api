@@ -69,10 +69,9 @@ public partial class PushNotificationService(
         }
 
         const int FcmBatchSize = 500;
-        var subsList = subs as List<Domain.Entities.PushSubscription> ?? subs.ToList();
-        for (int offset = 0; offset < subsList.Count; offset += FcmBatchSize)
+        for (int offset = 0; offset < subs.Count; offset += FcmBatchSize)
         {
-            var chunk = subsList.Skip(offset).Take(FcmBatchSize).ToList();
+            var chunk = subs.Skip(offset).Take(FcmBatchSize).ToList();
             var messages = chunk.Select(s => new Message
             {
                 Token = s.Endpoint,

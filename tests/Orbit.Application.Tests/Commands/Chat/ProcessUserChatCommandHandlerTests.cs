@@ -221,18 +221,14 @@ public class ProcessUserChatCommandHandlerTests
     private void SetupAiResponse(AiResponse response)
     {
         _aiIntentService.SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(response));
     }
 
     private void SetupAiFailure(string error)
     {
         _aiIntentService.SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            Arg.Any<AiToolRequest>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AiResponse>(error));
     }
 
@@ -630,9 +626,7 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.AiMessage.Should().Be("Hello there");
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
+            Arg.Any<AiToolRequest>(),
             Arg.Is<Func<AiStreamEvent, Task>?>(sink => sink == null),
             Arg.Any<CancellationToken>());
     }
@@ -647,12 +641,9 @@ public class ProcessUserChatCommandHandlerTests
         await handler.Handle(new ProcessUserChatCommand(UserId, "Hello AI"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Is<IReadOnlyList<object>>(declarations =>
-                ToolNames(declarations).SequenceEqual(ExpectedOrderedToolNames)),
-            Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+            Arg.Is<AiToolRequest>(request =>
+                ToolNames(request.ToolDeclarations).SequenceEqual(ExpectedOrderedToolNames)),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -665,11 +656,8 @@ public class ProcessUserChatCommandHandlerTests
         await handler.Handle(new ProcessUserChatCommand(UserId, "thanks"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 0),
-            Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 0),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -683,11 +671,8 @@ public class ProcessUserChatCommandHandlerTests
             new ProcessUserChatCommand(UserId, "ok", ConfirmationToken: "confirm-token"), CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
-            Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 1),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -704,11 +689,8 @@ public class ProcessUserChatCommandHandlerTests
             CancellationToken.None);
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(),
-            Arg.Is<IReadOnlyList<object>>(declarations => declarations.Count == 1),
-            Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
+            Arg.Is<AiToolRequest>(request => request.ToolDeclarations.Count == 1),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -722,9 +704,8 @@ public class ProcessUserChatCommandHandlerTests
 
         string? capturedPrompt = null;
         _aiIntentService.SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(), Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
+            Arg.Do<AiToolRequest>(request => capturedPrompt = request.SystemPrompt),
+            Arg.Any<Func<AiStreamEvent, Task>?>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AiResponse { TextMessage = "ok" }));
 
         var handler = CreateHandler();
@@ -1134,11 +1115,8 @@ public class ProcessUserChatCommandHandlerTests
         result.Value.AiMessage.Should().Be("I see your image!");
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(),
-            Arg.Any<Guid>(),
-            Arg.Is<byte[]?>(b => b != null && b.Length == 4),
-            Arg.Is<string?>(s => s == "image/png"),
-            Arg.Any<IReadOnlyList<ChatHistoryMessage>?>(),
+            Arg.Is<AiToolRequest>(request =>
+                request.ImageData != null && request.ImageData.Length == 4 && request.ImageMimeType == "image/png"),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>());
     }
@@ -1161,9 +1139,7 @@ public class ProcessUserChatCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
 
         await _aiIntentService.Received(1).SendWithToolsAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyList<object>>(), Arg.Any<Guid>(),
-            Arg.Any<byte[]?>(), Arg.Any<string?>(),
-            Arg.Is<IReadOnlyList<ChatHistoryMessage>?>(h => h != null && h.Count == 2),
+            Arg.Is<AiToolRequest>(request => request.History != null && request.History.Count == 2),
             Arg.Any<Func<AiStreamEvent, Task>?>(),
             Arg.Any<CancellationToken>());
     }

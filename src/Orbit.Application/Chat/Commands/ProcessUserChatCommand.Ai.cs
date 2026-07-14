@@ -67,13 +67,14 @@ public partial class ProcessUserChatCommandHandler
         LogCallingAiIntentService(logger, toolDeclarations.Count);
 
         return await ai.IntentService.SendWithToolsAsync(
-            request.Message,
-            systemPrompt,
-            toolDeclarations,
-            request.UserId,
-            request.ImageData,
-            request.ImageMimeType,
-            request.History,
+            new AiToolRequest(
+                request.Message,
+                systemPrompt,
+                toolDeclarations,
+                request.UserId,
+                request.ImageData,
+                request.ImageMimeType,
+                request.History),
             aiStreamSink,
             cancellationToken);
     }
