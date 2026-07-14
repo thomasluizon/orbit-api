@@ -89,6 +89,64 @@ public class StripeRetryPolicyTests
         attempts.Should().Be(StripeRetryPolicy.MaxRetries + 1);
     }
 
+    [Fact]
+    public async Task ExecuteWithRetryAsync_UserCancellation_PropagatesWithoutRetry()
+    {
+        var attempts = 0;
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await StripeRetryPolicy.ExecuteWithRetryAsync<string>(
+            () =>
+            {
+                attempts++;
+                throw new OperationCanceledException(cts.Token);
+            },
+            cts.Token,
+            baseDelayMs: 0);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        attempts.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_Timeout_RetriesThenSucceeds()
+    {
+        var attempts = 0;
+
+        var result = await StripeRetryPolicy.ExecuteWithRetryAsync(
+            () =>
+            {
+                attempts++;
+                if (attempts == 1)
+                    throw new OperationCanceledException("timed out");
+                return Task.FromResult("ok");
+            },
+            CancellationToken.None,
+            baseDelayMs: 0);
+
+        attempts.Should().Be(2);
+        result.Should().Be("ok");
+    }
+
+    [Fact]
+    public async Task ExecuteWithRetryAsync_NonTransientException_DoesNotRetry()
+    {
+        var attempts = 0;
+
+        var act = async () => await StripeRetryPolicy.ExecuteWithRetryAsync<string>(
+            () =>
+            {
+                attempts++;
+                throw new InvalidOperationException("boom");
+            },
+            CancellationToken.None,
+            baseDelayMs: 0);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        attempts.Should().Be(1);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.TooManyRequests, true)]
     [InlineData(HttpStatusCode.InternalServerError, true)]
