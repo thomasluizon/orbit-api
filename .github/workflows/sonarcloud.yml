@@ -64,8 +64,16 @@ jobs:
       #   Services/StripeCouponRewardService.cs        Stripe SDK coupon/subscription wrapper.
       #   Services/GeoLocationService.cs               ipapi.co HTTP lookup (IsPrivateIpAddress classifier is a Phase-2 extract target).
       #   AI/AiCompletionClient.cs                     OpenAI SDK wrapper.
+      #   AI/AiBatchClient.cs                          OpenAI Files/Batch SDK wrapper (sibling of AiCompletionClient; pre-release OPENAI001 surface, no mockable seam).
+      #   AI/AudioTranscriptionService.cs              OpenAI Audio SDK wrapper (constructs AudioClient in-ctor from settings, no seam).
+      #   Services/StripeBillingService.cs             Stripe SDK wrapper (checkout/portal/subscription/invoice/coupon), sibling of StripeCouponRewardService.
+      #   Services/GooglePlayBillingService.cs         Google Android Publisher SDK glue (Play subscription verify/acknowledge).
+      #   Services/Calendar/**                         Google Calendar v3 SDK glue + its DI extension; the testable filtering/dedup/mapping lives in GoogleCalendarEventFetcher (in coverage).
+      #   BackgroundJobs/HangfireRecurringJobRegistrar.cs  Hangfire recurring-job registration IHostedService (pure AddOrUpdate wiring).
       #   Orbit.Analyzers/**                           build-time Roslyn analyzers (netstandard2.0; Orbit.Analyzers.Tests runs outside the runtime coverage set).
-      # DROPPED (now in coverage): Services/AppConfigService.cs (pure ConvertValue<T> + injectable cache/repo) and
+      #   Orbit.Analyzers.CodeFixes/**                 build-time Roslyn code-fix providers (netstandard2.0; sibling of Orbit.Analyzers, outside the runtime coverage set).
+      #   .github/**                                   CI tooling scripts (e.g. scripts/check_coverage.py) — not shipped product code (parity with load-tests/**).
+      # DROPPED (now in coverage): Services/AppConfigService.cs (pure ConvertValue<T> + injectable cache/repo — now covered by AppConfigServiceTests) and
       # Services/UserDateService.cs (user-timezone "today" + week-start, injectable deps) — both live in
       # Orbit.Infrastructure, which is in the coverage run, so they are unit-testable and should count.
       # sonar.exclusions additions — non-product / false-positive sources:
@@ -81,7 +89,7 @@ jobs:
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/bin/**,**/obj/**,**/OAuth/OAuthLoginPage.cs,**/.claude/**,**/Email/Templates/**,**/load-tests/**" \
-            /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/AI/AiCompletionClient.cs,**/Services/GeoLocationService.cs,**/Orbit.Analyzers/**"
+            /d:sonar.coverage.exclusions="**/Program.cs,**/Extensions/ServiceCollectionExtensions*.cs,**/Extensions/WebApplicationExtensions.cs,**/Middleware/**,**/OpenApi/**,**/OAuth/**,**/Persistence/OrbitDbContext.cs,**/Persistence/OrbitDbContextFactory.cs,**/Persistence/GenericRepository.cs,**/Persistence/UnitOfWork.cs,**/Persistence/AccountResetRepository.cs,**/Configuration/**,**/Services/ReminderSchedulerService.cs,**/Services/SlipAlertSchedulerService.cs,**/Services/GoalDeadlineNotificationService.cs,**/Services/HabitDueDateAdvancementService.cs,**/Services/DataEncryptionMigrationService.cs,**/Services/PushNotificationService.cs,**/Services/AccountDeletionService.cs,**/Services/GoogleTokenService.cs,**/Services/BackgroundServiceHealthCheck.cs,**/Services/StripeCouponRewardService.cs,**/Services/StripeBillingService.cs,**/Services/GooglePlayBillingService.cs,**/Services/Calendar/**,**/AI/AiCompletionClient.cs,**/AI/AiBatchClient.cs,**/AI/AudioTranscriptionService.cs,**/Services/GeoLocationService.cs,**/BackgroundJobs/HangfireRecurringJobRegistrar.cs,**/Orbit.Analyzers/**,**/Orbit.Analyzers.CodeFixes/**,**/.github/**"
 
       - name: Build
         run: dotnet build --no-restore
