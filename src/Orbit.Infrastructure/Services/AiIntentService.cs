@@ -384,7 +384,7 @@ public sealed partial class AiIntentService(
                 HistorySummarySystemPrompt,
                 transcript,
                 temperature: 0.2,
-                cancellationToken,
+                cancellationToken: cancellationToken,
                 maxOutputTokens: 320,
                 purpose: "history_summary");
 

@@ -20,7 +20,7 @@ public partial class ProcessUserChatCommandHandler
         {
             await ConcurrencyRetry.SaveWithRetryAsync(
                 execution.UnitOfWork,
-                ct => execution.UserStreakService.RecalculateAsync(userId, ct),
+                ct => execution.UserStreakService.RecalculateAsync(userId, cancellationToken: ct),
                 cancellationToken);
         }
 

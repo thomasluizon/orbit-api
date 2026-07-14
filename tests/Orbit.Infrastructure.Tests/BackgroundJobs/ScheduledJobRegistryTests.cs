@@ -22,8 +22,13 @@ public class ScheduledJobRegistryTests
 {
     private static readonly IConfiguration EmptyConfiguration = new ConfigurationBuilder().Build();
 
-    public static IEnumerable<object[]> AllScheduledJobs() =>
-        BuildAll().Select(job => new object[] { job });
+    public static TheoryData<IScheduledJob> AllScheduledJobs()
+    {
+        var data = new TheoryData<IScheduledJob>();
+        foreach (var job in BuildAll())
+            data.Add(job);
+        return data;
+    }
 
     [Theory]
     [MemberData(nameof(AllScheduledJobs))]

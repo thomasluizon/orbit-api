@@ -92,10 +92,10 @@ public sealed partial class AiCompletionClient
         string systemPrompt,
         string userPrompt,
         double temperature = 0.7,
-        CancellationToken cancellationToken = default,
         int? maxOutputTokens = null,
         string purpose = "text",
-        AiModelTier tier = AiModelTier.Primary)
+        AiModelTier tier = AiModelTier.Primary,
+        CancellationToken cancellationToken = default)
     {
         var messages = new List<ChatMessage>
         {
@@ -136,10 +136,10 @@ public sealed partial class AiCompletionClient
         string systemPrompt,
         string userPrompt,
         double temperature = 0.1,
-        CancellationToken cancellationToken = default,
         int? maxOutputTokens = null,
         string purpose = "json",
-        AiModelTier tier = AiModelTier.Primary)
+        AiModelTier tier = AiModelTier.Primary,
+        CancellationToken cancellationToken = default)
     {
         var messages = new List<ChatMessage>
         {

@@ -46,7 +46,7 @@ public class GetRecapQueryHandler(
             cancellationToken);
 
         var streakState = await userStreakService.RecalculateAsync(
-            request.UserId, cancellationToken, awardFreezeIfEligible: false);
+            request.UserId, awardFreezeIfEligible: false, cancellationToken);
 
         var metrics = RetrospectiveMetricsCalculator.Compute(
             habits.ToList(),

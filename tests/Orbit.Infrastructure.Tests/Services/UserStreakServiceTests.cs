@@ -112,7 +112,7 @@ public class UserStreakServiceTests
             Arg.Any<CancellationToken>())
             .Returns((User?)null);
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().BeNull();
     }
@@ -127,7 +127,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit>());
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(0);
@@ -152,7 +152,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3)) });
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(3);
@@ -179,7 +179,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(6);
@@ -202,7 +202,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(2);        result.LongestStreak.Should().Be(2);
@@ -232,7 +232,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { daily, weekdayHabit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(7);
@@ -254,7 +254,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 4)) });
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(4);
@@ -277,7 +277,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { bad });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(0);
@@ -302,7 +302,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(5);
@@ -333,11 +333,11 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var first = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var first = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         SetupFreezes(new List<StreakFreeze> { StreakFreeze.Create(UserId, new DateOnly(2026, 4, 6)) });
 
-        var second = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var second = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         first!.CurrentStreak.Should().Be(5);
         second!.CurrentStreak.Should().Be(5);
@@ -365,7 +365,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result!.CurrentStreak.Should().Be(0);
         user.StreakFreezesAccumulated.Should().Be(1);
@@ -391,7 +391,7 @@ public class UserStreakServiceTests
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result!.CurrentStreak.Should().Be(0);
         user.StreakFreezesAccumulated.Should().Be(0);
@@ -422,7 +422,7 @@ public class UserStreakServiceTests
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromException<int>(uniqueViolation));
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.CurrentStreak.Should().Be(5);
@@ -458,7 +458,7 @@ public class UserStreakServiceTests
             StreakFreeze.Create(UserId, new DateOnly(2026, 4, 3))
         });
 
-        var result = await _sut.RecalculateAsync(UserId, CancellationToken.None);
+        var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result!.CurrentStreak.Should().Be(0);
         user.StreakFreezesAccumulated.Should().Be(1);

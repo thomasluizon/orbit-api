@@ -28,7 +28,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     {
         _handler = new BulkDeleteHabitsCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _userDateService, _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
         _unitOfWork.ExecuteInTransactionAsync(
                 Arg.Any<Func<CancellationToken, Task>>(),
@@ -145,7 +145,7 @@ public class BulkDeleteHabitsCommandHandlerTests
         var act = async () => await _handler.Handle(command, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>();
-        await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _userStreakService.DidNotReceive().RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>());
         _cache.TryGetValue(cacheKey, out _).Should().BeTrue();
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
             Arg.Any<Func<CancellationToken, Task>>(),
@@ -182,7 +182,7 @@ public class BulkDeleteHabitsCommandHandlerTests
             });
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(_ => { saveObservedInsideTransaction.Add(insideTransaction); return 1; });
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(_ => { recalcObservedInsideTransaction.Add(insideTransaction); return new UserStreakState(0, 0, null); });
 
         var command = new BulkDeleteHabitsCommand(UserId, new List<Guid> { habit.Id });

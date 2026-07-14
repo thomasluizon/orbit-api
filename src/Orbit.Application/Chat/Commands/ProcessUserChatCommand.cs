@@ -177,7 +177,7 @@ public partial class ProcessUserChatCommandHandler(
             goalList));
     }
 
-    private (string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList) BuildResponseCards(
+    private static (string? AiMessage, HabitListCard? HabitList, GoalListCard? GoalList) BuildResponseCards(
         string? aiMessage, ProcessUserChatCommand request, ChatContext context)
     {
         HabitListCard? habitList = null;

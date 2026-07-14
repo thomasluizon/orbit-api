@@ -26,7 +26,7 @@ public class DeleteHabitCommandHandlerTests
     {
         _handler = new DeleteHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _userDateService, _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        _userStreakService.RecalculateAsync(UserId, Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
     }
 

@@ -44,7 +44,7 @@ public class LogHabitLinkedGoalTests
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
-        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(5, 5, Today));
 
         var user = User.Create("Test", "test@test.com").Value;
@@ -319,7 +319,7 @@ public class LogHabitLinkedGoalTests
             Arg.Any<CancellationToken>())
             .Returns(habit);
 
-        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns((UserStreakState?)null);
 
         var command = new LogHabitCommand(UserId, habit.Id);

@@ -63,7 +63,7 @@ public class BulkDeleteHabitsCommandHandler(
             {
                 await ConcurrencyRetry.SaveWithRetryAsync(
                     unitOfWork,
-                    c => userStreakService.RecalculateAsync(request.UserId, c),
+                    c => userStreakService.RecalculateAsync(request.UserId, cancellationToken: c),
                     ct);
             }
         }, cancellationToken);

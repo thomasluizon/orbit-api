@@ -48,7 +48,7 @@ public sealed partial class AiProactiveCheckinMessageService(
                 "You are Astra, a supportive habit coach sending a proactive check-in push notification to help someone get back on track with the habits they fell behind on today.",
                 prompt,
                 temperature: 0.9,
-                cancellationToken,
+                cancellationToken: cancellationToken,
                 purpose: "proactive_checkin");
 
             if (string.IsNullOrWhiteSpace(text))

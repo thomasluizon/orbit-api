@@ -82,11 +82,11 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_SuccessResultResponse_RoundTripsThroughLedgerOnReplay()
     {
         var behavior = CreateBehavior<ResultRequest, Result<string>>();
-        RequestHandlerDelegate<Result<string>> handler = async _ =>
+        RequestHandlerDelegate<Result<string>> handler = async ct =>
         {
             _handlerCalls++;
             _dbContext.Tags.Add(Tag.Create(_userId, "tag", "#ff0000").Value);
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(ct);
             return Result.Success("created-id");
         };
 
@@ -186,10 +186,10 @@ public class IdempotencyBehaviorDbTests : IDisposable
     public async Task Handle_HandlerThrows_RollsBackReservationAndMutationTogether()
     {
         var behavior = CreateBehavior<FakeRequest, string>();
-        RequestHandlerDelegate<string> throwingHandler = async _ =>
+        RequestHandlerDelegate<string> throwingHandler = async ct =>
         {
             _dbContext.Tags.Add(Tag.Create(_userId, "doomed-tag", "#ff0000").Value);
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(ct);
             throw new InvalidOperationException("handler failed after a partial write");
         };
 
@@ -205,11 +205,11 @@ public class IdempotencyBehaviorDbTests : IDisposable
         new(new StubIdempotencyContext(hasKey, _userId, "mutation-key-1"), _store, _unitOfWork);
 
     private RequestHandlerDelegate<string> CreateTagHandler() =>
-        async _ =>
+        async ct =>
         {
             _handlerCalls++;
             _dbContext.Tags.Add(Tag.Create(_userId, $"tag-{_handlerCalls}", "#ff0000").Value);
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(ct);
             return $"response-{_handlerCalls}";
         };
 

@@ -94,7 +94,7 @@ public partial class BulkLogHabitsCommandHandler(
 
                 await ConcurrencyRetry.SaveWithRetryAsync(
                     unitOfWork,
-                    c => services.UserStreakService.RecalculateAsync(request.UserId, c),
+                    c => services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: c),
                     ct);
             }
         }, cancellationToken);

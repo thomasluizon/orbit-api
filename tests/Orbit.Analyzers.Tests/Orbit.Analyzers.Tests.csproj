@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Orbit.Analyzers\Orbit.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\Orbit.Analyzers.CodeFixes\Orbit.Analyzers.CodeFixes.csproj" />
   </ItemGroup>
 
 </Project>
