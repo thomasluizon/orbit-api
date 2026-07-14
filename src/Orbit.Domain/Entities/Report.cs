@@ -13,9 +13,9 @@ public class Report : Entity
     public ReportStatus Status { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
-#pragma warning disable CS0649 // EF writes this backing field via reflection on materialization; there is no C# writer, which is what removes the S1144 unused-private-setter finding. https://github.com/thomasluizon/orbit-api/pull/390
+#pragma warning disable CS0649, S3459 // EF writes this backing field via reflection on materialization and at the SQL layer; there is no C# writer, so both CS0649 (never-assigned) and Sonar S3459 (unassigned field) are false positives here. https://github.com/thomasluizon/orbit-api/pull/390
     private DateTime? _reviewedAtUtc;
-#pragma warning restore CS0649
+#pragma warning restore CS0649, S3459
 
     /// <summary>
     /// UTC instant an admin reviewed this report; null until reviewed. Exposed as a read-only
