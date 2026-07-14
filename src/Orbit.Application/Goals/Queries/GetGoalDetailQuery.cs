@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
@@ -28,41 +27,13 @@ public class GetGoalDetailQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<GoalDetailWithMetricsResponse>();
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-
-        var goals = await goalRepository.FindAsync(
-            g => g.Id == request.GoalId && g.UserId == request.UserId,
-            q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
-            cancellationToken);
-        var goal = goals.Count > 0 ? goals[0] : null;
-
-        if (goal is null)
+        var loaded = await GoalDetailLoader.BuildGoalDetailAsync(
+            goalRepository, userDateService, request.GoalId, request.UserId, cancellationToken);
+        if (loaded is null)
             return Result.Failure<GoalDetailWithMetricsResponse>(ErrorMessages.GoalNotFound);
 
-        GoalStreakSyncService.ApplyReadValue(goal, userToday);
+        var goalMetrics = GoalMetricsCalculator.Calculate(loaded.Goal, loaded.UserToday);
 
-        var progressPercentage = goal.TargetValue > 0
-            ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
-            : 0;
-
-        var progressHistory = goal.ProgressLogs
-            .OrderByDescending(l => l.CreatedAtUtc)
-            .Select(l => new GoalProgressEntryDto(l.Value, l.PreviousValue, l.Note, l.CreatedAtUtc))
-            .ToList();
-
-        var linkedHabits = goal.Habits
-            .Select(h => new LinkedHabitDto(h.Id, h.Title))
-            .ToList();
-
-        var detail = new GoalDetailDto(
-            goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.CurrentValue,
-            goal.Unit, goal.Status, goal.Type, goal.Deadline, goal.Position, goal.CreatedAtUtc,
-            goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits);
-
-        var goalMetrics = GoalMetricsCalculator.Calculate(goal, userToday);
-
-        return Result.Success(new GoalDetailWithMetricsResponse(detail, goalMetrics));
+        return Result.Success(new GoalDetailWithMetricsResponse(loaded.Dto, goalMetrics));
     }
 }

@@ -74,7 +74,8 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         if (!Guid.TryParse(notificationId, out var parsedId))
             return new ToolResult(false, Error: "notification_id must be a valid GUID.");
 
-        return await ExecuteAsync(
+        return await ChatToolMediator.RunAsync(
+            mediator,
             new MarkNotificationReadCommand(userId, parsedId),
             parsedId,
             "Marked notification as read",
@@ -91,7 +92,8 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(p256dh) || string.IsNullOrWhiteSpace(auth))
             return new ToolResult(false, Error: "endpoint, p256dh, and auth are required.");
 
-        return await ExecuteAsync(
+        return await ChatToolMediator.RunAsync(
+            mediator,
             new SubscribePushCommand(userId, endpoint, p256dh, auth),
             userId,
             "Push subscription registered",
@@ -105,7 +107,8 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         if (string.IsNullOrWhiteSpace(endpoint))
             return new ToolResult(false, Error: "endpoint is required.");
 
-        return await ExecuteAsync(
+        return await ChatToolMediator.RunAsync(
+            mediator,
             new UnsubscribePushCommand(userId, endpoint),
             userId,
             "Push subscription removed",
@@ -127,14 +130,6 @@ public class UpdateNotificationsTool(IMediator mediator) : IAiTool
         return result.IsSuccess
             ? new ToolResult(true, EntityId: userId.ToString(), EntityName: "Test push requested", Payload: result.Value)
             : ToolResult.FromFailure(result, userId.ToString());
-    }
-
-    private async Task<ToolResult> ExecuteAsync(IRequest<Result> command, Guid entityId, string entityName, object payload, CancellationToken ct)
-    {
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess
-            ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)
-            : ToolResult.FromFailure(result, entityId.ToString());
     }
 }
 
@@ -163,7 +158,7 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         return action switch
         {
             "delete_one" => await DeleteOneAsync(args, userId, ct),
-            "delete_all" => await ExecuteAsync(new DeleteAllNotificationsCommand(userId), userId, "Deleted all notifications", new { action }, ct),
+            "delete_all" => await ChatToolMediator.RunAsync(mediator, new DeleteAllNotificationsCommand(userId), userId, "Deleted all notifications", new { action }, ct),
             _ => new ToolResult(false, Error: $"Unsupported action '{action}'.")
         };
     }
@@ -174,19 +169,12 @@ public class DeleteNotificationsTool(IMediator mediator) : IAiTool
         if (!Guid.TryParse(notificationId, out var parsedId))
             return new ToolResult(false, Error: "notification_id must be a valid GUID.");
 
-        return await ExecuteAsync(
+        return await ChatToolMediator.RunAsync(
+            mediator,
             new DeleteNotificationCommand(userId, parsedId),
             parsedId,
             "Deleted notification",
             new { action = "delete_one", notificationId },
             ct);
-    }
-
-    private async Task<ToolResult> ExecuteAsync(IRequest<Result> command, Guid entityId, string entityName, object payload, CancellationToken ct)
-    {
-        var result = await mediator.Send(command, ct);
-        return result.IsSuccess
-            ? new ToolResult(true, EntityId: entityId.ToString(), EntityName: entityName, Payload: payload)
-            : ToolResult.FromFailure(result, entityId.ToString());
     }
 }

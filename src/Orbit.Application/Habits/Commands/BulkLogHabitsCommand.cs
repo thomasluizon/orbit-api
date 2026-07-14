@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -10,11 +9,11 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
-public record BulkLogItem(Guid HabitId, DateOnly? Date = null);
+public record BulkLogItem(Guid HabitId, DateOnly? Date = null) : IBulkHabitItem;
 
 public record BulkLogHabitsCommand(
     Guid UserId,
-    IReadOnlyList<BulkLogItem> Items) : IRequest<Result<BulkLogResult>>;
+    IReadOnlyList<BulkLogItem> Items) : IRequest<Result<BulkLogResult>>, IBulkHabitCommand<BulkLogItem>;
 
 public record BulkLogResult(IReadOnlyList<BulkLogItemResult> Results);
 
@@ -47,13 +46,8 @@ public partial class BulkLogHabitsCommandHandler(
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
 
-        var habitIds = request.Items.Select(i => i.HabitId).ToHashSet();
-        var loggableWindowStart = today.AddDays(-AppConstants.DefaultOverdueWindowDays);
-        var habits = await habitRepository.FindTrackedAsync(
-            h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
-            q => q.Include(h => h.Logs.Where(l => l.Date >= loggableWindowStart)),
-            cancellationToken);
-        var habitMap = habits.ToDictionary(h => h.Id);
+        var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
+            habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
 
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
