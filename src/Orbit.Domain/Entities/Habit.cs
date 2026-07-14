@@ -129,6 +129,10 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (reminderValidation is not null)
             return Result.Failure<Habit>(reminderValidation);
 
+        var reminderTimesValidation = HabitInvariants.ValidateReminderTimes(p.ReminderTimes);
+        if (reminderTimesValidation is not null)
+            return Result.Failure<Habit>(reminderTimesValidation);
+
         return Result.Success(new Habit
         {
             UserId = p.UserId,
@@ -342,7 +346,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         if (emojiValidation is not null)
             return emojiValidation;
 
-        return HabitInvariants.ValidateScheduledReminders(p.ScheduledReminders);
+        var scheduledReminderValidation = HabitInvariants.ValidateScheduledReminders(p.ScheduledReminders);
+        if (scheduledReminderValidation is not null)
+            return scheduledReminderValidation;
+
+        return HabitInvariants.ValidateReminderTimes(p.ReminderTimes);
     }
 
     private void ApplyRequiredUpdates(HabitUpdateParams p)

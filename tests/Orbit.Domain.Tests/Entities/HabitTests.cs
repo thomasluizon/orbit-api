@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.ValueObjects;
@@ -919,6 +920,56 @@ public class HabitTests
 
         result.IsSuccess.Should().BeTrue();
         habit.ScheduledReminders.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Create_ReminderTimes_AtLimit_ReturnsSuccess()
+    {
+        var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes).ToList();
+
+        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+            ReminderTimes: reminderTimes));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.ReminderTimes.Should().HaveCount(DomainConstants.MaxReminderTimes);
+    }
+
+    [Fact]
+    public void Create_ReminderTimes_OverLimit_ReturnsFailure()
+    {
+        var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes + 1).ToList();
+
+        var result = Habit.Create(new HabitCreateParams(ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow),
+            ReminderTimes: reminderTimes));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain($"at most {DomainConstants.MaxReminderTimes} reminder times");
+    }
+
+    [Fact]
+    public void Update_ReminderTimes_AtLimit_ReturnsSuccess()
+    {
+        var habit = CreateValidHabit();
+        var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes).ToList();
+
+        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+            ReminderTimes: reminderTimes));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ReminderTimes.Should().HaveCount(DomainConstants.MaxReminderTimes);
+    }
+
+    [Fact]
+    public void Update_ReminderTimes_OverLimit_ReturnsFailure()
+    {
+        var habit = CreateValidHabit();
+        var reminderTimes = Enumerable.Range(0, DomainConstants.MaxReminderTimes + 1).ToList();
+
+        var result = habit.Update(new HabitUpdateParams("Exercise", null, FrequencyUnit.Day, 1, null, false, null,
+            ReminderTimes: reminderTimes));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Contain($"at most {DomainConstants.MaxReminderTimes} reminder times");
     }
 
     [Fact]

@@ -402,6 +402,7 @@ public class OrbitDbContext : DbContext
             entity.Property(item => item.Question).HasMaxLength(500);
             entity.Property(item => item.PartialArgumentsJson).HasColumnType(JsonbColumnType);
             entity.Property(item => item.QuickActionsJson).HasColumnType(JsonbColumnType);
+            entity.Property(item => item.ResolvedAtUtc).HasField("_resolvedAtUtc");
             entity.HasOne<User>().WithMany().HasForeignKey(item => item.UserId).OnDelete(DeleteBehavior.Cascade);
         });
     }
@@ -565,6 +566,7 @@ public class OrbitDbContext : DbContext
             entity.Property(r => r.Reason).HasConversion<string>().HasMaxLength(32);
             entity.Property(r => r.Status).HasConversion<string>().HasMaxLength(32);
             entity.Property(r => r.Details).HasMaxLength(DomainConstants.MaxReportDetailsLength);
+            entity.Property(r => r.ReviewedAtUtc).HasField("_reviewedAtUtc");
             entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReporterId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany().HasForeignKey(r => r.ReportedUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<Cheer>().WithMany().HasForeignKey(r => r.CheerId).OnDelete(DeleteBehavior.SetNull);
