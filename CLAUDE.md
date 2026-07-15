@@ -56,6 +56,8 @@ The workflow is tool-agnostic between Claude Code and opencode; `.claude/` stays
 
 Branch protection on `main`: no direct pushes, no force pushes, no branch deletion. Branches: `feature/xxx`, `fix/xxx`, `chore/xxx`. **Squash merge only.** Never reuse a branch after its PR is squash-merged.
 
+Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotnet format Orbit.slnx --include <staged .cs>` on staged `.cs` files and re-stages the fixes. This repo has no Node, so there is no auto-install — bootstrap once per machine with `winget install evilmartians.lefthook` (fallbacks: `scoop install lefthook`, or a GitHub-release binary + `lefthook self-update`), then run `lefthook install` inside the clone to write `.git/hooks/pre-commit`.
+
 ## Testing
 
 - xUnit + FluentAssertions. Unit tests only — the integration suite was removed as outdated; do not add integration tests or a real-DB harness.
