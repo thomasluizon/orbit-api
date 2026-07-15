@@ -26,7 +26,7 @@ jobs:
         run: dotnet restore bench/Orbit.Benchmarks/Orbit.Benchmarks.csproj
 
       - name: Run benchmarks (ShortRun)
-        run: dotnet run -c Release --project bench/Orbit.Benchmarks --no-restore -- --filter '*'
+        run: dotnet run -c Release --project bench/Orbit.Benchmarks --no-restore -- --filter '*' --artifacts "$GITHUB_WORKSPACE/BenchmarkDotNet.Artifacts"
 
       - name: Compare against baseline (report-only)
         if: always()
