@@ -1,0 +1,7 @@
+min_version: "2.1.10"
+pre-commit:
+  commands:
+    dotnet-format:
+      glob: "*.cs"
+      run: dotnet format Orbit.slnx --include {staged_files}
+      stage_fixed: true
