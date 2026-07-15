@@ -46,3 +46,13 @@ dotnet test --filter "FullyQualifiedName~CreateHabit_Should_Succeed"
 | Domain entity test | `Orbit.Domain.Tests/Entities/HabitTests.cs` |
 | Service test | `Orbit.Infrastructure.Tests/Services/UserDateServiceTests.cs` |
 | Validator test | `Orbit.Application.Tests/Validators/*Tests.cs` |
+| Query-builder shape test | `Orbit.Infrastructure.Tests/Persistence/HabitLogReaderTests.cs` (EF InMemory / `.AsQueryable()`) |
+| N+1 / SQL round-trip-count test | `Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` |
+
+## Query-shape / round-trip-count pattern
+
+`QueryRoundTripCountTests` and the SQLite case in `SocialGraphReaderTests` catch N+1 regressions without a real Postgres: build the context via the shared `SqliteOrbitDbContextFactory` (SQLite in-memory — the only provider that emits real SQL — with the `::`-cast/filtered-index compat shim), pass a `CountingDbCommandInterceptor`, seed a small and a large row set, run the query, and assert the command count is **invariant to volume** (a count that grows with the seed is the N+1 signature). Use `SqliteOrbitDbContextFactory` for any new relational query-shape test; the ~6 inline copies of the compat shim are a known dedup follow-up.
+
+## Benchmarks (not part of `dotnet test`)
+
+`bench/Orbit.Benchmarks` (BenchmarkDotNet, `net10.0`) measures the pure hot paths and runs nightly via `benchmark.yml` against `bench/baseline.json` (report-only). It is intentionally excluded from the test/coverage/Stryker surface — never add it to a `dotnet test` step. Enumerate with `dotnet run -c Release --project bench/Orbit.Benchmarks -- --list flat`.

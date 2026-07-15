@@ -4,7 +4,7 @@
 
 ## Stack
 
-.NET 10, C# 13, PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI GPT-4.1-mini, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
+.NET 10, C# 14 (net10.0's default language version), PostgreSQL via EF Core 10, MediatR 14, FluentValidation 12, JWT Bearer, OpenAI GPT-4.1-mini, BCrypt, Firebase Admin SDK (FCM), Lib.Net.Http.WebPush (VAPID).
 
 ## Architecture (one-pager)
 
@@ -63,6 +63,8 @@ Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotne
 - xUnit + FluentAssertions. Unit tests only — the integration suite was removed as outdated; do not add integration tests or a real-DB harness.
 - Every new feature needs unit tests: commands, queries, validators, domain logic.
 - Test accounts bypass email verification via the `TEST_ACCOUNTS` env var (`email:code` pairs) — see `tests/CLAUDE.md`.
+- **Query-shape / N+1 guard:** `tests/Orbit.Infrastructure.Tests/Persistence/QueryRoundTripCountTests.cs` runs the filtered-include and batched reads (`GetRetrospectiveQuery`, `GetDailySummaryQuery`, `ExportUserDataQuery` shapes) over SQLite in-memory with a `CountingDbCommandInterceptor` and asserts the SQL round-trip count is invariant to row volume — the tripwire for an N+1 regression. Reuses the shared `SqliteOrbitDbContextFactory` shim (extracted for these tests; the ~6 inline copies remain a dedup follow-up).
+- **Benchmarks (not tests):** `bench/Orbit.Benchmarks` is a BenchmarkDotNet console (`net10.0`, `[MemoryDiagnoser][ShortRunJob]`) over the three pure hot paths (`HabitScheduleService`, `HabitMetricsCalculator.Calculate`, `RetrospectiveMetricsCalculator.Compute`). It is deliberately outside `dotnet test`/coverage/Stryker. `benchmark.yml` runs it nightly, exports JSON, and `check_bench.py` compares each mean to `bench/baseline.json` (~50% tolerance, report-only). Run locally: `dotnet run -c Release --project bench/Orbit.Benchmarks -- --filter '*'` (or `--list flat` to enumerate).
 
 ## Deployment
 
