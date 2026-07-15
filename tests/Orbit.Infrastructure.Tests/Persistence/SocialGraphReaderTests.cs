@@ -173,4 +173,36 @@ public class SocialGraphReaderTests
         result.Should().HaveCount(2);
         result.Select(c => c.Note).Should().ContainInOrder("n0", "n1");
     }
+
+    [Fact]
+    public async Task ReadVisibleFriendships_KeepsBlockFilterAsSingleQuery_NotPerFriendship()
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var caller = SeedUser(factory.Context, "caller");
+
+        for (var index = 0; index < 15; index++)
+        {
+            var friend = SeedUser(factory.Context, $"friend-{index}");
+            factory.Context.Friendships.Add(Accepted(caller, friend));
+            if (index % 3 == 0)
+                factory.Context.BlockedUsers.Add(BlockedUser.Create(caller, friend).Value);
+        }
+        await factory.Context.SaveChangesAsync();
+        factory.Context.ChangeTracker.Clear();
+
+        counter.Reset();
+        await new SocialGraphReader(factory.Context).ReadVisibleFriendshipsAsync(caller, 100, CancellationToken.None);
+
+        counter.CommandCount.Should().Be(1);
+    }
+
+    private static Guid SeedUser(OrbitDbContext context, string label)
+    {
+        var id = Guid.NewGuid();
+        var user = User.Create(label, $"{label}-{id:N}@example.com").Value;
+        typeof(User).GetProperty("Id")!.SetValue(user, id);
+        context.Users.Add(user);
+        return id;
+    }
 }

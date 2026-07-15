@@ -1,0 +1,10 @@
+{
+  "toleranceRatio": 0.5,
+  "means": {
+    "HabitScheduleBenchmarks.GetScheduledDates_OneYearDaily": 0,
+    "HabitScheduleBenchmarks.ComputeStreakAsOf_OneYear": 0,
+    "HabitScheduleBenchmarks.BuildStreakSeries_NinetyDayWindow": 0,
+    "HabitMetricsBenchmarks.Calculate_OneYearDailyHabit": 0,
+    "RetrospectiveMetricsBenchmarks.Compute_TwentyHabitsNinetyDays": 0
+  }
+}

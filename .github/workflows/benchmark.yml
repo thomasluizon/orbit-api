@@ -1,0 +1,41 @@
+name: Benchmarks
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Hot-path benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore bench/Orbit.Benchmarks/Orbit.Benchmarks.csproj
+
+      - name: Run benchmarks (ShortRun)
+        run: dotnet run -c Release --project bench/Orbit.Benchmarks --no-restore -- --filter '*' --artifacts "$GITHUB_WORKSPACE/BenchmarkDotNet.Artifacts"
+
+      - name: Compare against baseline (report-only)
+        if: always()
+        run: python3 .github/scripts/check_bench.py BenchmarkDotNet.Artifacts/results bench/baseline.json
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results
+          path: BenchmarkDotNet.Artifacts/**
+          if-no-files-found: warn

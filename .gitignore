@@ -35,6 +35,9 @@ TestResults/
 ## Mutation testing (Stryker)
 StrykerOutput/
 
+## BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
 ## Environment Variables & Secrets (CRÍTICO PARA SEU PROJETO)
 .env
 appsettings.Development.json
