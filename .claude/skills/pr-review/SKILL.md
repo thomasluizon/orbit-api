@@ -217,8 +217,9 @@ that will decide the outcome has to survive a challenge first.
      read "couldn't ask" as agreement. This graceful-degradation path keeps the CI review
      (no opencode) byte-for-byte identical to today.
    Scope to **Critical only** (not High) — cross-model time/cost is reserved for the findings
-   that actually block, per the on-demand-diversity budget (research.md). CONTESTED never
-   changes the deterministic recommendation: a surviving Critical still means NEEDS WORK.
+   that actually block. This is the on-demand-diversity budget: cross-model judgement is a
+   tool for blocking calls, never a standing gate. CONTESTED never changes the deterministic
+   recommendation: a surviving Critical still means NEEDS WORK.
 3. **Completeness pass (§3).** One pass only — a diff is its own boundary, so no loop: ask
    *"what changed file or hunk did I not give a verdict, what dimension did I mark N/A
    without checking its surface?"* and close the gap before reporting.
