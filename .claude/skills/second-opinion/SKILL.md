@@ -20,8 +20,10 @@ Ask a **different model** — GLM-5.2, run through the local `opencode` CLI on t
 Go subscription — to independently judge one concrete claim. Claude and GLM fail in
 different ways; a second architecture disagreeing is a real signal, an agreement is
 corroboration. This is the **on-demand cross-model diversity** the harness reserves for
-high-stakes calls (research.md locked decision: no standing consensus voting — the
-adversarial skeptic already beats that; bring GLM only when it pays).
+high-stakes calls. **Locked decision: no standing consensus voting** — the adversarial
+skeptic already beats it (a refuter kills false positives; N agents voting rubber-stamp
+each other), and the skeptics' only real gap is that they share a model family, so their
+blind spots correlate. That gap is what GLM closes. Bring it only when it pays.
 
 The model is **GLM-5.2 on OpenCode Go** (`opencode-go/glm-5.2`) — the top open-weight coder
 as of build time, ~1/6 Claude's cost, vetted full-precision weights on the Go plan. The
