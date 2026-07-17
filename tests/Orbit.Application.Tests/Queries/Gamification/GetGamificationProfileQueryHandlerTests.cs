@@ -2,7 +2,9 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Queries;
+using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -14,6 +16,7 @@ public class GetGamificationProfileQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
+    private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
     private readonly GetGamificationProfileQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -22,7 +25,9 @@ public class GetGamificationProfileQueryHandlerTests
     {
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<string>());
-        _handler = new GetGamificationProfileQueryHandler(_userRepo, _achievementRepo, _featureFlagService);
+        _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(AchievementProgressMetrics.Empty);
+        _handler = new GetGamificationProfileQueryHandler(_userRepo, _achievementRepo, _featureFlagService, _progressService);
     }
 
     private void EnableFreeTierFlag()
@@ -79,7 +84,7 @@ public class GetGamificationProfileQueryHandlerTests
     public async Task Handle_ProUser_CalculatesXpToNextLevel()
     {
         var user = CreateProUser();
-        user.AddXp(200);        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        user.AddXp(200); _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _achievementRepo.FindAsync(
             Arg.Any<Expression<Func<UserAchievement, bool>>>(),
@@ -91,7 +96,8 @@ public class GetGamificationProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.XpToNextLevel.Should().Be(100);    }
+        result.Value.XpToNextLevel.Should().Be(100);
+    }
 
     [Fact]
     public async Task Handle_AtLevel10_ReturnsInfiniteNextLevel()
@@ -208,6 +214,41 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.Achievements.Should().NotBeEmpty();
         result.Value.AchievementsEarned.Should().Be(1);
         result.Value.NextReward.ProTeaser.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_ProUser_PopulatesPerAchievementProgress()
+    {
+        var user = CreateProUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _achievementRepo.FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement> { UserAchievement.Create(UserId, AchievementDefinitions.WeekWarrior) });
+        _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new AchievementProgressMetrics(
+                CurrentStreak: 5, TotalCompletions: 120, GoalsCreated: 1, GoalsCompleted: 2,
+                FriendsCount: 3, CheersSent: 10, EarlyLogs: 4, NightLogs: 0));
+
+        var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var monthlyMaster = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.MonthlyMaster);
+        monthlyMaster.ProgressCurrent.Should().Be(5);
+        monthlyMaster.ProgressTarget.Should().Be(30);
+
+        var dedicated = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.Dedicated);
+        dedicated.ProgressCurrent.Should().Be(100);
+        dedicated.ProgressTarget.Should().Be(100);
+
+        var firstOrbit = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.FirstOrbit);
+        firstOrbit.ProgressCurrent.Should().BeNull();
+        firstOrbit.ProgressTarget.Should().BeNull();
+
+        var weekWarrior = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.WeekWarrior);
+        weekWarrior.IsEarned.Should().BeTrue();
+        weekWarrior.ProgressCurrent.Should().Be(7);
+        weekWarrior.ProgressTarget.Should().Be(7);
     }
 
     [Fact]

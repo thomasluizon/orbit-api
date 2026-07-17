@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Orbit.Application.Gamification;
+using Orbit.Domain.Enums;
 
 namespace Orbit.Application.Tests.Gamification;
 
@@ -186,6 +187,54 @@ public class AchievementDefinitionsTests
             .ToList();
 
         goals.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public void QuantifiableAchievements_HavePositiveProgressTarget()
+    {
+        AchievementDefinitions.All
+            .Where(a => a.Metric != ProgressMetric.None)
+            .Should().AllSatisfy(a => a.ProgressTarget.Should().BeGreaterThan(0));
+    }
+
+    [Fact]
+    public void NoneMetricAchievements_HaveNullProgressTarget()
+    {
+        AchievementDefinitions.All
+            .Where(a => a.Metric == ProgressMetric.None)
+            .Should().AllSatisfy(a => a.ProgressTarget.Should().BeNull());
+    }
+
+    [Theory]
+    [InlineData(AchievementDefinitions.WeekWarrior, ProgressMetric.CurrentStreak, 7)]
+    [InlineData(AchievementDefinitions.FortnightFocus, ProgressMetric.CurrentStreak, 14)]
+    [InlineData(AchievementDefinitions.MonthlyMaster, ProgressMetric.CurrentStreak, 30)]
+    [InlineData(AchievementDefinitions.QuarterChampion, ProgressMetric.CurrentStreak, 90)]
+    [InlineData(AchievementDefinitions.Centurion, ProgressMetric.CurrentStreak, 100)]
+    [InlineData(AchievementDefinitions.HalfYearHero, ProgressMetric.CurrentStreak, 180)]
+    [InlineData(AchievementDefinitions.YearOfDiscipline, ProgressMetric.CurrentStreak, 365)]
+    [InlineData(AchievementDefinitions.StreakTitan, ProgressMetric.CurrentStreak, 500)]
+    [InlineData(AchievementDefinitions.StreakImmortal, ProgressMetric.CurrentStreak, 1000)]
+    [InlineData(AchievementDefinitions.GettingMomentum, ProgressMetric.TotalCompletions, 10)]
+    [InlineData(AchievementDefinitions.BuildingHabits, ProgressMetric.TotalCompletions, 50)]
+    [InlineData(AchievementDefinitions.Dedicated, ProgressMetric.TotalCompletions, 100)]
+    [InlineData(AchievementDefinitions.Relentless, ProgressMetric.TotalCompletions, 500)]
+    [InlineData(AchievementDefinitions.LegendaryVolume, ProgressMetric.TotalCompletions, 1000)]
+    [InlineData(AchievementDefinitions.Unstoppable, ProgressMetric.TotalCompletions, 2500)]
+    [InlineData(AchievementDefinitions.GoalSetter, ProgressMetric.GoalsCreated, 3)]
+    [InlineData(AchievementDefinitions.Overachiever, ProgressMetric.GoalsCompleted, 5)]
+    [InlineData(AchievementDefinitions.DreamMaker, ProgressMetric.GoalsCompleted, 10)]
+    [InlineData(AchievementDefinitions.SquadGoals, ProgressMetric.FriendsCount, 5)]
+    [InlineData(AchievementDefinitions.Cheerleader, ProgressMetric.CheersSent, 25)]
+    [InlineData(AchievementDefinitions.EarlyBird, ProgressMetric.EarlyLogs, 10)]
+    [InlineData(AchievementDefinitions.NightOwl, ProgressMetric.NightLogs, 10)]
+    public void QuantifiableAchievements_HaveExpectedMetricAndTarget(string id, ProgressMetric metric, int target)
+    {
+        var definition = AchievementDefinitions.GetById(id);
+
+        definition.Should().NotBeNull();
+        definition!.Metric.Should().Be(metric);
+        definition.ProgressTarget.Should().Be(target);
     }
 
     [Fact]

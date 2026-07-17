@@ -14,6 +14,15 @@ public static class AchievementChecks
 {
     public const int PerfectStreakWindowDays = 30;
 
+    /// <summary>
+    /// The single source of truth for a linear-threshold achievement: its <see cref="AchievementDefinition.ProgressTarget"/>.
+    /// Throws if the id is unknown or the achievement has no target, since every caller here passes a
+    /// compile-time-known quantifiable achievement id — a miss is a programming error, not a runtime state.
+    /// </summary>
+    private static int TargetFor(string achievementId) =>
+        AchievementDefinitions.GetById(achievementId)?.ProgressTarget
+            ?? throw new InvalidOperationException($"Achievement '{achievementId}' has no ProgressTarget");
+
     public static void TryGrant(
         string achievementId,
         User user,
@@ -45,23 +54,23 @@ public static class AchievementChecks
         User user,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
     {
-        if (currentStreak >= 7)
+        if (currentStreak >= TargetFor(AchievementDefinitions.WeekWarrior))
             TryGrant(AchievementDefinitions.WeekWarrior, user, earned, newAchievements);
-        if (currentStreak >= 14)
+        if (currentStreak >= TargetFor(AchievementDefinitions.FortnightFocus))
             TryGrant(AchievementDefinitions.FortnightFocus, user, earned, newAchievements);
-        if (currentStreak >= 30)
+        if (currentStreak >= TargetFor(AchievementDefinitions.MonthlyMaster))
             TryGrant(AchievementDefinitions.MonthlyMaster, user, earned, newAchievements);
-        if (currentStreak >= 90)
+        if (currentStreak >= TargetFor(AchievementDefinitions.QuarterChampion))
             TryGrant(AchievementDefinitions.QuarterChampion, user, earned, newAchievements);
-        if (currentStreak >= 100)
+        if (currentStreak >= TargetFor(AchievementDefinitions.Centurion))
             TryGrant(AchievementDefinitions.Centurion, user, earned, newAchievements);
-        if (currentStreak >= 180)
+        if (currentStreak >= TargetFor(AchievementDefinitions.HalfYearHero))
             TryGrant(AchievementDefinitions.HalfYearHero, user, earned, newAchievements);
-        if (currentStreak >= 365)
+        if (currentStreak >= TargetFor(AchievementDefinitions.YearOfDiscipline))
             TryGrant(AchievementDefinitions.YearOfDiscipline, user, earned, newAchievements);
-        if (currentStreak >= 500)
+        if (currentStreak >= TargetFor(AchievementDefinitions.StreakTitan))
             TryGrant(AchievementDefinitions.StreakTitan, user, earned, newAchievements);
-        if (currentStreak >= 1000)
+        if (currentStreak >= TargetFor(AchievementDefinitions.StreakImmortal))
             TryGrant(AchievementDefinitions.StreakImmortal, user, earned, newAchievements);
     }
 
@@ -71,17 +80,17 @@ public static class AchievementChecks
         User user,
         List<(UserAchievement Entity, AchievementDefinition Definition)> newAchievements)
     {
-        if (totalCompletions >= 10)
+        if (totalCompletions >= TargetFor(AchievementDefinitions.GettingMomentum))
             TryGrant(AchievementDefinitions.GettingMomentum, user, earned, newAchievements);
-        if (totalCompletions >= 50)
+        if (totalCompletions >= TargetFor(AchievementDefinitions.BuildingHabits))
             TryGrant(AchievementDefinitions.BuildingHabits, user, earned, newAchievements);
-        if (totalCompletions >= 100)
+        if (totalCompletions >= TargetFor(AchievementDefinitions.Dedicated))
             TryGrant(AchievementDefinitions.Dedicated, user, earned, newAchievements);
-        if (totalCompletions >= 500)
+        if (totalCompletions >= TargetFor(AchievementDefinitions.Relentless))
             TryGrant(AchievementDefinitions.Relentless, user, earned, newAchievements);
-        if (totalCompletions >= 1000)
+        if (totalCompletions >= TargetFor(AchievementDefinitions.LegendaryVolume))
             TryGrant(AchievementDefinitions.LegendaryVolume, user, earned, newAchievements);
-        if (totalCompletions >= 2500)
+        if (totalCompletions >= TargetFor(AchievementDefinitions.Unstoppable))
             TryGrant(AchievementDefinitions.Unstoppable, user, earned, newAchievements);
     }
 
@@ -162,7 +171,7 @@ public static class AchievementChecks
                 var userTime = TimeZoneInfo.ConvertTimeFromUtc(l.CreatedAtUtc, userTz);
                 return userTime.Hour < 7;
             });
-            if (earlyCount >= 10)
+            if (earlyCount >= TargetFor(AchievementDefinitions.EarlyBird))
                 TryGrant(AchievementDefinitions.EarlyBird, user, earned, newAchievements);
         }
 
@@ -173,7 +182,7 @@ public static class AchievementChecks
                 var userTime = TimeZoneInfo.ConvertTimeFromUtc(l.CreatedAtUtc, userTz);
                 return userTime.Hour >= 22;
             });
-            if (nightCount >= 10)
+            if (nightCount >= TargetFor(AchievementDefinitions.NightOwl))
                 TryGrant(AchievementDefinitions.NightOwl, user, earned, newAchievements);
         }
     }

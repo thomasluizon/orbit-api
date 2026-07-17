@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -39,7 +40,8 @@ public record GetGamificationProfileQuery(Guid UserId) : IRequest<Result<Gamific
 public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
-    IFeatureFlagService featureFlagService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
+    IFeatureFlagService featureFlagService,
+    IAchievementProgressService progressService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
     public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
     {
@@ -61,7 +63,7 @@ public class GetGamificationProfileQueryHandler(
         var (achievements, userAchievements, achievementsEarned) =
             achievementsLocked
                 ? (new List<AchievementDto>(), new List<UserAchievementDto>(), 0)
-                : await BuildAchievementsAsync(request.UserId, cancellationToken);
+                : await BuildAchievementsAsync(user, cancellationToken);
 
         var proTeaser = user.HasProAccess
             ? null
@@ -92,18 +94,23 @@ public class GetGamificationProfileQueryHandler(
     }
 
     private async Task<(List<AchievementDto> Achievements, List<UserAchievementDto> UserAchievements, int EarnedCount)> BuildAchievementsAsync(
-        Guid userId, CancellationToken cancellationToken)
+        User user, CancellationToken cancellationToken)
     {
-        var earned = await achievementRepository.FindAsync(a => a.UserId == userId, cancellationToken);
+        var earned = await achievementRepository.FindAsync(a => a.UserId == user.Id, cancellationToken);
         var earnedMap = earned.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
+        var earnedIds = earnedMap.Keys.ToHashSet();
+
+        var metrics = await progressService.LoadAsync(user, earnedIds, cancellationToken);
 
         var achievements = AchievementDefinitions.All.Select(def =>
         {
             var isEarned = earnedMap.TryGetValue(def.Id, out var earnedAt);
+            var (progressCurrent, progressTarget) = AchievementProgressCalculator.Compute(def, metrics, isEarned);
             return new AchievementDto(
                 def.Id, def.Name, def.Description,
                 def.Category.ToString(), def.Rarity.ToString(),
-                def.XpReward, def.IconKey, isEarned, isEarned ? earnedAt : null);
+                def.XpReward, def.IconKey, isEarned, isEarned ? earnedAt : null,
+                progressCurrent, progressTarget);
         }).ToList();
 
         var userAchievements = earned.Select(e =>

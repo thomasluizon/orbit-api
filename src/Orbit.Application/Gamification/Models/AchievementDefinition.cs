@@ -9,4 +9,6 @@ public record AchievementDefinition(
     AchievementCategory Category,
     AchievementRarity Rarity,
     int XpReward,
-    string IconKey);
+    string IconKey,
+    ProgressMetric Metric = ProgressMetric.None,
+    int? ProgressTarget = null);
