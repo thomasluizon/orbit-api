@@ -201,7 +201,7 @@ public class SendCheerCommandTests
     }
 
     [Fact]
-    public async Task TenthSentCheer_PersistsCheerAndEvaluatesCheerleaderThreshold()
+    public async Task ThresholdSentCheer_PersistsCheerAndEvaluatesCheerleaderThreshold()
     {
         _cheerRepository.CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(CheerleaderThreshold - 1);
@@ -213,5 +213,6 @@ public class SendCheerCommandTests
         await _cheerRepository.Received().CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>());
     }
 
-    private const int CheerleaderThreshold = 10;
+    private static readonly int CheerleaderThreshold =
+        AchievementChecks.TargetFor(AchievementDefinitions.Cheerleader);
 }

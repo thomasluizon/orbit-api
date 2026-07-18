@@ -29,7 +29,6 @@ public partial class SendCheerCommandHandler(
     ILogger<SendCheerCommandHandler> logger) : IRequestHandler<SendCheerCommand, Result<Guid>>
 {
     private const string CheerleaderAchievementId = "cheerleader";
-    private const int CheerleaderThreshold = 10;
     private const string RecipientNotificationUrl = "/social?tab=feed";
 
     public async Task<Result<Guid>> Handle(SendCheerCommand request, CancellationToken cancellationToken)
@@ -107,7 +106,7 @@ public partial class SendCheerCommandHandler(
         TryGrantAchievementAsync(sender, AchievementDefinitions.FirstCheer, cancellationToken);
 
     /// <summary>
-    /// Awards "Cheerleader" once the sender has sent <see cref="CheerleaderThreshold"/> cheers (counting
+    /// Awards "Cheerleader" once the sender has sent the achievement's <see cref="AchievementDefinition.ProgressTarget"/> cheers (counting
     /// the one being persisted in this unit of work, which is not yet in the database). The conventional
     /// achievement id stays dormant — <see cref="AchievementChecks.TryGrant"/> no-ops on an unknown id —
     /// until the definition ships, then this lights up automatically.
@@ -117,7 +116,7 @@ public partial class SendCheerCommandHandler(
     {
         var priorCheerCount = await repositories.Cheers.CountAsync(
             c => c.SenderId == sender.Id, cancellationToken);
-        if (priorCheerCount + 1 < CheerleaderThreshold)
+        if (priorCheerCount + 1 < AchievementChecks.TargetFor(CheerleaderAchievementId))
             return;
 
         await TryGrantAchievementAsync(sender, CheerleaderAchievementId, cancellationToken);

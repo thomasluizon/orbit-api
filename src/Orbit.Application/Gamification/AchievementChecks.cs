@@ -19,7 +19,7 @@ public static class AchievementChecks
     /// Throws if the id is unknown or the achievement has no target, since every caller here passes a
     /// compile-time-known quantifiable achievement id — a miss is a programming error, not a runtime state.
     /// </summary>
-    private static int TargetFor(string achievementId) =>
+    public static int TargetFor(string achievementId) =>
         AchievementDefinitions.GetById(achievementId)?.ProgressTarget
             ?? throw new InvalidOperationException($"Achievement '{achievementId}' has no ProgressTarget");
 
