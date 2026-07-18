@@ -27,8 +27,8 @@ public class AchievementProgressService(
     FriendGraphService friendGraphService,
     IUserDateService userDateService) : IAchievementProgressService
 {
-    private const int TotalCompletionWindowDays = 400;
-    private const int StreakLogWindowDays = 400;
+    private const int TotalCompletionWindowDays = 2750;
+    private const int StreakLogWindowDays = 1100;
     private const int TimeOfDayWindowDays = 90;
     private const int EarlyBeforeHour = 7;
     private const int NightFromHour = 22;
@@ -46,7 +46,7 @@ public class AchievementProgressService(
             cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToList();
 
-        // Streak achievements are granted PER-HABIT, so progress is the MAX single-habit streak (not the union user.CurrentStreak); the 400-day window mirrors GamificationService.AchievementLogWindowDays so progress equals grant and exceeds the calculator's 365-day horizon. https://github.com/thomasluizon/orbit-api/pull/419
+        // Streak achievements are granted PER-HABIT, so progress is the MAX single-habit streak (not the union user.CurrentStreak); the 1100-day window mirrors GamificationService.StreakLogWindowDays so progress equals grant and stays within the calculator's 1100-day horizon, keeping the 1000-day StreakImmortal reachable. https://github.com/thomasluizon/orbit-api/pull/419
         var maxCurrentStreak = habits.Count == 0
             ? 0
             : habits.Max(h => HabitMetricsCalculator.Calculate(h, today, userTimeZone).CurrentStreak);

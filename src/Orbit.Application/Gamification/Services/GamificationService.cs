@@ -35,7 +35,9 @@ public partial class GamificationService(
     IFeatureFlagService featureFlagService,
     ILogger<GamificationService> logger) : IGamificationService
 {
-    private const int AchievementLogWindowDays = 400;
+    // Streak window covers the 1000-day StreakImmortal target; volume window covers the 2500-completion Unstoppable target. Both must exceed their largest achievement target or those achievements can never be granted. https://github.com/thomasluizon/orbit-api/pull/419
+    private const int StreakLogWindowDays = 1100;
+    private const int TotalCompletionWindowDays = 2750;
     private const int MaxConcurrencyAttempts = 3;
 
     private sealed record PendingPush(Guid UserId, string Title, string Body);
@@ -92,7 +94,7 @@ public partial class GamificationService(
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var today = await userDateService.GetUserTodayAsync(userId, ct);
 
-        var streakLogCutoff = today.AddDays(-AchievementLogWindowDays);
+        var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
         var loggedHabits = await repos.HabitRepository.FindAsync(
             h => h.UserId == userId && habitIds.Contains(h.Id),
             q => q.Include(h => h.Logs.Where(l => l.Date >= streakLogCutoff)),
@@ -130,8 +132,8 @@ public partial class GamificationService(
             ct);
         var allHabitIds = allUserHabits.Select(h => h.Id).ToList();
 
-        var totalLogCutoff = today.AddDays(-AchievementLogWindowDays);
-        var totalLogCount = earned.Contains(AchievementDefinitions.Liftoff) && earned.Contains(AchievementDefinitions.LegendaryVolume)
+        var totalLogCutoff = today.AddDays(-TotalCompletionWindowDays);
+        var totalLogCount = earned.Contains(AchievementDefinitions.Liftoff) && earned.Contains(AchievementDefinitions.Unstoppable)
             ? 0
             : await repos.HabitLogRepository.CountAsync(
                 l => allHabitIds.Contains(l.HabitId) && l.Date >= totalLogCutoff, ct);
@@ -228,7 +230,7 @@ public partial class GamificationService(
 
         AchievementChecks.CheckConsistencyAchievements(currentStreak, earned, user, newAchievements);
 
-        if (!earned.Contains(AchievementDefinitions.LegendaryVolume))
+        if (!earned.Contains(AchievementDefinitions.Unstoppable))
             AchievementChecks.CheckVolumeAchievements(context.TotalLogCount, earned, user, newAchievements);
 
         AchievementChecks.CheckPerfectDay(context.AllUserHabits, today, earned, user, newAchievements);
