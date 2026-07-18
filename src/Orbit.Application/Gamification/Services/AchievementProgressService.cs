@@ -1,5 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Models;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -26,6 +28,7 @@ public class AchievementProgressService(
     IUserDateService userDateService) : IAchievementProgressService
 {
     private const int TotalCompletionWindowDays = 400;
+    private const int StreakLogWindowDays = 400;
     private const int TimeOfDayWindowDays = 90;
     private const int EarlyBeforeHour = 7;
     private const int NightFromHour = 22;
@@ -34,9 +37,19 @@ public class AchievementProgressService(
         User user, IReadOnlySet<string> earnedIds, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(user.Id, cancellationToken);
+        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
 
-        var habits = await habitRepository.FindAsync(h => h.UserId == user.Id, cancellationToken);
+        var streakLogCutoff = today.AddDays(-StreakLogWindowDays);
+        var habits = await habitRepository.FindAsync(
+            h => h.UserId == user.Id,
+            q => q.Include(h => h.Logs.Where(l => l.Date >= streakLogCutoff)),
+            cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToList();
+
+        // Streak achievements are granted PER-HABIT, so progress is the MAX single-habit streak (not the union user.CurrentStreak); the 400-day window mirrors GamificationService.AchievementLogWindowDays so progress equals grant and exceeds the calculator's 365-day horizon. https://github.com/thomasluizon/orbit-api/pull/419
+        var maxCurrentStreak = habits.Count == 0
+            ? 0
+            : habits.Max(h => HabitMetricsCalculator.Calculate(h, today, userTimeZone).CurrentStreak);
 
         var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0
@@ -50,10 +63,11 @@ public class AchievementProgressService(
         var friendsCount = await friendGraphService.CountAcceptedFriendsAsync(user.Id, cancellationToken);
         var cheersSent = await cheerRepository.CountAsync(c => c.SenderId == user.Id, cancellationToken);
 
-        var (earlyLogs, nightLogs) = await CountTimeOfDayLogsAsync(user, habitIds, earnedIds, cancellationToken);
+        var (earlyLogs, nightLogs) = await CountTimeOfDayLogsAsync(
+            habitIds, earnedIds, userTimeZone, cancellationToken);
 
         return new AchievementProgressMetrics(
-            user.CurrentStreak,
+            maxCurrentStreak,
             totalCompletions,
             goalsCreated,
             goalsCompleted,
@@ -64,7 +78,8 @@ public class AchievementProgressService(
     }
 
     private async Task<(int Early, int Night)> CountTimeOfDayLogsAsync(
-        User user, IReadOnlyList<Guid> habitIds, IReadOnlySet<string> earnedIds, CancellationToken cancellationToken)
+        IReadOnlyList<Guid> habitIds, IReadOnlySet<string> earnedIds,
+        TimeZoneInfo userTimeZone, CancellationToken cancellationToken)
     {
         if (habitIds.Count == 0)
             return (0, 0);
@@ -75,7 +90,6 @@ public class AchievementProgressService(
         var logs = await habitLogRepository.FindAsync(
             l => habitIds.Contains(l.HabitId) && l.CreatedAtUtc >= createdAtUtcCutoff, cancellationToken);
 
-        var userTimeZone = TimeZoneHelper.FindTimeZone(user.TimeZone);
         var early = 0;
         var night = 0;
         foreach (var log in logs)

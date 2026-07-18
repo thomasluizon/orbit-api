@@ -6,6 +6,7 @@ using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using System.Linq;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Gamification;
@@ -23,6 +24,7 @@ public class AchievementProgressServiceTests
     private readonly AchievementProgressService _service;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 7, 17);
 
     public AchievementProgressServiceTests()
     {
@@ -30,18 +32,39 @@ public class AchievementProgressServiceTests
         _service = new AchievementProgressService(
             _habitRepo, _habitLogRepo, _goalRepo, _cheerRepo, friendGraphService, _userDateService);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(new DateOnly(2026, 7, 17));
+            .Returns(Today);
     }
 
     private static User CreateUser(int streak = 0)
     {
         var user = User.Create("Test User", "test@example.com").Value;
-        user.SetStreakState(streak, streak, new DateOnly(2026, 7, 16));
+        user.SetStreakState(streak, streak, Today.AddDays(-1));
         return user;
     }
 
     private static Habit CreateHabit() =>
         Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, new DateOnly(2026, 1, 1))).Value;
+
+    /// <summary>
+    /// Builds a daily habit whose own current streak is exactly <paramref name="streakDays"/>: it backdates
+    /// the habit's creation so the streak window has room, then logs the last N consecutive days ending today.
+    /// </summary>
+    private static Habit CreateHabitWithStreak(int streakDays)
+    {
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, Today)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-400).ToDateTime(TimeOnly.MinValue));
+        for (var day = 0; day < streakDays; day++)
+            habit.Log(Today.AddDays(-day), advanceDueDate: false);
+        return habit;
+    }
+
+    private void StubHabits(params Habit[] habits) =>
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habits.ToList());
 
     private void StubCounts()
     {
@@ -55,15 +78,14 @@ public class AchievementProgressServiceTests
     public async Task LoadAsync_WithHabits_MapsEveryCountToItsMetric()
     {
         var user = CreateUser(streak: 9);
-        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Habit> { CreateHabit() });
+        StubHabits(CreateHabitWithStreak(5));
         _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<HabitLog>());
         StubCounts();
 
         var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
 
-        metrics.CurrentStreak.Should().Be(9);
+        metrics.CurrentStreak.Should().Be(5);
         metrics.TotalCompletions.Should().Be(42);
         metrics.GoalsCreated.Should().Be(7);
         metrics.GoalsCompleted.Should().Be(3);
@@ -78,8 +100,7 @@ public class AchievementProgressServiceTests
     public async Task LoadAsync_BothTimeOfDayAchievementsEarned_SkipsTheLogScan()
     {
         var user = CreateUser();
-        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Habit> { CreateHabit() });
+        StubHabits(CreateHabit());
         StubCounts();
         var earned = new HashSet<string> { AchievementDefinitions.EarlyBird, AchievementDefinitions.NightOwl };
 
@@ -94,8 +115,7 @@ public class AchievementProgressServiceTests
     public async Task LoadAsync_NoHabits_SkipsAllLogQueries()
     {
         var user = CreateUser();
-        _habitRepo.FindAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(new List<Habit>());
+        StubHabits();
         StubCounts();
 
         var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
@@ -103,5 +123,19 @@ public class AchievementProgressServiceTests
         metrics.TotalCompletions.Should().Be(0);
         await _habitLogRepo.DidNotReceive().CountAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>());
         await _habitLogRepo.DidNotReceive().FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LoadAsync_HighUnionStreakButLowPerHabitStreaks_ReturnsMaxPerHabitStreakNotUnion()
+    {
+        var user = CreateUser(streak: 30);
+        StubHabits(CreateHabitWithStreak(3), CreateHabitWithStreak(1));
+        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog>());
+        StubCounts();
+
+        var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(3);
     }
 }
