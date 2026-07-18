@@ -2,6 +2,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
+using Orbit.Application.Habits.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -56,6 +57,19 @@ public class AchievementProgressServiceTests
             .SetValue(habit, Today.AddDays(-400).ToDateTime(TimeOnly.MinValue));
         for (var day = 0; day < streakDays; day++)
             habit.Log(Today.AddDays(-day), advanceDueDate: false);
+        return habit;
+    }
+
+    /// <summary>
+    /// Builds a daily BAD habit with NO logs and a backdated creation, so its abstinence "streak"
+    /// (consecutive non-logged expected days) runs long — the value that must NOT count toward streak progress.
+    /// </summary>
+    private static Habit CreateBadHabitWithAbstinenceStreak()
+    {
+        var habit = Habit.Create(
+            new HabitCreateParams(UserId, "Bad Habit", FrequencyUnit.Day, 1, Today, IsBadHabit: true)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-400).ToDateTime(TimeOnly.MinValue));
         return habit;
     }
 
@@ -137,5 +151,23 @@ public class AchievementProgressServiceTests
         var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
 
         metrics.CurrentStreak.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task LoadAsync_BadHabitAbstinenceStreak_ExcludedFromStreakProgress()
+    {
+        var user = CreateUser(streak: 30);
+        var badHabit = CreateBadHabitWithAbstinenceStreak();
+        StubHabits(CreateHabitWithStreak(2), badHabit);
+        _habitLogRepo.FindAsync(Arg.Any<Expression<Func<HabitLog, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog>());
+        StubCounts();
+
+        var badHabitRawStreak = HabitMetricsCalculator.Calculate(badHabit, Today).CurrentStreak;
+
+        var metrics = await _service.LoadAsync(user, new HashSet<string>(), CancellationToken.None);
+
+        metrics.CurrentStreak.Should().Be(2);
+        badHabitRawStreak.Should().BeGreaterThan(2);
     }
 }

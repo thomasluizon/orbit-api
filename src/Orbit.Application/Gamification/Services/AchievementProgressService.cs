@@ -46,10 +46,11 @@ public class AchievementProgressService(
             cancellationToken);
         var habitIds = habits.Select(h => h.Id).ToList();
 
-        // Streak achievements are granted PER-HABIT, so progress is the MAX single-habit streak (not the union user.CurrentStreak); the 1100-day window mirrors GamificationService.StreakLogWindowDays so progress equals grant and stays within the calculator's 1100-day horizon, keeping the 1000-day StreakImmortal reachable. https://github.com/thomasluizon/orbit-api/pull/419
-        var maxCurrentStreak = habits.Count == 0
+        // Streak achievements are granted PER-HABIT and ONLY for good habits (GamificationService awards CheckConsistencyAchievements exclusively when !IsBadHabit; a bad-habit "streak" is consecutive ABSTINENCE days, opposite semantics), so progress is the MAX single-GOOD-habit streak (not the union user.CurrentStreak, not a bad habit's abstinence run); the 1100-day window mirrors GamificationService.StreakLogWindowDays so progress equals grant and stays within the calculator's 1100-day horizon, keeping the 1000-day StreakImmortal reachable. https://github.com/thomasluizon/orbit-api/pull/419
+        var goodHabits = habits.Where(h => !h.IsBadHabit).ToList();
+        var maxCurrentStreak = goodHabits.Count == 0
             ? 0
-            : habits.Max(h => HabitMetricsCalculator.Calculate(h, today, userTimeZone).CurrentStreak);
+            : goodHabits.Max(h => HabitMetricsCalculator.Calculate(h, today, userTimeZone).CurrentStreak);
 
         var totalCompletionCutoff = today.AddDays(-TotalCompletionWindowDays);
         var totalCompletions = habitIds.Count == 0
