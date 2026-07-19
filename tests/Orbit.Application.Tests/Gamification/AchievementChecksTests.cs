@@ -58,4 +58,39 @@ public class AchievementChecksTests
 
         newAchievements.Should().NotContain(a => a.Definition.Id == AchievementDefinitions.Unstoppable);
     }
+
+    [Theory]
+    [InlineData(AchievementDefinitions.WeekWarrior)]
+    [InlineData(AchievementDefinitions.MonthlyMaster)]
+    [InlineData(AchievementDefinitions.QuarterChampion)]
+    [InlineData(AchievementDefinitions.StreakTitan)]
+    public void CheckConsistencyAchievements_GrantsExactlyAtDefinitionTarget(string achievementId)
+    {
+        var target = AchievementDefinitions.GetById(achievementId)!.ProgressTarget!.Value;
+
+        var atTarget = NewList();
+        AchievementChecks.CheckConsistencyAchievements(target, new HashSet<string>(), CreateUser(), atTarget);
+        atTarget.Should().Contain(a => a.Definition.Id == achievementId);
+
+        var belowTarget = NewList();
+        AchievementChecks.CheckConsistencyAchievements(target - 1, new HashSet<string>(), CreateUser(), belowTarget);
+        belowTarget.Should().NotContain(a => a.Definition.Id == achievementId);
+    }
+
+    [Theory]
+    [InlineData(AchievementDefinitions.GettingMomentum)]
+    [InlineData(AchievementDefinitions.Dedicated)]
+    [InlineData(AchievementDefinitions.Relentless)]
+    public void CheckVolumeAchievements_GrantsExactlyAtDefinitionTarget(string achievementId)
+    {
+        var target = AchievementDefinitions.GetById(achievementId)!.ProgressTarget!.Value;
+
+        var atTarget = NewList();
+        AchievementChecks.CheckVolumeAchievements(target, new HashSet<string>(), CreateUser(), atTarget);
+        atTarget.Should().Contain(a => a.Definition.Id == achievementId);
+
+        var belowTarget = NewList();
+        AchievementChecks.CheckVolumeAchievements(target - 1, new HashSet<string>(), CreateUser(), belowTarget);
+        belowTarget.Should().NotContain(a => a.Definition.Id == achievementId);
+    }
 }

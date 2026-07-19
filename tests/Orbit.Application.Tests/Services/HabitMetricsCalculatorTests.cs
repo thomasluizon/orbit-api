@@ -503,6 +503,23 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void Calculate_StreakLongerThan365Days_NotCappedAt365()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Long Streak", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-600).ToDateTime(TimeOnly.MinValue));
+
+        for (var day = 0; day < 500; day++)
+            habit.Log(Today.AddDays(-day), advanceDueDate: false);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(500);
+        metrics.LongestStreak.Should().Be(500);
+    }
+
+    [Fact]
     public void Calculate_FlexibleHabit_LoggedMultipleTimes_CountsAll()
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -518,5 +535,6 @@ public class HabitMetricsCalculatorTests
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
-        metrics.TotalCompletions.Should().Be(1);    }
+        metrics.TotalCompletions.Should().Be(1);
+    }
 }

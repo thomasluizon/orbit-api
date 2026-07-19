@@ -114,6 +114,8 @@ public class ResultActionResultExtensionsTests
     [InlineData(ErrorCodes.InternalServerError, 500)]
     [InlineData(ErrorCodes.ValidationError, 400)]
     [InlineData(ErrorCodes.DeadlineInPast, 400)]
+    [InlineData(ErrorCodes.PaymentServiceUnavailable, 503)]
+    [InlineData(ErrorCodes.BillingDetailsUnavailable, 503)]
     public void ToErrorResult_MapsErrorCodeToStatus(string errorCode, int expectedStatus)
     {
         var result = Result.Failure("failure", errorCode);

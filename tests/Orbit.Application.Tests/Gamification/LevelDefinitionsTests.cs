@@ -98,4 +98,14 @@ public class LevelDefinitionsTests
         LevelDefinitions.All[0].Level.Should().Be(1);
         LevelDefinitions.All[0].XpRequired.Should().Be(0);
     }
+
+    [Theory]
+    [InlineData(1, "starter")]
+    [InlineData(2, "explorer")]
+    [InlineData(10, "legend")]
+    [InlineData(20, "legend")]
+    public void TitleKeyForLevel_ReturnsLowercaseTitle(int level, string expectedKey)
+    {
+        LevelDefinitions.TitleKeyForLevel(level).Should().Be(expectedKey);
+    }
 }

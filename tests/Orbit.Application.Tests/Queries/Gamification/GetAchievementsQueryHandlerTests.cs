@@ -1,7 +1,9 @@
 using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Queries;
+using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
@@ -12,13 +14,16 @@ public class GetAchievementsQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
+    private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
     private readonly GetAchievementsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public GetAchievementsQueryHandlerTests()
     {
-        _handler = new GetAchievementsQueryHandler(_userRepo, _achievementRepo);
+        _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(AchievementProgressMetrics.Empty);
+        _handler = new GetAchievementsQueryHandler(_userRepo, _achievementRepo, _progressService);
     }
 
     private static User CreateProUser()
@@ -122,6 +127,50 @@ public class GetAchievementsQueryHandlerTests
             a.XpReward.Should().BeGreaterThan(0);
             a.IconKey.Should().NotBeNullOrEmpty();
         });
+    }
+
+    [Fact]
+    public async Task Handle_ProUser_AttachesProgressForQuantifiableAndNullForOneShot()
+    {
+        var user = CreateProUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _achievementRepo.FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement> { UserAchievement.Create(UserId, AchievementDefinitions.GettingMomentum) });
+        _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new AchievementProgressMetrics(
+                CurrentStreak: 12, TotalCompletions: 40, GoalsCreated: 2, GoalsCompleted: 0,
+                FriendsCount: 5, CheersSent: 30, EarlyLogs: 3, NightLogs: 9));
+
+        var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+
+        var fortnight = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.FortnightFocus);
+        fortnight.ProgressCurrent.Should().Be(12);
+        fortnight.ProgressTarget.Should().Be(14);
+
+        var squadGoals = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.SquadGoals);
+        squadGoals.ProgressCurrent.Should().Be(5);
+        squadGoals.ProgressTarget.Should().Be(5);
+
+        var cheerleader = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.Cheerleader);
+        cheerleader.ProgressCurrent.Should().Be(25);
+        cheerleader.ProgressTarget.Should().Be(25);
+
+        var nightOwl = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.NightOwl);
+        nightOwl.ProgressCurrent.Should().Be(9);
+        nightOwl.ProgressTarget.Should().Be(10);
+
+        var gettingMomentum = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.GettingMomentum);
+        gettingMomentum.IsEarned.Should().BeTrue();
+        gettingMomentum.ProgressCurrent.Should().Be(10);
+        gettingMomentum.ProgressTarget.Should().Be(10);
+
+        var missionControl = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.MissionControl);
+        missionControl.ProgressCurrent.Should().BeNull();
+        missionControl.ProgressTarget.Should().BeNull();
     }
 
     [Fact]

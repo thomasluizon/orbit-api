@@ -54,6 +54,8 @@ public static class ResultActionResultExtensions
         [ErrorCodes.ChallengeClosed] = StatusCodes.Status409Conflict,
 
         [ErrorCodes.InternalServerError] = StatusCodes.Status500InternalServerError,
+        [ErrorCodes.PaymentServiceUnavailable] = StatusCodes.Status503ServiceUnavailable,
+        [ErrorCodes.BillingDetailsUnavailable] = StatusCodes.Status503ServiceUnavailable,
     };
 
     public static IActionResult ToPayGateAwareResult(

@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -15,7 +16,9 @@ public record AchievementDto(
     int XpReward,
     string IconKey,
     bool IsEarned,
-    DateTime? EarnedAtUtc);
+    DateTime? EarnedAtUtc,
+    int? ProgressCurrent = null,
+    int? ProgressTarget = null);
 
 public record AchievementsResponse(IReadOnlyList<AchievementDto> Achievements);
 
@@ -23,7 +26,8 @@ public record GetAchievementsQuery(Guid UserId) : IRequest<Result<AchievementsRe
 
 public class GetAchievementsQueryHandler(
     IGenericRepository<User> userRepository,
-    IGenericRepository<UserAchievement> achievementRepository) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
+    IGenericRepository<UserAchievement> achievementRepository,
+    IAchievementProgressService progressService) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
 {
     public async Task<Result<AchievementsResponse>> Handle(GetAchievementsQuery request, CancellationToken cancellationToken)
     {
@@ -36,10 +40,14 @@ public class GetAchievementsQueryHandler(
 
         var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
         var earnedMap = earnedList.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
+        var earnedIds = earnedMap.Keys.ToHashSet();
+
+        var metrics = await progressService.LoadAsync(user, earnedIds, cancellationToken);
 
         var achievements = AchievementDefinitions.All.Select(def =>
         {
             var isEarned = earnedMap.TryGetValue(def.Id, out var earnedAt);
+            var (progressCurrent, progressTarget) = AchievementProgressCalculator.Compute(def, metrics, isEarned);
             return new AchievementDto(
                 def.Id,
                 def.Name,
@@ -49,7 +57,9 @@ public class GetAchievementsQueryHandler(
                 def.XpReward,
                 def.IconKey,
                 isEarned,
-                isEarned ? earnedAt : null);
+                isEarned ? earnedAt : null,
+                progressCurrent,
+                progressTarget);
         }).ToList();
 
         return Result.Success(new AchievementsResponse(achievements));

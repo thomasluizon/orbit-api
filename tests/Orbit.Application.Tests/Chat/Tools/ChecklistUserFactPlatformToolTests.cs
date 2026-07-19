@@ -343,6 +343,7 @@ public class ChecklistUserFactPlatformToolTests
                 100,
                 2,
                 "Climber",
+                "climber",
                 50,
                 100,
                 25,
@@ -372,7 +373,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
+            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", "starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure<AchievementsResponse>("achievements_failed"));
         var tool = new GetGamificationOverviewTool(mediator);
@@ -388,7 +389,7 @@ public class ChecklistUserFactPlatformToolTests
     {
         var mediator = Substitute.For<IMediator>();
         mediator.Send(Arg.Any<GetGamificationProfileQuery>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
+            .Returns(Result.Success(new GamificationProfileResponse(0, 1, "Starter", "starter", 0, 10, 10, 0, 1, [], [], 0, 0, null, true, false, new NextRewardCarrot(2, "Explorer", 10, null))));
         mediator.Send(Arg.Any<GetAchievementsQuery>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(new AchievementsResponse([])));
         mediator.Send(Arg.Any<GetStreakInfoQuery>(), Arg.Any<CancellationToken>())
