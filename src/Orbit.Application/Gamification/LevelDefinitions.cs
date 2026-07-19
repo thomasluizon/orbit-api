@@ -54,6 +54,12 @@ public static class LevelDefinitions
         return LegendTitle;
     }
 
+    /// <summary>
+    /// Stable, locale-independent key for <paramref name="level"/>'s title (e.g. "explorer"),
+    /// for clients to localize instead of displaying <see cref="TitleForLevel"/>'s English literal.
+    /// </summary>
+    public static string TitleKeyForLevel(int level) => TitleForLevel(level).ToLowerInvariant();
+
     public static LevelDefinition GetLevelForXp(int totalXp)
     {
         if (totalXp < _all[TableMaxLevel - 1].XpRequired)

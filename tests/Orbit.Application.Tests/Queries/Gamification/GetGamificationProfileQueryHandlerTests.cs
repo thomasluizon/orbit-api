@@ -76,6 +76,7 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.TotalXp.Should().Be(150);
         result.Value.Level.Should().Be(2);
         result.Value.LevelTitle.Should().Be("Explorer");
+        result.Value.LevelTitleKey.Should().Be("explorer");
         result.Value.AchievementsEarned.Should().Be(2);
         result.Value.AchievementsTotal.Should().Be(AchievementDefinitions.All.Count);
     }
