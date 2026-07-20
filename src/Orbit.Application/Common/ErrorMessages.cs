@@ -102,6 +102,8 @@ public static class ErrorMessages
     public static readonly AppError CannotLogFutureDate = new(ErrorCodes.CannotLogFutureDate, "Cannot log a future date.");
     public static readonly AppError BeyondOverdueWindow = new(ErrorCodes.BeyondOverdueWindow, "Cannot log a date beyond the overdue window.");
     public static readonly AppError SelfParent = new(ErrorCodes.SelfParent, "A habit cannot be its own parent.");
+    public static readonly AppError GeneralMismatchWithParent = new(ErrorCodes.GeneralMismatchWithParent, "A sub-habit's General setting must match its parent habit's.");
+    public static readonly AppError GeneralMismatchWithChildren = new(ErrorCodes.GeneralMismatchWithChildren, "Can't change this while it has sub-habits with a different General setting.");
     public static readonly AppError CircularReference = new(ErrorCodes.CircularReference, "Cannot move a habit under its own descendant.");
     public static readonly AppError MaxDepthReached = new(ErrorCodes.MaxDepthReached, "Maximum nesting depth reached ({0} levels).");
     public static readonly AppError MaxApiKeys = new(ErrorCodes.MaxApiKeys, "You can have at most {0} active API keys.");

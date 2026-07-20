@@ -224,7 +224,7 @@ internal static class HabitScheduleFilters
             h.ReminderEnabled, h.ReminderTimes, h.ScheduledReminders, h.SlipAlertEnabled,
             h.ChecklistItems, MapTags(h), MapGoals(h),
             MapChildren(h.Id, ctx),
-            ctx.ChildLookup[h.Id].Any(),
+            HasSubHabits(h.Id, ctx.ChildLookup),
             flexibleTarget, flexibleCompleted,
             isLoggedInRange, instances,
             ComputeSearchMatches(h, ctx),
@@ -356,11 +356,20 @@ internal static class HabitScheduleFilters
             scheduledDates, isOverdue,
             c.Position, c.ChecklistItems, MapTags(c),
             MapChildren(c.Id, ctx),
-            ctx.ChildLookup[c.Id].Any(), ft, fc, isLoggedInRange,
+            HasSubHabits(c.Id, ctx.ChildLookup), ft, fc, isLoggedInRange,
             instances,
             ComputeSearchMatches(c, ctx),
             Emoji: c.Emoji);
     }
+
+    /// <summary>
+    /// Whether a habit has a sub-habit worth navigating to: any incomplete one-time task or any
+    /// recurring/flexible child, regardless of today's schedule. A child that is a completed
+    /// one-time task (no <see cref="Habit.FrequencyUnit"/>, already done) does not count, so the
+    /// "go to sub habits" affordance hides once every child has been finished.
+    /// </summary>
+    private static bool HasSubHabits(Guid parentId, ILookup<Guid?, Habit> childLookup) =>
+        childLookup[parentId].Any(c => !(c.IsCompleted && c.FrequencyUnit is null));
 
     private static List<HabitTagItem> MapTags(Habit h) =>
         h.Tags.Select(t => new HabitTagItem(t.Id, t.Name, t.Color)).ToList();

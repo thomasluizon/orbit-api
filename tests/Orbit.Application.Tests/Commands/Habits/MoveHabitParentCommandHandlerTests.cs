@@ -174,6 +174,57 @@ public class MoveHabitParentCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_IsGeneralMatchesNewParent_MovesSuccessfully()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Child", null, null, DueDate: Today, IsGeneral: true)).Value;
+        var newParent = Habit.Create(new HabitCreateParams(
+            UserId, "New Parent", null, null, DueDate: Today, IsGeneral: true)).Value;
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit, newParent);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit, newParent }.AsReadOnly());
+
+        var command = new MoveHabitParentCommand(UserId, habit.Id, newParent.Id);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ParentHabitId.Should().Be(newParent.Id);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralMismatchesNewParent_ReturnsFailureWithoutSaving()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Child", FrequencyUnit.Day, 1, DueDate: Today, IsGeneral: false)).Value;
+        var newParent = Habit.Create(new HabitCreateParams(
+            UserId, "New Parent", null, null, DueDate: Today, IsGeneral: true)).Value;
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit, newParent);
+
+        var command = new MoveHabitParentCommand(UserId, habit.Id, newParent.Id);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GeneralMismatchWithParent);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     private static List<Habit> BuildParentChain(int length)
     {
         var chain = new List<Habit>();

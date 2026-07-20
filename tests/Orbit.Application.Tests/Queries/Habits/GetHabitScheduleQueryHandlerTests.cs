@@ -311,6 +311,40 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ParentWithOnlyCompletedOneTimeTaskChild_HasSubHabitsFalse()
+    {
+        var parent = CreateTestHabit(title: "Morning Routine", dueDate: Today);
+        var completedChild = CreateTestHabit(
+            title: "Done Step", frequencyUnit: null, frequencyQuantity: null,
+            dueDate: Today, isCompleted: true, parentHabitId: parent.Id);
+        SetupHabits(parent, completedChild);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6));
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.Items[0].HasSubHabits.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_ParentWithIncompleteOneTimeTaskChild_HasSubHabitsTrue()
+    {
+        var parent = CreateTestHabit(title: "Morning Routine", dueDate: Today);
+        var incompleteChild = CreateTestHabit(
+            title: "Pending Step", frequencyUnit: null, frequencyQuantity: null,
+            dueDate: Today, parentHabitId: parent.Id);
+        SetupHabits(parent, incompleteChild);
+
+        var query = new GetHabitScheduleQuery(UserId, Today, Today.AddDays(6));
+        var result = await _handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().HaveCount(1);
+        result.Value.Items[0].HasSubHabits.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_TagFilter_IncludesHabitsWithMatchingTag()
     {
         var tag = Tag.Create(UserId, "Health", "#00FF00").Value;

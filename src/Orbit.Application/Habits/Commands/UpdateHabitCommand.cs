@@ -61,6 +61,14 @@ public class UpdateHabitCommandHandler(
         if (habit is null)
             return Result.Failure(ErrorMessages.HabitNotFound);
 
+        if (request.IsGeneral.HasValue)
+        {
+            var generalMismatch = await ValidateGeneralAgainstRelativesAsync(
+                habit, request.IsGeneral.Value, request.UserId, cancellationToken);
+            if (generalMismatch.IsFailure)
+                return generalMismatch;
+        }
+
         var opts = request.Options ?? new UpdateHabitCommandOptions();
 
         var result = habit.Update(new HabitUpdateParams(
@@ -103,6 +111,39 @@ public class UpdateHabitCommandHandler(
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Rejects an <c>IsGeneral</c> change that would break the invariant that a habit's
+    /// <c>IsGeneral</c> must match its parent's: if the habit has a parent, the new value must
+    /// match the parent's; otherwise, it must match every child that isn't a completed
+    /// one-time task. A completed one-time-task child is functionally inert and excluded so an
+    /// ancient, already-finished child can't permanently block the parent's General flag.
+    /// </summary>
+    private async Task<Result> ValidateGeneralAgainstRelativesAsync(
+        Habit habit, bool newIsGeneral, Guid userId, CancellationToken cancellationToken)
+    {
+        if (habit.ParentHabitId is not null)
+        {
+            var parent = await habitRepository.FindOneTrackedAsync(
+                h => h.Id == habit.ParentHabitId && h.UserId == userId,
+                cancellationToken: cancellationToken);
+
+            return parent is not null && parent.IsGeneral != newIsGeneral
+                ? Result.Failure(ErrorMessages.GeneralMismatchWithParent)
+                : Result.Success();
+        }
+
+        var children = await habitRepository.FindAsync(
+            h => h.ParentHabitId == habit.Id && h.UserId == userId,
+            cancellationToken);
+
+        var activeMismatchedChild = children.Any(c =>
+            c.IsGeneral != newIsGeneral && !(c.IsCompleted && c.FrequencyUnit is null));
+
+        return activeMismatchedChild
+            ? Result.Failure(ErrorMessages.GeneralMismatchWithChildren)
+            : Result.Success();
     }
 
     private async Task ClearTodaySentRemindersAsync(Guid userId, Guid habitId, CancellationToken cancellationToken)

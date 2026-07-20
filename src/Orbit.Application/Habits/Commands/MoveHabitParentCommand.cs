@@ -44,6 +44,9 @@ public class MoveHabitParentCommandHandler(
         if (parent is null)
             return Result.Failure(ErrorMessages.TargetParentNotFound);
 
+        if (parent.IsGeneral != habit.IsGeneral)
+            return Result.Failure(ErrorMessages.GeneralMismatchWithParent);
+
         var allHabits = await habitRepository.FindAsync(h => h.UserId == request.UserId, cancellationToken);
         var habitsById = allHabits.ToDictionary(h => h.Id);
 
