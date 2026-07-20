@@ -217,4 +217,167 @@ public class UpdateHabitCommandHandlerTests
         habit.Goals.Should().BeEmpty();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_IsGeneralMatchesParent_Succeeds()
+    {
+        var parent = CreateTestHabit();
+        var habit = CreateTestHabit();
+        habit.SetParentHabitId(parent.Id);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit, parent);
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            IsGeneral: parent.IsGeneral);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsGeneral.Should().Be(parent.IsGeneral);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralMismatchesParent_ReturnsFailureWithoutSaving()
+    {
+        var parent = CreateTestHabit();
+        var habit = CreateTestHabit();
+        habit.SetParentHabitId(parent.Id);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit, parent);
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            IsGeneral: !parent.IsGeneral);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GeneralMismatchWithParent);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralMatchesAllChildren_Succeeds()
+    {
+        var habit = CreateTestHabit();
+        var child = CreateTestHabit();
+        child.SetParentHabitId(habit.Id);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { child }.AsReadOnly());
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            IsGeneral: child.IsGeneral);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsGeneral.Should().Be(child.IsGeneral);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralMismatchesChild_ReturnsFailureWithoutSaving()
+    {
+        var habit = CreateTestHabit();
+        var child = CreateTestHabit();
+        child.SetParentHabitId(habit.Id);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { child }.AsReadOnly());
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            IsGeneral: !child.IsGeneral);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GeneralMismatchWithChildren);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralMismatchesCompletedOneTimeTaskChild_Succeeds()
+    {
+        var habit = CreateTestHabit();
+        var completedChild = Habit.Create(new HabitCreateParams(
+            UserId, "Completed one-time child", null, null, DueDate: Today)).Value;
+        completedChild.SetParentHabitId(habit.Id);
+        completedChild.Log(Today);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { completedChild }.AsReadOnly());
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, null, null,
+            IsGeneral: !completedChild.IsGeneral);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsGeneral.Should().Be(!completedChild.IsGeneral);
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralMismatchesIncompleteOneTimeTaskChild_ReturnsFailureWithoutSaving()
+    {
+        var habit = CreateTestHabit();
+        var incompleteChild = Habit.Create(new HabitCreateParams(
+            UserId, "Incomplete one-time child", null, null, DueDate: Today)).Value;
+        incompleteChild.SetParentHabitId(habit.Id);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { incompleteChild }.AsReadOnly());
+
+        var command = new UpdateHabitCommand(
+            UserId, habit.Id, "Updated", null, FrequencyUnit.Day, 1,
+            IsGeneral: !incompleteChild.IsGeneral);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Orbit.Application.Common.ErrorCodes.GeneralMismatchWithChildren);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }

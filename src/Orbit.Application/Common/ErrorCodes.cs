@@ -97,6 +97,8 @@ public static class ErrorCodes
     public const string CannotLogFutureDate = "CANNOT_LOG_FUTURE_DATE";
     public const string BeyondOverdueWindow = "BEYOND_OVERDUE_WINDOW";
     public const string SelfParent = "SELF_PARENT";
+    public const string GeneralMismatchWithParent = "GENERAL_MISMATCH_WITH_PARENT";
+    public const string GeneralMismatchWithChildren = "GENERAL_MISMATCH_WITH_CHILDREN";
     public const string MaxApiKeys = "MAX_API_KEYS";
     public const string MaxHabitsPerGoal = "MAX_HABITS_PER_GOAL";
     public const string InvalidGoalStatus = "INVALID_GOAL_STATUS";
