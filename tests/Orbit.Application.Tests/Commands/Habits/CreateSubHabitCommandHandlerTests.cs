@@ -130,6 +130,56 @@ public class CreateSubHabitCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OneTimeChildUnderRecurringParent_DoesNotInheritParentFrequency()
+    {
+        var parent = CreateParentHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(parent);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+
+        var command = new CreateSubHabitCommand(UserId, parent.Id, "Child Task", null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.FrequencyUnit == null && h.FrequencyQuantity == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_InheritParentFrequencyWithNoOverride_UsesParentCadence()
+    {
+        var parent = CreateParentHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(parent);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+
+        var command = new CreateSubHabitCommand(
+            UserId, parent.Id, "Child Task", null,
+            InheritParentFrequency: true);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _habitRepo.Received(1).AddAsync(
+            Arg.Is<Habit>(h => h.FrequencyUnit == FrequencyUnit.Day && h.FrequencyQuantity == 1),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ExceedsMaxDepth_ReturnsFailure()
     {
         _appConfigService.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>())
