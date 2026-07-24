@@ -1,12 +1,22 @@
 # Orbit Review Rubric
 
-The single source of truth for what a review checks, shared verbatim by two skills:
-`/pr-review` walks it dimension-by-dimension over a **diff**, and `/audit-code-quality`
-(#228) walks it over the **whole repo**. Both read this one file
-(`.claude/skills/pr-review/rubric.md`) — there is no second copy, so the two can never
-drift. It is command-agnostic on purpose: it contains **dimensions, severities, and
-templates** — no orchestration, no scope resolution, no GitHub mechanics. Those live in
-the consuming skill.
+The single source of truth for what a review checks **in this repo**. Exactly two things
+read it: `/pr-review` (`.claude/skills/pr-review/SKILL.md`), which walks it
+dimension-by-dimension over a **diff**, and `.github/workflows/claude-review.yml`, which
+invokes that same skill in CI and maintains no criteria of its own. Unlike
+orbit-ui-mobile, this repo ships no `/audit-code-quality` skill, so nothing here walks the
+rubric over the whole repo.
+
+**A second copy exists**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`, where
+`/audit-code-quality` also walks it. Two repos and two CIs mean the file cannot be
+deduped, so the copies are lockstep twins kept aligned by hand, exactly like the two
+`pr-review/SKILL.md` copies. Sanctioned divergences are backend-only material, such as
+dimension 13's transaction-teardown bullet (`ORBIT0002`). Change a dimension here and
+mirror it there in the same task; a drift between the two is a defect, not a variant.
+
+It is command-agnostic on purpose: it contains **dimensions, severities, and templates**,
+no orchestration, no scope resolution, no GitHub mechanics. Those live in the consuming
+skill.
 
 Every finding cites the rule it came from (a `CLAUDE.md` rule number, `no-comments.cjs`,
 a `DESIGN.md` line, an orbit-api hard rule, or a security category) so the author can
@@ -64,7 +74,7 @@ Every finding, every dimension, the same shape:
 · issue: <1-2 sentences — what is wrong>
 · risk: <1-2 sentences — what goes wrong if it ships>
 · fix: <the concrete change, or a corrected snippet>
-· reference: <CLAUDE.md rule N | no-comments.cjs | DESIGN.md:181 | orbit-api hard rule | OWASP | security category>
+· reference: <CLAUDE.md rule N | no-comments.cjs | DESIGN.md "Bans" | orbit-api hard rule | OWASP | security category>
 ```
 
 ---
@@ -164,30 +174,71 @@ well-named function** so the code reads without prose.
 
 ### 8. DESIGN.md / AI-slop
 
-> Reference: DESIGN.md:181 (AI-slop tells), DESIGN.md:185 (scene-sentence test),
-> DESIGN.md:159-169 (bans). **Gated: only when the diff touches `apps/*` UI files.**
+> Reference: `DESIGN.md` at the orbit-ui-mobile repo root, sections **Identity & anchor
+> (locked)** (:18), **Bans** (:469), **AI-slop test** (:505), **Scene-sentence test**
+> (:525). Cite the section name, not the line alone: the line numbers move, the section
+> names do not. **Gated: only when the diff touches `apps/*` UI files.** An
+> orbit-api-only diff marks this N/A, and in CI the file is not checked out at all, so it
+> is "not verifiable in CI".
 
-Scan for the AI-slop tells from `DESIGN.md:181`:
+The anchor is the **de-decorated navy-violet orbital** (the #539 freeze, 2026-07-17).
+Identity comes from three carriers and nothing else: the **orbital logo mark**, the
+**Astra orbital glyph**, and **ring-shaped status and progress indicators**. It never
+comes from a background gradient, a glow, decorative background orbit arcs, or texture.
+**Quiet decoration is still decoration**: a softened glow, a 0.03-opacity texture, a
+"subtle" mesh is the same finding as the loud version. The freeze removed the layer, it
+did not dim it.
 
-- Gradients used as decoration outside the sanctioned gradient-header.
-- Cards-in-cards (opaque card-on-card on dark).
-- Gray text on colored backgrounds.
-- Rounded-square icon tiles above headings.
-- Semantic-red destructive fills where the artboard shows a text pill.
-- Oversized centered H1 outside hero contexts; decorative gradient borders.
+Scan for the AI-slop tells:
 
-Token / ban checks (`DESIGN.md:159-169`):
+- Decoration used as hierarchy: any glow, gradient wash, gradient border, gradient text
+  (`bg-clip-text` over a gradient), mesh, bloom, texture, or "quiet" background effect.
+  There is no sanctioned gradient and no sanctioned glow left: `--gradient-header`,
+  `GradientTop`, and the primary-glow shadow token are **deleted**.
+- Cards in cards (opaque card-on-card on dark), and cards used where spacing would have
+  grouped.
+- A coloured side-stripe border on a row, card, callout, or alert.
+- Connector or tree lines in a hierarchy.
+- Grey text on coloured backgrounds; rounded-square icon tiles above headings.
+- Semantic-red destructive fills where the spec shows a text pill.
+- An oversized centered H1 outside a hero context.
+- The hero-metric template used as decoration, or any invented precise-looking number.
+- A whole-section fade-and-rise scroll reveal, or any page-load choreography.
+- An animation whose purpose cannot be named from the closed list.
+- A heading and the intro beneath it saying the same thing; an eyebrow that enumerates
+  rather than labels.
 
-- No raw `--slate-*` references or hardcoded violet rgba — semantic tokens only
-  (`--primary` / `--primary-rgb` / `tintFromPrimary`).
-- No `transition-all` (animate `transform` / `opacity`, named); no `h-screen` (use
+Token checks that need judgment:
+
+- **`--primary` is fill and graphic only; `--primary-soft` is the accent text token.**
+  Accent-coloured small text on the canvas is a finding, not a preference. On light both
+  resolve to the same value, so the split only bites on dark.
+- **Accent rationing**: the accent appears on the active tab, progress and ring
+  indicators, done dots, the primary CTA, the FAB, and active nav. That is the whole
+  list. Accent on a card, a row, a border, a heading, or an icon not communicating state
+  is decoration.
+- No raw `--slate-*` reference and no hardcoded violet rgba. Semantic tokens only; tints
+  come from `--primary-rgb` (web) or `tintFromPrimary` (mobile).
+- No hand-rolled `box-shadow` heavier than `--shadow-1/2/3`. Shadows model occlusion
+  under a lifted surface; they never carry the accent hue.
+- No `transition-all` (animate `transform` and `opacity`, named); no `h-screen` (use
   `min-h-dvh`); no new font families, radii, or colors outside the spec.
-- No per-component scheme branches — schemes resolve through tokens.
-- No em dashes in user-facing copy.
+- No per-component scheme branch. Schemes resolve through tokens.
 
-Then the **scene-sentence test** (`:185`): describe the rendered screen in one sentence.
-If it reads like every other SaaS app, it is generic — flag it to rework until the
-sentence names Orbit's navy-cosmic, violet-glow character.
+**Do not hand-flag what an ESLint `local/*` rule already fails on** in orbit-ui-mobile:
+decorative glow, raw gradient and gradient text, side-stripe borders, off-scale spacing,
+`space-x-*` / `space-y-*`, overshoot easing, arbitrary z-index, full-bleed pill CTAs, and
+em dashes in copy each have a gate. Report the gate's verdict; re-flagging it by hand is
+noise. `DESIGN.md`'s **Enforcement** section is the authoritative gate-versus-reviewer
+split.
+
+Then the **scene-sentence test**: describe the rendered screen in one sentence, as if
+narrating a film scene. If it reads like every other SaaS app ("a clean modern dashboard
+with cards"), it is generic. The sentence must name Orbit's character: a near-black
+neutral canvas, quiet tonal panels separated by hairlines, one violet reserved for what is
+done and what is next, and the orbital ring language carrying the identity. **If the only
+way to make the sentence specific is to describe decoration, the design has failed and the
+decoration is not the fix.**
 
 ### 9. Parity (web ↔ mobile)
 

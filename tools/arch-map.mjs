@@ -10,11 +10,14 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+const BUILD_OUTPUT_DIRS = new Set(["bin", "obj"]);
+
 function walk(dir, out = []) {
   for (const name of readdirSync(dir).sort()) {
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (name.endsWith(".cs")) out.push(full);
+    if (statSync(full).isDirectory()) {
+      if (!BUILD_OUTPUT_DIRS.has(name)) walk(full, out);
+    } else if (name.endsWith(".cs")) out.push(full);
   }
   return out;
 }

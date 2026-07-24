@@ -8817,14 +8817,6 @@
                   {
                     "type": "object",
                     "properties": {
-                      "client_id": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
                       "redirect_uri": {
                         "type": "string"
                       }
