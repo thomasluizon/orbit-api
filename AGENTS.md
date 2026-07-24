@@ -21,6 +21,25 @@ CLAUDE.md; this file holds the worker contract and the review rules and DEFERS t
 - DTO/contract changes are append-only and deploy-API-first; the TypeScript consumer
   (orbit-ui-mobile) updates in lockstep via its own ticket that this one blocks.
 
+### Guardrails you must not trip
+
+These hold for EVERY worker and every engine. They are enforced by CI, GitHub branch
+protection, and the lefthook pre-commit/pre-push hooks, NOT by the Claude Code session
+hooks (those do not run under `codex exec` or a raw shell). This list is the readable
+copy; the gates are the enforcement.
+
+- Never push or force-push to `main`/`master`. Branch to `feature/`|`fix/`|`chore/`,
+  open a PR, squash-merge only. Never reuse a squash-merged branch.
+- Never bypass the git hooks: no `--no-verify` (or its `-n` commit alias), no
+  `--no-gpg-sign` and no `commit.gpgsign=false`. Fix what a hook flags, then commit.
+- Never `git worktree remove --force`: on Windows it follows a junction and deletes the
+  link target. Remove the junctions first, then remove the worktree without `--force`.
+- EF migrations must be idempotent: raw `CREATE INDEX` inside `migrationBuilder.Sql(...)`
+  needs `IF NOT EXISTS`, and raw `DROP INDEX` needs `IF EXISTS` (EF re-applies at startup
+  on Render; a duplicate raw `CREATE INDEX` throws Postgres 42P07 and fails the deploy).
+  The fluent `migrationBuilder.CreateIndex(...)`/`DropIndex(...)` API is already safe.
+  The Guard Migrations CI job enforces this over changed `Migrations/*.cs` files.
+
 ## Code Review Rules
 
 Only what no gate can check; mechanical findings belong to CI. Flag P0/P1 only.

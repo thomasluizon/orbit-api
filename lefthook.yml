@@ -7,3 +7,22 @@ pre-commit:
       stage_fixed: true
     dashes:
       run: node tools/check-dashes.mjs --files {staged_files}
+pre-push:
+  commands:
+    protect-main:
+      use_stdin: true
+      run: |
+        blocked=0
+        while read -r _local_ref _local_sha remote_ref _remote_sha; do
+          case "$remote_ref" in
+            refs/heads/main|refs/heads/master) blocked=1 ;;
+          esac
+        done
+        branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+        case "$branch" in
+          main|master) blocked=1 ;;
+        esac
+        if [ "$blocked" -eq 1 ]; then
+          echo "BLOCKED: direct push to main/master is forbidden (branch protection, squash-merge only). Open a PR."
+          exit 1
+        fi
