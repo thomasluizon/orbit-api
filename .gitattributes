@@ -1,2 +1,5 @@
 src/Orbit.Api/openapi.json text eol=lf
 .claude/skills/**/*.mjs text eol=lf
+tools/*.mjs text eol=lf
+architecture.json text eol=lf
+architecture.html text eol=lf
