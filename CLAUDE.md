@@ -48,7 +48,7 @@ C# LSP (Roslyn, via the CWM.RoslynNavigator MCP server — install once with `do
 
 The workflow is tool-agnostic between Claude Code and opencode; `.claude/` stays the single source of truth.
 
-- opencode reads this `CLAUDE.md` natively (fallback when no `AGENTS.md` exists) and discovers `.claude/skills/**` as-is. **Never create an `AGENTS.md`** — it would shadow this file and fork the rules.
+- `AGENTS.md` (repo root) is Codex's entry doc: the worker contract plus `## Code Review Rules`. It DEFERS to this CLAUDE.md for conventions; change behaviour here, never there. (The old never-create-AGENTS.md rule died when opencode was dropped; see orbit-ui-mobile REBUILD.md D22/D26.)
 - `opencode.json` (committed) loads the scoped `tests/CLAUDE.md`.
 - `.opencode/agents/*.md` are thin pointers to the matching `.claude/agents/*.md` bodies. Edit behavior in `.claude/agents/` only; when adding a new agent, create both the body and its pointer.
 
