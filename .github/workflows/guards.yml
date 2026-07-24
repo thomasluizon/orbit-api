@@ -1,9 +1,15 @@
 name: Guards
 
-# Vendored from orbit-ui-mobile (REBUILD.md 6.1.1): the cross-repo dash ban.
-# The old session-only hook matched /Email/ and ResendEmailService.cs only, so
-# 71 tracked .cs files carried dashes ungated (a confirmed audit gap). This job
-# holds for every tool because CI is the one layer nothing bypasses.
+# Cheap repo-hygiene gates vendored from orbit-ui-mobile, one job each. They
+# hold for every tool because CI is the one layer nothing bypasses.
+#
+# Dash Ban (REBUILD.md 6.1.1): the old session-only hook matched /Email/ and
+# ResendEmailService.cs only, so 71 tracked .cs files carried dashes ungated (a
+# confirmed audit gap).
+#
+# Skill and Agent Frontmatter (REBUILD.md section 14, item 1): an unquoted YAML
+# value containing ": " drops the skill or agent silently, which is how this
+# repo's security-reviewer stopped loading.
 
 on:
   pull_request:
@@ -39,3 +45,13 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: node tools/check-dashes.mjs --text "$PR_TITLE $PR_BODY"
+
+  frontmatter:
+    name: Skill and Agent Frontmatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node tools/check-frontmatter.mjs
