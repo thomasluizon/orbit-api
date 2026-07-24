@@ -36,7 +36,7 @@ const SKIP = [
 ]
 
 const shouldSkip = (file) => {
-  const normalized = file.replace(/\\/g, "/")
+  const normalized = file.replaceAll("\\", "/")
   return SKIP.some((pattern) => pattern.test(normalized))
 }
 
@@ -72,7 +72,7 @@ const checkFiles = (files) => {
     }
     if (text.includes("\u0000")) continue
     const findings = dashFindings(text)
-    if (findings.length) perFile.set(file.replace(/\\/g, "/"), findings)
+    if (findings.length) perFile.set(file.replaceAll("\\", "/"), findings)
   }
   return perFile
 }
@@ -125,7 +125,7 @@ if (mode === "--files") {
 
 if (mode === "--check-baseline" || mode === "--write-baseline") {
   const perFile = checkFiles(trackedFiles())
-  const current = Object.fromEntries([...perFile].map(([file, findings]) => [file, findings.length]).sort())
+  const current = Object.fromEntries([...perFile].map(([file, findings]) => [file, findings.length]).sort((a, b) => a[0].localeCompare(b[0])))
   if (mode === "--write-baseline") {
     writeFileSync(BASELINE_PATH, JSON.stringify(current, null, 2) + "\n")
     console.log(`dash-baseline.json written: ${Object.keys(current).length} files, ${Object.values(current).reduce((a, b) => a + b, 0)} dashes`)
