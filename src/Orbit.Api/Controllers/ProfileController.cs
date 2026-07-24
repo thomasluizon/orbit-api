@@ -7,6 +7,7 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
+using Orbit.Domain.Interfaces;
 
 #pragma warning disable CA1873
 
@@ -15,7 +16,10 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public partial class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
+public partial class ProfileController(
+    IMediator mediator,
+    ILogger<ProfileController> logger,
+    IUserDateService userDateService) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
     public record SetNameRequest(string Name);
@@ -382,7 +386,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (!result.IsSuccess)
             return result.ToErrorResult();
 
-        var fileName = $"orbit-data-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
+        var userToday = await userDateService.GetUserTodayAsync(HttpContext.GetUserId(), cancellationToken);
+        var fileName = $"orbit-data-export-{userToday:yyyy-MM-dd}.json";
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
         return File(json, "application/json", fileName);
     }

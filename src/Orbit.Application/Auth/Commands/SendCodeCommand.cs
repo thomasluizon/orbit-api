@@ -39,14 +39,18 @@ public class SendCodeCommandHandler(
 
         if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) && existing is not null)
         {
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
             var elapsed = DateTime.UtcNow - existing.CreatedAt;
+#pragma warning restore ORBIT0004
             if (elapsed.TotalSeconds < 60)
                 return Task.FromResult(Result.Failure(ErrorMessages.CodeRequestCooldown));
         }
 
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var entry = new VerificationEntry(code, 0, DateTime.UtcNow);
+#pragma warning restore ORBIT0004
         cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
@@ -70,7 +74,9 @@ public class SendCodeCommandHandler(
             if (parts.Length != 2 || !string.Equals(parts[0].Trim(), email, StringComparison.OrdinalIgnoreCase))
                 continue;
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
             var entry = new VerificationEntry(parts[1].Trim(), 0, DateTime.UtcNow);
+#pragma warning restore ORBIT0004
             cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
             {
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
@@ -95,7 +101,9 @@ public class SendCodeCommandHandler(
         if (!string.Equals(smokeEmail.Trim(), email, StringComparison.OrdinalIgnoreCase))
             return false;
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var entry = new VerificationEntry(smokeCode, 0, DateTime.UtcNow);
+#pragma warning restore ORBIT0004
         cache.Set(cacheKey, entry, new MemoryCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)

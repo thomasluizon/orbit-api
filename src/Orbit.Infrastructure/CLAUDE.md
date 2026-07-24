@@ -22,7 +22,7 @@ AI/                       - top-level AI service entry points
 - **Infrastructure owns the EF plumbing** — the DbContext, migrations, fluent entity configuration, and provider wiring live here. Application composes EF queries (LINQ + `Microsoft.EntityFrameworkCore` operators) against repository `IQueryable`s; Domain entities stay EF-free.
 - **No `[Required]` / `[StringLength]` / `[Key]` attributes on domain entities** — domain stays EF-free.
 - **Migrations** are alphabetical-by-timestamp. Add via `dotnet ef migrations add <Name> --project src/Orbit.Infrastructure --startup-project src/Orbit.Api`. NEVER edit a migration that has been applied to any environment.
-- **Adding a `DbSet<>` requires a FluentConfig.** If you forget the config, EF infers — which is wrong, and the next migration will be ugly.
+- **Adding a `DbSet<>` requires a FluentConfig.** If you forget the config, EF infers — which is wrong, and the next migration will be ugly. Roslyn `ORBIT0005` fails CI on a `DbSet<T>` with no matching `modelBuilder.Entity<T>(...)` call.
 
 ## AI services (OpenAI)
 
