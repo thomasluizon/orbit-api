@@ -135,7 +135,9 @@ public sealed partial class StripeBillingService(
 
             return new BillingSubscriptionDetails(
                 subscription.Status,
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
                 item?.CurrentPeriodEnd ?? DateTime.UtcNow,
+#pragma warning restore ORBIT0004
                 subscription.CancelAtPeriodEnd,
                 interval,
                 item?.Price?.UnitAmount ?? 0,

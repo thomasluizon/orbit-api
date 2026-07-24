@@ -62,7 +62,9 @@ public partial class PlayNotificationCleanupService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var playCutoff = DateTime.UtcNow - PlayRetentionPeriod;
+#pragma warning restore ORBIT0004
         var purgedNotifications = await dbContext.ProcessedPlayNotifications
             .Where(n => n.ProcessedAtUtc < playCutoff)
             .ExecuteDeleteAsync(ct);
@@ -70,7 +72,9 @@ public partial class PlayNotificationCleanupService(
         if (purgedNotifications > 0)
             LogNotificationsPurged(logger, purgedNotifications);
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var stripeCutoff = DateTime.UtcNow - StripeRetentionPeriod;
+#pragma warning restore ORBIT0004
         var purgedEvents = await dbContext.ProcessedStripeEvents
             .Where(e => e.ProcessedAtUtc < stripeCutoff)
             .ExecuteDeleteAsync(ct);

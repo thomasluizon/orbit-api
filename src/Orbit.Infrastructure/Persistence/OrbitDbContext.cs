@@ -911,7 +911,9 @@ public class OrbitDbContext : DbContext
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var now = DateTime.UtcNow;
+#pragma warning restore ORBIT0004
         foreach (var entry in ChangeTracker.Entries<ITimestamped>()
             .Where(e => e.State is EntityState.Modified or EntityState.Added))
         {

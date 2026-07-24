@@ -92,7 +92,9 @@ public partial class ProactiveCheckinSchedulerService(
         CancellationToken ct)
     {
         var userIds = candidates.Select(u => u.Id).ToList();
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+#pragma warning restore ORBIT0004
         var windowFloor = utcToday.AddDays(-MaxTimeZoneSkewDays);
         var windowCeiling = utcToday.AddDays(MaxTimeZoneSkewDays);
 

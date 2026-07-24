@@ -138,7 +138,9 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
     {
         var userId = HttpContext.GetUserId();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         if (DateTime.UtcNow - since > MaxSyncWindow)
+#pragma warning restore ORBIT0004
             return StatusCode(StatusCodes.Status410Gone, ErrorMessages.SyncWindowExceeded.ToErrorBody());
 
         var sinceUtc = DateTime.SpecifyKind(since, DateTimeKind.Utc);
@@ -211,7 +213,9 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             ChecklistTemplates: new SyncEntitySetV2<SyncChecklistTemplateDto>(
                 checklistTemplates.Where(ct => !ct.IsDeleted).Select(MapChecklistTemplate).ToList(),
                 checklistTemplates.Where(ct => ct.IsDeleted).Select(ct => new SyncDeletedRef(ct.Id, ct.DeletedAtUtc!.Value)).ToList()),
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
             ServerTimestamp: DateTime.UtcNow);
+#pragma warning restore ORBIT0004
 
         LogSyncChanges(logger, userId, since);
         return Ok(response);

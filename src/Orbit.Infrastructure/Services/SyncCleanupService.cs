@@ -66,7 +66,9 @@ public partial class SyncCleanupService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var cutoff = DateTime.UtcNow - RetentionPeriod;
+#pragma warning restore ORBIT0004
         var totalPurged = 0;
 
         totalPurged += await PurgeAsync(dbContext.Habits, h => h.IsDeleted && h.DeletedAtUtc < cutoff, ct);
@@ -78,7 +80,9 @@ public partial class SyncCleanupService(
         totalPurged += await PurgeAsync(dbContext.Notifications, n => n.IsDeleted && n.DeletedAtUtc < cutoff, ct);
         totalPurged += await PurgeAsync(dbContext.ChecklistTemplates, c => c.IsDeleted && c.DeletedAtUtc < cutoff, ct);
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var suggestionCutoff = DateTime.UtcNow - SuggestionRetentionPeriod;
+#pragma warning restore ORBIT0004
         var abandonedSuggestions = await dbContext.GoogleCalendarSyncSuggestions
             .Where(s => s.DiscoveredAtUtc < suggestionCutoff && s.ImportedAtUtc == null)
             .ToListAsync(ct);

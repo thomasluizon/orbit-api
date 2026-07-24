@@ -61,8 +61,10 @@ public partial class ReminderSchedulerService(
 
     private async Task ProcessRelativeReminders(OrbitDbContext dbContext, List<PendingReminderPush> pending, CancellationToken ct)
     {
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var minLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
         var maxLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+#pragma warning restore ORBIT0004
         var habits = await dbContext.Habits
             .AsNoTracking()
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime != null
@@ -79,7 +81,9 @@ public partial class ReminderSchedulerService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+#pragma warning restore ORBIT0004
         var minWindowDate = utcToday.AddDays(-1);
         var maxWindowDate = utcToday.AddDays(1);
 
@@ -151,8 +155,10 @@ public partial class ReminderSchedulerService(
 
     private async Task ProcessScheduledReminders(OrbitDbContext dbContext, List<PendingReminderPush> pending, CancellationToken ct)
     {
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var minLocalDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
         var maxDayBeforeDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2));
+#pragma warning restore ORBIT0004
         var habits = await dbContext.Habits
             .AsNoTracking()
             .Where(h => !h.IsCompleted && !h.IsGeneral && h.ReminderEnabled && h.DueTime == null
@@ -171,7 +177,9 @@ public partial class ReminderSchedulerService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var habitIds = habits.Select(h => h.Id).ToList();
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+#pragma warning restore ORBIT0004
 
         var sentScheduledKeys = await dbContext.SentReminders
             .AsNoTracking()

@@ -33,7 +33,9 @@ public sealed partial class AiUsageRecorder(
         CancellationToken cancellationToken = default)
     {
         var costUsd = ComputeCostUsd(_pricing.GetValueOrDefault(model), cachedTokens, promptTokens, completionTokens);
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var date = DateOnly.FromDateTime(DateTime.UtcNow);
+#pragma warning restore ORBIT0004
 
         try
         {

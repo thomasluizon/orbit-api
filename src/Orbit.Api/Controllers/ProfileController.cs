@@ -382,7 +382,9 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (!result.IsSuccess)
             return result.ToErrorResult();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var fileName = $"orbit-data-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
+#pragma warning restore ORBIT0004
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
         return File(json, "application/json", fileName);
     }

@@ -32,7 +32,9 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
             missingArgumentKey,
             question,
             quickActionsJson,
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
             DateTime.UtcNow.AddMinutes(AppConstants.PendingClarificationTtlMinutes));
+#pragma warning restore ORBIT0004
 
         dbContext.PendingClarifications.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -45,7 +47,9 @@ public class PendingClarificationStore(OrbitDbContext dbContext) : IPendingClari
         Guid userId,
         CancellationToken cancellationToken = default)
     {
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
         var now = DateTime.UtcNow;
+#pragma warning restore ORBIT0004
         var entity = await dbContext.PendingClarifications
             .AsNoTracking()
             .FirstOrDefaultAsync(
