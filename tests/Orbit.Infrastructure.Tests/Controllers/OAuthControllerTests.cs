@@ -537,7 +537,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "client_credentials", "code-abc", "verifier-xyz",
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -549,7 +549,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "authorization_code", "nonexistent-code", "verifier-xyz",
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -561,7 +561,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "authorization_code", "nonexistent-code", "verifier-xyz",
-            "client-123", "https://evil.com/callback", CancellationToken.None);
+            "https://evil.com/callback", CancellationToken.None);
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_redirect_uri");
@@ -580,13 +580,46 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", authCode, codeVerifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
         json.Should().Contain("access_token");
         json.Should().Contain("Bearer");
         await _apiKeyRepo.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Token_TakesNoClientId_AndBindsOnPkceAndRedirectUriInstead()
+    {
+        var (verifier, challenge) = GeneratePkce();
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-registered-at-authorize");
+
+        var result = await _controller.Token(
+            "authorization_code", code, verifier,
+            "https://claude.ai/callback", CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+
+        typeof(OAuthController).GetMethod(nameof(OAuthController.Token))!
+            .GetParameters().Select(p => p.Name)
+            .Should().NotContain("client_id");
+    }
+
+    [Fact]
+    public async Task Token_WrongCodeVerifier_ReturnsInvalidGrant()
+    {
+        var (_, challenge) = GeneratePkce();
+        var (otherVerifier, _) = GeneratePkce();
+        var code = _authStore.CreateCode(UserId, challenge, "https://claude.ai/callback", "client-123");
+
+        var result = await _controller.Token(
+            "authorization_code", code, otherVerifier,
+            "https://claude.ai/callback", CancellationToken.None);
+
+        var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        JsonSerializer.Serialize(bad.Value).Should().Contain("invalid_grant");
+        await _apiKeyRepo.DidNotReceive().AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -601,7 +634,7 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
         created.Should().NotBeNull();
@@ -632,7 +665,7 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
         priorKey.IsRevoked.Should().BeTrue();
@@ -712,7 +745,7 @@ public class OAuthControllerTests : IDisposable
     {
         var result = await _controller.Token(
             "authorization_code", "any-code", "verifier-xyz",
-            "client-123", "https://attacker.com/callback", CancellationToken.None);
+            "https://attacker.com/callback", CancellationToken.None);
 
         var bad = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var json = JsonSerializer.Serialize(bad.Value);
@@ -865,7 +898,7 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         var json = JsonSerializer.Serialize(ok.Value);
@@ -882,7 +915,7 @@ public class OAuthControllerTests : IDisposable
 
         var result = await _controller.Token(
             "authorization_code", code, verifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         JsonSerializer.Serialize(ok.Value).Should().NotContain("nonce");
@@ -904,7 +937,7 @@ public class OAuthControllerTests : IDisposable
 
         var tokenResult = await _controller.Token(
             "authorization_code", code, verifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var ok = tokenResult.Should().BeOfType<OkObjectResult>().Subject;
         JsonSerializer.Serialize(ok.Value).Should().Contain("verify-nonce-7");
@@ -931,7 +964,7 @@ public class OAuthControllerTests : IDisposable
 
         var tokenResult = await _controller.Token(
             "authorization_code", code, verifier,
-            "client-123", "https://claude.ai/callback", CancellationToken.None);
+            "https://claude.ai/callback", CancellationToken.None);
 
         var ok = tokenResult.Should().BeOfType<OkObjectResult>().Subject;
         JsonSerializer.Serialize(ok.Value).Should().Contain("google-nonce-42");

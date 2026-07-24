@@ -280,6 +280,18 @@ public partial class OAuthController(
         return Result.Success(user);
     }
 
+    /// <summary>
+    /// Exchanges an authorization code for an Orbit API key.
+    /// </summary>
+    /// <remarks>
+    /// A <c>client_id</c> form field is accepted by the protocol and ignored here. This server is a
+    /// public-client authorization server (<c>token_endpoint_auth_method: none</c>) whose
+    /// <c>/oauth/register</c> hands out an unpersisted random identifier, so a <c>client_id</c> presented
+    /// at this endpoint is an unverified, client-asserted string and matching it against the equally
+    /// client-asserted value captured at authorize time proves nothing about the caller. Client binding
+    /// comes from PKCE S256, the exact redirect_uri match, single-use codes, and the 5-minute expiry, all
+    /// enforced in <see cref="OAuthAuthorizationStore.ExchangeCode"/>.
+    /// </remarks>
     [HttpPost("/oauth/token")]
     [DistributedRateLimit("auth")]
     [Consumes("application/x-www-form-urlencoded")]
@@ -287,7 +299,6 @@ public partial class OAuthController(
         [FromForm] string grant_type,
         [FromForm] string code,
         [FromForm] string code_verifier,
-        [FromForm] string? client_id,
         [FromForm] string redirect_uri,
         CancellationToken ct)
     {
