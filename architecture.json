@@ -2903,6 +2903,204 @@
     "untested": [],
     "testClasses": [
       {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AppDbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "DbContext",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "DbSet",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "DbSetFluentConfigurationAnalyzerTests",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "EntityTypeBuilder",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "Habit",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "ModelBuilder",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "Repository",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "User",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "UserConfiguration",
+        "file": "tests/Orbit.Analyzers.Tests/DbSetFluentConfigurationAnalyzerTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "AuditEntry",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "DailySummary",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "Fixture",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "Habit",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "ReminderWindow",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "SlipDetector",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "SummaryKeys",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "UserClock",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "UserDateService",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "UtcNowUserFacingDateAnalyzerTests",
+        "file": "tests/Orbit.Analyzers.Tests/UtcNowUserFacingDateAnalyzerTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
         "testClass": "AcceptAccountabilityPairCommandTests",
         "file": "tests/Orbit.Application.Tests/Accountability/AcceptAccountabilityPairCommandTests.cs",
         "references": [
@@ -6540,6 +6738,7 @@
           "ApplyOnboardingCommand",
           "CompleteOnboardingCommand",
           "DismissImportPromptCommand",
+          "ExportUserDataQuery",
           "GetProfileQuery",
           "ResetAccountCommand",
           "SetAiMemoryCommand",
