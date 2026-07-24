@@ -99,6 +99,7 @@ public class CreateSubHabitTool(
                 IsBadHabit: isBadHabit,
                 DueDate: dueDate,
                 Emoji: emoji,
+                InheritParentFrequency: true,
                 Options: new Orbit.Application.Habits.Commands.HabitCommandOptions(
                     Days: days,
                     DueTime: dueTime,

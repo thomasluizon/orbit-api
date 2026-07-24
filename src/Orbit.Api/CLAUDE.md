@@ -12,7 +12,7 @@ Controllers, middleware, OpenAPI/Scalar, DI config, `Program.cs`. This project s
 
 ## Authorization
 
-`[Authorize]` at the controller class level (the `csharp-authz` hook blocks a Controller with neither `[Authorize]` nor `[AllowAnonymous]`); the pipeline 401s unauthenticated `[Authorize]` requests. Override with `[AllowAnonymous]` per-action only when truly public (e.g., `POST /api/auth/send-code`).
+`[Authorize]` at the controller class level (Roslyn `ORBIT0003` fails the build on a Controller with neither `[Authorize]` nor `[AllowAnonymous]`, class-level or on every action); the pipeline 401s unauthenticated `[Authorize]` requests. Override with `[AllowAnonymous]` per-action only when truly public (e.g., `POST /api/auth/send-code`).
 
 Exempt by construction:
 - `GET /health` (mapped via `MapHealthChecks` in `Extensions/WebApplicationExtensions.cs` — no controller)

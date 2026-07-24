@@ -44,13 +44,17 @@ public sealed class GooglePlayBillingService(
         var lineItem = purchase.LineItems?.FirstOrDefault(item => item.ExpiryTimeDateTimeOffset is not null)
             ?? purchase.LineItems?.FirstOrDefault();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var expiresAt = lineItem?.ExpiryTimeDateTimeOffset?.UtcDateTime ?? DateTime.UtcNow;
+#pragma warning restore ORBIT0004
         var resolvedProductId = lineItem?.ProductId ?? productId;
         var interval = _settings.IntervalForBasePlan(lineItem?.OfferDetails?.BasePlanId);
 
         var isActive = purchase.SubscriptionState is not null
             && EntitledStates.Contains(purchase.SubscriptionState)
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
             && expiresAt > DateTime.UtcNow;
+#pragma warning restore ORBIT0004
 
         var isAcknowledged = purchase.AcknowledgementState == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED";
 

@@ -8,6 +8,12 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Habits.Commands;
 
+/// <param name="InheritParentFrequency">
+/// When true and <see cref="FrequencyUnit"/>/<see cref="FrequencyQuantity"/> are unset, the child
+/// inherits the parent's cadence instead of becoming a one-time task. Only the AI chat tool (which
+/// treats an unspecified frequency as "match the parent") opts into this; the REST API always sends
+/// the user's explicit choice, where an unset frequency means the user picked "one-time".
+/// </param>
 public record CreateSubHabitCommand(
     Guid UserId,
     Guid ParentHabitId,
@@ -19,7 +25,8 @@ public record CreateSubHabitCommand(
     DateOnly? DueDate = null,
     HabitCommandOptions? Options = null,
     IReadOnlyList<Guid>? TagIds = null,
-    string? Emoji = null) : IRequest<Result<Guid>>;
+    string? Emoji = null,
+    bool InheritParentFrequency = false) : IRequest<Result<Guid>>;
 
 public class CreateSubHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
@@ -61,11 +68,19 @@ public class CreateSubHabitCommandHandler(
             ? 0
             : siblings.Max(h => h.Position ?? -1) + 1;
 
+        var frequencyUnit = request.FrequencyUnit;
+        var frequencyQuantity = request.FrequencyQuantity;
+        if (request.InheritParentFrequency)
+        {
+            frequencyUnit ??= parent.FrequencyUnit;
+            frequencyQuantity ??= parent.FrequencyQuantity;
+        }
+
         var childResult = Habit.Create(new HabitCreateParams(
             request.UserId,
             request.Title,
-            request.FrequencyUnit ?? parent.FrequencyUnit,
-            request.FrequencyQuantity ?? parent.FrequencyQuantity,
+            frequencyUnit,
+            frequencyQuantity,
             childDueDate,
             request.Description,
             Emoji: request.Emoji,

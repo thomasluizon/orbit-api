@@ -56,7 +56,9 @@ public partial class StreakFreezeAutoActivationService(
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
         var pushService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
 
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var utcYesterday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+#pragma warning restore ORBIT0004
         var candidates = await dbContext.Users
             .Where(u => u.CurrentStreak > 0
                 && u.StreakFreezesAccumulated > 0

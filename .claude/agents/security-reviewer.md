@@ -1,6 +1,7 @@
 ---
 name: security-reviewer
-description: Reviews orbit-api Controllers and Infrastructure for security issues: missing [Authorize], JWT leaks, webhook signature checks, CORS gaps, input validation, rate-limit coverage. Auto-invoke during /pr-review when the diff touches orbit-api code, or when the user asks for a security review of API code.
+description: >-
+  Reviews orbit-api Controllers and Infrastructure for security issues: missing [Authorize], JWT leaks, webhook signature checks, CORS gaps, input validation, rate-limit coverage. Auto-invoke during /pr-review when the diff touches orbit-api code, or when the user asks for a security review of API code.
 tools: Glob, Grep, Read
 model: sonnet
 effort: medium

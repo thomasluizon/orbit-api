@@ -1,0 +1,19 @@
+name: arch-map
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Regenerate architecture map
+        run: node tools/arch-map.mjs
+      - name: Fail on drift
+        run: git diff --exit-code architecture.json architecture.html

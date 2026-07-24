@@ -5,3 +5,10 @@ pre-commit:
       glob: "*.cs"
       run: dotnet format Orbit.slnx --include {staged_files}
       stage_fixed: true
+    dashes:
+      run: node tools/check-dashes.mjs --files {staged_files}
+pre-push:
+  commands:
+    protect-main:
+      use_stdin: true
+      run: node tools/check-push-target.mjs
