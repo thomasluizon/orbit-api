@@ -113,6 +113,16 @@ jobs:
           fi
           echo "OK: no existing migration was edited (new migrations are allowed)."
 
+      - name: Fail on non-idempotent raw index SQL in new migrations
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          echo "Changed migration files:"
+          git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs'
+          git diff --name-only -z --diff-filter=d "origin/$BASE_REF...HEAD" -- ':(glob)**/Migrations/*.cs' \
+            | xargs -0 --no-run-if-empty python3 .github/scripts/check_migration_idempotency.py
+
   convention-guard:
     name: Guard Conventions
     runs-on: ubuntu-latest
