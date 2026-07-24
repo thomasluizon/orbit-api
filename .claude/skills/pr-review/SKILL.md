@@ -17,16 +17,11 @@ This skill subsumes the old `/review` and `/security-review` commands: it does
 everything both did and adds the backward-compat guard and a single shared rubric.
 
 <!--
-Lockstep twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md — keep them behavior-
-aligned (Stage-6 rule: the copies can't be deduped across two repos + CIs, so they stay
-aligned by hand). Both walk the shared rubric, run the adversarial Phase 6
-(`.claude/skills/_shared/verification-protocol.md`) with the cross-model `/second-opinion`
-step on surviving Critical findings, and end decisively APPROVE / NEEDS WORK. Sanctioned
-differences: default repo (api here / ui there) + the mirror-image `ui#`/`api#` selector, the
-subagent set (security-reviewer + contract-aligner here; parity/i18n/design are ui-only), and
-`dotnet` validate vs the ui `/validate` skill. `opencode` is absent in orbit-api CI (this
-copy's only runtime), so the second-opinion step degrades to UNAVAILABLE here — identical to
-how the ui copy behaves in ui CI.
+Lockstep twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos and two CIs, so
+the copies cannot be deduped and stay behavior-aligned by hand (Stage-6 rule). Sanctioned
+differences: the default repo (api here, ui there) and the mirror-image `ui#` / `api#`
+selector; the subagent set (security-reviewer + contract-aligner here, parity/i18n/design
+ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
 -->
 
 **Golden rule**: every finding is constructive and actionable — a clear fix, a file:line,
@@ -96,7 +91,6 @@ In parallel:
 - `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\CLAUDE.md` (root +
   `packages/shared`) — only if the diff changes a DTO, endpoint, or contract surface the
   web/mobile clients consume.
-- The plan in `.claude/plans/completed/` if the PR body references one.
 - **`.claude/skills/pr-review/rubric.md`** — the dimensions, severities, and finding
   template this review walks.
 - **`.claude/skills/_shared/verification-protocol.md`** — the shared reliability contract;
@@ -144,8 +138,7 @@ dimension.
 | `security-reviewer` | any `src/` code changed (i.e. every backend PR) | Security (#12, API side) |
 | `contract-aligner` | a DTO, Controller route, or sibling `packages/shared` type / `endpoints.ts` changed | Contract drift (#11) |
 
-`security-reviewer` fires on essentially every orbit-api PR; `contract-aligner` fires when
-the change touches the cross-repo contract — launch them together when both apply.
+Launch both together when both gates fire.
 
 Parity (#9) and i18n (#10) are **frontend-only** dimensions owned by the `orbit-ui-mobile`
 side of the review: `parity-checker` and `i18n-syncer` do not live in this repo and never
@@ -329,10 +322,9 @@ endpoint / `mcp__github_inline_comment__create_inline_comment`.
 
 - **CI wrapper** (`.github/workflows/claude-review.yml`) invokes this skill: it owns the
   single decisive post — produce the report + recommendation and let it submit (skip this
-  posting step). In CI also skip Phase 7 (Validate) — Build / Unit Tests run as separate
-  required checks — and mark any dimension that needs the un-checked-out sibling repo as
-  "not verifiable in CI". The Phase 6 adversarial pass still runs; its `/second-opinion` step
-  returns UNAVAILABLE (no `opencode` in CI) and the findings stand.
+  posting step). In CI also skip Phase 7 (Validate) and mark any dimension that needs the
+  un-checked-out sibling repo as "not verifiable in CI". The Phase 6 adversarial pass still
+  runs.
 - **Local, a PR you do NOT own**: post the decisive review yourself per the recommendation.
 - **Local, your OWN PR** (GitHub blocks self-approval): write the report and post it with
   `--comment` instead — do not fail trying to `--approve`.

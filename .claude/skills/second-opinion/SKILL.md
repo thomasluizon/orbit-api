@@ -5,11 +5,9 @@ argument-hint: <a claim to test, optionally with a file:line to pull context fro
 ---
 
 <!--
-Mirrored from orbit-ui-mobile/.claude/skills/second-opinion/ (SKILL.md + second-opinion.mjs)
-— the ui-mobile copy is the source of truth; keep them in lockstep. Both repos run
-`/pr-review` with the same adversarial Phase 6, so both carry this skill. `opencode` is absent
-in orbit-api CI (this copy's only runtime), so here the helper returns UNAVAILABLE and the
-finding stands — the same graceful-degradation path ui-mobile uses in its own CI.
+Mirrored from orbit-ui-mobile/.claude/skills/second-opinion/ (SKILL.md + second-opinion.mjs):
+that copy is the source of truth, keep the two in lockstep. Both repos run `/pr-review` with
+the same adversarial Phase 6, so both carry this skill.
 -->
 
 # Second Opinion (cross-model)
