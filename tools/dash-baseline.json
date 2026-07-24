@@ -1,6 +1,5 @@
 {
   ".github/scripts/check_bench.py": 1,
-  ".github/workflows/claude-review.yml": 7,
   ".github/workflows/dependabot-auto-merge.yml": 1,
   ".github/workflows/mutation.yml": 2,
   ".github/workflows/sonarcloud.yml": 9,
