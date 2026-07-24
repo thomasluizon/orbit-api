@@ -18,11 +18,7 @@ pre-push:
             refs/heads/main|refs/heads/master) blocked=1 ;;
           esac
         done
-        branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-        case "$branch" in
-          main|master) blocked=1 ;;
-        esac
         if [ "$blocked" -eq 1 ]; then
-          echo "BLOCKED: direct push to main/master is forbidden (branch protection, squash-merge only). Open a PR."
+          echo "BLOCKED: pushing to main/master is forbidden (branch protection, squash-merge only). Open a PR."
           exit 1
         fi

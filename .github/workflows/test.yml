@@ -116,14 +116,10 @@ jobs:
       - name: Fail on non-idempotent raw index SQL in new migrations
         run: |
           git fetch origin "${{ github.base_ref }}"
-          changed=$(git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- ':(glob)**/Migrations/*.cs')
-          if [ -z "$changed" ]; then
-            echo "OK: no migration files changed."
-            exit 0
-          fi
-          echo "Checking migrations for idempotent raw index SQL:"
-          echo "$changed"
-          python3 .github/scripts/check_migration_idempotency.py $changed
+          echo "Changed migration files:"
+          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- ':(glob)**/Migrations/*.cs'
+          git diff --name-only -z --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- ':(glob)**/Migrations/*.cs' \
+            | xargs -0 --no-run-if-empty python3 .github/scripts/check_migration_idempotency.py
 
   convention-guard:
     name: Guard Conventions
