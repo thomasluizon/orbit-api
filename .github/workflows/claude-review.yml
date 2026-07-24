@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: anthropics/claude-code-action@f1bd27ca5b54584506e40e17884d90bdaaa1a9b3 # v1
+      - uses: anthropics/claude-code-action@e0cf66d1d257526b5d07f141838c338921cb8455 # v1
         if: ${{ github.actor != 'dependabot[bot]' }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -25,23 +25,22 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            You are the SOLE automated reviewer of this PR. You MUST finish with exactly ONE decisive GitHub review, APPROVE or REQUEST_CHANGES. A bare comment is never an acceptable terminal state.
+            You are the SOLE automated reviewer of this PR. You MUST finish with exactly ONE decisive GitHub review — APPROVE or REQUEST_CHANGES. A bare comment is never an acceptable terminal state.
 
-            ## Step 1: Review via the /pr-review skill (single source of truth)
+            ## Step 1 — Review via the /pr-review skill (single source of truth)
 
-            Run the repo's `/pr-review` skill against PR #${{ github.event.pull_request.number }}. The skill walks `.claude/skills/pr-review/rubric.md` and produces a severity-ranked report. This workflow does NOT maintain its own rubric. The skill and rubric own all criteria. You only run the skill and post the decision.
+            Run the repo's `/pr-review` skill against PR #${{ github.event.pull_request.number }}. The skill walks `.claude/skills/pr-review/rubric.md` and produces a severity-ranked report. This workflow does NOT maintain its own rubric — the skill and rubric own all criteria. You only run the skill and post the decision.
 
-            Honor the rubric's **Signal gate**: surface high-signal findings only, meaning Critical / High / concretely-actionable Medium. Do NOT add nits, style preferences, naming bikeshed, reformatting, or "consider…/future-proof…" suggestions of your own. Manufacturing nits to avoid approving is a defect.
+            Honor the rubric's **Signal gate**: surface high-signal only — Critical / High / concretely-actionable Medium. Do NOT add nits, style preferences, naming bikeshed, reformatting, or "consider…/future-proof…" suggestions of your own. Manufacturing nits to avoid approving is a defect.
 
             ## CI adaptations
 
-            - Skip the skill's Phase 7, "Validate" (dotnet build / test): this PR already runs Build / Unit Tests / SonarCloud as separate required checks.
-            - RUN the skill's Phase 6, "Verify findings (adversarial)" in full. It is the skeptic pass that decides which findings survive; skipping it is how a false Critical blocks a clean PR. Only its cross-model second opinion degrades in CI, and the skill already handles that as UNAVAILABLE.
+            - Skip the skill's Phase 6 (dotnet build / test): this PR already runs Build / Unit Tests / SonarCloud as separate required checks.
             - The sibling `orbit-ui-mobile` repo is NOT checked out in this job. Any cross-repo dimension (contract-aligner, the `packages/shared` side of the backward-compat guard) that needs it → mark "not verifiable in CI", never guess.
-            - Skip the "Post to GitHub" step of the skill's Phase 8, "Report": YOU post the single decision in Step 2. The skill still writes the report file, which is what Step 2 posts.
+            - Skip the skill's own Phase 7 posting — YOU post the single decision in Step 2.
             - First read prior resolved threads and your own earlier reviews; never re-flag a resolved or already-addressed concern, and focus on the diff since your last review.
 
-            ## Step 2: Post exactly one decision (mandatory)
+            ## Step 2 — Post exactly one decision (mandatory)
 
             From the skill's surviving findings, the recommendation is deterministic:
 
@@ -50,7 +49,7 @@ jobs:
             - **Otherwise** → approve:
               gh pr review ${{ github.event.pull_request.number }} --approve --body-file <skill report path>
 
-            Medium / Low / Info findings ride along in the report body but NEVER downgrade an APPROVE. Default to APPROVE. A clean PR earns a plain approval, say so. Never manufacture a Critical/High finding to avoid approving. Add inline comments (mcp__github_inline_comment__create_inline_comment, confirmed: true) only for Critical/High items tied to a specific line.
+            Medium / Low / Info findings ride along in the report body but NEVER downgrade an APPROVE. Default to APPROVE — a clean PR earns a plain approval, say so. Never manufacture a Critical/High finding to avoid approving. Add inline comments (mcp__github_inline_comment__create_inline_comment, confirmed: true) only for Critical/High items tied to a specific line.
 
             The PR branch is checked out in the current working directory.
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr review:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"'
