@@ -8,8 +8,10 @@ using NSubstitute;
 using Orbit.Api.Controllers;
 using Orbit.Application.Common;
 using Orbit.Application.Profile.Commands;
+using Orbit.Application.Profile.Models;
 using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Common;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Infrastructure.Tests.Controllers;
 
@@ -17,12 +19,13 @@ public class ProfileControllerTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly ILogger<ProfileController> _logger = Substitute.For<ILogger<ProfileController>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly ProfileController _controller;
     private static readonly Guid UserId = Guid.NewGuid();
 
     public ProfileControllerTests()
     {
-        _controller = new ProfileController(_mediator, _logger);
+        _controller = new ProfileController(_mediator, _logger, _userDateService);
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, UserId.ToString()) };
         var identity = new ClaimsIdentity(claims, "Test");
         var principal = new ClaimsPrincipal(identity);
@@ -52,6 +55,20 @@ public class ProfileControllerTests
         var result = await _controller.GetProfile(CancellationToken.None);
 
         result.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(404);
+    }
+
+    [Fact]
+    public async Task ExportUserData_Names_The_File_With_The_Users_Today()
+    {
+        _mediator.Send(Arg.Any<ExportUserDataQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(default(UserDataExport)!));
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new DateOnly(2026, 12, 31));
+
+        var result = await _controller.ExportUserData(CancellationToken.None);
+
+        result.Should().BeOfType<FileContentResult>()
+            .Which.FileDownloadName.Should().Be("orbit-data-export-2026-12-31.json");
     }
 
     [Fact]
