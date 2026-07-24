@@ -7,6 +7,7 @@ using Orbit.Api.Extensions;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Profile.Commands;
 using Orbit.Application.Profile.Queries;
+using Orbit.Domain.Interfaces;
 
 #pragma warning disable CA1873
 
@@ -15,7 +16,10 @@ namespace Orbit.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
-public partial class ProfileController(IMediator mediator, ILogger<ProfileController> logger) : ControllerBase
+public partial class ProfileController(
+    IMediator mediator,
+    ILogger<ProfileController> logger,
+    IUserDateService userDateService) : ControllerBase
 {
     public record SetTimezoneRequest(string TimeZone);
     public record SetNameRequest(string Name);
@@ -382,9 +386,8 @@ public partial class ProfileController(IMediator mediator, ILogger<ProfileContro
         if (!result.IsSuccess)
             return result.ToErrorResult();
 
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
-        var fileName = $"orbit-data-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
-#pragma warning restore ORBIT0004
+        var userToday = await userDateService.GetUserTodayAsync(HttpContext.GetUserId(), cancellationToken);
+        var fileName = $"orbit-data-export-{userToday:yyyy-MM-dd}.json";
         var json = JsonSerializer.SerializeToUtf8Bytes(result.Value, ExportJsonOptions);
         return File(json, "application/json", fileName);
     }

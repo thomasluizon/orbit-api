@@ -26,7 +26,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
 
     public static void RecordTick(string serviceName)
     {
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         LastSuccessfulTicks[serviceName] = DateTime.UtcNow;
 #pragma warning restore ORBIT0004
     }
@@ -40,7 +40,7 @@ public class BackgroundServiceHealthCheck : IHealthCheck
         {
             if (LastSuccessfulTicks.TryGetValue(name, out var lastTick))
             {
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
                 var elapsed = DateTime.UtcNow - lastTick;
 #pragma warning restore ORBIT0004
                 serviceTickStatuses[name] = $"Last tick: {elapsed.TotalMinutes:F0}m ago";

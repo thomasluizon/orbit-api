@@ -77,7 +77,7 @@ public partial class AccountDeletionService(
 
         return await dbContext.Users
             .IgnoreQueryFilters()
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
             .Where(u => u.IsDeactivated && u.ScheduledDeletionAt.HasValue && u.ScheduledDeletionAt.Value <= DateTime.UtcNow)
 #pragma warning restore ORBIT0004
             .Select(u => u.Id)
@@ -121,7 +121,7 @@ public partial class AccountDeletionService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
 
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var cutoff = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-90));
 #pragma warning restore ORBIT0004
 
@@ -137,7 +137,7 @@ public partial class AccountDeletionService(
             .Where(a => a.FrozenDate < cutoff)
             .ExecuteDeleteAsync(ct);
 
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var processedRequestCutoff = DateTime.UtcNow.AddDays(-ProcessedRequestRetentionDays);
 #pragma warning restore ORBIT0004
         var deletedProcessedRequests = await dbContext.ProcessedRequests

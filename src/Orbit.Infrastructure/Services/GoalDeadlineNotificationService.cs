@@ -94,7 +94,7 @@ public partial class GoalDeadlineNotificationService(
 
     private async Task<Dictionary<Guid, int>> ComputeFreshStreakValuesAsync(OrbitDbContext dbContext, CancellationToken ct)
     {
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var streakWindowStart = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-AppConstants.MaxStreakLookbackDays - 1);
 #pragma warning restore ORBIT0004
         var streakGoals = await dbContext.Goals

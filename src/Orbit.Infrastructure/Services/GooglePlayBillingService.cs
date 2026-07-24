@@ -44,7 +44,7 @@ public sealed class GooglePlayBillingService(
         var lineItem = purchase.LineItems?.FirstOrDefault(item => item.ExpiryTimeDateTimeOffset is not null)
             ?? purchase.LineItems?.FirstOrDefault();
 
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
         var expiresAt = lineItem?.ExpiryTimeDateTimeOffset?.UtcDateTime ?? DateTime.UtcNow;
 #pragma warning restore ORBIT0004
         var resolvedProductId = lineItem?.ProductId ?? productId;
@@ -52,7 +52,7 @@ public sealed class GooglePlayBillingService(
 
         var isActive = purchase.SubscriptionState is not null
             && EntitledStates.Contains(purchase.SubscriptionState)
-#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), exempted when ORBIT0004 landed (audit: orbit-ui-mobile REBUILD.md 6.1.2 gap 2) https://github.com/thomasluizon/orbit-api/issues
+#pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC instant (expiry/TTL/cutoff math, not a user-facing date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
             && expiresAt > DateTime.UtcNow;
 #pragma warning restore ORBIT0004
 
