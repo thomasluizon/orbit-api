@@ -2675,7 +2675,7 @@
       "Challenges": 15,
       "Chat": 79,
       "ChecklistTemplates": 5,
-      "Common": 32,
+      "Common": 33,
       "Gamification": 26,
       "Goals": 33,
       "Habits": 74,
@@ -6858,6 +6858,13 @@
         "file": "tests/Orbit.Infrastructure.Tests/Extensions/HttpContextExtensionsTests.cs",
         "references": [
           "User"
+        ]
+      },
+      {
+        "testClass": "ProductAnalyticsRegistrationTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Extensions/ProductAnalyticsRegistrationTests.cs",
+        "references": [
+          "ApiKey"
         ]
       },
       {
