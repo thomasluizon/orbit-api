@@ -22,6 +22,7 @@ public partial class GoogleAuthCommandHandler(
     IHttpClientFactory httpClientFactory,
     IEmailService emailService,
     IServiceScopeFactory scopeFactory,
+    IProductAnalytics productAnalytics,
     ILogger<GoogleAuthCommandHandler> logger) : IRequestHandler<GoogleAuthCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(GoogleAuthCommand request, CancellationToken cancellationToken)
@@ -42,6 +43,9 @@ public partial class GoogleAuthCommandHandler(
 
         if (wasReactivated || request.GoogleAccessToken is not null)
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (isNewUser)
+            AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");
 
         var sessionResult = await authSessionService.CreateSessionAsync(user.Id, user.Email, cancellationToken);
         if (sessionResult.IsFailure)

@@ -11,6 +11,7 @@ builder
     .AddOrbitAiServices()
     .AddOrbitInfrastructure()
     .AddOrbitRateLimiting()
+    .AddOrbitProductAnalytics()
     .AddOrbitObservability();
 
 var app = builder.Build();

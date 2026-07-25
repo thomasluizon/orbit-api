@@ -22,6 +22,7 @@ using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
 using Orbit.Infrastructure.Services.Calendar;
+using PostHog;
 
 namespace Orbit.Api.Extensions;
 
@@ -319,6 +320,28 @@ public static partial class ServiceCollectionExtensions
     public static WebApplicationBuilder AddOrbitRateLimiting(this WebApplicationBuilder builder)
     {
         builder.Services.AddScoped<IDistributedRateLimitService, DistributedRateLimitService>();
+
+        return builder;
+    }
+
+    public static WebApplicationBuilder AddOrbitProductAnalytics(this WebApplicationBuilder builder)
+    {
+        var settings = builder.Configuration.GetSection(PostHogSettings.SectionName).Get<PostHogSettings>()
+            ?? new PostHogSettings();
+
+        if (string.IsNullOrWhiteSpace(settings.ApiKey))
+        {
+            builder.Services.AddSingleton<IProductAnalytics, NoOpProductAnalytics>();
+            return builder;
+        }
+
+        builder.Services.Configure<PostHogOptions>(options =>
+        {
+            options.ProjectToken = settings.ApiKey;
+            options.HostUrl = new Uri(settings.HostUrl);
+        });
+        builder.AddPostHog();
+        builder.Services.AddSingleton<IProductAnalytics, PostHogProductAnalytics>();
 
         return builder;
     }

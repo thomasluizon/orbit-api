@@ -22,6 +22,7 @@ public class GoogleAuthCommandHandlerTests
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly FakeHttpMessageHandler _httpHandler = new();
+    private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
     private readonly GoogleAuthCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -38,7 +39,7 @@ public class GoogleAuthCommandHandlerTests
 
         _handler = new GoogleAuthCommandHandler(
             _userRepo, _unitOfWork, _authSessionService, httpFactory, _emailService,
-            Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
+            Substitute.For<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(), _analytics,
             Substitute.For<ILogger<GoogleAuthCommandHandler>>());
 
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -166,6 +167,32 @@ public class GoogleAuthCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Email.Should().Be(TestEmail);
         await _userRepo.Received(1).AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NewUserProvisioned_CapturesSignupCompleted()
+    {
+        SetupGoogleTokenResponse(TestEmail, "Google User");
+        User? created = null;
+        _userRepo.When(r => r.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()))
+            .Do(call => created = call.Arg<User>());
+
+        await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
+
+        created.Should().NotBeNull();
+        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free", false);
+    }
+
+    [Fact]
+    public async Task Handle_ReturningUser_DoesNotCaptureSignupCompleted()
+    {
+        SetupGoogleTokenResponse(TestEmail, "Google User");
+        SetupExistingUser(User.Create("Google User", TestEmail).Value);
+
+        await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
+
+        _analytics.DidNotReceive().CaptureUserEvent(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
     }
 
     private void SetupGoogleTokenResponse(string email, string name)

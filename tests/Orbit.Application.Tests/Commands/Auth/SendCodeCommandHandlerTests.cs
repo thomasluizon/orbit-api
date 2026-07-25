@@ -197,6 +197,7 @@ public class SendCodeCommandHandlerTests
 
         return new VerifyCodeCommandHandler(
             _cache, userRepo, unitOfWork, authSessionService, _emailService, mediator,
+            Substitute.For<IProductAnalytics>(),
             Substitute.For<ILogger<VerifyCodeCommandHandler>>());
     }
 
