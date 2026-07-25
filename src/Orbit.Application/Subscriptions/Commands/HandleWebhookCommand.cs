@@ -21,6 +21,7 @@ public partial class HandleWebhookCommandHandler(
     IOptions<StripeSettings> stripeSettings,
     SubscriptionService subscriptionService,
     IGenericRepository<ProcessedStripeEvent> processedEventRepository,
+    IProductAnalytics productAnalytics,
     ILogger<HandleWebhookCommandHandler> logger) : IRequestHandler<HandleWebhookCommand, Result>
 {
     private readonly StripeSettings _settings = stripeSettings.Value;
@@ -136,6 +137,7 @@ public partial class HandleWebhookCommandHandler(
 
         await unitOfWork.SaveChangesAsync(ct);
         LogUserUpgradedToPro(logger, uid, periodEnd);
+        AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_started");
     }
 
     private async Task HandleInvoicePaid(Event stripeEvent, CancellationToken ct)
@@ -159,6 +161,7 @@ public partial class HandleWebhookCommandHandler(
         user.SetStripeSubscription(invoiceSubId, periodEnd, interval);
         await unitOfWork.SaveChangesAsync(ct);
         LogSubscriptionRenewed(logger, user.Id, periodEnd);
+        AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_renewed");
     }
 
     private async Task HandleSubscriptionDeleted(Event stripeEvent, CancellationToken ct)
@@ -178,6 +181,7 @@ public partial class HandleWebhookCommandHandler(
         user.CancelStripeSubscription();
         await unitOfWork.SaveChangesAsync(ct);
         LogUserDowngraded(logger, user.Id);
+        AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_canceled");
     }
 
     private async Task HandleSubscriptionUpdated(Event stripeEvent, CancellationToken ct)
@@ -206,6 +210,7 @@ public partial class HandleWebhookCommandHandler(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+        AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_updated");
     }
 
     private static DateTime GetPeriodEnd(Subscription subscription, SubscriptionInterval interval)

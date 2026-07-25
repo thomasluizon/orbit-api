@@ -24,6 +24,7 @@ public class VerifyCodeCommandHandlerTests
     private readonly IAuthSessionService _authSessionService = Substitute.For<IAuthSessionService>();
     private readonly IEmailService _emailService = Substitute.For<IEmailService>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
     private readonly VerifyCodeCommandHandler _handler;
 
     private const string TestEmail = "test@example.com";
@@ -31,7 +32,7 @@ public class VerifyCodeCommandHandlerTests
     public VerifyCodeCommandHandlerTests()
     {
         _handler = new VerifyCodeCommandHandler(
-            _cache, _userRepo, _unitOfWork, _authSessionService, _emailService, _mediator,
+            _cache, _userRepo, _unitOfWork, _authSessionService, _emailService, _mediator, _analytics,
             Substitute.For<ILogger<VerifyCodeCommandHandler>>());
 
         _authSessionService.CreateSessionAsync(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -164,6 +165,45 @@ public class VerifyCodeCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.WasReactivated.Should().BeTrue();
         user.IsDeactivated.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_NewUser_CapturesSignupCompleted()
+    {
+        SetupCacheWithCode("123456");
+        User? created = null;
+        _userRepo.When(r => r.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>()))
+            .Do(call => created = call.Arg<User>());
+
+        await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
+
+        created.Should().NotBeNull();
+        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free", false);
+    }
+
+    [Fact]
+    public async Task Handle_ExistingUser_DoesNotCaptureSignupCompleted()
+    {
+        SetupCacheWithCode("123456");
+        SetupExistingUser(User.Create("Existing User", TestEmail).Value);
+
+        await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
+
+        _analytics.DidNotReceive().CaptureUserEvent(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+    }
+
+    [Fact]
+    public async Task Handle_CaptureThrows_SignupStillSucceeds()
+    {
+        SetupCacheWithCode("123456");
+        _analytics
+            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>()))
+            .Do(_ => throw new InvalidOperationException("PostHog unreachable"));
+
+        var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
     }
 
     private void SetupCacheWithCode(string code)

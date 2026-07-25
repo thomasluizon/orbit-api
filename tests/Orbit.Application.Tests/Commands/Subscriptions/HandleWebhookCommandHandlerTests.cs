@@ -15,6 +15,7 @@ using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Services;
 using Stripe;
 using Stripe.Checkout;
 
@@ -28,6 +29,7 @@ public class HandleWebhookCommandHandlerTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SubscriptionService _subscriptionService = Substitute.For<SubscriptionService>();
     private readonly IGenericRepository<ProcessedStripeEvent> _processedRepo = Substitute.For<IGenericRepository<ProcessedStripeEvent>>();
+    private readonly IProductAnalytics _analytics = Substitute.For<IProductAnalytics>();
     private readonly HandleWebhookCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -42,7 +44,7 @@ public class HandleWebhookCommandHandlerTests
         });
 
         _handler = new HandleWebhookCommandHandler(
-            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo,
+            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo, _analytics,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
     }
 
@@ -51,7 +53,7 @@ public class HandleWebhookCommandHandlerTests
     {
         var settings = Options.Create(new StripeSettings { WebhookSecret = "" });
         var handler = new HandleWebhookCommandHandler(
-            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo,
+            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo, _analytics,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
 
         var command = new HandleWebhookCommand("{}", "sig_test");
@@ -67,7 +69,7 @@ public class HandleWebhookCommandHandlerTests
     {
         var settings = Options.Create(new StripeSettings { WebhookSecret = null! });
         var handler = new HandleWebhookCommandHandler(
-            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo,
+            _userRepo, _unitOfWork, settings, _subscriptionService, _processedRepo, _analytics,
             Substitute.For<ILogger<HandleWebhookCommandHandler>>());
 
         var command = new HandleWebhookCommand("{}", "sig_test");
@@ -707,6 +709,190 @@ public class HandleWebhookCommandHandlerTests
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_CheckoutSessionCompleted_CapturesSubscriptionStarted()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_test"));
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro", false);
+    }
+
+    [Fact]
+    public async Task Handle_CheckoutSessionCompleted_YearlyPlan_CapturesIsYearlyProTrue()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _subscriptionService.GetAsync("sub_year", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateYearlySubscriptionWithoutPeriodEnd("sub_year"));
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_year", "cus_test"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro", true);
+    }
+
+    [Fact]
+    public async Task Handle_InvoicePaid_CapturesSubscriptionRenewed()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_test"));
+
+        var (json, signature) = BuildSignedEvent("invoice.paid", BuildInvoiceJson("sub_test"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_renewed", "Pro", false);
+    }
+
+    [Fact]
+    public async Task Handle_SubscriptionDeleted_CapturesSubscriptionCanceled()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var (json, signature) = BuildSignedEvent("customer.subscription.deleted",
+            BuildSubscriptionJson("sub_test", "canceled"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_canceled", "Free", false);
+    }
+
+    [Fact]
+    public async Task Handle_SubscriptionUpdated_CapturesSubscriptionUpdated()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var (json, signature) = BuildSignedEvent("customer.subscription.updated",
+            BuildSubscriptionJson("sub_test", "active"));
+
+        await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_updated", "Pro", false);
+    }
+
+    [Fact]
+    public async Task Handle_CaptureThrows_WebhookStillSucceedsSoStripeDoesNotRetry()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_test"));
+
+        _analytics
+            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>()))
+            .Do(_ => throw new InvalidOperationException("PostHog unreachable"));
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_ReplayedEventDedupedByProcessedStripeEvent_DoesNotCaptureASecondTime()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_test"));
+
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException("duplicate", new FakeUniqueViolationException()));
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        var result = await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _analytics.DidNotReceive().CaptureUserEvent(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+    }
+
+    [Fact]
+    public async Task Handle_NoOpAnalyticsBound_CapturesNothingAndLeavesHandlerResultUnchanged()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        _subscriptionService.GetAsync("sub_test", Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(), Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_test"));
+
+        var handler = new HandleWebhookCommandHandler(
+            _userRepo, _unitOfWork, Options.Create(new StripeSettings { WebhookSecret = WebhookSecret }),
+            _subscriptionService, _processedRepo, new NoOpProductAnalytics(),
+            Substitute.For<ILogger<HandleWebhookCommandHandler>>());
+
+        var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
+            UserId.ToString(), "sub_test", "cus_test"));
+
+        var result = await handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeTrue();
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+        _analytics.DidNotReceive().CaptureUserEvent(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+    }
+
     private static Subscription CreateMockSubscription(string subscriptionId)
     {
         return new Subscription
@@ -769,12 +955,12 @@ public class HandleWebhookCommandHandlerTests
 
     private static Subscription CreateSubscriptionWithInterval(
         string subscriptionId, string interval, DateTime currentPeriodEnd) => new()
-    {
-        Id = subscriptionId,
-        Status = "active",
-        Items = new StripeList<SubscriptionItem>
         {
-            Data =
+            Id = subscriptionId,
+            Status = "active",
+            Items = new StripeList<SubscriptionItem>
+            {
+                Data =
             [
                 new SubscriptionItem
                 {
@@ -785,8 +971,8 @@ public class HandleWebhookCommandHandlerTests
                     }
                 }
             ]
-        }
-    };
+            }
+        };
 
     private static string BuildCheckoutSessionJson(string? userId, string subscriptionId, string customerId)
     {

@@ -21,6 +21,7 @@ public partial class VerifyCodeCommandHandler(
     IAuthSessionService authSessionService,
     IEmailService emailService,
     IMediator mediator,
+    IProductAnalytics productAnalytics,
     ILogger<VerifyCodeCommandHandler> logger) : IRequestHandler<VerifyCodeCommand, Result<LoginResponse>>
 {
     public async Task<Result<LoginResponse>> Handle(VerifyCodeCommand request, CancellationToken cancellationToken)
@@ -109,7 +110,10 @@ public partial class VerifyCodeCommandHandler(
         }
 
         if (isNewUser)
+        {
+            AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "signup_completed");
             SendWelcomeEmailInBackground(user.Id, user.Email, user.Name, request.Language);
+        }
 
         return wasReactivated;
     }
