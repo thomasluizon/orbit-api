@@ -10,6 +10,9 @@ name: Guards
 # Skill and Agent Frontmatter (REBUILD.md section 14, item 1): an unquoted YAML
 # value containing ": " drops the skill or agent silently, which is how this
 # repo's security-reviewer stopped loading.
+#
+# Harness Lockstep (ORB-105): the six load-bearing review and security harness
+# twins must stay aligned with orbit-ui-mobile.
 
 on:
   pull_request:
@@ -61,3 +64,38 @@ jobs:
         with:
           node-version: 22
       - run: node tools/check-frontmatter.mjs
+
+  lockstep:
+    name: Harness Lockstep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect a lockstep change
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only --diff-filter=ACMRD origin/${{ github.base_ref }}...HEAD \
+            | grep -Eq '^(\.claude/skills/pr-review/(SKILL\.md|rubric\.md)|\.claude/skills/_shared/verification-protocol\.md|\.claude/agents/(contract-aligner|security-reviewer)\.md|\.claude/skills/second-opinion/second-opinion\.mjs|\.github/workflows/guards\.yml)$'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check out orbit-ui-mobile at main
+        if: steps.scope.outputs.changed == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: thomasluizon/orbit-ui-mobile
+          ref: main
+          path: orbit-ui-mobile
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        if: steps.scope.outputs.changed == 'true'
+        with:
+          node-version: 22
+      - name: Six harness twins stay in lockstep
+        if: steps.scope.outputs.changed == 'true'
+        run: node orbit-ui-mobile/tools/check-lockstep.mjs --ui-root "$GITHUB_WORKSPACE/orbit-ui-mobile" --api-root "$GITHUB_WORKSPACE"
