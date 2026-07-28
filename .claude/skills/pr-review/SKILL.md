@@ -133,6 +133,13 @@ Delegate the specialist subagents, gated by what the diff touches. Pass each the
 changed files. Fold every result back into the Phase 3 findings under the matching rubric
 dimension.
 
+**Block on them within this same turn.** Spawn the gated `security-reviewer` and
+`contract-aligner` subagents, wait for every one to return, and fold its result in before
+moving to Phase 5. The CI wrapper (`.github/workflows/claude-review.yml`) runs a single
+execution with **no** background-completion wake-up, so a subagent still running when the
+turn ends strands the review half-done and posts nothing. If you cannot block on one, run
+its check inline yourself.
+
 | Subagent | Gate (fire when…) | Folds into rubric dimension |
 |---|---|---|
 | `security-reviewer` | any `src/` code changed (i.e. every backend PR) | Security (#12, API side) |
