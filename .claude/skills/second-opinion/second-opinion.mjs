@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
-const DEFAULT_MODEL = 'opencode-go/glm-5.2';
+/**
+ * `codex exec` is intentional: this is a one-shot verdict with no supervised worker,
+ * so the headless-worker ban in tools/launch-worker.mjs does not apply.
+ */
+const DEFAULT_MODEL = 'gpt-5.6-sol';
 const DEFAULT_TIMEOUT_MS = 180_000;
 const SLUG = /^[\w./:-]+$/;
 
@@ -15,7 +20,10 @@ function parseArgs(argv) {
   let timeout = DEFAULT_TIMEOUT_MS;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--model' && argv[i + 1]) model = argv[++i];
-    else if (argv[i] === '--timeout' && argv[i + 1]) timeout = Number(argv[++i]) || DEFAULT_TIMEOUT_MS;
+    else if (argv[i] === '--timeout' && argv[i + 1]) {
+      const candidate = Number(argv[++i]);
+      timeout = Number.isFinite(candidate) && candidate > 0 ? candidate : DEFAULT_TIMEOUT_MS;
+    }
   }
   if (!SLUG.test(model)) model = DEFAULT_MODEL;
   return { model, timeout };
@@ -52,7 +60,7 @@ function buildPrompt(finding) {
   ].join('\n');
 }
 
-/** Extract the assistant text from opencode's `--format json` JSONL event stream. */
+/** Extract the assistant text and failures from Codex's `--json` JSONL event stream. */
 function parseEvents(stdout) {
   let text = '';
   let errorMessage = null;
@@ -65,8 +73,15 @@ function parseEvents(stdout) {
     } catch {
       continue;
     }
-    if (event.type === 'text' && event.part?.text) text += event.part.text;
-    else if (event.type === 'error') errorMessage = event.error?.data?.message || event.error?.name || 'opencode error';
+    if (event.type === 'item.completed' && event.item?.type === 'agent_message' && event.item.text) {
+      text += event.item.text;
+    } else if (event.type === 'item.completed' && event.item?.type === 'error') {
+      errorMessage = event.item.message || 'codex error';
+    } else if (event.type === 'error') {
+      errorMessage = event.message || 'codex error';
+    } else if (event.type === 'turn.failed') {
+      errorMessage = event.error?.message || 'codex turn failed';
+    }
   }
   return { text: text.trim(), errorMessage };
 }
@@ -102,7 +117,20 @@ const finding = readStdin();
 
 if (!finding.trim()) emit({ status: 'UNAVAILABLE', reason: 'no finding text on stdin', model });
 
-const run = spawnSync('opencode', ['run', '--model', model, '--format', 'json'], {
+const run = spawnSync('codex', [
+  'exec',
+  '--ephemeral',
+  '--ignore-user-config',
+  '--ignore-rules',
+  '--skip-git-repo-check',
+  '--sandbox',
+  'read-only',
+  '--model',
+  model,
+  '--json',
+  '-',
+], {
+  cwd: tmpdir(),
   input: buildPrompt(finding),
   encoding: 'utf8',
   timeout,
@@ -111,15 +139,19 @@ const run = spawnSync('opencode', ['run', '--model', model, '--format', 'json'],
 });
 
 if (run.error) {
-  const reason = run.error.code === 'ETIMEDOUT' ? 'opencode timed out' : `opencode not runnable (${run.error.code})`;
+  const reason = run.error.code === 'ETIMEDOUT' ? 'codex timed out' : `codex not runnable (${run.error.code})`;
   emit({ status: 'UNAVAILABLE', reason, model });
 }
 
 const { text, errorMessage } = parseEvents(run.stdout);
 if (errorMessage) emit({ status: 'UNAVAILABLE', reason: errorMessage, model });
+if (run.status !== 0) {
+  const stderrTail = String(run.stderr || '').trim().slice(-200);
+  emit({ status: 'UNAVAILABLE', reason: stderrTail || `codex exited with status ${run.status}`, model });
+}
 if (!text) {
   const stderrTail = String(run.stderr || '').trim().slice(-200);
-  emit({ status: 'UNAVAILABLE', reason: stderrTail || 'empty response from opencode', model });
+  emit({ status: 'UNAVAILABLE', reason: stderrTail || 'empty response from codex', model });
 }
 
 const verdict = parseVerdict(text);
