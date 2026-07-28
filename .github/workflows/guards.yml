@@ -10,6 +10,9 @@ name: Guards
 # Skill and Agent Frontmatter (REBUILD.md section 14, item 1): an unquoted YAML
 # value containing ": " drops the skill or agent silently, which is how this
 # repo's security-reviewer stopped loading.
+#
+# Harness Lockstep (ORB-105): the six load-bearing review and security harness
+# twins must stay aligned with orbit-ui-mobile.
 
 on:
   pull_request:
@@ -20,6 +23,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   dashes:
@@ -61,3 +65,95 @@ jobs:
         with:
           node-version: 22
       - run: node tools/check-frontmatter.mjs
+
+  lockstep:
+    name: Harness Lockstep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect a lockstep change
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only --diff-filter=ACMRD origin/${{ github.base_ref }}...HEAD \
+            | grep -Eq '^(\.claude/skills/pr-review/(SKILL\.md|rubric\.md)|\.claude/skills/_shared/verification-protocol\.md|\.claude/agents/(contract-aligner|security-reviewer)\.md|\.claude/skills/second-opinion/second-opinion\.mjs|\.github/workflows/guards\.yml)$'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Resolve coordinated sibling candidate
+        id: sibling
+        if: steps.scope.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          CURRENT_PR: ${{ github.event.pull_request.number }}
+          PEER_REPOSITORY: thomasluizon/orbit-ui-mobile
+        run: |
+          set -euo pipefail
+          ref=main
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            directives=$(printf '%s\n' "$PR_BODY" | tr -d '\r' | grep -E '^Harness-Lockstep-Peer:' || true)
+            count=$(printf '%s\n' "$directives" | sed '/^$/d' | wc -l | tr -d ' ')
+            if [ "$count" -gt 1 ]; then
+              echo "::error::PR body has more than one Harness-Lockstep-Peer directive"
+              exit 1
+            fi
+            if [ "$count" -eq 1 ]; then
+              peer_pr=$(printf '%s\n' "$directives" | sed -nE 's/^Harness-Lockstep-Peer:[[:space:]]*([1-9][0-9]*)[[:space:]]*$/\1/p')
+              if [ -z "$peer_pr" ]; then
+                echo "::error::Harness-Lockstep-Peer must contain one positive PR number"
+                exit 1
+              fi
+              peer_json=$(gh api "repos/$PEER_REPOSITORY/pulls/$peer_pr")
+              peer_base=$(jq -r '.base.ref' <<< "$peer_json")
+              peer_base_repo=$(jq -r '.base.repo.full_name' <<< "$peer_json")
+              peer_head_repo=$(jq -r '.head.repo.full_name' <<< "$peer_json")
+              peer_state=$(jq -r '.state' <<< "$peer_json")
+              peer_merged=$(jq -r '.merged' <<< "$peer_json")
+              peer_sha=$(jq -r '.head.sha' <<< "$peer_json")
+              if [ "$peer_base" != "main" ] || [ "$peer_base_repo" != "$PEER_REPOSITORY" ] || [ "$peer_head_repo" != "$PEER_REPOSITORY" ]; then
+                echo "::error::paired PR must target main from a branch in $PEER_REPOSITORY; forks are not accepted"
+                exit 1
+              fi
+              reciprocal=$(jq -r '.body // ""' <<< "$peer_json" | tr -d '\r' | grep -Fxc "Harness-Lockstep-Peer: $CURRENT_PR" || true)
+              if [ "$reciprocal" -ne 1 ]; then
+                echo "::error::$PEER_REPOSITORY#$peer_pr must contain exactly: Harness-Lockstep-Peer: $CURRENT_PR"
+                exit 1
+              fi
+              if [ "$peer_state" = "open" ]; then
+                if ! [[ "$peer_sha" =~ ^[0-9a-f]{40}$ ]]; then
+                  echo "::error::paired PR returned an invalid head SHA"
+                  exit 1
+                fi
+                ref=$peer_sha
+              elif [ "$peer_merged" = "true" ]; then
+                ref=main
+              else
+                echo "::error::$PEER_REPOSITORY#$peer_pr is closed without merge"
+                exit 1
+              fi
+            fi
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Sibling candidate: $PEER_REPOSITORY@$ref"
+      - name: Check out orbit-ui-mobile candidate
+        if: steps.scope.outputs.changed == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: thomasluizon/orbit-ui-mobile
+          ref: ${{ steps.sibling.outputs.ref }}
+          path: orbit-ui-mobile
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        if: steps.scope.outputs.changed == 'true'
+        with:
+          node-version: 22
+      - name: Six harness twins stay in lockstep
+        if: steps.scope.outputs.changed == 'true'
+        run: node orbit-ui-mobile/tools/check-lockstep.mjs --ui-root "$GITHUB_WORKSPACE/orbit-ui-mobile" --api-root "$GITHUB_WORKSPACE"

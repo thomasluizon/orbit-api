@@ -113,15 +113,33 @@ are **gated to `apps/*` changes**; backend hard rules are gated to `orbit-api` c
 > Reference: CLAUDE.md rules 6, 7, 10.
 
 - Function size soft cap ~50 lines, nesting ~3 levels; hard cap ~100. Over → the
-  function is doing too much, split it (rule 7).
+  function is doing too much, split it (rule 7). A file around 1,000 lines or one
+  carrying several unrelated responsibilities is a cohesion finding when the evidence
+  supports it. Split by responsibility or extract well-named pure helpers; when a split
+  merely moves the same tangle, report relocation, not simplification.
 - New endpoints follow CQRS (Command/Query + Handler + Validator) on the backend.
 - Frontend respects the adapter split: Server Action (web) vs `apiClient` (mobile);
   shared logic in `packages/shared`, not duplicated per app.
+- For branch-heavy code, look for the **code-judo move**: a state-model or data-shape
+  reframe that deletes whole branches. Prefer that reframe to adding more conditionals.
+- Flag special-case `if/else` ladders, deeply coupled branching, and flag soup that grows
+  per case. Prefer the smallest fitting remedy: early returns, a lookup table, or
+  polymorphism that makes the variants explicit.
 - No premature abstraction — extract on the third real use, not the second (rule 6).
-  Three similar lines beat a helper invented for two.
+  Three similar lines beat a helper invented for two. Apply the **deletion test** to thin
+  wrappers: if removing the module makes its complexity vanish instead of exposing useful
+  behavior, it is pass-through indirection. Flag magical abstractions that hide control
+  flow; delete needless wrappers or deepen the abstraction until its boundary is clear.
+- Repeated casts or optionality juggling indicate a structural type mismatch when one
+  better type or one parse at the trust boundary would remove the churn. Recommend that
+  structural fix, but exclude gate-owned mechanical forms such as `as any`,
+  `as unknown as X`, and unjustified `null!`; dimension 6 owns those direct violations.
 - DRY at the right level (rule 10): cross-app → `packages/shared`; cross-component →
-  `apps/<platform>/components/`; cross-function-in-file → a local helper. Don't lift to
-  `shared` for one caller.
+  `apps/<platform>/components/`; repeated handler or cross-function logic → one
+  well-named helper at the narrowest shared layer. Don't lift to `shared` for one caller.
+- Business logic belongs in its canonical domain, CQRS, or shared-logic layer, not in a
+  controller, component, DTO, or platform adapter. Move the rule to the owning layer
+  instead of duplicating or coordinating it at the edges.
 
 ### 4. Comment policy
 
