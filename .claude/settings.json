@@ -6,6 +6,12 @@
         "hooks": [
           { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guardrails.mjs\"" }
         ]
+      },
+      {
+        "matcher": "PowerShell",
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guardrails.mjs\"" }
+        ]
       }
     ]
   }

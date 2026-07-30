@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// PreToolUse(Bash) hook: block git invocations that violate Orbit's git workflow.
+// PreToolUse(Bash|PowerShell) hook: block git invocations that violate Orbit's git
+// workflow. Registered on both shell tools because a matcher naming only "Bash" leaves
+// the identical command issued through the PowerShell tool completely unguarded.
 // Enforces the CLAUDE.md "Git workflow" rules deterministically instead of relying
 // on prose the model can drift past:
 //   - "Branch protection on main. No direct pushes. Squash-merge only."
@@ -8,7 +10,7 @@
 // `git push` issued while HEAD is on main/master. Feature-branch pushes, new
 // commits, and PRs are untouched. reset --hard and checkout -- are intentionally
 // NOT blocked: CLAUDE.md allows them with judgment. Exits 0 silent (allow) or 2
-// with stderr feedback (block). Any error exits 0 so the hook never wedges Bash.
+// with stderr feedback (block). Any error exits 0 so the hook never wedges a shell tool.
 
 import { readFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
@@ -71,12 +73,12 @@ try {
         if (/^(?:main|master)$/.test(branch)) {
           process.stderr.write(
             `BLOCKED git command (Orbit git workflow):\n  ${command}\n\n` +
-              `HEAD is on '${branch}'. Pushing from the protected branch is forbidden — switch to a feature branch and open a PR.\n`,
+              `HEAD is on '${branch}'. Pushing from the protected branch is forbidden. Switch to a feature branch and open a PR.\n`,
           )
           process.exit(2)
         }
       } catch {
-        // Can't determine the branch (no repo at that path, git error) — fail open.
+        // Can't determine the branch (no repo at that path, git error): fail open.
       }
     }
   }
