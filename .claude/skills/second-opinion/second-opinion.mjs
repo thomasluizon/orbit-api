@@ -40,13 +40,13 @@ function readStdin() {
 function buildPrompt(finding) {
   return [
     'You are an INDEPENDENT second-opinion code reviewer — a different model from the one that raised this finding.',
-    'A primary reviewer flagged a CRITICAL issue in a pull request. Decide whether it is a REAL, blast-radius-carrying',
+    'A primary reviewer flagged a Critical or High issue in a pull request. Decide whether it is a REAL, blast-radius-carrying',
     'defect in the changed code, or a FALSE POSITIVE.',
     '',
     'Rules:',
     '- Judge ONLY from the finding text and code below. Do NOT use any tools, do NOT read files, do NOT ask questions.',
     '- Be skeptical in BOTH directions: do not rubber-stamp, do not reflexively contradict.',
-    '- AGREE if the cited defect is real and the Critical severity is justified.',
+    '- AGREE if the cited defect is real and the reported Critical or High severity is justified.',
     '- DISAGREE if the code is actually correct, the path unreachable, the value already validated, the severity',
     '  inflated, or the claim unsupported by the shown code.',
     '- UNSURE only if the given context genuinely cannot decide it.',

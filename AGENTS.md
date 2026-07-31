@@ -10,6 +10,13 @@ CLAUDE.md; this file holds the worker contract and the review rules and DEFERS t
   contradictory ticket means STOP and report, never improvise.
 - Finish = `dotnet build Orbit.slnx` 0 errors + `dotnet test` green, commit, push, one
   PR to `main` linking `ORB-N`, then stop. Never merge.
+- Post the approach before you write the code. Open the pull request as your FIRST act
+  after creating the branch, carrying no implementation yet, and immediately post your
+  intended approach as a pull request comment: the change you mean to make, the files it
+  will land in, and why that shape rather than the alternatives you rejected. Only then
+  start writing. The cloud reviewer reads that comment before it reads a diff, so a wrong
+  shape costs one comment instead of a review round against code already written. Changing
+  a plan is free; changing a merged design is not.
 - Analyzer gates (silent in local builds, CI-fatal): ORBIT0001 narration comments,
   ORBIT0002 redundant rollbacks, ORBIT0003 controller authorization, ORBIT0004 raw
   `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`),

@@ -17,11 +17,14 @@ This skill subsumes the old `/review` and `/security-review` commands: it does
 everything both did and adds the backward-compat guard and a single shared rubric.
 
 <!--
-Lockstep twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos and two CIs, so
-the copies cannot be deduped and stay behavior-aligned by hand (Stage-6 rule). Sanctioned
-differences: the default repo (api here, ui there) and the mirror-image `ui#` / `api#`
-selector; the subagent set (security-reviewer + contract-aligner here, parity/i18n/design
-ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
+Lockstep twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos, so the copies
+cannot be deduped. They are NOT aligned by hand: orbit-ui-mobile/tools/check-lockstep.mjs
+compares them line by line, a divergence is legal only when its diff-hunk fingerprint carries
+a justification in orbit-ui-mobile/tools/lockstep-declarations.json, and `Harness Lockstep` is
+a REQUIRED status check on this repository's `main`, so an unmirrored undeclared edit here
+turns it red. Declared differences: the default repo (api here, ui there) and the mirror-image
+`ui#` / `api#` selector; the subagent set (security-reviewer + contract-aligner here,
+parity/i18n/design ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
 -->
 
 **Golden rule**: every finding is constructive and actionable — a clear fix, a file:line,
@@ -135,10 +138,10 @@ dimension.
 
 **Block on them within this same turn.** Spawn the gated `security-reviewer` and
 `contract-aligner` subagents, wait for every one to return, and fold its result in before
-moving to Phase 5. The CI wrapper (`.github/workflows/claude-review.yml`) runs a single
-execution with **no** background-completion wake-up, so a subagent still running when the
-turn ends strands the review half-done and posts nothing. If you cannot block on one, run
-its check inline yourself.
+moving to Phase 5. This skill runs as a single subagent turn with **no**
+background-completion wake-up, so a subagent still running when the turn ends strands the
+review half-done and posts nothing. If you cannot block on one, run its check inline
+yourself.
 
 | Subagent | Gate (fire when…) | Folds into rubric dimension |
 |---|---|---|
@@ -199,27 +202,23 @@ that will decide the outcome has to survive a challenge first.
    duplicate, the severity inflated). Default to refuted when uncertain. Drop or downgrade
    anything the skeptic disproves — a false Critical that blocks a clean PR is as costly as
    a missed one. The survivors decide the recommendation.
-2. **Cross-model second opinion (§2, Critical survivors — interactive only).** For each
-   **Critical** finding that survives step 1 (including any `⚠️ breaks old mobile clients`),
-   fire **`/second-opinion`** so a *different* model (GLM-5.2 via opencode) independently
-   judges it — pipe the finding dossier (title · severity · `repo/path:line` · the claimed
-   defect · the cited code hunk) to `node .claude/skills/second-opinion/second-opinion.mjs`
-   and apply the JSON verdict it prints:
-   - **AGREE** → the finding is cross-model corroborated; keep the severity, note the
-     confirmation.
-   - **DISAGREE** → tag the finding **`CONTESTED`** and record GLM's `reasoning` beside
-     Claude's; surface **both** verdicts in the report. It stays Critical — the
-     disagreement is the human's to resolve. **Never** let it force a merge or silently drop
-     the finding (the skeptic in step 1 already owns the drop decision).
-   - **UNSURE** → note it; the finding stands as step 1 left it.
-   - **UNAVAILABLE** (opencode absent — **always the case in CI**, or capped / offline) →
-     skip the second opinion, leave the finding unchanged, and state it in one line. Never
-     read "couldn't ask" as agreement. This graceful-degradation path keeps the CI review
-     (no opencode) byte-for-byte identical to today.
-   Scope to **Critical only** (not High) — cross-model time/cost is reserved for the findings
-   that actually block. This is the on-demand-diversity budget: cross-model judgement is a
-   tool for blocking calls, never a standing gate. CONTESTED never changes the deterministic
-   recommendation: a surviving Critical still means NEEDS WORK.
+2. **Cross-model second opinion (§2, Critical and High survivors).** For each **Critical**
+   or **High** finding that survives step 1 (including any `⚠️ breaks old mobile clients`),
+   fire **`/second-opinion`**: pipe the finding dossier (title · severity ·
+   `repo/path:line` · the claimed defect · the cited code hunk) to
+   `node .claude/skills/second-opinion/second-opinion.mjs` and apply the verdict table that
+   skill carries. Scope is **Critical and High**, and it runs in an unattended `--sleep`
+   run exactly as it runs interactively: the two decisive findings of the 2026-07-28/29 run
+   were both High, so a Critical-only, interactive-only scope would have skipped both. A
+   caller-mode restriction would narrow nothing now, because every review is this one local
+   subagent and no automated review path remains in either repository.
+   Never name a model here; `/second-opinion` owns which model answers. Two bindings are
+   this skill's own: a **DISAGREE** finding is tagged **`CONTESTED`**, records the other
+   model's `reasoning` beside Claude's, and keeps its severity for the human to resolve;
+   **UNAVAILABLE** (the second-opinion engine is absent, unauthenticated, capped, or
+   offline) leaves the finding exactly as step 1 left it, stated in one line. CONTESTED
+   never changes the deterministic recommendation, so a surviving Critical or High still
+   means NEEDS WORK.
 3. **Completeness pass (§3).** One pass only — a diff is its own boundary, so no loop: ask
    *"what changed file or hunk did I not give a verdict, what dimension did I mark N/A
    without checking its surface?"* and close the gap before reporting.
@@ -239,8 +238,7 @@ dotnet test
 ```
 
 Record each result as PASS / FAIL with the error summary for the report's validation
-table. For a file/folder scope with no working-tree changes, validation is N/A. In CI this
-phase is skipped — Build / Unit Tests run as separate required checks.
+table. For a file/folder scope with no working-tree changes, validation is N/A.
 
 ---
 
@@ -267,10 +265,10 @@ mkdir -p .claude/reviews
 ## Findings
 
 ### Critical
-{findings in the rubric template, or "None" — `⚠️ breaks old mobile clients` findings sort here first.
+{findings in the rubric template, or "None". `⚠️ breaks old mobile clients` findings sort here first.
 A finding a cross-model second opinion disputed carries a **`CONTESTED`** tag with both
-verdicts inline — e.g. "Claude: Critical · GLM-5.2: DISAGREE — {GLM's reasoning}" — so the
-human sees the disagreement. It stays Critical; the tag never downgrades it.}
+verdicts inline, for example "Claude: Critical · second opinion: DISAGREE, {its reasoning}",
+so the human sees the disagreement. It keeps its severity; the tag never downgrades it.}
 
 ### High
 {… or "None"}
@@ -327,15 +325,24 @@ endpoint / `mcp__github_inline_comment__create_inline_comment`.
 
 **Caller context decides who posts:**
 
-- **CI wrapper** (`.github/workflows/claude-review.yml`) invokes this skill: it owns the
-  single decisive post — produce the report + recommendation and let it submit (skip this
-  posting step). In CI also skip Phase 7 (Validate) and mark any dimension that needs the
-  un-checked-out sibling repo as "not verifiable in CI". The Phase 6 adversarial pass still
-  runs.
+- **Orchestrator-side subagent**: `/orchestrate` runs this skill in a FRESH worktree at the
+  pull request head, as a subagent and never in the main session. Post the decisive review
+  yourself per the recommendation, and mark any dimension needing a repository that is not
+  checked out beside this one as "not verifiable here" rather than guessing.
 - **Local, a PR you do NOT own**: post the decisive review yourself per the recommendation.
 - **Local, your OWN PR** (GitHub blocks self-approval): write the report and post it with
-  `--comment` instead — do not fail trying to `--approve`.
+  `--comment` instead, and never fail trying to `--approve`.
 - **Local file / folder / staged** scope: only write the report file, never post.
+
+**There is no review status check in either repository** and
+`required_approving_review_count` is **0** on both `main` branches. `claude` was the only
+account that ever posted an approving review, GitHub forbids a pull request author
+approving their own pull request, and leaving the count at 1 with no producer would have
+made every merge an admin merge, which the conventions forbid an agent from performing.
+The blocking path is the merge sweep's commit-anchored approval check plus the
+deterministic `guards.yml` required contexts. So read this review's verdict from the
+report body, never from the GitHub review state: a `--comment` post reads neutral even
+when the verdict is NEEDS WORK.
 
 ---
 
