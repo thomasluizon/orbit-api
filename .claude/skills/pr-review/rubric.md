@@ -10,9 +10,13 @@ rubric over the whole repo.
 **A second copy exists**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`, where
 `/audit-code-quality` also walks it. Two repos and two CIs mean the file cannot be
 deduped, so the copies are lockstep twins kept aligned by hand, exactly like the two
-`pr-review/SKILL.md` copies. Sanctioned divergences are backend-only material, such as
-dimension 13's transaction-teardown bullet (`ORBIT0002`). Change a dimension here and
-mirror it there in the same task; a drift between the two is a defect, not a variant.
+`pr-review/SKILL.md` copies. Sanctioned divergences run in both directions: backend-only
+material here, such as dimension 13's transaction-teardown bullet (`ORBIT0002`), and
+orbit-ui-mobile-only material there, such as dimension 15's harness-execution evidence,
+which has no counterpart in this repository because the harness runner
+`tools/test-tools.mjs` and the per-tool case modules it loads from `tools/__tests__/` exist
+only in orbit-ui-mobile. Change a dimension here and mirror it there in the same task; a
+drift between the two is a defect, not a variant.
 
 It is command-agnostic on purpose: it contains **dimensions, severities, and templates**,
 no orchestration, no scope resolution, no GitHub mechanics. Those live in the consuming
