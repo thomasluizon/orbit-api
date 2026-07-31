@@ -18,7 +18,13 @@ jobs:
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@e0cf66d1d257526b5d07f141838c338921cb8455 # v1
-        if: ${{ github.actor != 'dependabot[bot]' }}
+        # Identify Dependabot by the pull request AUTHOR, not by github.actor.
+        # github.actor becomes whoever re-runs the workflow, so a human re-run of a
+        # Dependabot run would let this step through, and CLAUDE_CODE_OAUTH_TOKEN
+        # lives only in the Actions secret store, never the Dependabot one, so the
+        # action would run with an empty token and fail. Matches the author check
+        # dependabot-auto-merge.yml already uses.
+        if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
