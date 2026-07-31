@@ -7,7 +7,7 @@ model: sonnet
 effort: medium
 ---
 
-<!-- LOCKSTEP COPY — twin lives at orbit-ui-mobile/.claude/agents/security-reviewer.md. /pr-review runs from EITHER repo root (this orbit-api copy fires in CI via .github/workflows/claude-review.yml, where the orbit-ui-mobile sibling is NOT checked out), and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing — dedup is impossible across two separate git repos + CI. Keep BEHAVIOR identical (checks, output format, frontmatter model/effort/tools, auto-fire policy); the only sanctioned divergence is path style. This copy cites orbit-api's real file layout (JwtTokenService.cs, ServiceCollectionExtensions.Infrastructure.cs). -->
+<!-- LOCKSTEP COPY. Twin lives at orbit-ui-mobile/.claude/agents/security-reviewer.md. /pr-review runs from EITHER repo root, orchestrator-side in a fresh worktree at the pull request head, and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing: dedup is impossible across two separate git repos. Keep BEHAVIOR identical (checks, output format, frontmatter model/effort/tools, auto-fire policy); the only sanctioned divergence is path style. This copy cites orbit-api's real file layout (JwtTokenService.cs, ServiceCollectionExtensions.Infrastructure.cs). -->
 
 # Security reviewer (orbit-api)
 

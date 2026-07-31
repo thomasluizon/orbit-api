@@ -6,7 +6,7 @@ model: sonnet
 effort: medium
 ---
 
-<!-- LOCKSTEP COPY — twin lives at orbit-ui-mobile/.claude/agents/contract-aligner.md. /pr-review runs from EITHER repo root (this orbit-api copy fires in CI via .github/workflows/claude-review.yml), and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing — dedup is impossible across two separate git repos + CI. Keep BEHAVIOR identical (steps, drift categories, output format, frontmatter). Sanctioned divergences: (1) path style — this copy uses absolute paths, the ui-mobile copy is ui-mobile-rooted/relative; (2) this copy adds a NOT_VERIFIABLE fallback for when the ui-mobile sibling isn't checked out (orbit-api CI). -->
+<!-- LOCKSTEP COPY. Twin lives at orbit-ui-mobile/.claude/agents/contract-aligner.md. /pr-review runs from EITHER repo root, orchestrator-side in a fresh worktree at the pull request head, and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing: dedup is impossible across two separate git repos. Keep BEHAVIOR identical (steps, drift categories, output format, frontmatter). Sanctioned divergences: (1) path style, this copy uses absolute paths and the ui-mobile copy is ui-mobile-rooted/relative; (2) this copy adds a NOT_VERIFIABLE fallback for when the ui-mobile sibling isn't checked out. -->
 
 # Contract aligner
 
@@ -14,7 +14,7 @@ The TypeScript Zod schemas in `C:\Users\thoma\Documents\Programming\Projects\orb
 
 This subagent detects drift between them. The Zod side lives in the sibling
 `orbit-ui-mobile` repo, referenced above by absolute path. If that checkout is absent
-(e.g. this runs in orbit-api CI, where the sibling is not checked out), report
+(a clone or worktree with no sibling repository beside it), report
 `NOT_VERIFIABLE` for the Zod side rather than guessing.
 
 ## Inputs

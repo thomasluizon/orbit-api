@@ -1,16 +1,20 @@
 # Orbit Review Rubric
 
-The single source of truth for what a review checks **in this repo**. Exactly two things
-read it: `/pr-review` (`.claude/skills/pr-review/SKILL.md`), which walks it
-dimension-by-dimension over a **diff**, and `.github/workflows/claude-review.yml`, which
-invokes that same skill in CI and maintains no criteria of its own. Unlike
+The single source of truth for what a review checks **in this repo**. Exactly one thing
+reads it: `/pr-review` (`.claude/skills/pr-review/SKILL.md`), which walks it
+dimension-by-dimension over a **diff**, orchestrator-side in a fresh worktree at the pull
+request head. There is no CI reviewer in either repository. Unlike
 orbit-ui-mobile, this repo ships no `/audit-code-quality` skill, so nothing here walks the
 rubric over the whole repo.
 
-**A second copy exists**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`, where
-`/audit-code-quality` also walks it. Two repos and two CIs mean the file cannot be
-deduped, so the copies are lockstep twins kept aligned by hand, exactly like the two
-`pr-review/SKILL.md` copies. Sanctioned divergences run in both directions: backend-only
+**A lockstep TWIN does exist**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`,
+where `/audit-code-quality` also walks it. Two repos mean the file cannot be deduped, so
+`orbit-ui-mobile/tools/check-lockstep.mjs` compares the two line by line and a divergence
+is legal only when its diff-hunk fingerprint carries a justification in
+`orbit-ui-mobile/tools/lockstep-declarations.json`, which that repository owns and
+recomputes. `Harness Lockstep` is a REQUIRED status check on this repository's `main`, so
+an unmirrored, undeclared edit here turns that check red. It is not kept aligned by hand:
+it is machine-compared. Sanctioned divergences run in both directions: backend-only
 material here, such as dimension 13's transaction-teardown bullet (`ORBIT0002`), and
 orbit-ui-mobile-only material there, such as dimension 15's harness-execution evidence,
 which has no counterpart in this repository because the harness runner
@@ -23,7 +27,7 @@ no orchestration, no scope resolution, no GitHub mechanics. Those live in the co
 skill.
 
 Every finding cites the rule it came from (a `CLAUDE.md` rule number, `no-comments.cjs`,
-a `DESIGN.md` line, an orbit-api hard rule, or a security category) so the author can
+a `DESIGN.md` section, an orbit-api hard rule, or a security category) so the author can
 trace it back. Tag every finding with a severity from the ladder at the bottom.
 
 ---
@@ -200,8 +204,8 @@ well-named function** so the code reads without prose.
 > (locked)** (:18), **Bans** (:469), **AI-slop test** (:505), **Scene-sentence test**
 > (:525). Cite the section name, not the line alone: the line numbers move, the section
 > names do not. **Gated: only when the diff touches `apps/*` UI files.** An
-> orbit-api-only diff marks this N/A, and in CI the file is not checked out at all, so it
-> is "not verifiable in CI".
+> orbit-api-only diff marks this N/A, and where the orbit-ui-mobile checkout is absent the
+> reference cannot be read at all, so it is "not verifiable here".
 
 The anchor is the **de-decorated navy-violet orbital** (the #539 freeze, 2026-07-17).
 Identity comes from three carriers and nothing else: the **orbital logo mark**, the
