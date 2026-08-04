@@ -62,3 +62,13 @@ jobs:
         with:
           node-version: 22
       - run: node tools/check-frontmatter.mjs
+
+  root-allowlist:
+    name: Root Allowlist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node tools/check-root-allowlist.mjs

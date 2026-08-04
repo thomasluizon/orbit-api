@@ -1,6 +1,8 @@
 min_version: "2.1.10"
 pre-commit:
   commands:
+    root-allowlist:
+      run: node tools/check-root-allowlist.mjs
     dotnet-format:
       glob: "*.cs"
       run: dotnet format Orbit.slnx --include {staged_files}
