@@ -1,6 +1,6 @@
 ---
 name: second-opinion
-description: Get an independent cross-model second opinion (GPT-5.6 Sol via Codex) on a specific, load-bearing technical claim or a Critical or High code-review finding. A different model reads the claim and code, then returns AGREE, DISAGREE, or UNSURE. Use to stress-test a single blocking finding, a risky assertion, or a close call before you commit to it. Auto-fired inside /pr-review on each Critical or High finding that survives the skeptic, in unattended runs exactly as in interactive ones. Not for open-ended research (use /deep-research) or multi-lens judgement (use /llm-council).
+description: Get an independent cross-model second opinion (GPT-5.6 Sol via Codex) on a specific, load-bearing technical claim or a Critical or High code-review finding. A different model reads the claim and code, then returns AGREE, DISAGREE, or UNSURE. Use to stress-test a single blocking finding, a risky assertion, or a close call before you commit to it. Auto-fired inside /pr-review on each Critical or High finding that survives the skeptic. Not for open-ended research (use /deep-research).
 argument-hint: <a claim to test, optionally with a file:line to pull context from>
 ---
 
@@ -88,9 +88,8 @@ For a `/second-opinion <claim>` invocation outside a review:
 ## Inside /pr-review
 
 `/pr-review` Phase 6 fires this on each **Critical** and **High** finding that survives
-the adversarial skeptic, in an unattended `--sleep` run exactly as in an interactive one.
-Both decisive findings of the 2026-07-28/29 run were High, so a Critical-only,
-interactive-only scope would have skipped both. The verdict contract is unchanged:
+the adversarial skeptic. Both decisive findings of the 2026-07-28/29 run were High, so a
+Critical-only scope would have skipped both. The verdict contract is unchanged:
 `DISAGREE` tags the finding `CONTESTED` and shows both verdicts, `UNSURE` leaves the
 existing review in place, and `UNAVAILABLE` leaves the finding exactly as the skeptic
 left it.
