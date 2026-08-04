@@ -9,10 +9,7 @@ rubric over the whole repo.
 
 **A TWIN does exist**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`,
 where `/audit-code-quality` also walks it. Two repos mean the file cannot be deduped, so the
-two are mirrored **by hand**. `Harness Lockstep` was dropped from this repository's required
-contexts on 2026-08-04, and the harness rebuild on orbit-ui-mobile `chore/harness-rebuild`
-deletes the tool behind it, so a red lockstep run blocks nothing and soon will not run at
-all. Only a careful author keeps the pair honest now.
+two are mirrored **by hand**. Only a careful author keeps the pair honest now.
 Intentional divergences run in both directions: backend-only
 material here, such as dimension 13's transaction-teardown bullet (`ORBIT0002`), and
 orbit-ui-mobile-only material there, such as dimension 15's harness-execution evidence,

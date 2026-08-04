@@ -18,11 +18,8 @@ everything both did and adds the backward-compat guard and a single shared rubri
 
 <!--
 Twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos, so the copies cannot be
-deduped. They are mirrored BY HAND. `Harness Lockstep` was dropped from this repository's
-required contexts on 2026-08-04, and the harness rebuild on orbit-ui-mobile
-`chore/harness-rebuild` deletes the tool behind it, so a red lockstep run blocks nothing and
-soon will not run at all. Change a phase here and mirror it there in the same task, because
-only that discipline keeps the pair honest. Known intentional
+deduped. They are mirrored BY HAND. Change a phase here and mirror it there in the same task,
+because only that discipline keeps the pair honest. Known intentional
 differences: the default repo (api here, ui there) and the mirror-image `ui#` / `api#`
 selector; the subagent set (security-reviewer + contract-aligner here, parity/i18n/design
 ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
