@@ -17,14 +17,15 @@ This skill subsumes the old `/review` and `/security-review` commands: it does
 everything both did and adds the backward-compat guard and a single shared rubric.
 
 <!--
-Lockstep twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos, so the copies
-cannot be deduped. They are NOT aligned by hand: orbit-ui-mobile/tools/check-lockstep.mjs
-compares them line by line, a divergence is legal only when its diff-hunk fingerprint carries
-a justification in orbit-ui-mobile/tools/lockstep-declarations.json, and `Harness Lockstep` is
-a REQUIRED status check on this repository's `main`, so an unmirrored undeclared edit here
-turns it red. Declared differences: the default repo (api here, ui there) and the mirror-image
-`ui#` / `api#` selector; the subagent set (security-reviewer + contract-aligner here,
-parity/i18n/design ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
+Twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos, so the copies cannot be
+deduped. They are mirrored BY HAND. `Harness Lockstep` was dropped from this repository's
+required contexts on 2026-08-04, and the harness rebuild on orbit-ui-mobile
+`chore/harness-rebuild` deletes the tool behind it, so a red lockstep run blocks nothing and
+soon will not run at all. Change a phase here and mirror it there in the same task, because
+only that discipline keeps the pair honest. Known intentional
+differences: the default repo (api here, ui there) and the mirror-image `ui#` / `api#`
+selector; the subagent set (security-reviewer + contract-aligner here, parity/i18n/design
+ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
 -->
 
 **Golden rule**: every finding is constructive and actionable — a clear fix, a file:line,
@@ -207,11 +208,10 @@ that will decide the outcome has to survive a challenge first.
    fire **`/second-opinion`**: pipe the finding dossier (title · severity ·
    `repo/path:line` · the claimed defect · the cited code hunk) to
    `node .claude/skills/second-opinion/second-opinion.mjs` and apply the verdict table that
-   skill carries. Scope is **Critical and High**, and it runs in an unattended `--sleep`
-   run exactly as it runs interactively: the two decisive findings of the 2026-07-28/29 run
-   were both High, so a Critical-only, interactive-only scope would have skipped both. A
-   caller-mode restriction would narrow nothing now, because every review is this one local
-   subagent and no automated review path remains in either repository.
+   skill carries. Scope is **Critical and High**: the two decisive findings of the
+   2026-07-28/29 run were both High, so a Critical-only scope would have skipped both. There
+   is no unattended mode to distinguish, because every review is this one local subagent and
+   no automated review path remains in either repository.
    Never name a model here; `/second-opinion` owns which model answers. Two bindings are
    this skill's own: a **DISAGREE** finding is tagged **`CONTESTED`**, records the other
    model's `reasoning` beside Claude's, and keeps its severity for the human to resolve;
@@ -339,8 +339,8 @@ endpoint / `mcp__github_inline_comment__create_inline_comment`.
 account that ever posted an approving review, GitHub forbids a pull request author
 approving their own pull request, and leaving the count at 1 with no producer would have
 made every merge an admin merge, which the conventions forbid an agent from performing.
-The blocking path is the merge sweep's commit-anchored approval check plus the
-deterministic `guards.yml` required contexts. So read this review's verdict from the
+The blocking path is the deterministic `guards.yml` required contexts plus this local
+`/pr-review`, run by a session that did not write the code. So read this review's verdict from the
 report body, never from the GitHub review state: a `--comment` post reads neutral even
 when the verdict is NEEDS WORK.
 

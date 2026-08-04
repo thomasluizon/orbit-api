@@ -7,14 +7,13 @@ request head. There is no CI reviewer in either repository. Unlike
 orbit-ui-mobile, this repo ships no `/audit-code-quality` skill, so nothing here walks the
 rubric over the whole repo.
 
-**A lockstep TWIN does exist**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`,
-where `/audit-code-quality` also walks it. Two repos mean the file cannot be deduped, so
-`orbit-ui-mobile/tools/check-lockstep.mjs` compares the two line by line and a divergence
-is legal only when its diff-hunk fingerprint carries a justification in
-`orbit-ui-mobile/tools/lockstep-declarations.json`, which that repository owns and
-recomputes. `Harness Lockstep` is a REQUIRED status check on this repository's `main`, so
-an unmirrored, undeclared edit here turns that check red. It is not kept aligned by hand:
-it is machine-compared. Sanctioned divergences run in both directions: backend-only
+**A TWIN does exist**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`,
+where `/audit-code-quality` also walks it. Two repos mean the file cannot be deduped, so the
+two are mirrored **by hand**. `Harness Lockstep` was dropped from this repository's required
+contexts on 2026-08-04, and the harness rebuild on orbit-ui-mobile `chore/harness-rebuild`
+deletes the tool behind it, so a red lockstep run blocks nothing and soon will not run at
+all. Only a careful author keeps the pair honest now.
+Intentional divergences run in both directions: backend-only
 material here, such as dimension 13's transaction-teardown bullet (`ORBIT0002`), and
 orbit-ui-mobile-only material there, such as dimension 15's harness-execution evidence,
 which has no counterpart in this repository because the harness runner
