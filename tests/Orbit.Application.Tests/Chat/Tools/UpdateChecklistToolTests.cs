@@ -139,3 +139,28 @@ public class UpdateChecklistToolTests
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);
 }
+
+internal static class HabitToolTestFactory
+{
+    public static MoveHabitParentTool CreateMoveHabitParentTool(
+        IMediator mediator,
+        Guid userId,
+        string title)
+    {
+        var habitRepository = Substitute.For<IGenericRepository<Habit>>();
+        var habit = Habit.Create(new HabitCreateParams(
+            userId,
+            title,
+            FrequencyUnit.Day,
+            1,
+            new DateOnly(2026, 8, 6))).Value;
+
+        habitRepository.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+        .Returns(habit);
+
+        return new MoveHabitParentTool(mediator, habitRepository);
+    }
+}
