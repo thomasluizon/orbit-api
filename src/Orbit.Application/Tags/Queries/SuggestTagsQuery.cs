@@ -17,7 +17,6 @@ public class SuggestTagsQueryHandler(
     IPayGateService payGate,
     ITagSuggestionService tagSuggestionService,
     IGenericRepository<Tag> tagRepository,
-    IGenericRepository<User> userRepository,
     IUnitOfWork unitOfWork) : IRequestHandler<SuggestTagsQuery, Result<SuggestTagsResponse>>
 {
     private const string NewTagColor = "#7c3aed";
@@ -26,15 +25,18 @@ public class SuggestTagsQueryHandler(
         SuggestTagsQuery request,
         CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanSendAiMessage(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<SuggestTagsResponse>();
-
         var existingTags = await tagRepository.FindAsync(
             tag => tag.UserId == request.UserId,
             cancellationToken);
 
         var existingNames = existingTags.Select(tag => tag.Name).ToList();
+
+        var reservation = await payGate.TryConsumeAiMessage(
+            request.UserId,
+            unitOfWork,
+            cancellationToken);
+        if (reservation.IsFailure)
+            return reservation.PropagateError<SuggestTagsResponse>();
 
         var suggestionResult = await tagSuggestionService.SuggestTagsAsync(
             request.Title,
@@ -47,8 +49,6 @@ public class SuggestTagsQueryHandler(
             return suggestionResult.PropagateError<SuggestTagsResponse>();
 
         var suggestions = MapSuggestions(suggestionResult.Value, existingTags);
-
-        await MeterAiMessageAsync(request.UserId, cancellationToken);
 
         return Result.Success(new SuggestTagsResponse(suggestions));
     }
@@ -79,18 +79,6 @@ public class SuggestTagsQueryHandler(
         }
 
         return mapped;
-    }
-
-    private async Task MeterAiMessageAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        var user = await userRepository.FindOneTrackedAsync(
-            candidate => candidate.Id == userId,
-            cancellationToken: cancellationToken);
-        if (user is null)
-            return;
-
-        user.IncrementAiMessageCount();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private static string Capitalize(string value) =>

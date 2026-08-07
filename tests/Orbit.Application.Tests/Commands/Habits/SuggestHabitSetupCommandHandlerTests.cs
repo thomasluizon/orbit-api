@@ -1,11 +1,8 @@
-using System.Linq.Expressions;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
-using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
@@ -16,11 +13,8 @@ public class SuggestHabitSetupCommandHandlerTests
 {
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IHabitSuggestionService _suggestionService = Substitute.For<IHabitSuggestionService>();
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
-    private readonly ILogger<SuggestHabitSetupCommandHandler> _logger =
-        Substitute.For<ILogger<SuggestHabitSetupCommandHandler>>();
     private readonly SuggestHabitSetupCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -31,7 +25,7 @@ public class SuggestHabitSetupCommandHandlerTests
     public SuggestHabitSetupCommandHandlerTests()
     {
         _handler = new SuggestHabitSetupCommandHandler(
-            _payGate, _suggestionService, _userRepo, _unitOfWork, _cache, _logger);
+            _payGate, _suggestionService, _unitOfWork, _cache);
     }
 
     private static HabitSetupSuggestion SampleSuggestion() =>
@@ -39,20 +33,10 @@ public class SuggestHabitSetupCommandHandlerTests
             IsFlexible: false, FlexibleTarget: null, DueTime: null,
             SubHabits: SubHabits, ChecklistItems: Array.Empty<string>());
 
-    private void SetupTrackedUser()
-    {
-        var user = User.Create("Test", "test@example.com").Value;
-        _userRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<User, bool>>>(),
-            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-            Arg.Any<CancellationToken>())
-            .Returns(user);
-    }
-
     [Fact]
-    public async Task Handle_PayGateFails_ReturnsFailure_WithoutCallingServiceOrIncrementing()
+    public async Task Handle_ReservationFails_ReturnsFailureWithoutCallingProvider()
     {
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>())
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("Monthly AI message limit reached"));
 
         var result = await _handler.Handle(
@@ -62,30 +46,40 @@ public class SuggestHabitSetupCommandHandlerTests
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
         await _suggestionService.DidNotReceive()
             .SuggestSetupAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _payGate.Received(1)
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_Success_CallsService_IncrementsCounter_ReturnsSuggestion()
+    public async Task Handle_Success_ReservesBeforeProviderAndReturnsSuggestion()
     {
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        var calls = new List<string>();
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                calls.Add("reserve");
+                return Result.Success();
+            });
         _suggestionService.SuggestSetupAsync("Run", "en", Arg.Any<CancellationToken>())
-            .Returns(Result.Success(SampleSuggestion()));
-        SetupTrackedUser();
+            .Returns(_ =>
+            {
+                calls.Add("provider");
+                return Result.Success(SampleSuggestion());
+            });
 
         var result = await _handler.Handle(
             new SuggestHabitSetupCommand(UserId, "Run", "en"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Emoji.Should().Be("R");
+        calls.Should().Equal("reserve", "provider");
         await _suggestionService.Received(1).SuggestSetupAsync("Run", "en", Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_SuggestionServiceFails_PropagatesFailure_WithoutIncrementing()
+    public async Task Handle_SuggestionServiceFails_PropagatesFailureAfterReservation()
     {
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _suggestionService.SuggestSetupAsync("Run", "en", Arg.Any<CancellationToken>())
             .Returns(Result.Failure<HabitSetupSuggestion>("AI service temporarily unavailable"));
 
@@ -93,16 +87,16 @@ public class SuggestHabitSetupCommandHandlerTests
             new SuggestHabitSetupCommand(UserId, "Run", "en"), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _payGate.Received(1)
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_SecondCallSameTitle_ServedFromCache_WithoutSecondServiceCallOrIncrement()
+    public async Task Handle_SecondCallSameTitle_ServedFromCacheWithoutSecondProviderCallOrReservation()
     {
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _suggestionService.SuggestSetupAsync("Run", "en", Arg.Any<CancellationToken>())
             .Returns(Result.Success(SampleSuggestion()));
-        SetupTrackedUser();
 
         var command = new SuggestHabitSetupCommand(UserId, "Run", "en");
         await _handler.Handle(command, CancellationToken.None);
@@ -111,6 +105,7 @@ public class SuggestHabitSetupCommandHandlerTests
         second.IsSuccess.Should().BeTrue();
         second.Value.Emoji.Should().Be("R");
         await _suggestionService.Received(1).SuggestSetupAsync("Run", "en", Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _payGate.Received(1)
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 }
