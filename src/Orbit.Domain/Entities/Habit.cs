@@ -289,9 +289,6 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public Result<HabitLog> Unlog(DateOnly date)
     {
         var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
-        if (log is null && IsGeneral)
-            log = _logs.FindLast(l => l.Value > 0 && !l.IsDeleted);
-
         if (log is null)
             return Result.Failure<HabitLog>(DomainErrors.LogNotFoundForDate);
 

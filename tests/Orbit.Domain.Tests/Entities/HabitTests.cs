@@ -259,14 +259,22 @@ public class HabitTests
     }
 
     [Fact]
-    public void Symptoms2And4_GeneralLoggedYesterday_CannotBeUnloggedToday()
+    public void Unlog_GeneralHabit_MissingDateFailsAndExistingDateDeletesOnlyMatchingLog()
     {
         var habit = CreateGeneralHabit();
         habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
 
-        var result = habit.Unlog(Today);
+        var missingDateResult = habit.Unlog(Today.AddDays(1));
 
-        result.IsSuccess.Should().BeTrue();
+        missingDateResult.IsFailure.Should().BeTrue();
+        habit.Logs.Should().OnlyContain(log => !log.IsDeleted);
+
+        var existingDateResult = habit.Unlog(Today);
+
+        existingDateResult.IsSuccess.Should().BeTrue();
+        habit.Logs.Should().ContainSingle(log => log.Date == Yesterday && !log.IsDeleted);
+        habit.Logs.Should().ContainSingle(log => log.Date == Today && log.IsDeleted);
     }
 
     [Fact]
