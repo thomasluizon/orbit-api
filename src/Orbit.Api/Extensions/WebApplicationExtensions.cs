@@ -546,7 +546,7 @@ public static partial class WebApplicationExtensions
                     retryAfterUtc = decision.WindowEndsAtUtc
                 }
             }
-        });
+        }, context.RequestAborted);
     }
 
     private static async Task TryAuditLegacyMcpAsync(
