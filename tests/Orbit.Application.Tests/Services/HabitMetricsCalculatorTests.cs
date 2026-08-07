@@ -324,6 +324,7 @@ public class HabitMetricsCalculatorTests
         habit.Log(Today, advanceDueDate: false);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
@@ -357,6 +358,7 @@ public class HabitMetricsCalculatorTests
             IsBadHabit: true, DueDate: startDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
         habit.CatchUpDueDate(Today);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
@@ -376,6 +378,7 @@ public class HabitMetricsCalculatorTests
             IsBadHabit: true, DueDate: Today)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, createdDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
         habit.UpdatedAtUtc = habit.CreatedAtUtc;
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
@@ -395,6 +398,7 @@ public class HabitMetricsCalculatorTests
         habit.Log(Today.AddDays(-1), advanceDueDate: false);
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
             .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 

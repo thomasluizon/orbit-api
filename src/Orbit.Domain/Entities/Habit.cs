@@ -82,18 +82,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public DateOnly? EndDate { get; private set; }
     public int? Position { get; private set; }
     public string? GoogleEventId { get; private set; }
-    private DateTime _createdAtUtc;
-    public DateTime CreatedAtUtc
-    {
-        get => _createdAtUtc;
-        private set
-        {
-            if (_createdAtUtc != default)
-                ScheduledStartDate = null;
-
-            _createdAtUtc = value;
-        }
-    }
+    public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
