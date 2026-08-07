@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -7,11 +8,31 @@ using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
-public class CreateGoalTool(
-    IGenericRepository<Goal> goalRepository,
-    IUnitOfWork unitOfWork,
-    IGenericRepository<Habit>? habitRepository = null) : IAiTool
+public class CreateGoalTool : IAiTool
 {
+    private readonly IGenericRepository<Goal> _goalRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IGenericRepository<Habit>? _habitRepository;
+
+    [ActivatorUtilitiesConstructor]
+    public CreateGoalTool(
+        IGenericRepository<Goal> goalRepository,
+        IUnitOfWork unitOfWork,
+        IGenericRepository<Habit> habitRepository)
+    {
+        _goalRepository = goalRepository;
+        _unitOfWork = unitOfWork;
+        _habitRepository = habitRepository;
+    }
+
+    public CreateGoalTool(
+        IGenericRepository<Goal> goalRepository,
+        IUnitOfWork unitOfWork)
+    {
+        _goalRepository = goalRepository;
+        _unitOfWork = unitOfWork;
+    }
+
     public string Name => "create_goal";
     public string Description => "Create a new goal to track progress toward a target. Pass habit_ids inline in this call rather than following up with link_habits_to_goal. Goals can have a target value and unit (e.g., 'read 12 books', 'lose 5 kg'). If the user doesn't specify a target, use target_value=1 and unit='goal'. Use when user wants to track measurable long-term progress. Use goal_type='Streak' to create a streak goal that tracks the habit's consecutive day streak.";
 
@@ -55,17 +76,9 @@ public class CreateGoalTool(
         if (args.TryGetProperty("goal_type", out var goalTypeEl) && goalTypeEl.ValueKind == JsonValueKind.String)
             Enum.TryParse(goalTypeEl.GetString(), ignoreCase: true, out goalType);
 
-        var habitIds = new List<Guid>();
-        if (args.TryGetProperty("habit_ids", out var habitIdsEl) && habitIdsEl.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in habitIdsEl.EnumerateArray())
-            {
-                if (!Guid.TryParse(item.GetString(), out var habitId))
-                    return new ToolResult(false, Error: ErrorMessages.HabitNotFound.Message);
-
-                habitIds.Add(habitId);
-            }
-        }
+        var habitIdsFailure = TryParseHabitIds(args, out var habitIds);
+        if (habitIdsFailure is not null)
+            return habitIdsFailure;
 
         if (habitIds.Count > AppConstants.MaxHabitsPerGoal)
             return new ToolResult(false, Error: ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal).Message);
@@ -83,8 +96,10 @@ public class CreateGoalTool(
         var goal = goalResult.Value;
         if (habitIds.Count > 0)
         {
-            ArgumentNullException.ThrowIfNull(habitRepository);
-            var habits = await habitRepository.FindTrackedAsync(
+            if (_habitRepository is null)
+                return new ToolResult(false, Error: "habit_ids is unavailable for this tool instance.");
+
+            var habits = await _habitRepository.FindTrackedAsync(
                 h => habitIds.Contains(h.Id) && h.UserId == userId,
                 ct);
 
@@ -96,8 +111,28 @@ public class CreateGoalTool(
                 goal.AddHabit(habit);
         }
 
-        await goalRepository.AddAsync(goal, ct);
-        await unitOfWork.SaveChangesAsync(ct);
+        await _goalRepository.AddAsync(goal, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
         return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
+    }
+
+    private static ToolResult? TryParseHabitIds(JsonElement args, out List<Guid> habitIds)
+    {
+        habitIds = [];
+        if (!args.TryGetProperty("habit_ids", out var habitIdsElement))
+            return null;
+
+        if (habitIdsElement.ValueKind != JsonValueKind.Array)
+            return new ToolResult(false, Error: "habit_ids must be an array.");
+
+        foreach (var item in habitIdsElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String || !Guid.TryParse(item.GetString(), out var habitId))
+                return new ToolResult(false, Error: "habit_ids must contain only valid GUID strings.");
+
+            habitIds.Add(habitId);
+        }
+
+        return null;
     }
 }

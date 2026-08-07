@@ -261,6 +261,12 @@ public class CreateGoalCommandHandlerTests
     public async Task CreateGoal_StreakGoalWithHabit_UsesExistingPassiveSyncPath()
     {
         var habit = CreateHabit("Daily habit");
+        typeof(Habit)
+            .GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-2).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        habit.Log(Today.AddDays(-2), advanceDueDate: false);
+        habit.Log(Today.AddDays(-1), advanceDueDate: false);
+        habit.Log(Today, advanceDueDate: false);
         _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
             .Returns([habit]);
         Goal? createdGoal = null;
@@ -272,7 +278,7 @@ public class CreateGoalCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         createdGoal.Should().NotBeNull();
-        createdGoal!.CurrentValue.Should().Be(GoalStreakSyncService.CalculateCurrentStreak(createdGoal, Today));
+        createdGoal!.CurrentValue.Should().Be(0);
         GoalStreakSyncService.NeedsPassiveSync(createdGoal, Today).Should().BeTrue();
     }
 
@@ -338,6 +344,60 @@ public class CreateGoalToolHabitLinkTests
         result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
         await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
         await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
+    [Fact]
+    public async Task CreateGoalTool_WithNonArrayHabitIds_ReturnsValidationFailure()
+    {
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        using var document = JsonDocument.Parse("""{"title":"Read daily","habit_ids":"not-an-array"}""");
+
+        var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("habit_ids must be an array.");
+        await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+    }
+
+    [Theory]
+    [InlineData("123")]
+    [InlineData("\"not-a-guid\"")]
+    public async Task CreateGoalTool_WithInvalidHabitIdItem_ReturnsValidationFailure(string item)
+    {
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":[{{{item}}}]}""");
+
+        var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("habit_ids must contain only valid GUID strings.");
+        await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task CreateGoalTool_WithEmptyHabitIds_CreatesWithoutLoadingHabits()
+    {
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        using var document = JsonDocument.Parse("""{"title":"Read daily","habit_ids":[]}""");
+
+        var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        await _habitRepo.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default);
+        await _goalRepo.Received(1).AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateGoalTool_TwoArgumentConstruction_WithHabitIds_ReturnsFailure()
+    {
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork);
+        using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":["{{{Guid.NewGuid()}}}"]}""");
+
+        var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("habit_ids is unavailable for this tool instance.");
+        await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 
     private static Habit CreateHabit() =>
