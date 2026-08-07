@@ -4,6 +4,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Common;
 
@@ -43,6 +44,29 @@ public class PayGateServiceTests
         return user;
     }
 
+    private static Habit CreateCompletedOneTimeTask(int index)
+    {
+        var dueDate = new DateOnly(2026, 8, 5);
+        var task = Habit.Create(new HabitCreateParams(
+            UserId, $"Finished task {index}", null, null, dueDate)).Value;
+        task.Log(dueDate).IsSuccess.Should().BeTrue();
+        return task;
+    }
+
+    private static Habit CreateCompletedRecurringHabit(int index)
+    {
+        var dueDate = new DateOnly(2026, 8, 5);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            $"Finished recurring habit {index}",
+            FrequencyUnit.Day,
+            1,
+            dueDate,
+            EndDate: dueDate)).Value;
+        habit.Log(dueDate).IsSuccess.Should().BeTrue();
+        return habit;
+    }
+
     [Fact]
     public async Task CanCreateHabits_ProUser_AlwaysSuccess()
     {
@@ -69,6 +93,42 @@ public class PayGateServiceTests
     }
 
     [Fact]
+    public async Task CanCreateHabits_FreeUserWithCompletedTasks_Success()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var completedTasks = Enumerable.Range(1, 10).Select(CreateCompletedOneTimeTask).ToList();
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => completedTasks.Count(
+                call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()));
+
+        var result = await _sut.CanCreateHabits(UserId);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CanCreateHabits_FreeUserWithCompletedRecurringHabits_Success()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var completedHabits = Enumerable.Range(1, 10).Select(CreateCompletedRecurringHabit).ToList();
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => completedHabits.Count(
+                call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()));
+
+        var result = await _sut.CanCreateHabits(UserId);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task CanCreateHabits_FreeUser_AtLimit_PayGateFailure()
     {
         var user = CreateFreeUser();
@@ -82,6 +142,8 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be(
+            "You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
     }
 
     [Fact]
