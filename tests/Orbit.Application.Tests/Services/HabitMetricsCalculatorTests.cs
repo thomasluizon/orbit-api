@@ -296,6 +296,23 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void Calculate_LegacyGoodHabitScheduledInFutureWithPreStartLog_HasNoMetricsYet()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(5))).Value;
+        habit.Log(Today, advanceDueDate: false);
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
     public void Calculate_BadHabitScheduledToday_StartsWithOneCleanDay()
     {
         var habit = Habit.Create(new HabitCreateParams(

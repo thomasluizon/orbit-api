@@ -75,10 +75,43 @@ public static class HabitMetricsCalculator
         DateOnly today,
         DateOnly createdDate)
     {
-        var hasCompletedLog = logs.Any(log => log.Value > 0);
-        return !hasCompletedLog && habit.DueDate > today
-            ? habit.DueDate
-            : createdDate;
+        if (habit.DueDate <= today)
+            return createdDate;
+
+        var hasProgressingLog = HasProgressingLegacyLog(habit, logs, today, createdDate);
+        return hasProgressingLog ? createdDate : habit.DueDate;
+    }
+
+    private static bool HasProgressingLegacyLog(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        DateOnly today,
+        DateOnly createdDate)
+    {
+        if (habit.FrequencyUnit is null)
+            return false;
+
+        var completedDates = logs
+            .Where(log => log.Value > 0)
+            .Select(log => log.Date)
+            .ToHashSet();
+        var hasCompletedHistory = completedDates.Any(date =>
+            date <= today
+            && HabitScheduleService.IsHabitHistoricallyDueOnDate(habit, date, createdDate));
+
+        if (!hasCompletedHistory)
+            return false;
+
+        var futureStart = today.AddDays(1);
+        if (futureStart >= habit.DueDate)
+            return true;
+
+        var futureExpectedDates = habit.Days.Count > 0 && habit.FrequencyQuantity == 1
+            ? GenerateDayFilteredDates(habit, habit.DueDate.AddDays(-1), futureStart)
+            : GenerateFrequencyBasedDates(habit, habit.DueDate, futureStart)
+                .Where(date => date < habit.DueDate);
+
+        return futureExpectedDates.All(completedDates.Contains);
     }
 
     private static List<DateOnly> GenerateDayFilteredDates(Habit habit, DateOnly today, DateOnly startDate)
