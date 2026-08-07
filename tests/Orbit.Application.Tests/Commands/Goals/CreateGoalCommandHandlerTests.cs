@@ -1,9 +1,11 @@
+using System.Text.Json;
 using FluentAssertions;
 using FluentValidation.TestHelper;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Services;
@@ -287,4 +289,57 @@ public class CreateGoalCommandHandlerTests
 
         result.ShouldHaveValidationErrorFor(x => x.HabitIds);
     }
+}
+
+public class CreateGoalToolHabitLinkTests
+{
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private static readonly Guid UserId = Guid.NewGuid();
+
+    [Fact]
+    public void ParameterSchema_ExposesOptionalHabitIds()
+    {
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+
+        JsonSerializer.Serialize(tool.GetParameterSchema()).Should().Contain("habit_ids");
+    }
+
+    [Fact]
+    public async Task CreateGoalTool_WithHabitIds_LinksThem()
+    {
+        var habit = CreateHabit();
+        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([habit]);
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":["{{{habit.Id}}}"]}""");
+
+        var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        await _goalRepo.Received(1).AddAsync(
+            Arg.Is<Goal>(goal => goal.Habits.Count == 1 && goal.Habits.Contains(habit)),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateGoalTool_WithForeignHabitId_FailsWithoutCreatingGoal()
+    {
+        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var tool = new CreateGoalTool(_goalRepo, _unitOfWork, _habitRepo);
+        using var document = JsonDocument.Parse($$$"""{"title":"Read daily","habit_ids":["{{{Guid.NewGuid()}}}"]}""");
+
+        var result = await tool.ExecuteAsync(document.RootElement, UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be(ErrorMessages.HabitNotFound.Message);
+        await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
+    private static Habit CreateHabit() =>
+        Habit.Create(new HabitCreateParams(UserId, "Read", FrequencyUnit.Day, 1, DueDate: new DateOnly(2026, 8, 6))).Value;
 }
