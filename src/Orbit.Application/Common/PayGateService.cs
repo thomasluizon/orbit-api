@@ -81,10 +81,12 @@ public class PayGateService(
             token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
             user =>
             {
+                var currentAtUtc = DateTime.UtcNow;
                 if (!IsProductionSmokeAccount(user.Email))
                 {
                     var messageLimit = (user.HasProAccess ? proLimit : freeLimit) + user.AdRewardBonusMessages;
-                    if (user.AiMessagesUsedThisMonth >= messageLimit)
+                    var cycleIsActive = user.AiMessagesResetAt.HasValue && user.AiMessagesResetAt.Value > currentAtUtc;
+                    if (cycleIsActive && user.AiMessagesUsedThisMonth >= messageLimit)
                     {
                         var errorMessage = user.HasProAccess
                             ? $"You've reached your monthly AI message limit ({messageLimit})."
@@ -94,7 +96,7 @@ public class PayGateService(
                     }
                 }
 
-                user.IncrementAiMessageCount();
+                user.IncrementAiMessageCount(currentAtUtc);
                 return Task.FromResult(Result.Success());
             },
             ErrorMessages.UserNotFound,
