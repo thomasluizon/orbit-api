@@ -1,12 +1,16 @@
 using FluentAssertions;
+using FluentValidation.TestHelper;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
+using Orbit.Application.Goals.Validators;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Commands.Goals;
@@ -14,6 +18,7 @@ namespace Orbit.Application.Tests.Commands.Goals;
 public class CreateGoalCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
+    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
@@ -27,7 +32,7 @@ public class CreateGoalCommandHandlerTests
     public CreateGoalCommandHandlerTests()
     {
         _handler = new CreateGoalCommandHandler(
-            _goalRepo, _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
+            _goalRepo, _habitRepo, _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -173,5 +178,113 @@ public class CreateGoalCommandHandlerTests
         await _goalRepo.Received(1).AddAsync(
             Arg.Is<Goal>(g => g.Deadline == Today),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateGoal_WithoutHabitIds_CreatesGoalWithNoLinks()
+    {
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _goalRepo.Received(1).AddAsync(
+            Arg.Is<Goal>(goal => goal.Habits.Count == 0),
+            Arg.Any<CancellationToken>());
+        await _habitRepo.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task CreateGoal_WithHabitIds_LinksAllOfThem()
+    {
+        var first = CreateHabit("First");
+        var second = CreateHabit("Second");
+        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([first, second]);
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: [first.Id, second.Id]);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _goalRepo.Received(1).AddAsync(
+            Arg.Is<Goal>(goal => goal.Habits.Count == 2 && goal.Habits.Contains(first) && goal.Habits.Contains(second)),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateGoal_WithForeignHabitId_FailsAndCreatesNoGoal()
+    {
+        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: [Guid.NewGuid()]);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
+        await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
+    [Fact]
+    public async Task CreateGoal_WithTooManyHabitIds_FailsAndCreatesNoGoal()
+    {
+        var habitIds = Enumerable.Range(0, AppConstants.MaxHabitsPerGoal + 1).Select(_ => Guid.NewGuid()).ToList();
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: habitIds);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorCodes.MaxHabitsPerGoal);
+        await _goalRepo.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
+        await _unitOfWork.DidNotReceiveWithAnyArgs().SaveChangesAsync(default);
+    }
+
+    [Fact]
+    public async Task CreateGoal_WithEmptyHabitIdList_BehavesAsAbsent()
+    {
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: []);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _goalRepo.Received(1).AddAsync(
+            Arg.Is<Goal>(goal => goal.Habits.Count == 0),
+            Arg.Any<CancellationToken>());
+        await _habitRepo.DidNotReceiveWithAnyArgs().FindTrackedAsync(default!, default);
+    }
+
+    [Fact]
+    public async Task CreateGoal_StreakGoalWithHabit_UsesExistingPassiveSyncPath()
+    {
+        var habit = CreateHabit("Daily habit");
+        _habitRepo.FindTrackedAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns([habit]);
+        Goal? createdGoal = null;
+        _goalRepo.AddAsync(Arg.Do<Goal>(goal => createdGoal = goal), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var command = new CreateGoalCommand(UserId, "Streak", null, 7, "days", null, Type: GoalType.Streak, HabitIds: [habit.Id]);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        createdGoal.Should().NotBeNull();
+        createdGoal!.CurrentValue.Should().Be(GoalStreakSyncService.CalculateCurrentStreak(createdGoal, Today));
+        GoalStreakSyncService.NeedsPassiveSync(createdGoal, Today).Should().BeTrue();
+    }
+
+    private static Habit CreateHabit(string title) =>
+        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
+
+    [Fact]
+    public void Validate_HabitIdsOverLimit_HasError()
+    {
+        var habitIds = Enumerable.Range(0, AppConstants.MaxHabitsPerGoal + 1).Select(_ => Guid.NewGuid()).ToList();
+        var command = new CreateGoalCommand(UserId, "Goal", null, 10, "units", null, HabitIds: habitIds);
+
+        var result = new CreateGoalCommandValidator().TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.HabitIds);
     }
 }
