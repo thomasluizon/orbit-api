@@ -255,3 +255,21 @@ Gating, Platform, and Locale columns accurate and the stated tool counts correct
 (`onboarding.featureGuide.*`) wrong is **Medium**. In the orbit-api repo the file is not checked out, so do
 not guess: emit "FEATURES.md update required in thomasluizon/orbit-ui-mobile" (**High**) so it lands in the
 paired frontend PR.
+
+### 13. External-interface evidence
+
+> Reference: root AGENTS.md "Never assume an external interface. Check it, then use it." Gated whenever
+> the diff adds or changes a read of a CLI, GitHub/Linear/provider API, Git response, SDK, or library field,
+> flag, subcommand, exit code, enum, event argument, or response shape.
+
+Inspect the PR body's evidence for every such read. It must show the **complete selected key/type shape**
+or complete compared enum/value set from a real invocation or installed source, redact credentials and
+personal/account values, preserve literal formats the code parses, and include an exact reproduction
+command or installed `file:line`. An existing callsite, documentation, memory, and a fixture authored with
+the implementation are not evidence. Compare the code and its fixture to that evidence; a fixture that
+invents the same field proves nothing.
+
+Missing or guessed evidence for a field on the correctness path is **High and Blocking** because the
+implementation is unproven against the interface it will execute. If the diff redesigns so the unknown is
+not read and success depends only on a confirmed exit code, record why this dimension passes. Do not
+manufacture a failure from an absent unconfirmed field, and do not expose a credential while proving it.

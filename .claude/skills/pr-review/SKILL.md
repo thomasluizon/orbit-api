@@ -53,7 +53,12 @@ report time, against the definition above, not renegotiated per round.
 
 **4. Diff-only scope.** Read `gh pr diff`. You are reviewing a diff, not a repository. Open a
 repository file only to resolve a symbol the diff itself cites. A defect reachable only by browsing
-code the diff never touched is out of scope; if it matters, it is a ticket.
+code the diff never touched is out of scope; if it matters, it is a ticket. Dimension 7 has one
+bounded exception: when the target diff changes a request, response, endpoint, or schema contract,
+perform a targeted read/search in the sibling repository's primary `main` checkout for the shipped
+consumer or provider symbols cited by that contract. If the PR body links a paired contract PR,
+inspect that paired diff too. This is contract evidence, not permission to browse for unrelated
+defects.
 
 **5. Monotonic round 2.** Re-check **only** the frozen Blocking list, answering `CLOSED` or `OPEN`
 per finding. New findings are forbidden, with exactly one mechanical carve-out: **any defect on a
@@ -79,7 +84,8 @@ Concretely, before round 1:
 - Confirm this session did not write any of the code in the diff. If it did, **stop**: the review
   is invalid under rule 2. Fork-inherited context counts as the same session.
 - `cwd` is the main checkout of the repo the PR targets. Never a worktree, never the fixer's tree.
-- The only inputs are the diff, `rubric.md`, and the PR title/body/linked ticket for intent.
+- The inputs are the diff, `rubric.md`, and the PR title/body/linked ticket for intent, plus the
+  targeted sibling-primary/paired-PR contract evidence permitted by rule 4 and nothing broader.
 
 ---
 
@@ -121,9 +127,11 @@ Read `rubric.md` once, then classify the diff as **frontend** (`apps/`, `package
 1. Compute the fixer's line set: `git diff <r1-sha>..<r2-sha> --unified=0`. Pass it as data.
 2. For each frozen Blocking finding, answer `CLOSED` or `OPEN` with the line that settles it.
 3. A new finding is admissible **only** if its line is in the round-2 line set from step 1, and it
-   is Blocking. Anything else is a follow-up ticket.
-4. All `CLOSED` means hand to Thomas. Any `OPEN` means stop and hand to Thomas with the open list.
-   There is no round 3.
+   is Blocking. Append every admitted new blocker to `findings.json` with `status: "OPEN"`; it is
+   part of the open list and verdict calculation. Anything else is a follow-up ticket.
+4. Hand to Thomas as `CLEAN` only when every frozen blocker is `CLOSED` **and no admitted round-2
+   blocker is OPEN**. Otherwise stop with every open frozen or admitted blocker listed. There is no
+   round 3 and no opportunity to hide the new blocker behind the frozen list.
 
 ---
 
@@ -145,7 +153,8 @@ integrity is `"blocking": false` and becomes a ticket.
 
 Round 2 rewrites the same receipt, sets `rounds` to 2, and adds
 `"status": "CLOSED" | "OPEN"` to every round-1 Blocking finding. Round-1 entries are never removed.
-Set `verdict` to `CLEAN` only when no Blocking finding remains OPEN. Capture `reviewedHeadOid` and
+Every newly admitted round-2 blocker is appended with `status: "OPEN"`. Set `verdict` to `CLEAN`
+only when no frozen or admitted Blocking finding remains OPEN. Capture `reviewedHeadOid` and
 `baseSha` from the PR state reviewed; a review of any other head/base is stale by construction.
 
 ### Posting
