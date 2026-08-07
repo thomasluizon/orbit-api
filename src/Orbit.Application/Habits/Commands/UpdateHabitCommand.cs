@@ -70,6 +70,7 @@ public class UpdateHabitCommandHandler(
         }
 
         var opts = request.Options ?? new UpdateHabitCommandOptions();
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         var result = await HabitReactivationAllowance.ExecuteAsync(
             request.UserId,
@@ -99,7 +100,8 @@ public class UpdateHabitCommandHandler(
                 EndDate: opts.EndDate,
                 ClearEndDate: request.ClearEndDate,
                 ScheduledReminders: opts.ScheduledReminders,
-                Emoji: request.Emoji)),
+                Emoji: request.Emoji,
+                UserToday: today)),
             cancellationToken);
 
         if (result.IsFailure)
@@ -117,7 +119,6 @@ public class UpdateHabitCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();

@@ -27,19 +27,12 @@ public class StreakGoalReadSyncerTests
             UserId, "Avoid doom scrolling", target, "days", Type: GoalType.Streak)).Value;
 
         var badHabit = Habit.Create(new HabitCreateParams(
-            UserId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
+            UserId, "Doom scrolling", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(-1))).Value;
 
-        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
         badHabit.AddGoal(goal);
         goal.AddHabit(badHabit);
         return goal;
-    }
-
-    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
-    {
-        typeof(Habit)
-            .GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     private void ArrangeGoals(params Goal[] goals)
