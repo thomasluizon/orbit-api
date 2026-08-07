@@ -1,405 +1,257 @@
 # Orbit Review Rubric
 
-The single source of truth for what a review checks **in this repo**. Exactly one thing
-reads it: `/pr-review` (`.claude/skills/pr-review/SKILL.md`), which walks it
-dimension-by-dimension over a **diff**, orchestrator-side in a fresh worktree at the pull
-request head. There is no CI reviewer in either repository. Unlike
-orbit-ui-mobile, this repo ships no `/audit-code-quality` skill, so nothing here walks the
-rubric over the whole repo.
+**At a glance:** the frozen list of what a review checks here. `/pr-review` walks it over a diff and
+`/audit-code-quality` walks the same file over the whole repo, so it stays orchestration-free: dimensions,
+severities, and the finding template only. A twin lives at `orbit-api/.claude/skills/pr-review/rubric.md`
+because `/pr-review` runs from either repo root and two git repos cannot share a file; mirror any
+substantive edit there in the same task. Every finding quotes the diff line it is about and cites the rule
+it came from by section, never by line number: line numbers rot silently and then point at the wrong rule.
 
-**A TWIN does exist**, at `orbit-ui-mobile/.claude/skills/pr-review/rubric.md`,
-where `/audit-code-quality` also walks it. Two repos mean the file cannot be deduped, so the
-two are mirrored **by hand**. Only a careful author keeps the pair honest now.
-Intentional divergences run in both directions: backend-only
-material here, such as dimension 13's transaction-teardown bullet (`ORBIT0002`), and
-orbit-ui-mobile-only material there, such as dimension 15's harness-execution evidence,
-which has no counterpart in this repository because the harness runner
-`tools/test-tools.mjs` and the per-tool case modules it loads from `tools/__tests__/` exist
-only in orbit-ui-mobile. Change a dimension here and mirror it there in the same task; a
-drift between the two is a defect, not a variant.
+## Severity and the blocking decision
 
-It is command-agnostic on purpose: it contains **dimensions, severities, and templates**,
-no orchestration, no scope resolution, no GitHub mechanics. Those live in the consuming
-skill.
+| Severity | Meaning |
+|---|---|
+| **Critical** | Exploitable, data loss, crash, broken contract, or breaks an already-shipped client. |
+| **High** | Type-safety hole, missing error handling, missing parity, missing validation, a test that cannot fail. |
+| **Medium** | Pattern inconsistency, missing edge case, defense-in-depth gap. |
+| **Low / Info** | Style deviation, minor naming, observation. |
 
-Every finding cites the rule it came from (a `CLAUDE.md` rule number, `no-comments.cjs`,
-a `DESIGN.md` section, an orbit-api hard rule, or a security category) so the author can
-trace it back. Tag every finding with a severity from the ladder at the bottom.
+Severity is descriptive. **`blocking` is the decision**, and it has one test: does the finding break
+behaviour, security, or data integrity? A High that does not is `"blocking": false` and becomes a follow-up
+ticket. Never manufacture a Blocking finding to avoid handing over a clean diff.
 
----
+`BREAKS-OLD-CLIENTS` is a Critical-class marker, always Blocking, for a change that makes an
+already-installed Android client misbehave, because old builds ship a frozen `@orbit/shared` snapshot.
+Detection is dimension 7.
 
-## Severity ladder
+## Gate-owned: never a hand-written finding
 
-One vocabulary for every dimension. A finding's severity is about blast radius, not
-which dimension raised it.
-
-| Severity | Meaning | Action |
-|---|---|---|
-| **Critical** | Exploitable, data loss, crash, broken contract, or **breaks an already-shipped client**. | Block merge. Fix now. |
-| **High** | Type-safety hole, missing error handling, missing parity, missing validation, dead code that ships. | Fix before merge. |
-| **Medium** | Pattern inconsistency, missing edge case, missing test, defense-in-depth gap. | Fix soon; OK to merge with a tracked follow-up. |
-| **Low** | Style deviation, minor naming, micro-cleanup. | Address when convenient. |
-| **Info** | Observation, forward-compatible note, praise. | No action required. |
-
-### The `⚠️ breaks old mobile clients` marker
-
-A **Critical-class** marker, separate from the severity word, applied to any finding
-where a `packages/shared` Zod schema or an orbit-api DTO change makes an
-already-installed Android client misbehave. Old Android builds ship a **frozen
-`@orbit/shared` snapshot** — a server-side or shared rename is invisible to them; they
-keep using the old field name and silently break. Detection and classification are
-defined in the **Contract drift + backward-compat guard** dimension below. Any finding
-carrying this marker is Critical regardless of how small the diff looks.
-
----
-
-## Signal gate — post high-signal only
-
-The review CONVERGES; it is not a nit machine. What gets posted is gated by severity:
-
-- **Critical / High** — always post; these decide the outcome.
-- **Medium** — post only when concretely actionable (a specific missing test, a real unhandled edge case, a definite pattern break). Never speculative.
-- **Low / Info** — do **not** post as PR-review findings. A local deep audit may list them; on a PR they are noise.
-
-**Never post — not findings, in any dimension:** style preferences (verbose vs concise, arrow vs named function, optional-chaining vs guard); naming bikeshed; reformatting; "consider extracting / hoisting / future-proofing" on code that already works; Zod modifier ordering (`.nullable().optional()`) when behavior is correct; magic-number→const when the value is obvious from context; anything the author chose defensibly that you would merely prefer otherwise; anything already addressed in an earlier commit or a resolved review thread.
-
-**Outcome is deterministic:** `NEEDS WORK` iff ≥1 surviving **Critical or High** finding (including any `⚠️ breaks old mobile clients`); otherwise `APPROVE`. Medium / Low / Info never force NEEDS WORK. Never manufacture a Critical/High finding to avoid approving — a clean diff earns a plain approval.
-
----
+The most-broken rule in `.claude/rules/core.md`. If a required check already fails on it, a hand-written
+finding is noise, because the PR cannot merge either way. ESLint `local/*` and Roslyn `ORBIT0001..0005`
+(`Lint`) own `any` / `as any` / `as unknown as X`, `console.log`, the whole comment policy, full-bleed web
+buttons, overshoot easing, and `will-change` discipline. `Type Check`, `Unit Tests`, `Build`, `Dash Ban`
+(em and en dashes, PR title and body included), `Copy Register` (shouted strings and the cliche register in
+i18n values), `Design Token Guard` (raw `--slate-*`, `transition-all`, `h-screen` in `apps/*`),
+`Suppressions Ratchet`, `Expo SDK Pin`, `Dependency Review`, `Dependency Audit`, `GitGuardian Security
+Checks`, `Analyze` (CodeQL), `SonarCloud Code Analysis`, and `React Doctor` own the rest. Three gates are
+partial and the uncovered half is yours: `local/no-decorative-glow` and `local/no-raw-gradient` ship at
+`warn` in `apps/*`, so pre-existing violations are known debt but a **newly introduced** one is a finding;
+`Cross-Platform Parity` and `Contract Drift` are scoped in dimensions 8 and 7.
 
 ## Finding template
 
-Every finding, every dimension, the same shape:
-
 ```
-[SEVERITY] <one-line title>  ⚠️ breaks old mobile clients (only if applicable)
-· dimension: <rubric dimension>
-· location: <repo>/<path>:<line>
-· issue: <1-2 sentences — what is wrong>
-· risk: <1-2 sentences — what goes wrong if it ships>
-· fix: <the concrete change, or a corrected snippet>
-· reference: <CLAUDE.md rule N | no-comments.cjs | DESIGN.md "Bans" | orbit-api hard rule | OWASP | security category>
+[SEVERITY] <one-line title>          blocking: true|false   [BREAKS-OLD-CLIENTS if applicable]
+- dimension: <number and name>
+- location: <repo>/<path>:<line>     (a line in the diff; quote it)
+- claim: <what is wrong, and what goes wrong if it ships>
+- fix: <the concrete change>
+- reference: <CLAUDE.md rule N | DESIGN.md section | orbit-api hard rule | security category>
 ```
-
----
 
 ## Dimensions
 
-Each dimension is a checklist. A diff that doesn't touch a dimension's surface skips it
-(noted as N/A) — do not invent findings for files the diff never changes. UI dimensions
-are **gated to `apps/*` changes**; backend hard rules are gated to `orbit-api` changes.
+A diff that does not touch a dimension's surface skips it, recorded as N/A with the reason. Do not invent
+findings for files the diff never changes.
 
 ### 1. Correctness
 
-> Reference: the change's own intent (PR body / linked issue / plan).
+> Reference: the change's own intent (PR body, linked ticket).
 
-- Does it do what the PR/issue says, across every boundary it crosses?
-- Data flow: request shape in → handler → response shape out → consumer reads it. Any
-  mismatch in that chain?
-- Boundary conditions: empty list, zero, null, first/last item, timezone edges (dates
-  must route through `IUserDateService` on the backend — see dimension 13).
-- State: are loading / error / empty states all handled, not just the happy path?
-- Concurrency / ordering assumptions that the diff silently relies on.
+Does it do what the ticket says, across every boundary it crosses? Follow the data flow (request shape in,
+handler, response shape out, consumer reads it) and name any mismatch. Check the boundaries (empty list,
+zero, null, first and last item, timezone edges), that loading, error, and empty states are all handled,
+and any concurrency or ordering assumption the diff silently relies on.
 
 ### 2. Dead / stale code
 
-> Reference: CLAUDE.md rule 2; orbit-api "No dead code".
+> Reference: CLAUDE.md rule 2.
 
-- Orphaned exports, functions, or types with **zero references** after this change
-  (cite the zero-reference grep).
-- Dead branches that can no longer be reached.
-- Commented-out code blocks.
-- Stub functions and speculative "just in case" parameters.
-- Imports / variables the diff itself left unused.
+Orphaned exports, functions, or types with zero references after this change (cite the grep); dead branches;
+commented-out code; stubs and speculative parameters; imports the diff itself orphaned.
 
 ### 3. SOLID / clean architecture
 
-> Reference: CLAUDE.md rules 6, 7, 10.
+> Reference: CLAUDE.md rules 3, 4, 7.
 
-- Function size soft cap ~50 lines, nesting ~3 levels; hard cap ~100. Over → the
-  function is doing too much, split it (rule 7). A file around 1,000 lines or one
-  carrying several unrelated responsibilities is a cohesion finding when the evidence
-  supports it. Split by responsibility or extract well-named pure helpers; when a split
-  merely moves the same tangle, report relocation, not simplification.
-- New endpoints follow CQRS (Command/Query + Handler + Validator) on the backend.
-- Frontend respects the adapter split: Server Action (web) vs `apiClient` (mobile);
-  shared logic in `packages/shared`, not duplicated per app.
-- For branch-heavy code, look for the **code-judo move**: a state-model or data-shape
-  reframe that deletes whole branches. Prefer that reframe to adding more conditionals.
-- Flag special-case `if/else` ladders, deeply coupled branching, and flag soup that grows
-  per case. Prefer the smallest fitting remedy: early returns, a lookup table, or
-  polymorphism that makes the variants explicit.
-- No premature abstraction — extract on the third real use, not the second (rule 6).
-  Three similar lines beat a helper invented for two. Apply the **deletion test** to thin
-  wrappers: if removing the module makes its complexity vanish instead of exposing useful
-  behavior, it is pass-through indirection. Flag magical abstractions that hide control
-  flow; delete needless wrappers or deepen the abstraction until its boundary is clear.
-- Repeated casts or optionality juggling indicate a structural type mismatch when one
-  better type or one parse at the trust boundary would remove the churn. Recommend that
-  structural fix, but exclude gate-owned mechanical forms such as `as any`,
-  `as unknown as X`, and unjustified `null!`; dimension 6 owns those direct violations.
-- DRY at the right level (rule 10): cross-app → `packages/shared`; cross-component →
-  `apps/<platform>/components/`; repeated handler or cross-function logic → one
-  well-named helper at the narrowest shared layer. Don't lift to `shared` for one caller.
-- Business logic belongs in its canonical domain, CQRS, or shared-logic layer, not in a
-  controller, component, DTO, or platform adapter. Move the rule to the owning layer
-  instead of duplicating or coordinating it at the edges.
+- Function soft cap ~50 lines and ~3 nesting levels, hard cap ~100. A file near 1,000 lines or carrying
+  unrelated responsibilities is a cohesion finding when the evidence supports it, but when a split would
+  merely relocate the same tangle, say that instead.
+- For branch-heavy code look for the **code-judo move**: a state-model or data-shape reframe that deletes
+  whole branches. Prefer it to another conditional; flag flag-soup and special-case ladders.
+- No premature abstraction: extract on the third real use, not the second. Apply the **deletion test** to
+  thin wrappers, since if removing the module makes its complexity vanish rather than exposing useful
+  behaviour it is pass-through indirection. Repeated casts or optionality juggling means a structural type
+  mismatch that one better type, or one parse at the trust boundary, would remove.
+- DRY at the right level: cross-app to `packages/shared`, cross-component to `apps/<platform>/components/`,
+  never lifted to shared for one caller. Business logic belongs in its domain, CQRS, or shared layer, never
+  in a controller, component, DTO, or adapter; new backend endpoints follow CQRS.
 
-### 4. Comment policy
+### 4. No-workaround / root cause
 
-> Reference: `eslint-rules/no-comments.cjs:17-24` (local/no-comments); orbit-api `ORBIT0001`.
+> Reference: CLAUDE.md rule 1.
 
-The reviewer flags a comment exactly when the linter would. **Allowed**, nothing else:
+The signature smell is **frontend written to dodge a missing or awkward API**: client-side reshaping,
+refetch-and-merge, optimistic patches papering over a shape the backend should return. Flag it and point at
+the upstream fix, and the same for fallbacks or defensive branches covering a problem that belongs to a
+config, a type, or a shared util. An unavoidable workaround is allowed only with a one-line WHY comment
+carrying an `http(s)://` link to the upstream issue; no link means it is not sanctioned.
 
-- `/** … */` JSDoc block (a `Block` comment whose value starts with `*`) on an exported
-  function, hook, or type — one short paragraph on intent and contract.
-- A `///` line (a `Line` comment whose trimmed value starts with `/`) — TS triple-slash
-  reference / C# XML doc.
-- A tooling directive matching `no-comments.cjs`'s `DIRECTIVE` set: `eslint-disable*`,
-  `@ts-*`, `ts-*`, `prettier-ignore`, `@jsx`, coverage/bundler pragmas
-  (`c8`/`v8`/`istanbul`/`webpack`/`@vite`/`@vitest`/`@__PURE__`).
-- A WHY note that contains an `http(s)://` URL to an upstream issue/PR/doc — a real
-  external constraint the author cannot fix here.
+### 5. Test quality
 
-Everything else is a finding: `//` narration, restating code, task/PR/fix references,
-TODOs. The fix is never "reword the comment" — it is **rename the symbol or extract a
-well-named function** so the code reads without prose.
+> Reference: the `tdd` skill (`~/.claude/skills/tdd/`). `Unit Tests` proves the suite is green; it cannot
+> tell a real test from one that passes by construction.
 
-### 5. No-workaround / root-cause
+- **Tautological test (High).** The assertion recomputes the expected value the way the code does
+  (`expect(add(a, b)).toBe(a + b)`, a snapshot derived by hand the same way, a constant asserted equal to
+  itself), so it passes by construction and can never disagree with the code. Expected values must come
+  from an independent source of truth: a known-good literal, a worked example, the spec. This is exactly
+  what a worker under an evidence gate produces when it needs a green result, so read the new tests before
+  believing the green check.
+- **Implementation-coupled test (Medium).** Mocks internal collaborators, tests private methods, or
+  verifies through a side channel (querying the database instead of reading back through the interface).
+  The tell: it breaks on a refactor that changed no behaviour. Mock only at system boundaries (external
+  APIs, time, randomness), never your own modules.
+- **New behaviour with no test that would fail without it is High.** Assert the behaviour a caller cares
+  about, not the shape of the call.
 
-> Reference: CLAUDE.md rule 1; orbit-api "No workarounds".
+### 6. Security
 
-- The signature smell: **ugly frontend written to dodge a missing or awkward API** —
-  client-side reshaping, refetch-and-merge, optimistic patches that paper over a shape
-  the backend should return directly. Flag it and point at the upstream fix.
-- Fallbacks, defensive branches, or local patches for a problem that belongs to a
-  config, a type, or a shared util.
-- An unavoidable workaround is allowed **only** with a one-line WHY-with-URL note
-  (dimension 4). No link → it is not a sanctioned workaround.
+> Reference: OWASP and the orbit-api hard rules. CodeQL, SonarCloud, and GitGuardian own the mechanical half
+> (injection patterns, committed secrets); the judgement below is yours.
 
-### 6. Type safety
+- **Authorization.** A new controller endpoint carries `[Authorize]` or `[AllowAnonymous]`; missing both is
+  a bug and the default is `[Authorize]`. `[AllowAnonymous]` on anything touching user data is
+  public-by-mistake, a `userId` read from the request body instead of `User.GetUserId()` is a tenancy hole,
+  and Server Actions and BFF routes need their own auth check.
+- **Webhooks and keys.** Every Stripe webhook calls `EventUtility.ConstructEvent(json, signature,
+  WebhookSecret)` before any processing and rejects a null or empty `WebhookSecret`; the Stripe API key is
+  set once at startup, never per request. The JWT secret comes from configuration with no dev fallback in
+  production, HS256 pinned with `none` and asymmetric rejected, short-lived access tokens, DB-backed
+  revocable refresh tokens, never logged.
+- **CORS and session.** No `AllowAnyHeader()`, no `AllowAnyMethod()`, never `AllowAnyOrigin()` with
+  `AllowCredentials()`. Web session stays httpOnly, sameSite strict, secure; mobile tokens live in
+  SecureStore, never AsyncStorage.
+- **Validation and rate limits.** The backend is the source of truth and frontend Zod is convenience only:
+  every new endpoint has a FluentValidation validator **and** a domain-entity guard, with request size
+  limits intact (Kestrel 10MB global, chat 20MB). Abuse-prone endpoints (auth `send-code` / `verify-code`,
+  chat, AI summary) carry `[DistributedRateLimit]`.
+- **Leakage.** No stack traces, DB schema, passwords, tokens, or PII in responses or logs, and response DTOs
+  carry no password hashes or refresh tokens. Logging is structured, never interpolated, because
+  interpolation leaks PII into log analytics. Weak hashing (MD5, SHA1) or an insecure RNG for a
+  security-sensitive value is Critical. Frontend: XSS via unescaped input in JSX or
+  `dangerouslySetInnerHTML`, and auth state reaching logs or analytics.
 
-> Reference: CLAUDE.md rule 3.
+### 7. Contract alignment and backward compatibility
 
-- TypeScript: any `any`, `as any`, or `as unknown as X` escape hatch. Use `unknown`
-  with narrowing instead.
-- C#: implicit conversions and unjustified `null!` (the C# analog of an `as any`).
-- Inferred-`any` callbacks and untyped external payloads crossing a trust boundary
-  without a Zod parse.
+> Reference: CLAUDE.md "Security & contracts"; issue #206. **`Contract Drift` regenerates the Zod snapshot
+> from orbit-api `main`**, so it cannot see a paired in-flight API PR and it never makes the append-only
+> judgement. Both are yours.
 
-### 7. No `console.log`
+Compare `packages/shared/src/types/*` and `packages/shared/src/api/endpoints.ts` against the orbit-api DTOs
+(feature-local records under `src/Orbit.Application/`) and the Controller routes; casing is expected to
+differ (PascalCase C#, camelCase over JSON). Report `MISSING_DTO`, `MISSING_ZOD`, `FIELD_DRIFT` (name, type,
+or required-vs-optional), `PATH_DRIFT` (route or method). Then make the append-only judgement drift
+detection does not: shared and DTO changes **add optional fields** and never rename, remove, or retype a
+field an old mobile client still reads, because mobile lags via the Play store.
 
-> Reference: CLAUDE.md rule 4.
+- Removed or renamed in a **response** DTO or schema: old clients read `undefined`. **Critical,
+  `BREAKS-OLD-CLIENTS`**, unless it was already optional AND unused (cite the grep).
+- Removed or renamed in a **request** DTO or schema, or made newly required: old clients still send the old
+  shape and validation rejects it. **Critical, `BREAKS-OLD-CLIENTS`**.
+- Added as optional: forward-compatible, **Info**. Enum value removed: old clients may still send it.
 
-- Any `console.log` (or stray `print`/`Debug.WriteLine`) in production code. Use the
-  project logger or remove it. Test files are exempt.
+The fix is always the compatible alternative: keep-and-deprecate, accept both names server-side for a
+release, or expand-contract behind the `AppConfig.MinSupportedVersion` gate, raised only after the carrying
+build is live in the Play fleet. When old-client reach is genuinely uncertain, downgrade to High with a
+"verify old-client usage" note rather than over-claiming Critical. Semantic breaks under an unchanged field
+name belong to dimension 1; do not over-claim completeness here.
 
-### 8. DESIGN.md / AI-slop
+### 8. Cross-platform parity
 
-> Reference: `DESIGN.md` at the orbit-ui-mobile repo root, sections **Identity & anchor
-> (locked)** (:18), **Bans** (:469), **AI-slop test** (:505), **Scene-sentence test**
-> (:525). Cite the section name, not the line alone: the line numbers move, the section
-> names do not. **Gated: only when the diff touches `apps/*` UI files.** An
-> orbit-api-only diff marks this N/A, and where the orbit-ui-mobile checkout is absent the
-> reference cannot be read at all, so it is "not verifiable here".
+> Reference: root CLAUDE.md "Cross-platform parity (MANDATORY)". **The `Cross-Platform Parity` gate only
+> counts changed files per platform**, so it catches a wholly one-sided PR and nothing else. Per-file
+> mirrors and behavioural equivalence are yours.
 
-The anchor is the **de-decorated navy-violet orbital** (the #539 freeze, 2026-07-17).
-Identity comes from three carriers and nothing else: the **orbital logo mark**, the
-**Astra orbital glyph**, and **ring-shaped status and progress indicators**. It never
-comes from a background gradient, a glow, decorative background orbit arcs, or texture.
-**Quiet decoration is still decoration**: a softened glow, a 0.03-opacity texture, a
-"subtle" mesh is the same finding as the loud version. The freeze removed the layer, it
-did not dim it.
+Every changed `apps/web/**` file has its `apps/mobile/**` mirror changed in the same PR and vice versa:
+`hooks/use-<x>.ts`, `stores/<x>-store.ts`, and `components/<feature>/<X>.tsx` map one to one,
+`app/(app)/<page>/page.tsx` maps to `app/<page>.tsx`, and `app/actions/<x>.ts` maps to a mobile hook calling
+`apiClient` directly. The mirror is **behaviourally identical**: same logic, data flow, and error handling,
+reverts included. Only platform adapters may differ (BFF vs direct API, cookie vs SecureStore, shadcn vs
+NativeWind, next-intl vs i18next). A missing mirror file, or one that exists but was not updated, is
+**High** until proven intentional (the `parity:exempt` label plus a justification in the PR body). Never
+flag `packages/shared/**`, `apps/web/middleware.ts`, `apps/web/app/api/[...path]/route.ts` (its mobile
+equivalent is built into `apps/mobile/lib/api-client.ts`), or a platform-specific test.
 
-Scan for the AI-slop tells:
+### 9. i18n
 
-- Decoration used as hierarchy: any glow, gradient wash, gradient border, gradient text
-  (`bg-clip-text` over a gradient), mesh, bloom, texture, or "quiet" background effect.
-  There is no sanctioned gradient and no sanctioned glow left: `--gradient-header`,
-  `GradientTop`, and the primary-glow shadow token are **deleted**.
-- Cards in cards (opaque card-on-card on dark), and cards used where spacing would have
-  grouped.
-- A coloured side-stripe border on a row, card, callout, or alert.
-- Connector or tree lines in a hierarchy.
-- Grey text on coloured backgrounds; rounded-square icon tiles above headings.
-- Semantic-red destructive fills where the spec shows a text pill.
-- An oversized centered H1 outside a hero context.
-- The hero-metric template used as decoration, or any invented precise-looking number.
-- A whole-section fade-and-rise scroll reveal, or any page-load choreography.
-- An animation whose purpose cannot be named from the closed list.
-- A heading and the intro beneath it saying the same thing; an eyebrow that enumerates
-  rather than labels.
+> Reference: root CLAUDE.md. No gate checks locale parity.
 
-Token checks that need judgment:
+Every new user-facing string has a key in **both** `packages/shared/src/i18n/en.json` and `pt-BR.json`, in
+the same edit (`MISSING_PT` / `MISSING_EN`), and no callsite references a key that exists in neither
+(`ORPHANED`). `Orbit` and `Astra` are never translated. Keys stay dot-notation hierarchical and alphabetized
+within their hierarchy, with ICU plurals where a count is interpolated. Copy that is wordy, redundant with
+its own heading, or inconsistent in terminology across the two locales is a finding even though the Copy
+Register gate passed it.
 
-- **`--primary` is fill and graphic only; `--primary-soft` is the accent text token.**
-  Accent-coloured small text on the canvas is a finding, not a preference. On light both
-  resolve to the same value, so the split only bites on dark.
-- **Accent rationing**: the accent appears on the active tab, progress and ring
-  indicators, done dots, the primary CTA, the FAB, and active nav. That is the whole
-  list. Accent on a card, a row, a border, a heading, or an icon not communicating state
-  is decoration.
-- No raw `--slate-*` reference and no hardcoded violet rgba. Semantic tokens only; tints
-  come from `--primary-rgb` (web) or `tintFromPrimary` (mobile).
-- No hand-rolled `box-shadow` heavier than `--shadow-1/2/3`. Shadows model occlusion
-  under a lifted surface; they never carry the accent hue.
-- No `transition-all` (animate `transform` and `opacity`, named); no `h-screen` (use
-  `min-h-dvh`); no new font families, radii, or colors outside the spec.
-- No per-component scheme branch. Schemes resolve through tokens.
+### 10. Design
 
-**Do not hand-flag what an ESLint `local/*` rule already fails on** in orbit-ui-mobile:
-decorative glow, raw gradient and gradient text, side-stripe borders, off-scale spacing,
-`space-x-*` / `space-y-*`, overshoot easing, arbitrary z-index, full-bleed pill CTAs, and
-em dashes in copy each have a gate. Report the gate's verdict; re-flagging it by hand is
-noise. `DESIGN.md`'s **Enforcement** section is the authoritative gate-versus-reviewer
-split.
+> Reference: `DESIGN.md`. **Gated: only when the diff touches `apps/*` UI files.** Cite the DESIGN.md section
+> for every finding; if a rule is in neither `DESIGN.md` nor `.claude/rules/`, it is your taste and you must
+> label it as such.
 
-Then the **scene-sentence test**: describe the rendered screen in one sentence, as if
-narrating a film scene. If it reads like every other SaaS app ("a clean modern dashboard
-with cards"), it is generic. The sentence must name Orbit's character: a near-black
-neutral canvas, quiet tonal panels separated by hairlines, one violet reserved for what is
-done and what is next, and the orbital ring language carrying the identity. **If the only
-way to make the sentence specific is to describe decoration, the design has failed and the
-decoration is not the fix.**
+The anchor is the **de-decorated navy-violet orbital** (#539 freeze): a near-black canvas, one rationed
+violet, opaque surface steps, hairline rings and dividers, with hierarchy bought by surface steps, size,
+weight, and whitespace. **Quiet decoration is still decoration**: a softened glow or a 0.03-opacity texture
+is the same violation as the loud version.
 
-### 9. Parity (web ↔ mobile)
+- **AI-slop test.** Any decorative glow or gradient (the tokens are deleted, so anything reaching this diff
+  is hand-rolled), including gradient borders and `bg-clip-text` gradient text; decorative background orbit
+  arcs; a coloured side-stripe border; cards-in-cards; connector or tree lines; gray text on coloured
+  backgrounds; rounded-square icon tiles above headings; an oversized centered H1 outside a hero; the
+  hero-metric template used as decoration, or any invented precise-looking number.
+- **Token adherence and accent rationing.** `--primary` is fill and graphic only: CTA background, FAB,
+  progress ring, done dots, level bar, active tab, active nav. That is the whole list. It is never small
+  text on the canvas (that is `--primary-soft`), never decorative on a card, row, border, or heading. No new
+  font, radius, shadow, or colour outside the spec.
+- **Scene-sentence test.** Describe the rendered screen in one sentence. If it reads like generic SaaS ("a
+  clean modern dashboard with cards"), name what would make it read as Orbit; if the only way to make it
+  specific is to describe decoration, the design has failed and decoration is not the fix. **Restraint has a
+  floor** on the other side: a quieting pass that flattens everything to one size and weight, goes
+  grayscale, or trades an affordance for calm has also failed.
+- **Responsive and layout.** Desktop composes horizontally rather than stretching one mobile column, with
+  intrinsic-width pills; the 65ch measure; concentric radii (outer = inner + padding); one focal element per
+  view; a card is not a layout primitive; every sub-screen has a visible back affordance. A pill hugs its
+  content unless it is a mobile bottom-sheet or dialog's single primary action, a mobile auth or onboarding
+  submit, a full-screen empty-state CTA, or a paired confirm row, and the lint rule cannot see mobile
+  StyleSheet width, so flag `alignSelf: 'stretch'` and `width: '100%'` pills by eye.
+- **A11y.** Colour as the only signal; the 3:1 non-text contrast floor for icons, borders, and state
+  indicators; where focus lands on open, that it is trapped, and where it returns on close; a localized
+  label in both locales for icon-only controls; hit targets at least 44, reached by padding rather than by
+  growing the glyph. Arbitrary `z-*` values have no lint rule yet, so flag them by eye. 200% zoom and
+  screen-reader semantics need the live DOM: say a pass is owed, do not guess.
 
-> Reference: root CLAUDE.md "Cross-platform parity (MANDATORY)". Engine: `parity-checker`.
+### 11. Backend hard rules
 
-- Every changed `apps/web/**` file has its `apps/mobile/**` mirror changed in the same
-  PR (and vice-versa), per the mirror map in the `parity-checker` contract.
-- The mirror is **behaviorally identical** — same logic, data flow, error handling.
-  Only platform adapters may differ (BFF vs direct API, cookie vs SecureStore, shadcn vs
-  NativeWind, next-intl vs i18next).
-- `MISSING` (no mirror file) is High; `PARTIAL` (mirror exists, not updated) is High
-  until proven intentional.
+> Reference: orbit-api/CLAUDE.md "Cross-cutting hard rules". **Gated: `orbit-api` changes only.**
 
-### 10. i18n
+What dimensions 5 and 6 do not already carry. **Timezone**: user-facing dates use
+`IUserDateService.GetUserTodayAsync(userId)`, never `DateOnly.FromDateTime(DateTime.UtcNow)`, which is for
+`CreatedAtUtc` and cache keys only. **Validator placement**: `Orbit.Application/<Feature>/Validators/`.
+**Result flow**: `Result<T>` propagated correctly (`PropagateError<T>()`, `ToPayGateAwareResult()`), with no
+catch block that swallows an error silently. **Test scope**: every new command or query handler, validator,
+and service has a unit test, and unit is all there is, so never ask for an integration or E2E suite.
 
-> Reference: root CLAUDE.md (add keys to both locales in the same edit). Engine: `i18n-syncer`.
+### 12. FEATURES.md gating
 
-- Every new user-facing string has a key in **both** `packages/shared/src/i18n/en.json`
-  AND `pt-BR.json` (`MISSING_PT` / `MISSING_EN` are findings).
-- No `ORPHANED` callsite referencing a key that exists in neither locale.
-- Brand words (`Orbit`, `Astra`) stay untranslated.
-- Keys stay dot-notation hierarchical and alphabetized within their hierarchy.
+> Reference: `FEATURES.md` at the orbit-ui-mobile root. **Gated: only when the diff changes the user-facing
+> feature surface.** Hand-maintained, so nothing generates it and no gate checks it.
 
-### 11. Contract drift + backward-compat guard
-
-> Reference: CLAUDE.md "API contract" / orbit-api "Cross-repo parity contract".
-> Engine: `contract-aligner` for the field-by-field shape comparison.
-
-First, drift (from `contract-aligner`): `MISSING_DTO`, `MISSING_ZOD`, `FIELD_DRIFT`,
-`PATH_DRIFT` between `packages/shared/src/types/*` + `endpoints.ts` and the orbit-api
-DTOs + Controller routes.
-
-Then the **backward-compat judgment** drift detection alone does not make — the
-direction and the add/remove of each field, because old Android clients run a frozen
-`@orbit/shared`:
-
-- **Field removed from / renamed in a *response* DTO or schema** → old clients that read
-  it now get `undefined` → **`⚠️ breaks old mobile clients` (Critical)**, unless the
-  field was already optional AND unused (cite the grep proving it).
-- **Field removed from / renamed in a *request* DTO or schema, or a field made
-  newly-required** → old clients still send the old shape → server validation rejects
-  it → **`⚠️ breaks old mobile clients` (Critical)**.
-- **Field added as optional** → forward-compatible → **Info**, not a break.
-- **Enum value removed** → old clients may still send it → flag.
-
-Recommend the compatible alternative in the fix: keep-and-deprecate the old field,
-accept both names server-side for a release, or gate behind the min-version gate. When
-old-client reach is uncertain, downgrade to **High** with a "verify old-client usage"
-note rather than over-claiming Critical.
-
-### 12. Security
-
-> Reference: OWASP + orbit-api hard rules. Engine for API code: `security-reviewer`
-> (the frontend categories below are what that agent explicitly does NOT cover).
-
-Review the categories relevant to the change.
-
-**Injection** — raw or string-interpolated SQL / EF queries; XSS via unescaped user
-input in JSX or `dangerouslySetInnerHTML`; command injection (`exec()` /
-`Process.Start()` with user input); path traversal from unsanitized input in file paths.
-
-**Authentication & authorization** — missing `[Authorize]` on a new API endpoint (the
-default is `[Authorize]`; missing both it and `[AllowAnonymous]` is a bug); missing auth
-checks on Server Actions / BFF routes; hardcoded credentials, JWT secrets, or API keys;
-session config must stay httpOnly + sameSite strict + secure always; CORS must stay
-restrictive (no `AllowAnyHeader()` / `AllowAnyMethod()`, never `AllowAnyOrigin()` with
-`AllowCredentials()`); the Stripe API key set globally in `Program.cs`, never
-per-request.
-
-**Data exposure** — sensitive data (passwords, tokens, PII) in `console.log` or
-`ILogger`; responses leaking stack traces or DB schema; secrets in source / config;
-missing input validation at the API boundary; webhook handlers must verify signatures
-(Stripe `WebhookSecret`).
-
-**Dependency & configuration** — known-vulnerable dependency versions; debug mode
-enabled in production config; `SecurityHeadersMiddleware` (nosniff, DENY,
-referrer-policy, XSS) must not be disabled; request size limits (Kestrel 10MB global,
-chat endpoint 20MB) intact.
-
-**Cryptography** — weak hashing (MD5 / SHA1 for passwords — BCrypt is the standard);
-hardcoded encryption keys; insecure RNG for security-sensitive values; HTTPS enforcement
-intact.
-
-**Error handling** — verbose error messages exposing internals; unhandled promise
-rejections / unobserved tasks; catch blocks that swallow errors silently; `Result<T>`
-propagated correctly (`PropagateError<T>()` / `ToPayGateAwareResult()` per
-`orbit-api/CLAUDE.md`).
-
-**Validation (Orbit-specific)** — the backend is the source of truth; frontend Zod is
-convenience only. Every new endpoint needs FluentValidation **and** a domain-entity
-guard in the factory/update method. Numeric bounds, date ranges, and mutually exclusive
-options are enforced server-side.
-
-### 13. Backend hard rules
-
-> Reference: orbit-api/CLAUDE.md "Cross-cutting hard rules". **Gated: only when the diff
-> touches `orbit-api`.**
-
-- **Timezone**: user-facing dates use `IUserDateService.GetUserTodayAsync(userId)`,
-  never `DateOnly.FromDateTime(DateTime.UtcNow)`. `DateTime.UtcNow` is only for
-  `CreatedAtUtc` timestamps and cache keys.
-- **Authorization**: every controller endpoint requires JWT Bearer unless it is
-  `/health` or `/api/auth/*`; new endpoints default to `[Authorize]`.
-- **Validation**: validators in `Orbit.Application/<Feature>/Validators/` **and**
-  domain-entity guards.
-- **Logging**: structured, PascalCase properties, English only —
-  `logger.LogInformation("Action {Property}", value)`, never interpolated.
-- **Transaction teardown**: no explicit `RollbackAsync()`/`Rollback()` inside a
-  `using`/`await using`-scoped EF transaction — scope disposal already rolls back an
-  uncommitted transaction. The `ORBIT0002` analyzer (`src/Orbit.Analyzers`) fails the CI
-  build on violations; a genuinely manually-owned transaction (no `using`) is exempt.
-- **Tests**: every new command/query handler, validator, and service has a unit test
-  (unit only — no integration or E2E suite exists).
-
-### 14. FEATURES.md parity (feature inventory)
-
-> Reference: `FEATURES.md` at the orbit-ui-mobile repo root — the code-derived feature
-> inventory (#378). **Gated: only when the diff changes the user-facing feature surface.**
-
-- Triggers: a feature added, materially changed, or removed — new screen/route/tab, new
-  or removed Astra (`IAiTool`) or MCP (`[McpServerTool]`) tool, plan-gating change
-  (`PayGateService` / `AppConstants`), platform-availability change, or locale-specific
-  behavior change. Pure refactors, bugfixes, and visual polish with no behavior change
-  are N/A.
-- The same PR updates `FEATURES.md` — row added, edited, or removed, with the Gating /
-  Platform / Locale columns still accurate, and the stated tool counts corrected when
-  tools are added or removed. A missing update is **High** (same bar as a missing
-  web↔mobile mirror); a gating or platform claim the diff makes stale is **High** too.
-- Headline-set features (Astra, MCP, social, core tracker) also surface in the in-app
-  feature guide (`onboarding.featureGuide.*`) — if the change makes the guide wrong or
-  incomplete, flag it (**Medium**).
-- In the orbit-api repo the file is not in the checkout: do not verify — emit the
-  finding as "FEATURES.md update required in thomasluizon/orbit-ui-mobile" (**High**)
-  so it lands in the paired frontend PR.
-
----
-
-## Self-review note
-
-This rubric and the skill that walks it are themselves held to the standard they
-enforce: every code snippet here is exemplary (no narration comments, no `any`, no
-`console.log`). Dogfood the rubric against the review output before posting.
+Triggers: a new screen, route, or tab; a new or removed Astra (`IAiTool`) or MCP (`[McpServerTool]`) tool; a
+plan-gating change (`PayGateService`, `AppConstants`); a platform-availability or locale-specific behaviour
+change. Pure refactors, bugfixes, and visual polish are N/A. The same PR updates the row, keeping the
+Gating, Platform, and Locale columns accurate and the stated tool counts correct; a missing update is
+**High**, as is a gating or platform claim the diff makes stale, and a change that makes the in-app guide
+(`onboarding.featureGuide.*`) wrong is **Medium**. In the orbit-api repo the file is not checked out, so do
+not guess: emit "FEATURES.md update required in thomasluizon/orbit-ui-mobile" (**High**) so it lands in the
+paired frontend PR.
