@@ -2884,7 +2884,7 @@
       "Challenges": 14,
       "Chat": 57,
       "ChecklistTemplates": 9,
-      "Common": 160,
+      "Common": 161,
       "Gamification": 33,
       "Goals": 37,
       "Habits": 80,
@@ -4719,6 +4719,14 @@
         "testClass": "LocaleHelperTests",
         "file": "tests/Orbit.Application.Tests/Common/LocaleHelperTests.cs",
         "references": []
+      },
+      {
+        "testClass": "PayGateServiceExpiredCycleTests",
+        "file": "tests/Orbit.Application.Tests/Common/PayGateServiceExpiredCycleTests.cs",
+        "references": [
+          "Habit",
+          "User"
+        ]
       },
       {
         "testClass": "PayGateServiceTests",
