@@ -148,6 +148,23 @@ public class DistributedRateLimitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TryAcquireAsync_McpAiPolicy_RemainsExhaustedAcrossSegmentBoundary()
+    {
+        var clock = new MutableTimeProvider(MidWindowInstant);
+        var service = new DistributedRateLimitService(_dbContext, clock);
+
+        for (var attempt = 0; attempt < 15; attempt++)
+            (await service.TryAcquireAsync("mcp-ai", "api-key:one")).Allowed.Should().BeTrue();
+
+        clock.Advance(TimeSpan.FromSeconds(15));
+        var blocked = await service.TryAcquireAsync("mcp-ai", "api-key:one");
+
+        blocked.Allowed.Should().BeFalse();
+        blocked.CurrentCount.Should().Be(15);
+        blocked.WindowEndsAtUtc.Should().Be(MidWindowInstant.UtcDateTime.AddMinutes(1));
+    }
+
+    [Fact]
     public async Task TryAcquireAsync_RelationalProvider_RetriesSerializationConflictThenSucceeds()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -192,6 +209,15 @@ public class DistributedRateLimitServiceTests : IDisposable
     private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => instant;
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset instant) : TimeProvider
+    {
+        private DateTimeOffset _instant = instant;
+
+        public override DateTimeOffset GetUtcNow() => _instant;
+
+        public void Advance(TimeSpan duration) => _instant = _instant.Add(duration);
     }
 
     private class RateLimitOnlyOrbitDbContext(DbContextOptions<OrbitDbContext> options)

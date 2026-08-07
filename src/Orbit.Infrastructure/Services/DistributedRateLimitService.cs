@@ -113,7 +113,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         var now = clock.GetUtcNow().UtcDateTime;
         var segmentWindow = TimeSpan.FromTicks(policy.Window.Ticks / policy.SegmentCount);
         var segmentStartUtc = FloorUtc(now, segmentWindow);
-        var segmentEndUtc = segmentStartUtc.Add(segmentWindow);
+        var bucketExpiresAtUtc = segmentStartUtc.Add(policy.Window);
         var activeWindowStartUtc = policy.SegmentCount == 1
             ? segmentStartUtc
             : now - policy.Window + segmentWindow;
@@ -151,7 +151,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                 false,
                 policy.PermitLimit,
                 currentCount,
-                oldestRelevantBucket?.WindowEndsAtUtc ?? segmentEndUtc);
+                oldestRelevantBucket?.WindowEndsAtUtc ?? bucketExpiresAtUtc);
         }
 
         var currentBucket = recentBuckets.FirstOrDefault(bucket => bucket.WindowStartUtc == segmentStartUtc);
@@ -161,7 +161,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
                 policyName,
                 partitionKey,
                 segmentStartUtc,
-                segmentEndUtc));
+                bucketExpiresAtUtc));
         }
         else
         {
@@ -174,7 +174,7 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
             true,
             policy.PermitLimit,
             currentCount + 1,
-            segmentEndUtc);
+            bucketExpiresAtUtc);
     }
 
     private static bool IsRetryableRateLimitConflict(Exception exception)

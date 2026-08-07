@@ -152,6 +152,35 @@ public class WebApplicationExtensionsMcpTests
     }
 
     [Fact]
+    public async Task TryApplyMcpRateLimitsAsync_NonToolRequest_PreservesRequestIdInRejection()
+    {
+        using var requestDocument = WebApplicationExtensions.TryParseMcpBody(
+            "{\"jsonrpc\":\"2.0\",\"id\":\"list-7\",\"method\":\"tools/list\"}");
+        var isToolCall = WebApplicationExtensions.TryGetMcpToolCall(
+            requestDocument?.RootElement,
+            out var toolName,
+            out var requestId,
+            out _,
+            out _);
+        var service = Substitute.For<IDistributedRateLimitService>();
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 60, 60, DateTime.UtcNow.AddMinutes(1)));
+        var context = CreateRateLimitContext(service, Guid.NewGuid());
+
+        isToolCall.Should().BeFalse();
+        toolName.Should().BeNull();
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(context, toolName, requestId))
+            .Should().BeFalse();
+
+        context.Response.Body.Position = 0;
+        using var responseDocument = await JsonDocument.ParseAsync(context.Response.Body);
+        responseDocument.RootElement.GetProperty("id").GetString().Should().Be("list-7");
+    }
+
+    [Fact]
     public async Task TryApplyMcpRateLimitsAsync_ExhaustedKey_DoesNotAffectSecondKey()
     {
         var service = Substitute.For<IDistributedRateLimitService>();

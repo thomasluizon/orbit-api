@@ -439,15 +439,17 @@ public static partial class WebApplicationExtensions
         operationId = null;
         operationFingerprint = null;
 
-        if (root is not { ValueKind: JsonValueKind.Object } element ||
-            !element.TryGetProperty("method", out var methodElement) ||
+        if (root is not { ValueKind: JsonValueKind.Object } element)
+            return false;
+
+        if (element.TryGetProperty("id", out var idElement))
+            requestId = idElement.Clone();
+
+        if (!element.TryGetProperty("method", out var methodElement) ||
             !string.Equals(methodElement.GetString(), "tools/call", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
-
-        if (element.TryGetProperty("id", out var idElement))
-            requestId = idElement.Clone();
 
         if (!element.TryGetProperty("params", out var paramsElement))
             return false;
