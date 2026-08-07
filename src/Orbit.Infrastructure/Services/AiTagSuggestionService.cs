@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -61,15 +62,15 @@ public sealed partial class AiTagSuggestionService(
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
         var existingTagsBlock = existingTagNames.Count > 0
-            ? string.Join(", ", existingTagNames)
+            ? string.Join(", ", existingTagNames.Select(tag => PromptDataSanitizer.QuoteInline(tag, 80)))
             : "(none yet)";
         var descriptionLine = string.IsNullOrWhiteSpace(description)
             ? "(no description)"
-            : description.Trim();
+            : PromptDataSanitizer.SanitizeBlock(description, 160);
 
         return $$"""
             HABIT
-            Title: {{title}}
+            Title: {{PromptDataSanitizer.QuoteInline(title, 100)}}
             Description: {{descriptionLine}}
 
             EXISTING TAGS (reuse one of these verbatim whenever it fits instead of inventing a near-duplicate):
