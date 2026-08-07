@@ -266,7 +266,7 @@ public static class HabitScheduleService
     }
 
     /// <summary>
-    /// True when the habit has a completion log (Value &gt; 0) on any date within
+    /// True when the habit has an active completion log (Value &gt; 0) on any date within
     /// [<paramref name="dateFrom"/>, <paramref name="dateTo"/>]. Skip logs (Value == 0) do not
     /// count. This is the date-scoped "done in range" signal shared by the schedule query and the
     /// daily summary — deliberately distinct from <see cref="Habit.IsCompleted"/>, which is a
@@ -274,7 +274,13 @@ public static class HabitScheduleService
     /// decide whether a habit was done on a particular day.
     /// </summary>
     public static bool HasCompletedLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
-        habit.Logs.Any(l => l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
+        HasCompletedLogInRange(habit.Logs, dateFrom, dateTo);
+
+    internal static bool HasCompletedLogInRange(
+        IEnumerable<HabitLog> logs,
+        DateOnly dateFrom,
+        DateOnly dateTo) =>
+        logs.Any(l => !l.IsDeleted && l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
 
     /// <summary>
     /// True when the habit has an unresolved occurrence strictly before

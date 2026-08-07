@@ -5,6 +5,7 @@ using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace Orbit.Application.Tests.Queries.Habits;
 
@@ -36,6 +37,14 @@ public class GetHabitFullDetailQueryHandlerTests
     private static User CreateTestUser()
     {
         return User.Create("Test User", "test@example.com").Value;
+    }
+
+    private static void AttachChild(Habit parent, Habit child)
+    {
+        var field = typeof(Habit).GetField("_children", BindingFlags.Instance | BindingFlags.NonPublic);
+        var children = field?.GetValue(parent) as IList<Habit>;
+        children.Should().NotBeNull();
+        children!.Add(child);
     }
 
     [Fact]
@@ -149,5 +158,109 @@ public class GetHabitFullDetailQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Logs.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_GeneralHabitLoggedToday_ReturnsCompleted()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "General Habit",
+            null,
+            null,
+            DueDate: Today,
+            IsGeneral: true)).Value;
+        var log = habit.Log(Today).Value;
+        var user = CreateTestUser();
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog> { log }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habit.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_GeneralDescendantLoggedToday_ReturnsCompleted()
+    {
+        var parent = CreateTestHabit();
+        var child = Habit.Create(new HabitCreateParams(
+            UserId,
+            "General Child",
+            null,
+            null,
+            DueDate: Today,
+            IsGeneral: true,
+            ParentHabitId: parent.Id)).Value;
+        var log = child.Log(Today).Value;
+        var user = CreateTestUser();
+        AttachChild(parent, child);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var predicate = callInfo.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile();
+                return new List<HabitLog> { log }.Where(predicate).ToList().AsReadOnly();
+            });
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, parent.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habit.Children.Should().ContainSingle();
+        result.Value.Habit.Children[0].IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_CompletedOneTimeHabitWithoutLogToday_ReturnsCompleted()
+    {
+        var dueDate = Today.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Completed Task",
+            null,
+            null,
+            DueDate: dueDate)).Value;
+        var log = habit.Log(dueDate).Value;
+        var user = CreateTestUser();
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog> { log }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitFullDetailQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Habit.IsCompleted.Should().BeTrue();
     }
 }
