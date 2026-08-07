@@ -34,9 +34,12 @@ a one-line fix from reaching round seven on style alone."
 
 Six rules. All six bind. None is advisory, and none is negotiable mid-review.
 
-**1. Freeze the ruleset before round 1.** The dimensions and severity definitions in `rubric.md`
-are fixed at PR-open time and cannot move during the review. A bar you would like to raise
-mid-review is a follow-up ticket against the rubric, never a new bar this PR has to clear.
+**1. Freeze the ruleset before round 1.** Capture the PR's live `baseRefOid`, materialize
+`rubric.md` from that exact Git blob, and store both the OID and artifact path in the receipt.
+That snapshot supplies the dimensions and severity definitions for both rounds; never reload the
+mutable main-checkout copy in round 2. A head or base change invalidates the review and starts a
+fresh round 1. A bar raised after the captured base is a follow-up ticket against the rubric, never
+a new bar this review may apply.
 
 **2. Cross-vendor reviewer, fresh session.** Normal: Claude Opus 5 at `high`. `--codex-only`:
 Sol at `xhigh` in a **separate** session, and the run prints `DEGRADED: same-vendor review` in its
@@ -46,10 +49,12 @@ measurably favour their own family's output, and the bias extends across the who
 (arXiv 2603.04582, arXiv 2508.06709). The direction is corroborated; the magnitude in a real PR
 loop is **unmeasured**. State it that honestly, and never claim the degraded mode is unbiased.
 
-**3. Classify every finding at report time as Blocking or Non-blocking.** Blocking means it
-**breaks behaviour, security, or data integrity**. Everything else is **auto-filed as a follow-up
-Linear ticket** and never fixed in this PR. This is the severity floor. It is applied once, at
-report time, against the definition above, not renegotiated per round.
+**3. Apply the target repository's review floor, then classify each survivor as Blocking or
+Non-blocking.** `orbit-api/AGENTS.md` permits P0/P1 only: Critical maps to P0, High maps to P1,
+and Medium/Low/Info candidates are discarded before the receipt and create no ticket. For a
+surviving candidate, Blocking means it **breaks behaviour, security, or data integrity**.
+Everything else is **auto-filed as a follow-up Linear ticket** and never fixed in this PR. Apply
+the floor and classification once at report time; neither is renegotiated per round.
 
 **4. Diff-only scope.** Read `gh pr diff`. You are reviewing a diff, not a repository. Open a
 repository file only to resolve a symbol the diff itself cites. A defect reachable only by browsing
@@ -84,7 +89,7 @@ Concretely, before round 1:
 - Confirm this session did not write any of the code in the diff. If it did, **stop**: the review
   is invalid under rule 2. Fork-inherited context counts as the same session.
 - `cwd` is the main checkout of the repo the PR targets. Never a worktree, never the fixer's tree.
-- The inputs are the diff, `rubric.md`, and the PR title/body/linked ticket for intent, plus the
+- The inputs are the diff, the captured rubric artifact, and the PR title/body/linked ticket for intent, plus the
   targeted sibling-primary/paired-PR contract evidence permitted by rule 4 and nothing broader.
 
 ---
@@ -103,12 +108,18 @@ A bare number or blank scope is ambiguous across two repositories and must be re
 provides a repository-qualified selector or full PR URL; caller cwd never chooses the repository.
 
 ```bash
-gh pr view {N} --repo {OWNER/REPO} --json number,title,body,baseRefName,headRefName,files,labels
+gh pr view {N} --repo {OWNER/REPO} --json number,title,body,baseRefName,baseRefOid,headRefName,headRefOid,files,labels
 gh pr diff {N} --repo {OWNER/REPO} > <scratchpad>/pr-{N}.diff
+git show {baseRefOid}:.claude/skills/pr-review/rubric.md > <scratchpad>/pr-{N}-rubric.md
 ```
 
-Read `rubric.md` once, then classify the diff as **frontend** (`apps/`, `packages/`), **backend**
-(`orbit-api/src/`), or **both**. That classification gates which rubric dimensions apply.
+If the base object is not present locally, fetch that exact OID from `origin` before `git show`;
+never substitute the current working-tree rubric. Record `baseRefOid`, `headRefOid`, the rubric
+artifact path, and the complete live selected key/type evidence required by the target AGENTS.md.
+
+Read the captured rubric once, then classify repository-relative paths using the target repository:
+**frontend** is `apps/` or `packages/` in orbit-ui-mobile; **backend** is `src/` or `tests/` in
+orbit-api. A paired diff can be **both**. That classification gates which rubric dimensions apply.
 
 ### Round 1
 
@@ -116,7 +127,8 @@ Read `rubric.md` once, then classify the diff as **frontend** (`apps/`, `package
    never touches and record it as N/A with the reason. Do not invent findings to fill a dimension.
 2. Verify each candidate finding against the diff text before writing it down: quote the line you
    are claiming about. A finding you cannot anchor to a diff line does not get reported.
-3. Classify each survivor Blocking or Non-blocking by rule 3.
+3. Drop candidates below the target repository floor, then classify each survivor Blocking or
+   Non-blocking by rule 3.
 4. Write `findings.json`. **The list is now frozen.**
 5. File every Non-blocking finding as a follow-up Linear ticket (one per finding, title = the
    claim, body = file, line, and the rubric dimension). They are not fixed in this PR.
@@ -142,14 +154,16 @@ Read `rubric.md` once, then classify the diff as **frontend** (`apps/`, `package
 ```json
 {"reviewerKind":"independent","verdict":"BLOCKING","rounds":1,
  "reviewedHeadOid":"<full head SHA>","baseSha":"<full base SHA>",
+ "rubricBaseOid":"<full base SHA>","rubricArtifactPath":"<absolute snapshot path>",
  "artifactPath":"<absolute path to this file>",
  "findings":[{"id":"F1","severity":"High","file":"apps/web/hooks/use-streak.ts","line":42,
    "claim":"one sentence: what is wrong and what goes wrong if it ships","blocking":true}]}
 ```
 
-`severity` is descriptive and comes from the rubric's ladder. `blocking` is the decision, and it is
-the answer to rule 3's question alone: a High that does not break behaviour, security, or data
-integrity is `"blocking": false` and becomes a ticket.
+`severity` is descriptive and comes from the rubric's ladder. A candidate below the target
+repository floor never enters this array. `blocking` is the decision for a surviving candidate:
+a High that does not break behaviour, security, or data integrity is `"blocking": false` and
+becomes a ticket where the repository floor permits it.
 
 Round 2 rewrites the same receipt, sets `rounds` to 2, and adds
 `"status": "CLOSED" | "OPEN"` to every round-1 Blocking finding. Round-1 entries are never removed.
