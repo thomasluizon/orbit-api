@@ -239,6 +239,136 @@ public class GetHabitScheduleQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_GeneralHabitLoggedToday_MapsDatedCompletion()
+    {
+        var general = CreateTestHabit(
+            title: "General",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isGeneral: true);
+        general.Log(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(general);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, IsGeneral: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle().Which.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_GeneralHabitLoggedOnlyYesterday_MapsIncompleteToday()
+    {
+        var general = CreateTestHabit(
+            title: "General",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isGeneral: true);
+        general.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        SetupHabits(general);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, IsGeneral: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle().Which.IsCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_GeneralHabitWithSoftDeletedLogToday_MapsIncomplete()
+    {
+        var general = CreateTestHabit(
+            title: "General",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isGeneral: true);
+        var log = general.Log(Today).Value;
+        log.SoftDelete();
+        SetupHabits(general);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, IsGeneral: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle().Which.IsCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_NestedGeneralChildLoggedToday_MapsDatedCompletion()
+    {
+        var parent = CreateTestHabit(
+            title: "Parent",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isGeneral: true);
+        var child = CreateTestHabit(
+            title: "Child",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isGeneral: true,
+            parentHabitId: parent.Id);
+        child.Log(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(parent, child);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, IsGeneral: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var item = result.Value.Items.Should().ContainSingle().Which;
+        item.IsCompleted.Should().BeFalse();
+        item.Children.Should().ContainSingle().Which.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_IncludeGeneral_MapsDatedCompletion()
+    {
+        var scheduled = CreateTestHabit(title: "Scheduled", dueDate: Today);
+        var general = CreateTestHabit(
+            title: "General",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            isGeneral: true);
+        general.Log(Today).IsSuccess.Should().BeTrue();
+        IReadOnlyList<Habit> scheduledHabits = [scheduled];
+        IReadOnlyList<Habit> generalHabits = [general];
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(scheduledHabits, scheduledHabits, generalHabits);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId, Today, Today, IncludeGeneral: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle(h => h.Id == general.Id && h.IsCompleted);
+    }
+
+    [Fact]
+    public async Task Handle_NonGeneralOneTimeTaskLoggedYesterday_RetainsLifetimeCompletion()
+    {
+        var task = CreateTestHabit(
+            title: "One time task",
+            frequencyUnit: null,
+            frequencyQuantity: null,
+            dueDate: Today.AddDays(-1));
+        task.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        SetupHabits(task);
+
+        var result = await _handler.Handle(
+            new GetHabitScheduleQuery(UserId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Items.Should().ContainSingle().Which.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_PageBeyondTotal_ClampsToLastPage()
     {
         SetupHabits(CreateTestHabit(dueDate: Today));
