@@ -44,6 +44,8 @@ public class ConfirmAccountDeletionCommandHandler(
         var scheduledDate = user.HasProAccess && user.PlanExpiresAt.HasValue && user.PlanExpiresAt.Value > nowAtUtc
             ? user.PlanExpiresAt.Value.AddDays(7)
             : nowAtUtc.AddDays(7);
+        var maximumScheduledDate = nowAtUtc.AddDays(AppConstants.MaxDeletionGraceDays);
+        scheduledDate = scheduledDate < maximumScheduledDate ? scheduledDate : maximumScheduledDate;
 
         user.Deactivate(scheduledDate);
         await unitOfWork.SaveChangesAsync(cancellationToken);
