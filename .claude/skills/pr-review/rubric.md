@@ -244,7 +244,9 @@ is the same violation as the loud version.
 
 What dimensions 5 and 6 do not already carry. **Timezone**: user-facing dates use
 `IUserDateService.GetUserTodayAsync(userId)`, never `DateOnly.FromDateTime(DateTime.UtcNow)`, which is for
-`CreatedAtUtc` and cache keys only. **Validator placement**: `Orbit.Application/<Feature>/Validators/`.
+`CreatedAtUtc` and cache keys only. A background schedule window, notification cutoff, or streak
+calculation must derive `today` per user timezone and carry a boundary-hour unit test; server-local or
+one-global-timezone behavior is a P1 finding. **Validator placement**: `Orbit.Application/<Feature>/Validators/`.
 **Result flow**: `Result<T>` propagated correctly (`PropagateError<T>()`, `ToPayGateAwareResult()`), with no
 catch block that swallows an error silently. **Test scope**: every new command or query handler, validator,
 and service has a unit test, and unit is all there is, so never ask for an integration or E2E suite.

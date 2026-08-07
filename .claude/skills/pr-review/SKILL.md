@@ -1,7 +1,7 @@
 ---
 name: pr-review
 description: Capped two-round review of ONE PR diff against rubric.md, by a session that did not write the code. Use when asked to review a PR in orbit-ui-mobile or orbit-api.
-argument-hint: <pr-number | api#N | pr-url | blank=current branch's PR>
+argument-hint: <ui#N | api#N | pr-url>
 ---
 
 # PR Review
@@ -37,9 +37,11 @@ Six rules. All six bind. None is advisory, and none is negotiable mid-review.
 **1. Freeze the ruleset before round 1.** Capture the PR's live `baseRefOid`, materialize
 `rubric.md` from that exact Git blob, and store both the OID and artifact path in the receipt.
 That snapshot supplies the dimensions and severity definitions for both rounds; never reload the
-mutable main-checkout copy in round 2. A head or base change invalidates the review and starts a
-fresh round 1. A bar raised after the captured base is a follow-up ticket against the rubric, never
-a new bar this review may apply.
+mutable main-checkout copy in round 2. A base change or an unexpected head change invalidates the
+review and starts a fresh round 1. The single prescribed round-1-to-round-2 fixer head change keeps
+the frozen receipt only when the reviewer is handed that receipt plus both exact head OIDs; any
+other head transition restarts round 1. A bar raised after the captured base is a follow-up ticket
+against the rubric, never a new bar this review may apply.
 
 **2. Cross-vendor reviewer, fresh session.** Normal: Claude Opus 5 at `high`. `--codex-only`:
 Sol at `xhigh` in a **separate** session, and the run prints `DEGRADED: same-vendor review` in its
@@ -136,7 +138,9 @@ orbit-api. A paired diff can be **both**. That classification gates which rubric
 
 ### Round 2
 
-1. Compute the fixer's line set: `git diff <r1-sha>..<r2-sha> --unified=0`. Pass it as data.
+1. Fetch both exact reviewed head OIDs from `origin`, verify both objects exist, then compute the
+   fixer's line set: `git diff <r1-sha>..<r2-sha> --unified=0`. Pass it as data. Never assume either
+   head object is already present in the mandated main checkout.
 2. For each frozen Blocking finding, answer `CLOSED` or `OPEN` with the line that settles it.
 3. A new finding is admissible **only** if its line is in the round-2 line set from step 1, and it
    is Blocking. Append every admitted new blocker to `findings.json` with `status: "OPEN"`; it is
