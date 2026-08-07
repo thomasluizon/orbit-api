@@ -7,7 +7,8 @@ namespace Orbit.Application.Common;
 public class PayGateService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
-    IAppConfigService appConfig) : IPayGateService
+    IAppConfigService appConfig,
+    IUnitOfWork unitOfWork) : IPayGateService
 {
     public async Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default)
     {
@@ -65,6 +66,39 @@ public class PayGateService(
         }
 
         return Result.Success();
+    }
+
+    public async Task<Result> TryConsumeAiMessage(Guid userId, CancellationToken ct = default)
+    {
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
+
+        var consumption = await ConcurrencyRetry.ExecuteAsync(
+            userRepository,
+            unitOfWork,
+            token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
+            user =>
+            {
+                if (!IsProductionSmokeAccount(user.Email))
+                {
+                    var messageLimit = (user.HasProAccess ? proLimit : freeLimit) + user.AdRewardBonusMessages;
+                    if (user.AiMessagesUsedThisMonth >= messageLimit)
+                    {
+                        var errorMessage = user.HasProAccess
+                            ? $"You've reached your monthly AI message limit ({messageLimit})."
+                            : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+
+                        return Task.FromResult(Result.PayGateFailure(errorMessage));
+                    }
+                }
+
+                user.IncrementAiMessageCount();
+                return Task.FromResult(Result.Success());
+            },
+            ErrorMessages.UserNotFound,
+            ct);
+
+        return consumption.IsSuccess ? Result.Success() : consumption.PropagateError();
     }
 
     public async Task<Result> CanUseDailySummary(Guid userId, CancellationToken ct = default)

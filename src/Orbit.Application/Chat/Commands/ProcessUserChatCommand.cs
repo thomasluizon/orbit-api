@@ -266,9 +266,6 @@ public partial class ProcessUserChatCommandHandler(
     [LoggerMessage(EventId = 20, Level = LogLevel.Debug, Message = "Saving changes to database...")]
     private static partial void LogSavingChanges(ILogger logger);
 
-    [LoggerMessage(EventId = 22, Level = LogLevel.Warning, Message = "Background message counter increment failed")]
-    private static partial void LogBackgroundMessageCounterFailed(ILogger logger, Exception ex);
-
     [LoggerMessage(EventId = 24, Level = LogLevel.Information, Message = "Tool {Name} requested clarification (operationId={OperationId}, missing={MissingKey})")]
     private static partial void LogClarificationRequested(ILogger logger, string name, Guid operationId, string missingKey);
 

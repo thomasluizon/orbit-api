@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
-using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -49,7 +48,7 @@ public partial class ProcessUserChatCommandHandler
     }
 
     /// <summary>
-    /// Fires off background work for fact extraction and AI message counter increment.
+    /// Fires off background work for fact extraction.
     /// Runs in a separate DI scope so it doesn't block the response.
     /// </summary>
     private void RunBackgroundPostResponseWork(
@@ -59,19 +58,15 @@ public partial class ProcessUserChatCommandHandler
         bool shouldExtractFacts,
         IReadOnlyList<UserFact> existingFacts)
     {
+        if (!shouldExtractFacts)
+            return;
+
         _ = Task.Run(async () =>
         {
             try
             {
                 using var scope = execution.ServiceScopeFactory.CreateScope();
-                var bgUnitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                var bgUserRepo = scope.ServiceProvider.GetRequiredService<IGenericRepository<User>>();
-                var bgLogger = scope.ServiceProvider.GetRequiredService<ILogger<ProcessUserChatCommandHandler>>();
-
-                if (shouldExtractFacts)
-                    await SubmitFactExtractionBatchAsync(scope, userId, userMessage, aiMessage, existingFacts);
-
-                await IncrementAiMessageCountAsync(bgUserRepo, bgUnitOfWork, userId, bgLogger);
+                await SubmitFactExtractionBatchAsync(scope, userId, userMessage, aiMessage, existingFacts);
             }
             catch (Exception ex)
             {
@@ -90,31 +85,5 @@ public partial class ProcessUserChatCommandHandler
         var bgFactService = scope.ServiceProvider.GetRequiredService<IFactExtractionService>();
         await bgFactService.SubmitBatchAsync(userMessage: userMessage, aiResponse: aiMessage,
             existingFacts: existingFacts, userId: userId, cancellationToken: CancellationToken.None);
-    }
-
-    private static async Task IncrementAiMessageCountAsync(
-        IGenericRepository<User> bgUserRepo,
-        IUnitOfWork bgUnitOfWork,
-        Guid userId,
-        ILogger bgLogger)
-    {
-        try
-        {
-            await ConcurrencyRetry.ExecuteAsync(
-                bgUserRepo,
-                bgUnitOfWork,
-                ct => bgUserRepo.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct),
-                user =>
-                {
-                    user.IncrementAiMessageCount();
-                    return Task.FromResult(Result.Success());
-                },
-                ErrorMessages.UserNotFound,
-                CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            LogBackgroundMessageCounterFailed(bgLogger, ex);
-        }
     }
 }

@@ -7,6 +7,7 @@ using NSubstitute;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -63,12 +64,19 @@ public class ProcessUserChatCommandHandlerTests
 
     private ProcessUserChatCommandHandler CreateHandler(params IAiTool[] tools)
     {
+        return CreateHandler(_payGate, tools);
+    }
+
+    private ProcessUserChatCommandHandler CreateHandler(
+        IPayGateService payGate,
+        params IAiTool[] tools)
+    {
         var toolRegistry = new AiToolRegistry(tools);
         SetupOperationExecutor(toolRegistry);
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore, _streakGoalReadSyncer, _gamificationService);
+            _userDateService, _userStreakService, payGate, _unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore, _streakGoalReadSyncer, _gamificationService);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -208,8 +216,26 @@ public class ProcessUserChatCommandHandlerTests
     {
         user ??= User.Create("Thomas", "thomas@test.com").Value;
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>())
+        _payGate.TryConsumeAiMessage(UserId, Arg.Any<CancellationToken>())
             .Returns(payGatePass ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
+    }
+
+    private PayGateService CreateRealPayGate(User user)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var appConfig = Substitute.For<IAppConfigService>();
+        appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
+            .Returns(20);
+        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
+            .Returns(500);
+
+        return new PayGateService(_habitRepo, _userRepo, appConfig, _unitOfWork);
     }
 
     private static readonly AiConversationContext TestConversationContext = new()
@@ -259,6 +285,31 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TenConcurrentRequestsWithOneMessageRemaining_OnlyOneCallsAi()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (var i = 0; i < 19; i++)
+            user.IncrementAiMessageCount();
+
+        SetupAiResponse(new AiResponse { TextMessage = "Reserved response", ToolCalls = null });
+        var handler = CreateHandler(CreateRealPayGate(user));
+        var command = new ProcessUserChatCommand(UserId, "Hello AI");
+
+        var results = await Task.WhenAll(
+            Enumerable.Range(0, 10)
+                .Select(_ => handler.Handle(command, CancellationToken.None)));
+
+        results.Should().ContainSingle(result => result.IsSuccess);
+        results.Count(result => result.IsFailure && result.ErrorCode == Result.PayGateErrorCode).Should().Be(9);
+        user.AiMessagesUsedThisMonth.Should().Be(20);
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_AiServiceFails_ReturnsFailure()
     {
         SetupUserAndPayGate();
@@ -270,6 +321,34 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("AI service unavailable");
+    }
+
+    [Fact]
+    public async Task Handle_AiServiceFails_RetainsConsumedQuota()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (var i = 0; i < 19; i++)
+            user.IncrementAiMessageCount();
+
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                user.AiMessagesUsedThisMonth.Should().Be(20);
+                return Result.Failure<AiResponse>("AI service unavailable");
+            });
+        var handler = CreateHandler(CreateRealPayGate(user));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Hello AI"),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("AI service unavailable");
+        user.AiMessagesUsedThisMonth.Should().Be(20);
     }
 
     [Fact]
@@ -503,7 +582,7 @@ public class ProcessUserChatCommandHandlerTests
     public async Task Handle_NullUser_StillSucceeds()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         SetupAiResponse(new AiResponse { TextMessage = "Response", ToolCalls = null });
         var handler = CreateHandler();
 
@@ -1272,7 +1351,7 @@ public class ProcessUserChatCommandHandlerTests
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetAiMemory(false);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
         SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
         var handler = CreateHandler();
 
