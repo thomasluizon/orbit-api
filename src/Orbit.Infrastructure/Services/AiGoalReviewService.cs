@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -19,10 +20,11 @@ public sealed partial class AiGoalReviewService(
             return Result.Failure<string>(ErrorMessages.NoGoalsData);
 
         var languageName = LocaleHelper.GetAiLanguageName(language);
+        var sanitizedGoalsContext = PromptDataSanitizer.SanitizeBlock(goalsContext);
 
         var prompt = $"""
             GOALS DATA:
-            {goalsContext}
+            {sanitizedGoalsContext}
 
             RULES:
             - Write a natural-language review in {languageName}

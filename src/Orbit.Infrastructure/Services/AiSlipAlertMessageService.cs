@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -18,13 +19,14 @@ public sealed partial class AiSlipAlertMessageService(
         CancellationToken cancellationToken = default)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
+        var sanitizedHabitTitle = SanitizeHeadingTitle(habitTitle);
 
         var timeContext = peakHour.HasValue
             ? $"They tend to slip around {peakHour.Value}:00 on {dayOfWeek}s."
             : $"They tend to slip on {dayOfWeek}s (no specific time pattern).";
 
         var prompt = $"""
-            Bad habit: "{habitTitle}"
+            Bad habit: {PromptDataSanitizer.QuoteInline(habitTitle, 100)}
             Pattern: {timeContext}
 
             Generate a short, inspiring push notification to help them stay strong today.
@@ -60,7 +62,9 @@ public sealed partial class AiSlipAlertMessageService(
             if (lines.Length >= 2)
                 return Result.Success((lines[0], lines[1]));
 
-            var fallbackTitle = LocaleHelper.IsPortuguese(language) ? $"Fique atento: {habitTitle}" : $"Heads up: {habitTitle}";
+            var fallbackTitle = LocaleHelper.IsPortuguese(language)
+                ? $"Fique atento: {sanitizedHabitTitle}"
+                : $"Heads up: {sanitizedHabitTitle}";
             return Result.Success((fallbackTitle, lines[0]));
         }
         catch (Exception ex)
@@ -72,12 +76,16 @@ public sealed partial class AiSlipAlertMessageService(
 
     private static Result<(string Title, string Body)> GenerateFallback(string habitTitle, string language)
     {
+        var sanitizedHabitTitle = SanitizeHeadingTitle(habitTitle);
         return LocaleHelper.IsPortuguese(language)
-            ? Result.Success(($"Fique atento: {habitTitle}",
+            ? Result.Success(($"Fique atento: {sanitizedHabitTitle}",
                 "Você costuma deslizar por volta desse horário. Força -- você consegue!"))
-            : Result.Success(($"Heads up: {habitTitle}",
+            : Result.Success(($"Heads up: {sanitizedHabitTitle}",
                 "You tend to slip around this time. Stay strong -- you've got this!"));
     }
+
+    private static string SanitizeHeadingTitle(string habitTitle) =>
+        habitTitle.Length == 0 ? string.Empty : PromptDataSanitizer.SanitizeInline(habitTitle, 100);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "AI returned empty response for slip alert message")]
     private static partial void LogEmptySlipAlertResponse(ILogger logger);
