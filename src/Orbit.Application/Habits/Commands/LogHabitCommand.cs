@@ -48,7 +48,8 @@ public record LogHabitServices(
     IUserStreakService UserStreakService,
     IGamificationService GamificationService,
     IChallengeProgressService ChallengeProgressService,
-    IMediator Mediator);
+    IMediator Mediator,
+    IPayGateService? PayGate = null);
 
 public partial class LogHabitCommandHandler(
     LogHabitRepositories repos,
@@ -113,7 +114,12 @@ public partial class LogHabitCommandHandler(
         var attempt = 1;
         while (true)
         {
-            var unlogResult = habit.Unlog(targetDate);
+            var unlogResult = await HabitReactivationAllowance.ExecuteAsync(
+                habit.UserId,
+                HabitReactivationAllowance.IsRequiredForUnlog(habit),
+                services.PayGate,
+                () => habit.Unlog(targetDate),
+                cancellationToken);
             if (unlogResult.IsFailure)
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;

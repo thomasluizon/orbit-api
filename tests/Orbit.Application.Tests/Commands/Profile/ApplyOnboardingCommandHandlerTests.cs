@@ -71,6 +71,15 @@ public class ApplyOnboardingCommandHandlerTests
     private static ApplyHabitInput Habit(string title) =>
         new(title, null, null, FrequencyUnit.Day, 1);
 
+    private static Habit ExistingOneTimeTask(Guid userId, string title, bool completed)
+    {
+        var task = Orbit.Domain.Entities.Habit.Create(new HabitCreateParams(
+            userId, title, null, null, Today)).Value;
+        if (completed)
+            task.Log(Today).IsSuccess.Should().BeTrue();
+        return task;
+    }
+
     private static string SummaryCacheKey() =>
         $"summary:{UserId}:{Today:yyyy-MM-dd}:en";
 
@@ -175,6 +184,34 @@ public class ApplyOnboardingCommandHandlerTests
         result.Value.CreatedHabitCount.Should().Be(1);
         await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         user.HasCompletedOnboarding.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Apply_FreeUserWithCompletedTasks_CreatesFullRequestedSet()
+    {
+        var user = CreateFreeUser();
+        SetupUser(user);
+        var existingHabits = Enumerable.Range(1, 9)
+            .Select(index => ExistingOneTimeTask(user.Id, $"Finished task {index}", completed: true))
+            .Append(ExistingOneTimeTask(user.Id, "Live task", completed: false))
+            .ToList();
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => existingHabits.Count(
+                call.ArgAt<Expression<Func<Habit, bool>>>(0).Compile()));
+        var command = new ApplyOnboardingCommand(
+            UserId,
+            [Habit("One"), Habit("Two"), Habit("Three"), Habit("Four"), Habit("Five")],
+            null,
+            null,
+            null,
+            null);
+
+        var result = await CreateHandler().Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CreatedHabitCount.Should().Be(5);
     }
 
     [Fact]

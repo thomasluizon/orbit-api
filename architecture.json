@@ -2882,11 +2882,11 @@
       "Behaviors": 12,
       "Calendar": 16,
       "Challenges": 14,
-      "Chat": 57,
+      "Chat": 59,
       "ChecklistTemplates": 9,
-      "Common": 159,
+      "Common": 160,
       "Gamification": 33,
-      "Goals": 37,
+      "Goals": 38,
       "Habits": 80,
       "Marketing": 6,
       "Notifications": 16,
@@ -3221,7 +3221,8 @@
         "references": [
           "CreateGoalCommand",
           "CreateGoalCommandHandler",
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -3936,7 +3937,18 @@
         "references": [
           "CreateGoalCommand",
           "CreateGoalCommandHandler",
-          "Goal"
+          "Goal",
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "CreateGoalToolHabitLinkTests",
+        "file": "tests/Orbit.Application.Tests/Commands/Goals/CreateGoalCommandHandlerTests.cs",
+        "references": [
+          "CreateGoalCommand",
+          "CreateGoalCommandHandler",
+          "Goal",
+          "Habit"
         ]
       },
       {

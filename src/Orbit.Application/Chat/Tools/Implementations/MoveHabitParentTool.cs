@@ -1,11 +1,14 @@
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class MoveHabitParentTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator,
+    IGenericRepository<Habit> habitRepository) : IAiTool
 {
     public string Name => "move_habit_parent";
 
@@ -37,11 +40,15 @@ public class MoveHabitParentTool(
             parentId = parsedParentId;
         }
 
+        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
+        if (habit is null)
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
+
         var result = await mediator.Send(new MoveHabitParentCommand(userId, habitId, parentId), ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        return new ToolResult(true, EntityId: habitId.ToString());
+        return new ToolResult(true, EntityId: habitId.ToString(), EntityName: habit.Title);
     }
 }
