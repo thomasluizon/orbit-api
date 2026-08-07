@@ -36,13 +36,6 @@ public class SkipHabitCommandHandlerTests
             .Returns(Today);
     }
 
-    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
-    {
-        typeof(Habit)
-            .GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-    }
-
     [Fact]
     public async Task Handle_OneTimeTask_PostponesToTomorrow()
     {
@@ -213,8 +206,7 @@ public class SkipHabitCommandHandlerTests
             "Read",
             FrequencyUnit.Day,
             1,
-            DueDate: Today)).Value;
-        SetCreatedAtUtc(skippedHabit, Today.AddDays(-3));
+            DueDate: Today.AddDays(-3))).Value;
         skippedHabit.Log(Today.AddDays(-3), advanceDueDate: false);
         skippedHabit.Log(Today.AddDays(-2), advanceDueDate: false);
         skippedHabit.Log(Today.AddDays(-1), advanceDueDate: false);
@@ -225,8 +217,7 @@ public class SkipHabitCommandHandlerTests
             FrequencyUnit.Day,
             1,
             IsBadHabit: true,
-            DueDate: Today)).Value;
-        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+            DueDate: Today.AddDays(-1))).Value;
 
         skippedHabit.AddGoal(goal);
         badHabit.AddGoal(goal);

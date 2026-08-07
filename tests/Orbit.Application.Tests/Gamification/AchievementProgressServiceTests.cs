@@ -67,9 +67,8 @@ public class AchievementProgressServiceTests
     private static Habit CreateBadHabitWithAbstinenceStreak()
     {
         var habit = Habit.Create(
-            new HabitCreateParams(UserId, "Bad Habit", FrequencyUnit.Day, 1, Today, IsBadHabit: true)).Value;
-        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, Today.AddDays(-400).ToDateTime(TimeOnly.MinValue));
+            new HabitCreateParams(
+                UserId, "Bad Habit", FrequencyUnit.Day, 1, Today.AddDays(-400), IsBadHabit: true)).Value;
         return habit;
     }
 

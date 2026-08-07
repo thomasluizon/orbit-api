@@ -312,12 +312,50 @@ public class HabitMetricsCalculatorTests
         metrics.MonthlyCompletionRate.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Calculate_LegacyBadHabitScheduledForNextOccurrenceWithPreStartLog_HasNoMetricsYet(
+        int frequencyQuantity)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, frequencyQuantity,
+            IsBadHabit: true, DueDate: Today.AddDays(1))).Value;
+        habit.Log(Today, advanceDueDate: false);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
     [Fact]
     public void Calculate_BadHabitScheduledToday_StartsWithOneCleanDay()
     {
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(1);
+        metrics.LongestStreak.Should().Be(1);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_LegacyBadHabitCreatedEarlierAndScheduledToday_StartsToday()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 

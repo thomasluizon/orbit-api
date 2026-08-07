@@ -109,8 +109,7 @@ public class LogHabitLinkedGoalTests
             "Read",
             FrequencyUnit.Day,
             1,
-            DueDate: Today)).Value;
-        SetCreatedAtUtc(completedHabit, Today.AddDays(-3));
+            DueDate: Today.AddDays(-3))).Value;
         completedHabit.Log(Today.AddDays(-3), advanceDueDate: false);
         completedHabit.Log(Today.AddDays(-2), advanceDueDate: false);
         completedHabit.Log(Today.AddDays(-1), advanceDueDate: false);
@@ -121,8 +120,7 @@ public class LogHabitLinkedGoalTests
             FrequencyUnit.Day,
             1,
             IsBadHabit: true,
-            DueDate: Today)).Value;
-        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
+            DueDate: Today.AddDays(-1))).Value;
 
         completedHabit.AddGoal(goal);
         badHabit.AddGoal(goal);
