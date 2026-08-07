@@ -19,7 +19,7 @@ public class GoalStreakSyncServiceTests
     private static Habit CreateDailyHabit(string title, DateOnly createdOn, bool isBadHabit = false)
     {
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, title, FrequencyUnit.Day, 1, IsBadHabit: isBadHabit, DueDate: Today)).Value;
+            UserId, title, FrequencyUnit.Day, 1, IsBadHabit: isBadHabit, DueDate: createdOn)).Value;
         SetCreatedAtUtc(habit, createdOn);
         return habit;
     }
@@ -122,6 +122,18 @@ public class GoalStreakSyncServiceTests
         goal.AddHabit(CreateDailyHabit("Doom scrolling", Today.AddDays(-2), isBadHabit: true));
 
         GoalStreakSyncService.CalculateCurrentStreak(goal, Today).Should().Be(3);
+    }
+
+    [Fact]
+    public void CalculateCurrentStreak_FutureBadHabit_ReturnsZero()
+    {
+        var goal = CreateStreakGoal(30);
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
+        goal.AddHabit(habit);
+
+        GoalStreakSyncService.CalculateCurrentStreak(goal, Today).Should().Be(0);
     }
 
     [Fact]

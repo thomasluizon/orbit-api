@@ -47,6 +47,7 @@ public class GoalAiCacheInvalidationTests
         cache.Set(GoalReviewKey("en"), "stale review");
 
         var goalRepo = Substitute.For<IGenericRepository<Goal>>();
+        var habitRepo = Substitute.For<IGenericRepository<Habit>>();
         var payGate = Substitute.For<IPayGateService>();
         var userDateService = Substitute.For<IUserDateService>();
         var gamificationService = Substitute.For<IGamificationService>();
@@ -57,7 +58,7 @@ public class GoalAiCacheInvalidationTests
             .Returns(new DateOnly(2026, 7, 12));
 
         var handler = new CreateGoalCommandHandler(
-            goalRepo, payGate, userDateService, gamificationService, unitOfWork, cache,
+            goalRepo, habitRepo, payGate, userDateService, gamificationService, unitOfWork, cache,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
         var result = await handler.Handle(

@@ -21,7 +21,7 @@ public static class HabitMetricsCalculator
         TimeZoneInfo? userTimeZone = null)
     {
         var logDates = logs.Where(l => l.Value > 0).Select(l => l.Date).Distinct().ToHashSet();
-        var expectedDates = GenerateExpectedDates(habit, today, userTimeZone).ToList();
+        var expectedDates = GenerateExpectedDates(habit, logs, today, userTimeZone).ToList();
 
         var currentStreak = CalculateCurrentStreak(habit, expectedDates, logDates, today);
         var longestStreak = CalculateLongestStreak(habit, expectedDates, logDates);
@@ -49,10 +49,16 @@ public static class HabitMetricsCalculator
         return DateOnly.FromDateTime(userNow);
     }
 
-    private static List<DateOnly> GenerateExpectedDates(Habit habit, DateOnly today, TimeZoneInfo? userTimeZone = null)
+    private static List<DateOnly> GenerateExpectedDates(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        DateOnly today,
+        TimeZoneInfo? userTimeZone = null)
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
-        var habitStartDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
+        var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
+        var habitStartDate = habit.ScheduledStartDate
+            ?? ResolveLegacyStartDate(habit, logs, createdDate);
 
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
             return [habitStartDate];
@@ -61,6 +67,45 @@ public static class HabitMetricsCalculator
             return GenerateDayFilteredDates(habit, today, habitStartDate);
 
         return GenerateFrequencyBasedDates(habit, today, habitStartDate);
+    }
+
+    private static DateOnly ResolveLegacyStartDate(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        DateOnly createdDate)
+    {
+        var hasProgressingHistory = HasProgressingLegacyHistory(
+            habit,
+            logs,
+            createdDate);
+        return hasProgressingHistory ? createdDate : habit.DueDate;
+    }
+
+    private static bool HasProgressingLegacyHistory(
+        Habit habit,
+        IReadOnlyCollection<HabitLog> logs,
+        DateOnly createdDate)
+    {
+        if (habit.FrequencyUnit is null || habit.IsBadHabit)
+            return false;
+
+        var resolvedDates = logs
+            .Where(log => !log.IsDeleted)
+            .Select(log => log.Date)
+            .ToHashSet();
+        var firstCandidate = createdDate < habit.DueDate.AddDays(-MaxStreakHorizonDays)
+            ? habit.DueDate.AddDays(-MaxStreakHorizonDays)
+            : createdDate;
+        var candidateCount = habit.DueDate.DayNumber - firstCandidate.DayNumber;
+        if (candidateCount <= 0)
+            return false;
+
+        var expectedBeforeDue = Enumerable.Range(0, candidateCount)
+            .Select(firstCandidate.AddDays)
+            .Where(date => HabitScheduleService.IsHabitHistoricallyDueOnDate(habit, date, createdDate))
+            .ToList();
+
+        return expectedBeforeDue.Count > 0 && expectedBeforeDue.All(resolvedDates.Contains);
     }
 
     private static List<DateOnly> GenerateDayFilteredDates(Habit habit, DateOnly today, DateOnly startDate)

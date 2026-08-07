@@ -41,13 +41,6 @@ public class GetGoalMetricsQueryHandlerTests
             .Returns((goal is null ? new List<Goal>() : [goal]).AsReadOnly());
     }
 
-    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
-    {
-        typeof(Habit)
-            .GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-    }
-
     [Fact]
     public async Task Handle_GoalFound_ReturnsMetrics()
     {
@@ -120,9 +113,8 @@ public class GetGoalMetricsQueryHandlerTests
             FrequencyUnit.Day,
             1,
             IsBadHabit: true,
-            DueDate: Today)).Value;
+            DueDate: Today.AddDays(-1))).Value;
 
-        SetCreatedAtUtc(badHabit, Today.AddDays(-1));
         badHabit.AddGoal(goal);
         goal.AddHabit(badHabit);
         ArrangeGoal(goal);

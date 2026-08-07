@@ -52,9 +52,10 @@ public class AchievementProgressServiceTests
     /// </summary>
     private static Habit CreateHabitWithStreak(int streakDays)
     {
-        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, Today)).Value;
+        var startDate = Today.AddDays(-400);
+        var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, startDate)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, Today.AddDays(-400).ToDateTime(TimeOnly.MinValue));
+            .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue));
         for (var day = 0; day < streakDays; day++)
             habit.Log(Today.AddDays(-day), advanceDueDate: false);
         return habit;
@@ -67,9 +68,8 @@ public class AchievementProgressServiceTests
     private static Habit CreateBadHabitWithAbstinenceStreak()
     {
         var habit = Habit.Create(
-            new HabitCreateParams(UserId, "Bad Habit", FrequencyUnit.Day, 1, Today, IsBadHabit: true)).Value;
-        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, Today.AddDays(-400).ToDateTime(TimeOnly.MinValue));
+            new HabitCreateParams(
+                UserId, "Bad Habit", FrequencyUnit.Day, 1, Today.AddDays(-400), IsBadHabit: true)).Value;
         return habit;
     }
 

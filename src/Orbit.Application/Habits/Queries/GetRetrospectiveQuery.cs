@@ -59,7 +59,11 @@ public class GetRetrospectiveQueryHandler(
         if (gateCheck.IsFailure)
             return gateCheck.PropagateError<RetrospectiveResponse>();
 
-        var cacheKey = $"retro:v2:{request.UserId}:{request.Period}:{request.DateFrom}:{request.Language}";
+        var cacheKey = RetrospectiveCacheKey.Build(
+            request.UserId,
+            request.Period,
+            request.DateFrom,
+            request.Language);
 
         if (cache.TryGetValue(cacheKey, out RetrospectiveResponse? cached) && cached is not null)
             return Result.Success(cached with { FromCache = true });

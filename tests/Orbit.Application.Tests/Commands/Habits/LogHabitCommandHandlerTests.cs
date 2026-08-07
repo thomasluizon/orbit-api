@@ -5,7 +5,10 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Challenges.Services;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Habits.Queries;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -208,6 +211,56 @@ public class LogHabitCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         _cache.TryGetValue(cacheKey, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_LogInvalidatesCachedRetrospective_SoNextReadIsFresh()
+    {
+        var habit = CreateTestHabit();
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new[] { habit });
+
+        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve("week", Today, weekStartDay: 1);
+        var cacheKey = RetrospectiveCacheKey.Build(UserId, "week", dateFrom, "en");
+        var staleNarrative = new RetrospectiveNarrative("Stale", "", "", "");
+        var emptyMetrics = new RetrospectiveMetrics(0, 0, 0, 0, 0, 0, 0, 0, new int[7], [], []);
+        _cache.Set(cacheKey, new RetrospectiveResponse("week", emptyMetrics, staleNarrative, FromCache: false));
+
+        var payGate = Substitute.For<IPayGateService>();
+        var retrospectiveService = Substitute.For<IRetrospectiveService>();
+        var freshNarrative = new RetrospectiveNarrative("Fresh", "", "", "");
+        payGate.CanUseRetrospective(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        retrospectiveService.GenerateRetrospectiveAsync(
+            Arg.Any<List<Habit>>(),
+            dateFrom,
+            dateTo,
+            "week",
+            "en",
+            Arg.Any<CancellationToken>())
+            .Returns(Result.Success(freshNarrative));
+        var queryHandler = new GetRetrospectiveQueryHandler(
+            _habitRepo,
+            payGate,
+            retrospectiveService,
+            _userStreakService,
+            _cache);
+
+        await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+        var result = await queryHandler.Handle(
+            new GetRetrospectiveQuery(UserId, dateFrom, dateTo, "week", "en"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.FromCache.Should().BeFalse();
+        result.Value.Narrative.Should().Be(freshNarrative);
     }
 
     [Fact]

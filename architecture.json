@@ -2675,7 +2675,7 @@
       "Challenges": 15,
       "Chat": 79,
       "ChecklistTemplates": 5,
-      "Common": 33,
+      "Common": 34,
       "Gamification": 26,
       "Goals": 33,
       "Habits": 74,
@@ -2882,12 +2882,12 @@
       "Behaviors": 12,
       "Calendar": 16,
       "Challenges": 14,
-      "Chat": 57,
+      "Chat": 59,
       "ChecklistTemplates": 9,
-      "Common": 161,
+      "Common": 163,
       "Gamification": 33,
-      "Goals": 37,
-      "Habits": 80,
+      "Goals": 38,
+      "Habits": 81,
       "Marketing": 6,
       "Notifications": 16,
       "Profile": 38,
@@ -3221,7 +3221,8 @@
         "references": [
           "CreateGoalCommand",
           "CreateGoalCommandHandler",
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -3936,7 +3937,18 @@
         "references": [
           "CreateGoalCommand",
           "CreateGoalCommandHandler",
-          "Goal"
+          "Goal",
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "CreateGoalToolHabitLinkTests",
+        "file": "tests/Orbit.Application.Tests/Commands/Goals/CreateGoalCommandHandlerTests.cs",
+        "references": [
+          "CreateGoalCommand",
+          "CreateGoalCommandHandler",
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -4099,6 +4111,8 @@
         "testClass": "LogHabitCommandHandlerTests",
         "file": "tests/Orbit.Application.Tests/Commands/Habits/LogHabitCommandHandlerTests.cs",
         "references": [
+          "GetRetrospectiveQuery",
+          "GetRetrospectiveQueryHandler",
           "Goal",
           "Habit",
           "HabitLog",
@@ -7317,6 +7331,20 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiIntentServiceTests.cs",
         "references": [
           "Habit"
+        ]
+      },
+      {
+        "testClass": "AiPromptSanitizationTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AiPromptSanitizationTests.cs",
+        "references": [
+          "Goal"
+        ]
+      },
+      {
+        "testClass": "PromptCaptureHandler",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AiPromptSanitizationTests.cs",
+        "references": [
+          "Goal"
         ]
       },
       {

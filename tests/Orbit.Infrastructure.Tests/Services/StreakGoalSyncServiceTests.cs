@@ -141,9 +141,10 @@ public class StreakGoalSyncServiceTests
 
     private static Habit CreateDailyHabitLoggedLastDays(Guid userId, int days)
     {
+        var startDate = Today.AddDays(-(days - 1));
         var habit = Habit.Create(new HabitCreateParams(
-            userId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        SetCreatedAtUtc(habit, Today.AddDays(-(days - 1)));
+            userId, "Meditate", FrequencyUnit.Day, 1, DueDate: startDate)).Value;
+        SetCreatedAtUtc(habit, startDate);
         for (var offset = days - 1; offset >= 0; offset--)
             habit.Log(Today.AddDays(-offset), advanceDueDate: false);
         return habit;
