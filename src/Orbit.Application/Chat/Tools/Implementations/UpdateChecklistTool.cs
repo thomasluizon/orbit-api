@@ -1,12 +1,15 @@
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 using Orbit.Domain.ValueObjects;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateChecklistTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator,
+    IGenericRepository<Habit> habitRepository) : IAiTool
 {
     public string Name => "update_checklist";
 
@@ -47,6 +50,10 @@ public class UpdateChecklistTool(
         if (!args.TryGetProperty("checklist_items", out var itemsEl) || itemsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "checklist_items is required and must be an array.");
 
+        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
+        if (habit is null)
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
+
         var items = JsonArgumentParser.ParseChecklistItems(args) ?? new List<ChecklistItem>();
 
         var result = await mediator.Send(new UpdateChecklistCommand(userId, habitId, items), ct);
@@ -54,6 +61,6 @@ public class UpdateChecklistTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        return new ToolResult(true, EntityId: habitId.ToString());
+        return new ToolResult(true, EntityId: habitId.ToString(), EntityName: habit.Title);
     }
 }

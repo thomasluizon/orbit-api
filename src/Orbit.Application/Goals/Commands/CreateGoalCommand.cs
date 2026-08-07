@@ -17,10 +17,12 @@ public record CreateGoalCommand(
     string Unit,
     DateOnly? Deadline,
     int Position = 0,
-    GoalType Type = GoalType.Standard) : IRequest<Result<Guid>>, IIdempotentCommand;
+    GoalType Type = GoalType.Standard,
+    IReadOnlyList<Guid>? HabitIds = null) : IRequest<Result<Guid>>, IIdempotentCommand;
 
 public partial class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
+    IGenericRepository<Habit> habitRepository,
     IPayGateService payGate,
     IUserDateService userDateService,
     IGamificationService gamificationService,
@@ -52,6 +54,24 @@ public partial class CreateGoalCommandHandler(
             return goalResult.PropagateError<Guid>();
 
         var goal = goalResult.Value;
+
+        if (request.HabitIds is { Count: > 0 } habitIds)
+        {
+            if (habitIds.Count > AppConstants.MaxHabitsPerGoal)
+                return Result.Failure<Guid>(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal));
+
+            var habits = await habitRepository.FindTrackedAsync(
+                h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
+                cancellationToken);
+
+            var habitsResolved = OwnershipValidation.AllResolved(habitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
+            if (habitsResolved.IsFailure)
+                return habitsResolved.PropagateError<Guid>();
+
+            foreach (var habit in habits)
+                goal.AddHabit(habit);
+        }
+
         await goalRepository.AddAsync(goal, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

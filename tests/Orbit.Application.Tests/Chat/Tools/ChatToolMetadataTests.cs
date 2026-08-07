@@ -46,7 +46,7 @@ public class ChatToolMetadataTests
         var updateGoalProgressTool = new UpdateGoalProgressTool(Repo<Goal>(), Repo<GoalProgressLog>(), unitOfWork);
         var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), gamificationService, unitOfWork, logger);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
-        var updateHabitTool = new UpdateHabitTool(Repo<Habit>());
+        var updateHabitTool = new UpdateHabitTool(Repo<Habit>(), userDateService);
         var listTagsTool = new ListTagsTool(mediator);
         var createTagTool = new CreateTagTool(mediator);
         var updateTagTool = new UpdateTagTool(mediator);
