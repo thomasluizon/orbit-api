@@ -11,6 +11,8 @@ public sealed partial class AiGoalReviewService(
     AiCompletionClient aiClient,
     ILogger<AiGoalReviewService> logger) : IGoalReviewService
 {
+    private const int MaxGoalDataLineLength = 500;
+
     public async Task<Result<string>> GenerateReviewAsync(
         string goalsContext,
         string language,
@@ -20,7 +22,13 @@ public sealed partial class AiGoalReviewService(
             return Result.Failure<string>(ErrorMessages.NoGoalsData);
 
         var languageName = LocaleHelper.GetAiLanguageName(language);
-        var sanitizedGoalsContext = PromptDataSanitizer.SanitizeBlock(goalsContext, goalsContext.Length);
+        var sanitizedGoalsContext = string.Join(
+            '\n',
+            goalsContext
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Replace('\r', '\n')
+                .Split('\n')
+                .Select(line => PromptDataSanitizer.QuoteInline(line, MaxGoalDataLineLength)));
 
         var prompt = $"""
             GOALS DATA:
