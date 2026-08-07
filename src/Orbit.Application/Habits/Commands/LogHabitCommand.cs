@@ -55,7 +55,8 @@ public partial class LogHabitCommandHandler(
     LogHabitServices services,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
-    ILogger<LogHabitCommandHandler> logger) : IRequestHandler<LogHabitCommand, Result<LogHabitResponse>>
+    ILogger<LogHabitCommandHandler> logger,
+    IPayGateService? payGate = null) : IRequestHandler<LogHabitCommand, Result<LogHabitResponse>>
 {
     private const int MaxLogAttempts = 3;
 
@@ -81,10 +82,22 @@ public partial class LogHabitCommandHandler(
 
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
+        {
+            if (habit.IsCompleted && habit.ParentHabitId is null)
+            {
+                var allowanceGate = await GetPayGate().CanCreateHabits(request.UserId, 1, cancellationToken);
+                if (allowanceGate.IsFailure)
+                    return allowanceGate.PropagateError<LogHabitResponse>();
+            }
+
             return await HandleUnlogAsync(habit, targetDate, today, cancellationToken);
+        }
 
         return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
     }
+
+    private IPayGateService GetPayGate() =>
+        payGate ?? throw new InvalidOperationException("Habit reactivation allowance service is not configured.");
 
     private static Result ValidateTargetDate(Habit habit, DateOnly targetDate, DateOnly today)
     {

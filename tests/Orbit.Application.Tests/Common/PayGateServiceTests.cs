@@ -1,9 +1,14 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Orbit.Application.Challenges.Services;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Common;
@@ -17,6 +22,7 @@ public class PayGateServiceTests
     private readonly PayGateService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly ReactivationToday = new(2026, 8, 5);
 
     public PayGateServiceTests()
     {
@@ -147,6 +153,105 @@ public class PayGateServiceTests
     }
 
     [Fact]
+    public async Task UnlogCompletedTask_FreeUserAtLimit_RejectsWithoutChangingState()
+    {
+        ConfigureFreeUserAtHabitCap();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Finished task", null, null, ReactivationToday)).Value;
+        habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
+
+        var habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+        var goalRepo = Substitute.For<IGenericRepository<Goal>>();
+        var userDateService = Substitute.For<IUserDateService>();
+        var userStreakService = Substitute.For<IUserStreakService>();
+        var gamificationService = Substitute.For<IGamificationService>();
+        var challengeProgressService = Substitute.For<IChallengeProgressService>();
+        var mediator = Substitute.For<MediatR.IMediator>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(ReactivationToday);
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(CreateFreeUser());
+        var handler = new LogHabitCommandHandler(
+            new LogHabitRepositories(_habitRepo, habitLogRepo, goalRepo, _userRepo),
+            new LogHabitServices(
+                userDateService, userStreakService, gamificationService, challengeProgressService, mediator),
+            unitOfWork,
+            cache,
+            Substitute.For<ILogger<LogHabitCommandHandler>>(),
+            _sut);
+
+        var result = await handler.Handle(
+            new LogHabitCommand(UserId, habit.Id, ReactivationToday), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+        habit.IsCompleted.Should().BeTrue();
+        habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeFalse();
+        await unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EndDateReactivation_FreeUserAtLimit_RejectsWithoutChangingState(bool clearEndDate)
+    {
+        ConfigureFreeUserAtHabitCap();
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Finished recurring habit",
+            FrequencyUnit.Day,
+            1,
+            ReactivationToday,
+            EndDate: ReactivationToday)).Value;
+        habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
+        var originalDueDate = habit.DueDate;
+        var sentReminderRepo = Substitute.For<IGenericRepository<SentReminder>>();
+        var goalRepo = Substitute.For<IGenericRepository<Goal>>();
+        var userDateService = Substitute.For<IUserDateService>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        var handler = new UpdateHabitCommandHandler(
+            _habitRepo, sentReminderRepo, goalRepo, _sut, userDateService, unitOfWork, cache);
+        var options = clearEndDate
+            ? null
+            : new UpdateHabitCommandOptions(EndDate: ReactivationToday.AddDays(7));
+        var command = new UpdateHabitCommand(
+            UserId,
+            habit.Id,
+            "Changed title",
+            null,
+            FrequencyUnit.Day,
+            1,
+            ClearEndDate: clearEndDate,
+            Options: options);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+        habit.Title.Should().Be("Finished recurring habit");
+        habit.IsCompleted.Should().BeTrue();
+        habit.DueDate.Should().Be(originalDueDate);
+        habit.EndDate.Should().Be(ReactivationToday);
+        await unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task CanCreateHabits_UserNotFound_Failure()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
@@ -155,6 +260,17 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
+    }
+
+    private void ConfigureFreeUserAtHabitCap()
+    {
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(10);
     }
 
     [Fact]
@@ -343,7 +459,7 @@ public class PayGateServiceTests
     [Fact]
     public async Task CanUseRetrospective_MonthlyProUser_PayGateFailure()
     {
-        var user = CreateProUser();        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var user = CreateProUser(); _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.CanUseRetrospective(UserId);
 
@@ -475,7 +591,7 @@ public class PayGateServiceTests
     public async Task CanCreateHabits_TrialUser_HasProAccess()
     {
         var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(7));        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        user.StartTrial(DateTime.UtcNow.AddDays(7)); _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.CanCreateHabits(UserId);
 
@@ -519,7 +635,8 @@ public class PayGateServiceTests
 
         var limit = await _sut.GetAiMessageLimit(UserId);
 
-        limit.Should().Be(25);    }
+        limit.Should().Be(25);
+    }
 
     [Fact]
     public async Task CanCreateHabits_FreeUser_BulkCreate_ExceedsLimit_PayGateFailure()

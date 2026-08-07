@@ -71,6 +71,13 @@ public class UpdateHabitCommandHandler(
 
         var opts = request.Options ?? new UpdateHabitCommandOptions();
 
+        if (WouldReactivateTopLevelHabit(habit, request, opts))
+        {
+            var allowanceGate = await payGate.CanCreateHabits(request.UserId, 1, cancellationToken);
+            if (allowanceGate.IsFailure)
+                return allowanceGate;
+        }
+
         var result = habit.Update(new HabitUpdateParams(
             request.Title,
             request.Description,
@@ -111,6 +118,19 @@ public class UpdateHabitCommandHandler(
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
+    }
+
+    private static bool WouldReactivateTopLevelHabit(
+        Habit habit, UpdateHabitCommand request, UpdateHabitCommandOptions options)
+    {
+        if (!habit.IsCompleted || habit.ParentHabitId is not null || request.FrequencyUnit is null)
+            return false;
+
+        if (request.ClearEndDate == true)
+            return true;
+
+        var dueDate = request.DueDate ?? habit.DueDate;
+        return options.EndDate.HasValue && dueDate <= options.EndDate.Value;
     }
 
     /// <summary>
