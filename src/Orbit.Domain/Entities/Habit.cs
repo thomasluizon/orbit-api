@@ -166,7 +166,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public Result<HabitLog> Log(DateOnly date, string? note = null, bool advanceDueDate = true)
     {
-        if (IsCompleted)
+        if (IsCompleted && !IsGeneral)
             return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
 
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
@@ -175,11 +175,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var log = HabitLog.Create(Id, date, 1, note);
         _logs.Add(log);
 
-        if (FrequencyUnit is null)
+        if (FrequencyUnit is null && !IsGeneral)
         {
             IsCompleted = true;
         }
-        else if (!IsFlexible && advanceDueDate)
+        else if (FrequencyUnit is not null && !IsFlexible && advanceDueDate)
         {
             AdvanceDueDate(date);
 
@@ -289,6 +289,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public Result<HabitLog> Unlog(DateOnly date)
     {
         var log = _logs.Find(l => l.Date == date && l.Value > 0 && !l.IsDeleted);
+        if (log is null && IsGeneral)
+            log = _logs.FindLast(l => l.Value > 0 && !l.IsDeleted);
+
         if (log is null)
             return Result.Failure<HabitLog>(DomainErrors.LogNotFoundForDate);
 
