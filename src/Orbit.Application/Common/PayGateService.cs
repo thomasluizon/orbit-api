@@ -7,8 +7,7 @@ namespace Orbit.Application.Common;
 public class PayGateService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
-    IAppConfigService appConfig,
-    IUnitOfWork unitOfWork) : IPayGateService
+    IAppConfigService appConfig) : IPayGateService
 {
     public async Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default)
     {
@@ -68,7 +67,10 @@ public class PayGateService(
         return Result.Success();
     }
 
-    public async Task<Result> TryConsumeAiMessage(Guid userId, CancellationToken ct = default)
+    public async Task<Result> TryConsumeAiMessage(
+        Guid userId,
+        IUnitOfWork unitOfWork,
+        CancellationToken ct = default)
     {
         var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
         var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);

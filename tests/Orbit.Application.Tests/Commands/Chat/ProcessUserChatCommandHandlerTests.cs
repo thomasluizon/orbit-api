@@ -216,7 +216,7 @@ public class ProcessUserChatCommandHandlerTests
     {
         user ??= User.Create("Thomas", "thomas@test.com").Value;
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.TryConsumeAiMessage(UserId, Arg.Any<CancellationToken>())
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
             .Returns(payGatePass ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
     }
 
@@ -235,7 +235,7 @@ public class ProcessUserChatCommandHandlerTests
         appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
             .Returns(500);
 
-        return new PayGateService(_habitRepo, _userRepo, appConfig, _unitOfWork);
+        return new PayGateService(_habitRepo, _userRepo, appConfig);
     }
 
     private static readonly AiConversationContext TestConversationContext = new()
@@ -582,7 +582,7 @@ public class ProcessUserChatCommandHandlerTests
     public async Task Handle_NullUser_StillSucceeds()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
-        _payGate.TryConsumeAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
         SetupAiResponse(new AiResponse { TextMessage = "Response", ToolCalls = null });
         var handler = CreateHandler();
 
@@ -1351,7 +1351,7 @@ public class ProcessUserChatCommandHandlerTests
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetAiMemory(false);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.TryConsumeAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
         SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
         var handler = CreateHandler();
 

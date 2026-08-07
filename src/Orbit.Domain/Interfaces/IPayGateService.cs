@@ -22,7 +22,10 @@ public interface IPayGateService
     /// <summary>
     /// Atomically consumes one AI message when the user has quota remaining.
     /// </summary>
-    Task<Result> TryConsumeAiMessage(Guid userId, CancellationToken ct = default);
+    Task<Result> TryConsumeAiMessage(
+        Guid userId,
+        IUnitOfWork unitOfWork,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Checks if the user can use daily AI summaries (Pro-only feature).

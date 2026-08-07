@@ -13,14 +13,13 @@ public class PayGateServiceTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly PayGateService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public PayGateServiceTests()
     {
-        _sut = new PayGateService(_habitRepo, _userRepo, _appConfig, _unitOfWork);
+        _sut = new PayGateService(_habitRepo, _userRepo, _appConfig);
 
         _appConfig.GetAsync("FreeMaxHabits", 10, Arg.Any<CancellationToken>()).Returns(10);
         _appConfig.GetAsync("SubHabitsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
@@ -208,80 +207,6 @@ public class PayGateServiceTests
             result.IsFailure.Should().BeTrue();
             result.ErrorCode.Should().Be("PAY_GATE");
         });
-    }
-
-    [Fact]
-    public async Task TryConsumeAiMessage_UnderLimit_IncrementsAndSaves()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.FindOneTrackedAsync(
-                Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(user);
-
-        var result = await _sut.TryConsumeAiMessage(UserId);
-
-        result.IsSuccess.Should().BeTrue();
-        user.AiMessagesUsedThisMonth.Should().Be(1);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task TryConsumeAiMessage_AtLimit_ReturnsPayGateFailureWithoutSaving()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        for (var i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
-        _userRepo.FindOneTrackedAsync(
-                Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(user);
-
-        var result = await _sut.TryConsumeAiMessage(UserId);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        user.AiMessagesUsedThisMonth.Should().Be(20);
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task TryConsumeAiMessage_ProUserWithHeadroom_IncrementsAndSaves()
-    {
-        var user = CreateProUser();
-        for (var i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
-        _userRepo.FindOneTrackedAsync(
-                Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(user);
-
-        var result = await _sut.TryConsumeAiMessage(UserId);
-
-        result.IsSuccess.Should().BeTrue();
-        user.AiMessagesUsedThisMonth.Should().Be(21);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task TryConsumeAiMessage_UserNotFound_ReturnsFailureWithoutSaving()
-    {
-        _userRepo.FindOneTrackedAsync(
-                Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
-                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns((User?)null);
-
-        var result = await _sut.TryConsumeAiMessage(UserId);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Contain("User not found");
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

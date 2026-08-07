@@ -43,7 +43,10 @@ public partial class ProcessUserChatCommandHandler
             activeGoals = loadedGoals;
         }
 
-        var messageGate = await execution.PayGateService.TryConsumeAiMessage(request.UserId, cancellationToken);
+        var messageGate = await execution.PayGateService.TryConsumeAiMessage(
+            request.UserId,
+            execution.UnitOfWork,
+            cancellationToken);
         if (messageGate.IsFailure)
             return messageGate.PropagateError<ChatContext>();
 
