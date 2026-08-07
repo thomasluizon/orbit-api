@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -18,6 +19,12 @@ namespace Orbit.Api.Extensions;
 
 public static partial class WebApplicationExtensions
 {
+    internal const string McpRateLimitPolicy = "mcp";
+    internal const string McpAiRateLimitPolicy = "mcp-ai";
+
+    private static readonly HashSet<string> AiBearingMcpTools =
+        new(StringComparer.OrdinalIgnoreCase) { "get_daily_summary", "get_retrospective" };
+
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
         if (!BuildTimeDocumentGeneration.IsActive)
@@ -124,7 +131,17 @@ public static partial class WebApplicationExtensions
         if (!await TryAuthenticateMcpRequestAsync(context))
             return;
 
-        if (!TryGetMcpToolCall(root, out var toolName, out var requestId, out var operationId, out var operationFingerprint))
+        var isToolCall = TryGetMcpToolCall(
+            root,
+            out var toolName,
+            out var requestId,
+            out var operationId,
+            out var operationFingerprint);
+
+        if (!await TryApplyMcpRateLimitsAsync(context, toolName, requestId))
+            return;
+
+        if (!isToolCall)
         {
             await next();
             return;
@@ -135,6 +152,55 @@ public static partial class WebApplicationExtensions
             next,
             body,
             new McpToolCallRequest(toolName!, requestId, operationId, operationFingerprint));
+    }
+
+    internal static async Task<bool> TryApplyMcpRateLimitsAsync(
+        HttpContext context,
+        string? toolName,
+        JsonElement? requestId)
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
+            return true;
+
+        var apiKeyId = context.User.FindFirstValue("api_key_id");
+        if (string.IsNullOrWhiteSpace(apiKeyId))
+            throw new InvalidOperationException("Authenticated MCP principal is missing the api_key_id claim.");
+
+        var partitionKey = $"api-key:{apiKeyId}";
+        var service = context.RequestServices.GetRequiredService<IDistributedRateLimitService>();
+
+        var decision = await service.TryAcquireAsync(
+            McpRateLimitPolicy,
+            partitionKey,
+            context.RequestAborted);
+        if (!decision.Allowed)
+        {
+            await WriteMcpRateLimitErrorAsync(
+                context,
+                requestId,
+                McpRateLimitPolicy,
+                partitionKey,
+                decision);
+            return false;
+        }
+
+        if (toolName is null || !AiBearingMcpTools.Contains(toolName))
+            return true;
+
+        var aiDecision = await service.TryAcquireAsync(
+            McpAiRateLimitPolicy,
+            partitionKey,
+            context.RequestAborted);
+        if (aiDecision.Allowed)
+            return true;
+
+        await WriteMcpRateLimitErrorAsync(
+            context,
+            requestId,
+            McpAiRateLimitPolicy,
+            partitionKey,
+            aiDecision);
+        return false;
     }
 
     internal static JsonDocument? TryParseMcpBody(string body)
@@ -434,6 +500,55 @@ public static partial class WebApplicationExtensions
         });
     }
 
+    private static async Task WriteMcpRateLimitErrorAsync(
+        HttpContext context,
+        JsonElement? requestId,
+        string policyName,
+        string partitionKey,
+        DistributedRateLimitDecision decision)
+    {
+        var now = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow().UtcDateTime;
+        var retryAfterSeconds = Math.Max(
+            1,
+            (int)Math.Ceiling((decision.WindowEndsAtUtc - now).TotalSeconds));
+
+        context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.Response.ContentType = "application/json";
+        context.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+        context.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.GetRequestId();
+
+        var logger = context.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger(typeof(WebApplicationExtensions));
+        LogMcpRateLimitRejected(
+            logger,
+            policyName,
+            partitionKey,
+            decision.CurrentCount,
+            decision.PermitLimit,
+            retryAfterSeconds,
+            context.GetRequestId());
+
+        await context.Response.WriteAsJsonAsync(new
+        {
+            jsonrpc = "2.0",
+            id = requestId,
+            error = new
+            {
+                code = -32002,
+                message = "rate_limit_exceeded",
+                data = new
+                {
+                    reason = "rate_limit_exceeded",
+                    policy = policyName,
+                    limit = decision.PermitLimit,
+                    count = decision.CurrentCount,
+                    retryAfterUtc = decision.WindowEndsAtUtc
+                }
+            }
+        });
+    }
+
     private static async Task TryAuditLegacyMcpAsync(
         IAgentAuditService auditService,
         HttpContext context,
@@ -473,6 +588,19 @@ public static partial class WebApplicationExtensions
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Failed to write MCP audit entry for {SourceName}. TraceId={TraceId}")]
     private static partial void LogLegacyMcpAuditWriteFailed(ILogger logger, Exception ex, string sourceName, string traceId);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "MCP rate limit rejected. Policy={PolicyName} PartitionKey={PartitionKey} Count={CurrentCount}/{PermitLimit} RetryAfterSeconds={RetryAfterSeconds} RequestId={RequestId}")]
+    private static partial void LogMcpRateLimitRejected(
+        ILogger logger,
+        string policyName,
+        string partitionKey,
+        int currentCount,
+        int permitLimit,
+        int retryAfterSeconds,
+        string requestId);
 
     private sealed record McpToolCallRequest(
         string ToolName,

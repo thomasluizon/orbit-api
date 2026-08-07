@@ -1,6 +1,14 @@
+using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Orbit.Api.Extensions;
+using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 
 namespace Orbit.Infrastructure.Tests.Extensions;
 
@@ -141,5 +149,145 @@ public class WebApplicationExtensionsMcpTests
         document.Should().BeNull();
         WebApplicationExtensions.TryGetMcpToolCall(
             document?.RootElement, out _, out _, out _, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TryApplyMcpRateLimitsAsync_ExhaustedKey_DoesNotAffectSecondKey()
+    {
+        var service = Substitute.For<IDistributedRateLimitService>();
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var partitionKey = call.ArgAt<string>(1);
+                counts.TryGetValue(partitionKey, out var count);
+                count++;
+                counts[partitionKey] = count;
+                return new DistributedRateLimitDecision(
+                    count <= 1,
+                    1,
+                    Math.Min(count, 1),
+                    DateTime.UtcNow.AddMinutes(1));
+            });
+
+        var firstKey = Guid.NewGuid();
+        var secondKey = Guid.NewGuid();
+
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            CreateRateLimitContext(service, firstKey),
+            "get_habits",
+            requestId: null)).Should().BeTrue();
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            CreateRateLimitContext(service, firstKey),
+            "get_habits",
+            requestId: null)).Should().BeFalse();
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            CreateRateLimitContext(service, secondKey),
+            "get_habits",
+            requestId: null)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TryApplyMcpRateLimitsAsync_DailySummary_HitsAiLimitBeforeGeneralLimit()
+    {
+        var service = Substitute.For<IDistributedRateLimitService>();
+        var aiCount = 0;
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpAiRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                aiCount++;
+                return new DistributedRateLimitDecision(
+                    aiCount <= 1,
+                    1,
+                    Math.Min(aiCount, 1),
+                    DateTime.UtcNow.AddMinutes(1));
+            });
+
+        var apiKeyId = Guid.NewGuid();
+        var allowedContext = CreateRateLimitContext(service, apiKeyId);
+        var rejectedContext = CreateRateLimitContext(service, apiKeyId);
+        using var requestIdDocument = JsonDocument.Parse("42");
+
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            allowedContext,
+            "get_daily_summary",
+            requestIdDocument.RootElement.Clone())).Should().BeTrue();
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            rejectedContext,
+            "get_daily_summary",
+            requestIdDocument.RootElement.Clone())).Should().BeFalse();
+
+        rejectedContext.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        rejectedContext.Response.Headers.RetryAfter.Should().NotBeEmpty();
+        rejectedContext.Response.Body.Position = 0;
+        using var responseDocument = await JsonDocument.ParseAsync(rejectedContext.Response.Body);
+        var error = responseDocument.RootElement.GetProperty("error");
+        error.GetProperty("message").GetString().Should().Be("rate_limit_exceeded");
+        error.GetProperty("data").GetProperty("policy").GetString()
+            .Should().Be(WebApplicationExtensions.McpAiRateLimitPolicy);
+
+        await service.Received(2).TryAcquireAsync(
+            WebApplicationExtensions.McpRateLimitPolicy,
+            $"api-key:{apiKeyId}",
+            Arg.Any<CancellationToken>());
+        await service.Received(2).TryAcquireAsync(
+            WebApplicationExtensions.McpAiRateLimitPolicy,
+            $"api-key:{apiKeyId}",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryApplyMcpRateLimitsAsync_UnauthenticatedRequest_DoesNotCallLimiter()
+    {
+        var service = Substitute.For<IDistributedRateLimitService>();
+        var context = CreateRateLimitContext(service, apiKeyId: null);
+
+        var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            context,
+            "get_daily_summary",
+            requestId: null);
+
+        allowed.Should().BeTrue();
+        await service.DidNotReceive().TryAcquireAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static DefaultHttpContext CreateRateLimitContext(
+        IDistributedRateLimitService service,
+        Guid? apiKeyId)
+    {
+        var services = new ServiceCollection()
+            .AddSingleton(service)
+            .AddSingleton(TimeProvider.System)
+            .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
+            .BuildServiceProvider();
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = services,
+            Response = { Body = new MemoryStream() }
+        };
+
+        if (apiKeyId.HasValue)
+        {
+            context.User = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim("api_key_id", apiKeyId.Value.ToString())],
+                "ApiKey"));
+        }
+
+        return context;
     }
 }

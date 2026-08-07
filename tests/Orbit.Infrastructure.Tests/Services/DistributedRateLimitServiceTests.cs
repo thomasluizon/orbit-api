@@ -132,6 +132,21 @@ public class DistributedRateLimitServiceTests : IDisposable
         otherUser.CurrentCount.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData("mcp", 60)]
+    [InlineData("mcp-ai", 15)]
+    public async Task TryAcquireAsync_McpPolicies_BlockAfterPermitLimit(string policyName, int permitLimit)
+    {
+        DistributedRateLimitDecision finalDecision = new(true, 0, 0, DateTime.UtcNow);
+
+        for (var attempt = 0; attempt <= permitLimit; attempt++)
+            finalDecision = await _service.TryAcquireAsync(policyName, "api-key:one");
+
+        finalDecision.Allowed.Should().BeFalse();
+        finalDecision.PermitLimit.Should().Be(permitLimit);
+        finalDecision.CurrentCount.Should().Be(permitLimit);
+    }
+
     [Fact]
     public async Task TryAcquireAsync_RelationalProvider_RetriesSerializationConflictThenSucceeds()
     {
