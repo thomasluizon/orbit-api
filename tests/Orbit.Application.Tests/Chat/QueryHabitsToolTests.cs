@@ -40,14 +40,15 @@ public class QueryHabitsToolTests
         var h1 = CreateHabit("Water", FrequencyUnit.Day, 1, dueDate: Today, position: 0);
         var h2 = CreateHabit("Read", FrequencyUnit.Week, 1, dueDate: Today, position: 1);
         var completed = CreateHabit("Done", null, null, dueDate: Today);
-        completed.Log(Today);        SetupHabits(h1, h2, completed);
+        completed.Log(Today); SetupHabits(h1, h2, completed);
 
         var result = await Execute("{}");
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Water");
         result.EntityName.Should().Contain("Read");
-        result.EntityName.Should().NotContain("Done");    }
+        result.EntityName.Should().NotContain("Done");
+    }
 
     [Fact]
     public async Task NoFilters_IncludesEmojiState()
@@ -195,7 +196,7 @@ public class QueryHabitsToolTests
     {
         var active = CreateHabit("Active", FrequencyUnit.Day, 1, dueDate: Today);
         var done = CreateHabit("Done", null, null, dueDate: Today);
-        done.Log(Today);        SetupHabits(active, done);
+        done.Log(Today); SetupHabits(active, done);
 
         var result = await Execute("""{"is_completed": true}""");
 
@@ -204,11 +205,47 @@ public class QueryHabitsToolTests
     }
 
     [Fact]
+    public async Task IsCompletedTrue_ReturnsGeneralHabitLoggedTodayWithCompletedLabel()
+    {
+        var completedToday = CreateHabit(
+            "Read someday",
+            null,
+            null,
+            dueDate: Today,
+            isGeneral: true);
+        completedToday.Log(Today).IsSuccess.Should().BeTrue();
+        SetupHabits(completedToday);
+
+        var result = await Execute("""{"is_completed": true}""");
+
+        result.EntityName.Should().Contain("Read someday");
+        result.EntityName.Should().Contain("[GENERAL | COMPLETED]");
+    }
+
+    [Fact]
+    public async Task IsCompletedTrue_ExcludesGeneralHabitLoggedBeforeToday()
+    {
+        var completedYesterday = CreateHabit(
+            "Read yesterday",
+            null,
+            null,
+            dueDate: Today,
+            isGeneral: true);
+        completedYesterday.Log(Today.AddDays(-1)).IsSuccess.Should().BeTrue();
+        SetupHabits(completedYesterday);
+
+        var result = await Execute("""{"is_completed": true}""");
+
+        result.EntityName.Should().Contain("No habits found");
+        result.EntityName.Should().NotContain("Read yesterday");
+    }
+
+    [Fact]
     public async Task DefaultExcludesCompleted()
     {
         var active = CreateHabit("Active", FrequencyUnit.Day, 1, dueDate: Today);
         var done = CreateHabit("Done", null, null, dueDate: Today);
-        done.Log(Today);        SetupHabits(active, done);
+        done.Log(Today); SetupHabits(active, done);
 
         var result = await Execute("{}");
 

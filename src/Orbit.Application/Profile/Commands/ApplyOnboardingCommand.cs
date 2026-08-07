@@ -147,7 +147,7 @@ public class ApplyOnboardingCommandHandler(
         var maxHabits = await appConfig.GetAsync(
             AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, cancellationToken);
         var existingRoots = await repos.Habits.CountAsync(
-            h => h.UserId == user.Id && h.ParentHabitId == null, cancellationToken);
+            h => h.UserId == user.Id && h.ParentHabitId == null && !h.IsCompleted, cancellationToken);
         var allowance = Math.Max(0, maxHabits - existingRoots);
 
         return allowance >= habits.Count ? habits : habits.Take(allowance).ToList();

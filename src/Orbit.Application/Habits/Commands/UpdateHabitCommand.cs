@@ -72,27 +72,37 @@ public class UpdateHabitCommandHandler(
         var opts = request.Options ?? new UpdateHabitCommandOptions();
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
-        var result = habit.Update(new HabitUpdateParams(
-            request.Title,
-            request.Description,
-            request.FrequencyUnit,
-            request.FrequencyQuantity,
-            opts.Days,
-            request.IsBadHabit,
-            request.DueDate,
-            DueTime: opts.DueTime,
-            DueEndTime: opts.DueEndTime,
-            ReminderEnabled: opts.ReminderEnabled,
-            ReminderTimes: opts.ReminderTimes,
-            SlipAlertEnabled: opts.SlipAlertEnabled,
-            ChecklistItems: opts.ChecklistItems,
-            IsGeneral: request.IsGeneral,
-            IsFlexible: opts.IsFlexible,
-            EndDate: opts.EndDate,
-            ClearEndDate: request.ClearEndDate,
-            ScheduledReminders: opts.ScheduledReminders,
-            Emoji: request.Emoji,
-            UserToday: today));
+        var result = await HabitReactivationAllowance.ExecuteAsync(
+            request.UserId,
+            HabitReactivationAllowance.IsRequiredForEndDateChange(
+                habit,
+                request.FrequencyUnit,
+                request.DueDate,
+                opts.EndDate,
+                request.ClearEndDate == true),
+            payGate,
+            () => habit.Update(new HabitUpdateParams(
+                request.Title,
+                request.Description,
+                request.FrequencyUnit,
+                request.FrequencyQuantity,
+                opts.Days,
+                request.IsBadHabit,
+                request.DueDate,
+                DueTime: opts.DueTime,
+                DueEndTime: opts.DueEndTime,
+                ReminderEnabled: opts.ReminderEnabled,
+                ReminderTimes: opts.ReminderTimes,
+                SlipAlertEnabled: opts.SlipAlertEnabled,
+                ChecklistItems: opts.ChecklistItems,
+                IsGeneral: request.IsGeneral,
+                IsFlexible: opts.IsFlexible,
+                EndDate: opts.EndDate,
+                ClearEndDate: request.ClearEndDate,
+                ScheduledReminders: opts.ScheduledReminders,
+                Emoji: request.Emoji,
+                UserToday: today)),
+            cancellationToken);
 
         if (result.IsFailure)
             return result;

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -10,7 +11,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateHabitTool(
     IGenericRepository<Habit> habitRepository,
-    IUserDateService userDateService) : IAiTool
+    IUserDateService userDateService,
+    IPayGateService? payGate = null) : IAiTool
 {
     public string Name => "update_habit";
 
@@ -98,7 +100,17 @@ public class UpdateHabitTool(
         var today = await userDateService.GetUserTodayAsync(userId, ct);
         var updateParams = ResolveUpdateParams(args, habit, today);
 
-        var result = habit.Update(updateParams);
+        var result = await HabitReactivationAllowance.ExecuteAsync(
+            userId,
+            HabitReactivationAllowance.IsRequiredForEndDateChange(
+                habit,
+                updateParams.FrequencyUnit,
+                updateParams.DueDate,
+                updateParams.EndDate,
+                updateParams.ClearEndDate == true),
+            payGate,
+            () => habit.Update(updateParams),
+            ct);
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
