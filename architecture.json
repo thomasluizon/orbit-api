@@ -6873,6 +6873,14 @@
         "references": []
       },
       {
+        "testClass": "WebApplicationExtensionsMcpTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Extensions/WebApplicationExtensionsMcpTests.cs",
+        "references": [
+          "ApiKey",
+          "User"
+        ]
+      },
+      {
         "testClass": "HealthCheckResponseTests",
         "file": "tests/Orbit.Infrastructure.Tests/Health/HealthCheckResponseTests.cs",
         "references": [
