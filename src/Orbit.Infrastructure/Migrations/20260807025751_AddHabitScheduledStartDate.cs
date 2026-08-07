@@ -16,13 +16,6 @@ namespace Orbit.Infrastructure.Migrations
                 table: "Habits",
                 type: "date",
                 nullable: true);
-
-            migrationBuilder.Sql(
-                """
-                UPDATE "Habits"
-                SET "ScheduledStartDate" = "DueDate"
-                WHERE "ScheduledStartDate" IS NULL;
-                """);
         }
 
         /// <inheritdoc />

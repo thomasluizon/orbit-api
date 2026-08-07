@@ -402,6 +402,58 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void Calculate_BadHabitStartingTodayRescheduledEarlier_UsesNewStart()
+    {
+        var newStart = Today.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today)).Value;
+
+        habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            newStart,
+            UserToday: Today));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        habit.ScheduledStartDate.Should().Be(newStart);
+        metrics.CurrentStreak.Should().Be(2);
+        metrics.LongestStreak.Should().Be(2);
+    }
+
+    [Fact]
+    public void Calculate_BadHabitStartingTodayRescheduledLater_HasNoPreStartMetrics()
+    {
+        var newStart = Today.AddDays(2);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today)).Value;
+
+        habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            newStart,
+            UserToday: Today));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today.AddDays(1));
+
+        habit.ScheduledStartDate.Should().Be(newStart);
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
     public void Calculate_LegacyBadHabitWithCleanHistory_PreservesHistoricalWindow()
     {
         var startDate = Today.AddDays(-5);

@@ -385,7 +385,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         {
             var reschedulesUnstartedHabit = ScheduledStartDate.HasValue
                 && p.UserToday.HasValue
-                && ScheduledStartDate.Value > p.UserToday.Value
+                && ScheduledStartDate.Value >= p.UserToday.Value
                 && DueDate == ScheduledStartDate.Value
                 && p.DueDate.Value != DueDate;
 
