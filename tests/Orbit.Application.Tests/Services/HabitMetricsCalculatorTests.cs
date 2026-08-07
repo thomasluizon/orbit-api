@@ -460,6 +460,26 @@ public class HabitMetricsCalculatorTests
         metrics.MonthlyCompletionRate.Should().Be(100);
     }
 
+    [Fact]
+    public void Calculate_LegacyBadHabitLoggedOnDueDate_CapturesStartBeforeAdvance()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
+
+        var logResult = habit.Log(Today);
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        logResult.IsSuccess.Should().BeTrue();
+        habit.ScheduledStartDate.Should().Be(Today);
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+    }
+
     [Theory]
     [InlineData(FrequencyUnit.Week)]
     [InlineData(FrequencyUnit.Month)]

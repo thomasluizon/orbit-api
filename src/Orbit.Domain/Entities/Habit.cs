@@ -196,6 +196,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public void AdvanceDueDate(DateOnly today)
     {
+        CaptureLegacyScheduledStart();
+
         do
         {
             var prev = DueDate;
@@ -217,8 +219,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public void CatchUpDueDate(DateOnly today)
     {
-        if (ScheduledStartDate is null && DueDate < today && !IsCompleted)
-            ScheduledStartDate = DueDate;
+        if (DueDate < today && !IsCompleted)
+            CaptureLegacyScheduledStart();
 
         while (DueDate < today && !IsCompleted)
         {
@@ -234,6 +236,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
 
         UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    private void CaptureLegacyScheduledStart()
+    {
+        if (ScheduledStartDate is null)
+            ScheduledStartDate = DueDate;
     }
 
     /// <summary>
