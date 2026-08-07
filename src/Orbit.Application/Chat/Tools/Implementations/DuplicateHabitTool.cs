@@ -1,10 +1,13 @@
 using System.Text.Json;
 using MediatR;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class DuplicateHabitTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator,
+    IGenericRepository<Habit>? habitRepository = null) : IAiTool
 {
     public string Name => "duplicate_habit";
 
@@ -33,6 +36,10 @@ public class DuplicateHabitTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: "Duplicated habit");
+        var duplicate = habitRepository is null
+            ? null
+            : await HabitToolHelpers.FindHabitAsync(habitRepository, result.Value, userId, ct);
+
+        return new ToolResult(true, EntityId: result.Value.ToString(), EntityName: duplicate?.Title);
     }
 }

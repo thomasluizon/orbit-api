@@ -1,11 +1,14 @@
 using System.Text.Json;
 using MediatR;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class LinkGoalsToHabitTool(
-    IMediator mediator) : IAiTool
+    IMediator mediator,
+    IGenericRepository<Habit> habitRepository) : IAiTool
 {
     public string Name => "link_goals_to_habit";
 
@@ -37,6 +40,10 @@ public class LinkGoalsToHabitTool(
         if (!args.TryGetProperty("goal_ids", out var goalIdsEl) || goalIdsEl.ValueKind != JsonValueKind.Array)
             return new ToolResult(false, Error: "goal_ids is required and must be an array.");
 
+        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
+        if (habit is null)
+            return HabitToolHelpers.HabitNotFoundResult(habitId);
+
         var goalIds = JsonArgumentParser.ParseGuidArray(args, "goal_ids") ?? new List<Guid>();
 
         var result = await mediator.Send(new LinkGoalsToHabitCommand(userId, habitId, goalIds), ct);
@@ -44,6 +51,6 @@ public class LinkGoalsToHabitTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        return new ToolResult(true, EntityId: habitId.ToString());
+        return new ToolResult(true, EntityId: habitId.ToString(), EntityName: habit.Title);
     }
 }

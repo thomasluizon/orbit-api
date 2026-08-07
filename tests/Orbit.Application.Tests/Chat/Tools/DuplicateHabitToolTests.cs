@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
@@ -6,19 +7,23 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
 public class DuplicateHabitToolTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly DuplicateHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
     public DuplicateHabitToolTests()
     {
-        _tool = new DuplicateHabitTool(_mediator);
+        _tool = new DuplicateHabitTool(_mediator, _habitRepo);
     }
 
     [Fact]
@@ -26,14 +31,30 @@ public class DuplicateHabitToolTests
     {
         var habitId = Guid.NewGuid();
         var newId = Guid.NewGuid();
+        var duplicate = CreateHabit("Read books");
         _mediator.Send(Arg.Any<DuplicateHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success(newId));
+        SetupHabitFound(duplicate);
 
         var result = await Execute($$$"""{"habit_id": "{{{habitId}}}"}""");
 
         result.Success.Should().BeTrue();
         result.EntityId.Should().Be(newId.ToString());
-        result.EntityName.Should().Be("Duplicated habit");
+        result.EntityName.Should().Be("Read books");
+    }
+
+    [Fact]
+    public async Task SuccessfulDuplicate_WhenNewHabitCannotBeResolved_ReturnsNullEntityName()
+    {
+        var newId = Guid.NewGuid();
+        _mediator.Send(Arg.Any<DuplicateHabitCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success(newId));
+
+        var result = await Execute($$$"""{"habit_id": "{{{Guid.NewGuid()}}}"}""");
+
+        result.Success.Should().BeTrue();
+        result.EntityId.Should().Be(newId.ToString());
+        result.EntityName.Should().BeNull();
     }
 
     [Fact]
@@ -47,6 +68,7 @@ public class DuplicateHabitToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("not found");
+        result.EntityName.Should().BeNull();
     }
 
     [Fact]
@@ -72,4 +94,14 @@ public class DuplicateHabitToolTests
         var args = JsonDocument.Parse(json).RootElement;
         return await _tool.ExecuteAsync(args, UserId, CancellationToken.None);
     }
+
+    private void SetupHabitFound(Habit habit) =>
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+        .Returns(habit);
+
+    private static Habit CreateHabit(string title) =>
+        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 8, 6))).Value;
 }
