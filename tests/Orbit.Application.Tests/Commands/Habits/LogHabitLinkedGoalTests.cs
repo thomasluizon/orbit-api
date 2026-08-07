@@ -184,7 +184,7 @@ public class LogHabitLinkedGoalTests
             UserId, "3-day streak", 3, "days", Type: GoalType.Streak)).Value;
 
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+            UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-2))).Value;
         SetCreatedAtUtc(habit, Today.AddDays(-2));
         habit.Log(Today.AddDays(-2), advanceDueDate: false);
         habit.Log(Today.AddDays(-1), advanceDueDate: false);
@@ -218,7 +218,7 @@ public class LogHabitLinkedGoalTests
         goal.Status.Should().Be(GoalStatus.Completed);
 
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+            UserId, "Meditate", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-2))).Value;
         SetCreatedAtUtc(habit, Today.AddDays(-2));
         habit.Log(Today.AddDays(-2), advanceDueDate: false);
         habit.Log(Today.AddDays(-1), advanceDueDate: false);
