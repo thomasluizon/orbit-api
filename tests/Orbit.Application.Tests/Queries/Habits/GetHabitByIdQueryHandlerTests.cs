@@ -171,6 +171,57 @@ public class GetHabitByIdQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_GeneralHabitLoggedToday_ReturnsCompleted()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "General Habit",
+            null,
+            null,
+            DueDate: Today,
+            IsGeneral: true)).Value;
+        var log = habit.Log(Today).Value;
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<HabitLog> { log }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitByIdQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_CompletedOneTimeHabitWithoutLogToday_ReturnsCompleted()
+    {
+        var dueDate = Today.AddDays(-1);
+        var habit = CreateOneTimeHabit("Completed Task", dueDate);
+        habit.Log(dueDate).IsSuccess.Should().BeTrue();
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit }.AsReadOnly());
+
+        var result = await _handler.Handle(
+            new GetHabitByIdQuery(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_OverdueChild_ReturnsChildIsOverdue()
     {
         var parent = CreateTestHabit("Parent Habit");

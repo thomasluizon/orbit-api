@@ -79,6 +79,17 @@ public class GetHabitByIdQueryHandler(
             userToday,
             cancellationToken);
         var children = HabitDetailChildMapper.MapChildren(habit, userToday, descendantLogsByHabitId);
+        var isCompleted = habit.IsCompleted;
+        if (habit.IsGeneral)
+        {
+            var currentDateLogs = await habitLogRepository.FindAsync(
+                l => l.HabitId == habit.Id
+                    && l.Date == userToday
+                    && l.Value > 0
+                    && !l.IsDeleted,
+                cancellationToken);
+            isCompleted = currentDateLogs.Count > 0;
+        }
 
         return Result.Success(new HabitDetailResponse(
             habit.Id,
@@ -87,7 +98,7 @@ public class GetHabitByIdQueryHandler(
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
             habit.IsBadHabit,
-            habit.IsCompleted,
+            isCompleted,
             habit.IsGeneral,
             habit.IsFlexible,
             habit.DueDate,
