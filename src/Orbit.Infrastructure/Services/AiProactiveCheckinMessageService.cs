@@ -3,6 +3,7 @@ using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -18,13 +19,14 @@ public sealed partial class AiProactiveCheckinMessageService(
         CancellationToken cancellationToken = default)
     {
         var languageName = LocaleHelper.GetAiLanguageName(language);
-        var habitList = string.Join(", ", offTrackHabitTitles);
+        var sanitizedDisplayName = PromptDataSanitizer.SanitizeInline(displayName, AppConstants.MaxUserNameLength);
+        var habitList = string.Join(", ", offTrackHabitTitles.Select(title => PromptDataSanitizer.QuoteInline(title, 100)));
         var streakContext = currentStreak > 0
             ? $"They currently have a {currentStreak}-day streak going."
             : "They do not have an active streak right now.";
 
         var prompt = $"""
-            User's name: {displayName}
+            User's name: {sanitizedDisplayName}
             They have fallen behind today on these habits: {habitList}
             {streakContext}
 
@@ -62,8 +64,8 @@ public sealed partial class AiProactiveCheckinMessageService(
                 return Result.Success((lines[0], lines[1]));
 
             var fallbackTitle = LocaleHelper.IsPortuguese(language)
-                ? $"Ainda dá tempo hoje, {displayName}"
-                : $"Still time today, {displayName}";
+                ? $"Ainda dá tempo hoje, {sanitizedDisplayName}"
+                : $"Still time today, {sanitizedDisplayName}";
             return Result.Success((fallbackTitle, lines[0]));
         }
         catch (Exception ex)
@@ -75,10 +77,11 @@ public sealed partial class AiProactiveCheckinMessageService(
 
     private static Result<(string Title, string Body)> GenerateFallback(string displayName, string language)
     {
+        var sanitizedDisplayName = PromptDataSanitizer.SanitizeInline(displayName, AppConstants.MaxUserNameLength);
         return LocaleHelper.IsPortuguese(language)
-            ? Result.Success(($"Ainda dá tempo hoje, {displayName}",
+            ? Result.Success(($"Ainda dá tempo hoje, {sanitizedDisplayName}",
                 "Você ficou para trás em alguns hábitos hoje. A Astra está aqui -- bora retomar?"))
-            : Result.Success(($"Still time today, {displayName}",
+            : Result.Success(($"Still time today, {sanitizedDisplayName}",
                 "You've fallen behind on a few habits today. Astra's got your back -- let's get back on track."));
     }
 

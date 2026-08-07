@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using MediatR;
@@ -6,17 +7,21 @@ using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
 public class LinkGoalsToHabitToolTests
 {
     private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly LinkGoalsToHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
 
-    public LinkGoalsToHabitToolTests() => _tool = new LinkGoalsToHabitTool(_mediator);
+    public LinkGoalsToHabitToolTests() => _tool = new LinkGoalsToHabitTool(_mediator, _habitRepo);
 
     [Fact]
     public void Metadata_IsExposed()
@@ -67,13 +72,15 @@ public class LinkGoalsToHabitToolTests
         LinkGoalsToHabitCommand? captured = null;
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => { captured = callInfo.Arg<LinkGoalsToHabitCommand>(); return Result.Success(); });
-        var habitId = Guid.NewGuid();
+        var habit = CreateHabit("Run 5K");
+        SetupHabitFound(habit);
         var goalId = Guid.NewGuid();
 
-        var result = await Execute($$"""{"habit_id": "{{habitId}}", "goal_ids": ["{{goalId}}"]}""");
+        var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "goal_ids": ["{{goalId}}"]}""");
 
         result.Success.Should().BeTrue();
-        result.EntityId.Should().Be(habitId.ToString());
+        result.EntityId.Should().Be(habit.Id.ToString());
+        result.EntityName.Should().Be("Run 5K");
         captured!.GoalIds.Should().ContainSingle().Which.Should().Be(goalId);
     }
 
@@ -83,8 +90,10 @@ public class LinkGoalsToHabitToolTests
         LinkGoalsToHabitCommand? captured = null;
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(callInfo => { captured = callInfo.Arg<LinkGoalsToHabitCommand>(); return Result.Success(); });
+        var habit = CreateHabit("Run 5K");
+        SetupHabitFound(habit);
 
-        var result = await Execute($$"""{"habit_id": "{{Guid.NewGuid()}}", "goal_ids": []}""");
+        var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "goal_ids": []}""");
 
         result.Success.Should().BeTrue();
         captured!.GoalIds.Should().BeEmpty();
@@ -93,14 +102,27 @@ public class LinkGoalsToHabitToolTests
     [Fact]
     public async Task CommandFails_PropagatesError()
     {
+        var habit = CreateHabit("Run 5K");
+        SetupHabitFound(habit);
         _mediator.Send(Arg.Any<LinkGoalsToHabitCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("Habit not found."));
 
-        var result = await Execute($$"""{"habit_id": "{{Guid.NewGuid()}}", "goal_ids": ["{{Guid.NewGuid()}}"]}""");
+        var result = await Execute($$"""{"habit_id": "{{habit.Id}}", "goal_ids": ["{{Guid.NewGuid()}}"]}""");
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("Habit not found.");
+        result.EntityName.Should().BeNull();
     }
+
+    private void SetupHabitFound(Habit habit) =>
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+        .Returns(habit);
+
+    private static Habit CreateHabit(string title) =>
+        Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, new DateOnly(2026, 8, 6))).Value;
 
     private async Task<ToolResult> Execute(string json) =>
         await _tool.ExecuteAsync(JsonDocument.Parse(json).RootElement, UserId, CancellationToken.None);

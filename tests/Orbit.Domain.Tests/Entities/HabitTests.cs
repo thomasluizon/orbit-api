@@ -13,6 +13,8 @@ public class HabitTests
     private static readonly int[] ReminderTimes5And15And30 = [5, 15, 30];
     private static readonly ChecklistItem[] SingleChecklistItem = [new("Item 1", false)];
     private static readonly ChecklistItem[] SingleChecklistItemStep1 = [new("Step 1", false)];
+    private static readonly DateOnly Yesterday = new(2026, 8, 5);
+    private static readonly DateOnly Today = new(2026, 8, 6);
 
     private static Habit CreateValidHabit(
         FrequencyUnit? frequencyUnit = FrequencyUnit.Day,
@@ -43,6 +45,13 @@ public class HabitTests
             FrequencyUnit: null,
             FrequencyQuantity: null,
             DueDate: dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+    }
+
+    private static Habit CreateGeneralHabit()
+    {
+        return Habit.Create(new HabitCreateParams(
+            ValidUserId, "Read a book someday", null, null,
+            DueDate: Today, IsGeneral: true)).Value;
     }
 
     [Fact]
@@ -237,6 +246,99 @@ public class HabitTests
         habit.Log(today);
 
         habit.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Symptom3_GeneralLoggedYesterday_ShowsCompletedToday()
+    {
+        var habit = CreateGeneralHabit();
+
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+
+        habit.IsCompleted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Unlog_GeneralHabit_MissingDateFailsAndExistingDateDeletesOnlyMatchingLog()
+    {
+        var habit = CreateGeneralHabit();
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        var missingDateResult = habit.Unlog(Today.AddDays(1));
+
+        missingDateResult.IsFailure.Should().BeTrue();
+        habit.Logs.Should().OnlyContain(log => !log.IsDeleted);
+
+        var existingDateResult = habit.Unlog(Today);
+
+        existingDateResult.IsSuccess.Should().BeTrue();
+        habit.Logs.Should().ContainSingle(log => log.Date == Yesterday && !log.IsDeleted);
+        habit.Logs.Should().ContainSingle(log => log.Date == Today && log.IsDeleted);
+    }
+
+    [Fact]
+    public void Compounding_AfterFailedUnlog_TheHabitCannotBeLoggedAgainEither()
+    {
+        var habit = CreateGeneralHabit();
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+        habit.Unlog(Today);
+
+        var result = habit.Log(Today);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Control_RecurringHabit_UnlogsFineOnTheDayItWasLogged()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Yesterday)).Value;
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+
+        var result = habit.Unlog(Yesterday);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Log_OneTimeTaskOnDifferentDate_MarksCompletedPermanently()
+    {
+        var habit = CreateOneTimeHabit(dueDate: Today);
+
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+
+        habit.IsCompleted.Should().BeTrue();
+        habit.Log(Today).IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GeneralHabit_LogAndUnlogTwiceOnSameDate_EndsUnlogged()
+    {
+        var habit = CreateGeneralHabit();
+
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.Unlog(Today).IsSuccess.Should().BeTrue();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.Unlog(Today).IsSuccess.Should().BeTrue();
+
+        habit.IsCompleted.Should().BeFalse();
+        habit.Logs.Should().NotContain(log => log.Date == Today && !log.IsDeleted);
+    }
+
+    [Fact]
+    public void Update_CompletedOneTimeTaskToGeneral_ClearsPermanentCompletion()
+    {
+        var habit = CreateOneTimeHabit(dueDate: Yesterday);
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+
+        var result = habit.Update(new HabitUpdateParams(
+            "Read a book someday", null, null, null, null, false, Today, IsGeneral: true));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsGeneral.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
     }
 
     [Fact]

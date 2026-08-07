@@ -2882,11 +2882,11 @@
       "Behaviors": 12,
       "Calendar": 16,
       "Challenges": 14,
-      "Chat": 57,
+      "Chat": 59,
       "ChecklistTemplates": 9,
-      "Common": 160,
+      "Common": 161,
       "Gamification": 33,
-      "Goals": 37,
+      "Goals": 38,
       "Habits": 81,
       "Marketing": 6,
       "Notifications": 16,
@@ -3221,7 +3221,8 @@
         "references": [
           "CreateGoalCommand",
           "CreateGoalCommandHandler",
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -3936,7 +3937,18 @@
         "references": [
           "CreateGoalCommand",
           "CreateGoalCommandHandler",
-          "Goal"
+          "Goal",
+          "Habit"
+        ]
+      },
+      {
+        "testClass": "CreateGoalToolHabitLinkTests",
+        "file": "tests/Orbit.Application.Tests/Commands/Goals/CreateGoalCommandHandlerTests.cs",
+        "references": [
+          "CreateGoalCommand",
+          "CreateGoalCommandHandler",
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -7313,6 +7325,20 @@
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiIntentServiceTests.cs",
         "references": [
           "Habit"
+        ]
+      },
+      {
+        "testClass": "AiPromptSanitizationTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AiPromptSanitizationTests.cs",
+        "references": [
+          "Goal"
+        ]
+      },
+      {
+        "testClass": "PromptCaptureHandler",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AiPromptSanitizationTests.cs",
+        "references": [
+          "Goal"
         ]
       },
       {

@@ -125,7 +125,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IUserStreakService>(),
                 sp.GetRequiredService<IGamificationService>(),
                 sp.GetRequiredService<Orbit.Application.Challenges.Services.IChallengeProgressService>(),
-                sp.GetRequiredService<MediatR.IMediator>()));
+                sp.GetRequiredService<MediatR.IMediator>(),
+                sp.GetRequiredService<IPayGateService>()));
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.BulkLogServices>(sp =>
             new Orbit.Application.Habits.Commands.BulkLogServices(
                 sp.GetRequiredService<IUserDateService>(),
