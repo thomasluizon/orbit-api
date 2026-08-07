@@ -7314,6 +7314,20 @@
         ]
       },
       {
+        "testClass": "AiPromptSanitizationTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AiPromptSanitizationTests.cs",
+        "references": [
+          "Goal"
+        ]
+      },
+      {
+        "testClass": "PromptCaptureHandler",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/AiPromptSanitizationTests.cs",
+        "references": [
+          "Goal"
+        ]
+      },
+      {
         "testClass": "AiRescheduleSuggestionServiceGenerationTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiRescheduleSuggestionServiceGenerationTests.cs",
         "references": [
