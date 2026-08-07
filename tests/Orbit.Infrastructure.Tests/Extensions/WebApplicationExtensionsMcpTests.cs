@@ -219,8 +219,10 @@ public class WebApplicationExtensionsMcpTests
             requestId: null)).Should().BeTrue();
     }
 
-    [Fact]
-    public async Task TryApplyMcpRateLimitsAsync_DailySummary_HitsAiLimitBeforeGeneralLimit()
+    [Theory]
+    [InlineData("get_daily_summary")]
+    [InlineData("get_goal_review")]
+    public async Task TryApplyMcpRateLimitsAsync_AiBearingTool_HitsAiLimitBeforeGeneralLimit(string toolName)
     {
         var service = Substitute.For<IDistributedRateLimitService>();
         var aiCount = 0;
@@ -250,11 +252,11 @@ public class WebApplicationExtensionsMcpTests
 
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             allowedContext,
-            "get_daily_summary",
+            toolName,
             requestIdDocument.RootElement.Clone())).Should().BeTrue();
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             rejectedContext,
-            "get_daily_summary",
+            toolName,
             requestIdDocument.RootElement.Clone())).Should().BeFalse();
 
         rejectedContext.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
@@ -273,6 +275,30 @@ public class WebApplicationExtensionsMcpTests
         await service.Received(2).TryAcquireAsync(
             WebApplicationExtensions.McpAiRateLimitPolicy,
             $"api-key:{apiKeyId}",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryApplyMcpRateLimitsAsync_JwtPrincipal_UsesUserPartition()
+    {
+        var service = Substitute.For<IDistributedRateLimitService>();
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
+        var userId = Guid.NewGuid();
+        var context = CreateRateLimitContext(service, apiKeyId: null, userId);
+
+        var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            context,
+            "get_habits",
+            requestId: null);
+
+        allowed.Should().BeTrue();
+        await service.Received(1).TryAcquireAsync(
+            WebApplicationExtensions.McpRateLimitPolicy,
+            $"user:{userId}",
             Arg.Any<CancellationToken>());
     }
 
@@ -296,7 +322,8 @@ public class WebApplicationExtensionsMcpTests
 
     private static DefaultHttpContext CreateRateLimitContext(
         IDistributedRateLimitService service,
-        Guid? apiKeyId)
+        Guid? apiKeyId,
+        Guid? userId = null)
     {
         var services = new ServiceCollection()
             .AddSingleton(service)
@@ -310,11 +337,17 @@ public class WebApplicationExtensionsMcpTests
             Response = { Body = new MemoryStream() }
         };
 
-        if (apiKeyId.HasValue)
+        if (apiKeyId.HasValue || userId.HasValue)
         {
+            var claims = new List<Claim>();
+            if (apiKeyId.HasValue)
+                claims.Add(new Claim("api_key_id", apiKeyId.Value.ToString()));
+            if (userId.HasValue)
+                claims.Add(new Claim(ClaimTypes.NameIdentifier, userId.Value.ToString()));
+
             context.User = new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim("api_key_id", apiKeyId.Value.ToString())],
-                "ApiKey"));
+                claims,
+                apiKeyId.HasValue ? "ApiKey" : "JwtBearer"));
         }
 
         return context;

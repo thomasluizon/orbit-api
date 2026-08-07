@@ -23,7 +23,7 @@ public static partial class WebApplicationExtensions
     internal const string McpAiRateLimitPolicy = "mcp-ai";
 
     private static readonly HashSet<string> AiBearingMcpTools =
-        new(StringComparer.OrdinalIgnoreCase) { "get_daily_summary", "get_retrospective" };
+        new(StringComparer.OrdinalIgnoreCase) { "get_daily_summary", "get_goal_review", "get_retrospective" };
 
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
@@ -163,10 +163,13 @@ public static partial class WebApplicationExtensions
             return true;
 
         var apiKeyId = context.User.FindFirstValue("api_key_id");
-        if (string.IsNullOrWhiteSpace(apiKeyId))
-            throw new InvalidOperationException("Authenticated MCP principal is missing the api_key_id claim.");
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(apiKeyId) && string.IsNullOrWhiteSpace(userId))
+            throw new InvalidOperationException("Authenticated MCP principal is missing a rate limit partition claim.");
 
-        var partitionKey = $"api-key:{apiKeyId}";
+        var partitionKey = !string.IsNullOrWhiteSpace(apiKeyId)
+            ? $"api-key:{apiKeyId}"
+            : $"user:{userId}";
         var service = context.RequestServices.GetRequiredService<IDistributedRateLimitService>();
 
         var decision = await service.TryAcquireAsync(
