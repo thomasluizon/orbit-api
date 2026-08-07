@@ -143,12 +143,13 @@ public class GetHabitScheduleQueryHandler(
         GetHabitScheduleQuery request, CancellationToken cancellationToken)
     {
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var completionDate = GetCompletionDate(request, today);
         var weekStartDay = await userDateService.GetUserWeekStartDayAsync(request.UserId, cancellationToken);
 
         var allHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
             q => q.Include(h => h.Tags)
-                  .Include(h => h.Logs.Where(l => l.Date == today))
+                  .Include(h => h.Logs.Where(l => l.Date == completionDate))
                   .Include(h => h.Goals),
             cancellationToken);
 
@@ -158,7 +159,7 @@ public class GetHabitScheduleQueryHandler(
             .OrderBy(h => h.Position ?? int.MaxValue)
             .ThenBy(h => h.CreatedAtUtc);
 
-        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, today);
+        topLevel = HabitScheduleFilters.ApplyCommonFilters(topLevel, request, lookup, completionDate);
 
         var filtered = topLevel.ToList();
 
@@ -171,7 +172,7 @@ public class GetHabitScheduleQueryHandler(
             weekStartDay,
             IncludeAllChildren: true,
             IncludeOverdue: request.IncludeOverdue,
-            UserToday: today,
+            UserToday: completionDate,
             Search: request.Search);
         var pagedItems = filtered
             .Skip((page - 1) * request.PageSize)
@@ -261,7 +262,12 @@ public class GetHabitScheduleQueryHandler(
             .ToList();
 
         if (request.IncludeGeneral)
-            await AppendGeneralHabits(pagedItems, request, today, weekStartDay, cancellationToken);
+            await AppendGeneralHabits(
+                pagedItems,
+                request,
+                GetCompletionDate(request, today),
+                weekStartDay,
+                cancellationToken);
 
         return Result.Success(new PaginatedResponse<HabitScheduleItem>(
             pagedItems,
@@ -365,14 +371,14 @@ public class GetHabitScheduleQueryHandler(
     private async Task AppendGeneralHabits(
         List<HabitScheduleItem> pagedItems,
         GetHabitScheduleQuery request,
-        DateOnly today,
+        DateOnly completionDate,
         int weekStartDay,
         CancellationToken cancellationToken)
     {
         var generalHabits = await habitRepository.FindAsync(
             h => h.UserId == request.UserId && h.IsGeneral,
             q => q.Include(h => h.Tags)
-                  .Include(h => h.Logs.Where(l => l.Date == today))
+                  .Include(h => h.Logs.Where(l => l.Date == completionDate))
                   .Include(h => h.Goals),
             cancellationToken);
 
@@ -387,7 +393,7 @@ public class GetHabitScheduleQueryHandler(
             weekStartDay,
             IncludeAllChildren: true,
             IncludeOverdue: request.IncludeOverdue,
-            UserToday: today,
+            UserToday: completionDate,
             Search: request.Search);
         var generalItems = generalTopLevel
             .Select(h => HabitScheduleFilters.MapToScheduleItem(h, [], false, ctx))
@@ -395,4 +401,7 @@ public class GetHabitScheduleQueryHandler(
 
         pagedItems.AddRange(generalItems);
     }
+
+    private static DateOnly GetCompletionDate(GetHabitScheduleQuery request, DateOnly today) =>
+        request.DateFrom ?? request.DateTo ?? today;
 }
