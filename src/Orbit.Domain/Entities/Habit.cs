@@ -49,7 +49,8 @@ public record HabitUpdateParams(
     DateOnly? EndDate = null,
     bool? ClearEndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
-    string? Emoji = null);
+    string? Emoji = null,
+    DateOnly? UserToday = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -62,6 +63,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
+    public DateOnly? ScheduledStartDate { get; private set; }
     /// <summary>
     /// For monthly/yearly habits, the original day-of-month from the first DueDate (1-31).
     /// Preserves the anchor across month-end clamping so a Jan 31 habit re-anchors to Mar 31
@@ -146,6 +148,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsGeneral = p.IsGeneral,
             IsFlexible = p.IsFlexible,
             DueDate = p.DueDate,
+            ScheduledStartDate = p.DueDate,
             OriginalDayOfMonth = p.FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year
                 ? p.DueDate.Day
                 : null,
@@ -166,7 +169,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public Result<HabitLog> Log(DateOnly date, string? note = null, bool advanceDueDate = true)
     {
-        if (IsCompleted)
+        if (IsCompleted && !IsGeneral)
             return Result.Failure<HabitLog>(DomainErrors.CannotLogCompletedHabit);
 
         if (!IsBadHabit && !IsFlexible && _logs.Exists(l => l.Date == date && !l.IsDeleted))
@@ -175,11 +178,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         var log = HabitLog.Create(Id, date, 1, note);
         _logs.Add(log);
 
-        if (FrequencyUnit is null)
+        if (FrequencyUnit is null && !IsGeneral)
         {
             IsCompleted = true;
         }
-        else if (!IsFlexible && advanceDueDate)
+        else if (FrequencyUnit is not null && !IsFlexible && advanceDueDate)
         {
             AdvanceDueDate(date);
 
@@ -193,6 +196,8 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
     public void AdvanceDueDate(DateOnly today)
     {
+        CaptureLegacyScheduledStart();
+
         do
         {
             var prev = DueDate;
@@ -214,6 +219,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public void CatchUpDueDate(DateOnly today)
     {
+        if (DueDate < today && !IsCompleted)
+            CaptureLegacyScheduledStart();
+
         while (DueDate < today && !IsCompleted)
         {
             var prev = DueDate;
@@ -228,6 +236,12 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         }
 
         UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    private void CaptureLegacyScheduledStart()
+    {
+        if (ScheduledStartDate is null)
+            ScheduledStartDate = DueDate;
     }
 
     /// <summary>
@@ -368,7 +382,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DueEndTime = p.DueEndTime;
 
         if (p.DueDate is not null)
+        {
+            var reschedulesUnstartedHabit = ScheduledStartDate.HasValue
+                && p.UserToday.HasValue
+                && ScheduledStartDate.Value >= p.UserToday.Value
+                && DueDate == ScheduledStartDate.Value
+                && p.DueDate.Value != DueDate;
+
             DueDate = p.DueDate.Value;
+            if (reschedulesUnstartedHabit)
+                ScheduledStartDate = DueDate;
+        }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
             OriginalDayOfMonth = DueDate.Day;
@@ -379,7 +403,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private void ApplyOptionalUpdates(HabitUpdateParams p)
     {
         if (p.IsGeneral.HasValue)
+        {
             IsGeneral = p.IsGeneral.Value;
+            if (IsGeneral)
+                IsCompleted = false;
+        }
         if (p.IsFlexible.HasValue)
             IsFlexible = p.IsFlexible.Value;
         if (p.ReminderEnabled.HasValue)

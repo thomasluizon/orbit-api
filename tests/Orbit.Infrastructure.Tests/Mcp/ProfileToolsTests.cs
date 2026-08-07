@@ -50,6 +50,7 @@ public class ProfileToolsTests
     public async Task GetProfile_Success_ReturnsFormattedProfile()
     {
         var profile = new ProfileResponse(
+            Guid.NewGuid(),
             "Thomas", "thomas@example.com", "America/Sao_Paulo",
             true, true, true, true, true, true, true, true, "pt-BR", "Pro", true, false, null, null,
             5, 100, false, false, false, null, null, false, 1, 500, 5, "Achiever",

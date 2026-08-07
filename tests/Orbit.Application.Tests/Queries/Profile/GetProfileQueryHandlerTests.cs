@@ -6,6 +6,7 @@ using Orbit.Application.Profile.Queries;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 using System.Linq.Expressions;
+using System.Text.Json;
 
 namespace Orbit.Application.Tests.Queries.Profile;
 
@@ -77,9 +78,101 @@ public class GetProfileQueryHandlerTests
         var result = await _handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Name.Should().Be("John Doe");
-        result.Value.Email.Should().Be("test@example.com");
-        result.Value.AiMessagesLimit.Should().Be(20);
+        result.Value.Should().BeEquivalentTo(new
+        {
+            Name = "John Doe",
+            Email = "test@example.com",
+            user.TimeZone,
+            user.AiMemoryEnabled,
+            user.AiSummaryEnabled,
+            user.HasCompletedOnboarding,
+            user.HasCompletedTour,
+            user.HasCreatedFirstHabit,
+            user.HasLoggedFirstHabit,
+            user.HasTriedAstra,
+            user.HasCompletedOnboardingChecklist,
+            user.Language,
+            Plan = "pro",
+            user.HasProAccess,
+            user.IsTrialActive,
+            user.TrialEndsAt,
+            user.PlanExpiresAt,
+            AiMessagesUsed = user.AiMessagesUsedThisMonth,
+            AiMessagesLimit = 20,
+            user.HasImportedCalendar,
+            user.HasSeenImportPrompt,
+            HasGoogleConnection = false,
+            SubscriptionInterval = (string?)null,
+            SubscriptionSource = (string?)null,
+            user.IsLifetimePro,
+            user.WeekStartDay,
+            user.TotalXp,
+            Level = 1,
+            LevelTitle = "Starter",
+            AdRewardsClaimedToday = 0,
+            user.CurrentStreak,
+            user.LongestStreak,
+            StreakFreezesAvailable = 3,
+            user.ThemePreference,
+            user.ColorScheme,
+            user.GoogleCalendarAutoSyncEnabled,
+            GoogleCalendarAutoSyncStatus = Orbit.Domain.Enums.GoogleCalendarAutoSyncStatus.Idle,
+            user.GoogleCalendarLastSyncedAt,
+            CanViewGamification = true,
+            user.Handle,
+            user.SocialOptIn,
+            Uses24HourClock = true,
+            PublicProfile = new
+            {
+                Enabled = false,
+                Slug = (string?)null,
+                ShareUrl = (string?)null,
+                ShowStreak = true,
+                ShowLevel = true,
+                ShowAchievements = true,
+                ShowTopHabits = false
+            },
+            user.ProactiveAstraEnabled,
+            user.MarketingEmailConsent
+        });
+    }
+
+    [Fact]
+    public async Task Handle_UserFound_ReturnsCallerIdInDistinctIdFormat()
+    {
+        var user = CreateTestUser();
+        var callerId = user.Id;
+        _userRepo.GetByIdAsync(callerId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(callerId, Arg.Any<CancellationToken>()).Returns(20);
+        _userDateService.GetUserTodayAsync(callerId, Arg.Any<CancellationToken>()).Returns(Today);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(callerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.UserId.Should().Be(callerId);
+        result.Value.UserId.ToString().Should().Be(callerId.ToString("D").ToLowerInvariant());
+        result.Value.UserId.ToString().Should().MatchRegex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
+    }
+
+    [Fact]
+    public async Task ProfileResponse_LegacyConsumer_IgnoresUserId()
+    {
+        var user = CreateTestUser("Legacy User");
+        var callerId = user.Id;
+        _userRepo.GetByIdAsync(callerId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(callerId, Arg.Any<CancellationToken>()).Returns(20);
+        _userDateService.GetUserTodayAsync(callerId, Arg.Any<CancellationToken>()).Returns(Today);
+        StubFreezeRepoEmpty();
+        var result = await _handler.Handle(new GetProfileQuery(callerId), CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var legacyProfile = JsonSerializer.Deserialize<LegacyProfileResponse>(
+            json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        json.Should().Contain($"\"userId\":\"{callerId:D}\"");
+        legacyProfile.Should().Be(new LegacyProfileResponse("Legacy User", "test@example.com"));
     }
 
     [Fact]
@@ -134,6 +227,8 @@ public class GetProfileQueryHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
         result.ErrorCode.Should().Be("USER_NOT_FOUND");
+        var readValue = () => result.Value;
+        readValue.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
@@ -314,4 +409,6 @@ public class GetProfileQueryHandlerTests
         result.Value.Level.Should().Be(12);
         result.Value.LevelTitle.Should().Be("Legend");
     }
+
+    private sealed record LegacyProfileResponse(string Name, string Email);
 }

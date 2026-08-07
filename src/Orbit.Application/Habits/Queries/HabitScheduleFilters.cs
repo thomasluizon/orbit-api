@@ -102,7 +102,8 @@ internal static class HabitScheduleFilters
     internal static IEnumerable<Habit> ApplyCommonFilters(
         IEnumerable<Habit> topLevel,
         GetHabitScheduleQuery request,
-        ILookup<Guid?, Habit> lookup)
+        ILookup<Guid?, Habit> lookup,
+        DateOnly? userToday = null)
     {
         if (!string.IsNullOrWhiteSpace(request.Search))
             topLevel = ApplySearchFilter(
@@ -114,7 +115,8 @@ internal static class HabitScheduleFilters
                 lookup);
 
         if (request.IsCompleted.HasValue)
-            topLevel = topLevel.Where(h => h.IsCompleted == request.IsCompleted.Value);
+            topLevel = topLevel.Where(h =>
+                GetResponseCompletion(h, userToday) == request.IsCompleted.Value);
 
         if (request.TagIds is { Count: > 0 })
             topLevel = ApplyTagFilter(topLevel, request.TagIds, lookup);
@@ -217,7 +219,7 @@ internal static class HabitScheduleFilters
 
         return new HabitScheduleItem(
             h.Id, h.Title, h.Description, h.FrequencyUnit, h.FrequencyQuantity,
-            h.IsBadHabit, h.IsCompleted, h.IsGeneral, h.IsFlexible,
+            h.IsBadHabit, GetResponseCompletion(h, ctx.UserToday), h.IsGeneral, h.IsFlexible,
             h.Days.ToList(), h.Position, h.CreatedAtUtc,
             h.DueDate, h.DueTime, h.DueEndTime, h.EndDate,
             scheduledDates, isOverdue,
@@ -351,7 +353,8 @@ internal static class HabitScheduleFilters
 
         return new HabitScheduleChildItem(
             c.Id, c.Title, c.Description,
-            c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit, c.IsCompleted, c.IsGeneral, c.IsFlexible,
+            c.FrequencyUnit, c.FrequencyQuantity, c.IsBadHabit,
+            GetResponseCompletion(c, ctx.UserToday), c.IsGeneral, c.IsFlexible,
             c.Days.ToList(), c.DueDate, c.DueTime, c.DueEndTime, c.EndDate,
             scheduledDates, isOverdue,
             c.Position, c.ChecklistItems, MapTags(c),
@@ -360,6 +363,17 @@ internal static class HabitScheduleFilters
             instances,
             ComputeSearchMatches(c, ctx),
             Emoji: c.Emoji);
+    }
+
+    private static bool GetResponseCompletion(Habit habit, DateOnly? userToday)
+    {
+        if (!habit.IsGeneral || !userToday.HasValue)
+            return habit.IsCompleted;
+
+        return HabitScheduleService.HasCompletedLogInRange(
+            habit,
+            userToday.Value,
+            userToday.Value);
     }
 
     /// <summary>

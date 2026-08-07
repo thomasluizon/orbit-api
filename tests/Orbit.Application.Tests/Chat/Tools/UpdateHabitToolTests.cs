@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -16,6 +17,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class UpdateHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly UpdateHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -23,7 +25,9 @@ public class UpdateHabitToolTests
 
     public UpdateHabitToolTests()
     {
-        _tool = new UpdateHabitTool(_habitRepo);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Today);
+        _tool = new UpdateHabitTool(_habitRepo, _userDateService);
     }
 
     [Fact]
@@ -36,6 +40,43 @@ public class UpdateHabitToolTests
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Drink Water");
+    }
+
+    [Fact]
+    public async Task AtCapReactivation_ReturnsPayGateFailureWithoutMutatingHabit()
+    {
+        var habit = CreateCompletedRecurringHabit();
+        SetupHabitFound(habit);
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Habit limit reached"));
+        var tool = new UpdateHabitTool(_habitRepo, _userDateService, payGate);
+
+        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
+        var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        habit.IsCompleted.Should().BeTrue();
+        habit.EndDate.Should().Be(Today);
+    }
+
+    [Fact]
+    public async Task AllowedReactivation_UpdatesCompletedHabit()
+    {
+        var habit = CreateCompletedRecurringHabit();
+        SetupHabitFound(habit);
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        var tool = new UpdateHabitTool(_habitRepo, _userDateService, payGate);
+
+        var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
+        var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.EndDate.Should().BeNull();
     }
 
     [Fact]
@@ -555,7 +596,7 @@ public class UpdateHabitToolTests
         }
 
         await using var context = CreateContext(databaseName);
-        var tool = new UpdateHabitTool(new GenericRepository<Habit>(context));
+        var tool = new UpdateHabitTool(new GenericRepository<Habit>(context), _userDateService);
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Hijacked"), attackerId, CancellationToken.None);
@@ -584,6 +625,14 @@ public class UpdateHabitToolTests
     private static Habit CreateHabit(string title, FrequencyUnit? freq, int? qty)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, freq, qty, DueDate: Today)).Value;
+    }
+
+    private static Habit CreateCompletedRecurringHabit()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Finished recurring habit", FrequencyUnit.Day, 1, DueDate: Today, EndDate: Today)).Value;
+        habit.AdvanceDueDate(Today);
+        return habit;
     }
 
     private static Habit CreateHabitWithTime(string title, FrequencyUnit? freq, int? qty, TimeOnly dueTime)

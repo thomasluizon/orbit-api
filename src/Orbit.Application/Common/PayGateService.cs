@@ -1,5 +1,6 @@
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Common;
@@ -20,7 +21,7 @@ public class PayGateService(
 
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
         var activeHabitCount = await habitRepository.CountAsync(
-            h => h.UserId == userId && h.ParentHabitId == null, ct);
+            h => h.UserId == userId && h.ParentHabitId == null && !h.IsCompleted, ct);
 
         if (activeHabitCount + count > maxHabits)
             return Result.PayGateFailure($"You've reached the {maxHabits} habit limit on the free plan. Upgrade to Pro for unlimited habits.");
@@ -65,6 +66,44 @@ public class PayGateService(
         }
 
         return Result.Success();
+    }
+
+    public async Task<Result> TryConsumeAiMessage(
+        Guid userId,
+        IUnitOfWork unitOfWork,
+        CancellationToken ct = default)
+    {
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
+
+        var consumption = await ConcurrencyRetry.ExecuteAsync(
+            userRepository,
+            unitOfWork,
+            token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
+            user =>
+            {
+                var currentAtUtc = DateTime.UtcNow;
+                if (!IsProductionSmokeAccount(user.Email))
+                {
+                    var messageLimit = (user.HasProAccess ? proLimit : freeLimit) + user.AdRewardBonusMessages;
+                    var cycleIsActive = user.AiMessagesResetAt.HasValue && user.AiMessagesResetAt.Value > currentAtUtc;
+                    if (cycleIsActive && user.AiMessagesUsedThisMonth >= messageLimit)
+                    {
+                        var errorMessage = user.HasProAccess
+                            ? $"You've reached your monthly AI message limit ({messageLimit})."
+                            : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+
+                        return Task.FromResult(Result.PayGateFailure(errorMessage));
+                    }
+                }
+
+                user.IncrementAiMessageCount(currentAtUtc);
+                return Task.FromResult(Result.Success());
+            },
+            ErrorMessages.UserNotFound,
+            ct);
+
+        return consumption.IsSuccess ? Result.Success() : consumption.PropagateError();
     }
 
     public async Task<Result> CanUseDailySummary(Guid userId, CancellationToken ct = default)
@@ -198,4 +237,63 @@ public class PayGateService(
             ? Result.Success()
             : Result.PayGateFailure(errorMessage);
     }
+}
+
+internal static class HabitReactivationAllowance
+{
+    public static bool IsRequiredForUnlog(Habit habit) =>
+        habit.IsCompleted && habit.ParentHabitId is null;
+
+    public static bool IsRequiredForEndDateChange(
+        Habit habit,
+        FrequencyUnit? frequencyUnit,
+        DateOnly? dueDate,
+        DateOnly? endDate,
+        bool clearEndDate)
+    {
+        if (!habit.IsCompleted || habit.ParentHabitId is not null || frequencyUnit is null)
+            return false;
+
+        if (clearEndDate)
+            return true;
+
+        return endDate.HasValue && (dueDate ?? habit.DueDate) <= endDate.Value;
+    }
+
+    public static async Task<Result<T>> ExecuteAsync<T>(
+        Guid userId,
+        bool requiresAllowance,
+        IPayGateService? payGate,
+        Func<Result<T>> transition,
+        CancellationToken cancellationToken)
+    {
+        if (requiresAllowance)
+        {
+            var allowanceGate = await GetPayGate(payGate).CanCreateHabits(userId, 1, cancellationToken);
+            if (allowanceGate.IsFailure)
+                return allowanceGate.PropagateError<T>();
+        }
+
+        return transition();
+    }
+
+    public static async Task<Result> ExecuteAsync(
+        Guid userId,
+        bool requiresAllowance,
+        IPayGateService? payGate,
+        Func<Result> transition,
+        CancellationToken cancellationToken)
+    {
+        if (requiresAllowance)
+        {
+            var allowanceGate = await GetPayGate(payGate).CanCreateHabits(userId, 1, cancellationToken);
+            if (allowanceGate.IsFailure)
+                return allowanceGate;
+        }
+
+        return transition();
+    }
+
+    private static IPayGateService GetPayGate(IPayGateService? payGate) =>
+        payGate ?? throw new InvalidOperationException("Habit reactivation allowance service is not configured.");
 }
