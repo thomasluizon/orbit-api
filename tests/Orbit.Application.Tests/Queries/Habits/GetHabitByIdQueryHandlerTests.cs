@@ -201,6 +201,44 @@ public class GetHabitByIdQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_GeneralDescendantLoggedToday_ReturnsCompleted()
+    {
+        var parent = CreateTestHabit("Parent Habit");
+        var child = Habit.Create(new HabitCreateParams(
+            UserId,
+            "General Child",
+            null,
+            null,
+            DueDate: Today,
+            IsGeneral: true,
+            ParentHabitId: parent.Id)).Value;
+        var log = child.Log(Today).Value;
+        AttachChild(parent, child);
+
+        _habitRepo.FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { parent }.AsReadOnly());
+        _habitLogRepo.FindAsync(
+            Arg.Any<Expression<Func<HabitLog, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var predicate = callInfo.ArgAt<Expression<Func<HabitLog, bool>>>(0).Compile();
+                return new List<HabitLog> { log }.Where(predicate).ToList().AsReadOnly();
+            });
+
+        var result = await _handler.Handle(
+            new GetHabitByIdQuery(UserId, parent.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Children.Should().ContainSingle();
+        result.Value.Children[0].IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Handle_CompletedOneTimeHabitWithoutLogToday_ReturnsCompleted()
     {
         var dueDate = Today.AddDays(-1);

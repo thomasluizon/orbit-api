@@ -274,7 +274,13 @@ public static class HabitScheduleService
     /// decide whether a habit was done on a particular day.
     /// </summary>
     public static bool HasCompletedLogInRange(Habit habit, DateOnly dateFrom, DateOnly dateTo) =>
-        habit.Logs.Any(l => !l.IsDeleted && l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
+        HasCompletedLogInRange(habit.Logs, dateFrom, dateTo);
+
+    internal static bool HasCompletedLogInRange(
+        IEnumerable<HabitLog> logs,
+        DateOnly dateFrom,
+        DateOnly dateTo) =>
+        logs.Any(l => !l.IsDeleted && l.Date >= dateFrom && l.Date <= dateTo && l.Value > 0);
 
     /// <summary>
     /// True when the habit has an unresolved occurrence strictly before

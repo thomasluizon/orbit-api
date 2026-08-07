@@ -65,7 +65,7 @@ public class QueryHabitsTool(
         if (args.TryGetProperty("limit", out var limitEl) && limitEl.ValueKind == JsonValueKind.Number)
             limit = Math.Clamp(limitEl.GetInt32(), 1, 200);
 
-        var allHabits = await QueryHabitsAsync(userId, filters, includeMetrics, ct);
+        var allHabits = await QueryHabitsAsync(userId, filters, today, includeMetrics, ct);
 
         var results = allHabits
             .Where(h => h.ParentHabitId is null)
@@ -136,14 +136,18 @@ public class QueryHabitsTool(
         return (date, includeOverdue);
     }
 
-    private async Task<IReadOnlyList<Habit>> QueryHabitsAsync(Guid userId, HabitFilters f, bool includeMetrics, CancellationToken ct)
+    private async Task<IReadOnlyList<Habit>> QueryHabitsAsync(
+        Guid userId,
+        HabitFilters f,
+        DateOnly today,
+        bool includeMetrics,
+        CancellationToken ct)
     {
         var normalizedSearch = NormalizeSearchValue(f.Search);
         var normalizedTag = NormalizeSearchValue(f.Tag);
 
-        return await habitRepository.FindAsync(
+        var habits = await habitRepository.FindAsync(
             h => h.UserId == userId
-                && (f.IsCompleted == null ? !h.IsCompleted : h.IsCompleted == f.IsCompleted.Value)
                 && (f.IsGeneral == null || h.IsGeneral == f.IsGeneral.Value)
                 && (f.IsBadHabit == null || h.IsBadHabit == f.IsBadHabit.Value)
                 && (!f.FrequencyOneTime || h.FrequencyUnit == null)
@@ -153,8 +157,15 @@ public class QueryHabitsTool(
                 && (normalizedTag == null || h.Tags.Any(t => t.Name.Contains(normalizedTag, StringComparison.OrdinalIgnoreCase))),
             includeMetrics
                 ? q => q.Include(h => h.Tags).Include(h => h.Logs)
-                : q => q.Include(h => h.Tags),
+                : q => q
+                    .Include(h => h.Tags)
+                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0)),
             ct);
+
+        var expectedCompletion = f.IsCompleted ?? false;
+        return habits
+            .Where(h => GetResponseCompletion(h, today) == expectedCompletion)
+            .ToList();
     }
 
     private static string? NormalizeSearchValue(string? value)
@@ -197,11 +208,12 @@ public class QueryHabitsTool(
     private static List<string> BuildLabels(Habit habit, DateOnly today, bool includeMetrics)
     {
         var labels = new List<string>();
+        var isCompleted = GetResponseCompletion(habit, today);
         if (habit.IsGeneral) labels.Add("GENERAL");
-        if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate < today) labels.Add("OVERDUE");
-        if (!habit.IsGeneral && !habit.IsCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
+        if (!habit.IsGeneral && !isCompleted && habit.DueDate < today) labels.Add("OVERDUE");
+        if (!habit.IsGeneral && !isCompleted && habit.DueDate == today) labels.Add("DUE TODAY");
         if (habit.IsBadHabit) labels.Add("BAD HABIT");
-        if (habit.IsCompleted) labels.Add("COMPLETED");
+        if (isCompleted) labels.Add("COMPLETED");
         if (habit.Tags.Count > 0) labels.Add($"Tags: {string.Join(", ", habit.Tags.Select(t => t.Name))}");
 
         AddMetricLabels(labels, habit, today, includeMetrics);
@@ -214,6 +226,11 @@ public class QueryHabitsTool(
 
         return labels;
     }
+
+    private static bool GetResponseCompletion(Habit habit, DateOnly today) =>
+        habit.IsGeneral
+            ? HabitScheduleService.HasCompletedLogInRange(habit, today, today)
+            : habit.IsCompleted;
 
     private static void AddMetricLabels(List<string> labels, Habit habit, DateOnly today, bool includeMetrics)
     {
@@ -250,7 +267,7 @@ public class QueryHabitsTool(
         {
             var childLabels = new List<string>();
             if (includeMetrics && child.Logs.Any(l => l.Date == today)) childLabels.Add("DONE");
-            if (child.IsCompleted) childLabels.Add("COMPLETED");
+            if (GetResponseCompletion(child, today)) childLabels.Add("COMPLETED");
             var childLabelStr = childLabels.Count > 0 ? $" [{string.Join(" | ", childLabels)}]" : "";
             var emojiLabel = string.IsNullOrWhiteSpace(child.Emoji) ? "No emoji" : $"Emoji: {child.Emoji}";
             sb.AppendLine($"{indent}- \"{child.Title}\"{childSuffixes.GetValueOrDefault(child.Id, string.Empty)} | ID: {child.Id} | {emojiLabel}{childLabelStr}");
