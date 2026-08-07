@@ -13,7 +13,6 @@ public class SuggestTagsQueryHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly ITagSuggestionService _suggestionService = Substitute.For<ITagSuggestionService>();
     private readonly IGenericRepository<Tag> _tagRepo = Substitute.For<IGenericRepository<Tag>>();
-    private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly SuggestTagsQueryHandler _handler;
 
@@ -21,11 +20,11 @@ public class SuggestTagsQueryHandlerTests
 
     public SuggestTagsQueryHandlerTests()
     {
-        _handler = new SuggestTagsQueryHandler(_payGate, _suggestionService, _tagRepo, _userRepo, _unitOfWork);
+        _handler = new SuggestTagsQueryHandler(_payGate, _suggestionService, _tagRepo, _unitOfWork);
     }
 
     private void GivenPayGateAllows() =>
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
 
     private void GivenExistingTags(params Tag[] tags) =>
         _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
@@ -37,23 +36,13 @@ public class SuggestTagsQueryHandlerTests
                 Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success<IReadOnlyList<string>>(names.ToList()));
 
-    private User GivenTrackedUser()
-    {
-        var user = User.Create("Test User", "test@example.com").Value;
-        _userRepo.FindOneTrackedAsync(
-                Arg.Any<Expression<Func<User, bool>>>(),
-                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns(user);
-        return user;
-    }
-
     private static SuggestTagsQuery Query() => new(UserId, "Morning run", "Jog around the park", "en");
 
     [Fact]
-    public async Task Handle_PayGateFails_ReturnsFailureWithoutCallingAi()
+    public async Task Handle_ReservationFails_ReturnsFailureWithoutCallingAi()
     {
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>())
+        GivenExistingTags();
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("You've reached your monthly AI message limit (20)."));
 
         var result = await _handler.Handle(Query(), CancellationToken.None);
@@ -63,11 +52,12 @@ public class SuggestTagsQueryHandlerTests
         await _suggestionService.DidNotReceive().SuggestTagsAsync(
             Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _payGate.Received(1)
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_AiServiceFails_ReturnsFailureWithoutMetering()
+    public async Task Handle_AiServiceFails_ReturnsFailureAfterReservation()
     {
         GivenPayGateAllows();
         GivenExistingTags();
@@ -79,16 +69,34 @@ public class SuggestTagsQueryHandlerTests
         var result = await _handler.Handle(Query(), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _payGate.Received(1)
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_NewSuggestion_ReturnsNewTagAndMetersOneMessage()
+    public async Task Handle_NewSuggestion_LoadsContextThenReservesImmediatelyBeforeProvider()
     {
-        GivenPayGateAllows();
-        GivenExistingTags();
-        GivenAiSuggests("fitness");
-        var user = GivenTrackedUser();
+        var calls = new List<string>();
+        _tagRepo.FindAsync(Arg.Any<Expression<Func<Tag, bool>>>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                calls.Add("context");
+                return new List<Tag>().AsReadOnly();
+            });
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                calls.Add("reserve");
+                return Result.Success();
+            });
+        _suggestionService.SuggestTagsAsync(
+                Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                calls.Add("provider");
+                return Result.Success<IReadOnlyList<string>>(["fitness"]);
+            });
 
         var result = await _handler.Handle(Query(), CancellationToken.None);
 
@@ -99,9 +107,7 @@ public class SuggestTagsQueryHandlerTests
         suggestion.Color.Should().Be("#7c3aed");
         suggestion.IsExisting.Should().BeFalse();
         suggestion.Id.Should().BeNull();
-
-        user.AiMessagesUsedThisMonth.Should().Be(1);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        calls.Should().Equal("context", "reserve", "provider");
     }
 
     [Fact]
@@ -111,7 +117,6 @@ public class SuggestTagsQueryHandlerTests
         var existing = Tag.Create(UserId, "Health", "#10b981").Value;
         GivenExistingTags(existing);
         GivenAiSuggests("health", "reading");
-        GivenTrackedUser();
 
         var result = await _handler.Handle(Query(), CancellationToken.None);
 
@@ -137,7 +142,6 @@ public class SuggestTagsQueryHandlerTests
         GivenPayGateAllows();
         GivenExistingTags();
         GivenAiSuggests("Fit", "fit", "FIT", "Run", "Walk", "Swim", "Bike", "Yoga");
-        GivenTrackedUser();
 
         var result = await _handler.Handle(Query(), CancellationToken.None);
 

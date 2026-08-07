@@ -4163,8 +4163,7 @@
         "file": "tests/Orbit.Application.Tests/Commands/Habits/SuggestHabitSetupCommandHandlerTests.cs",
         "references": [
           "SuggestHabitSetupCommand",
-          "SuggestHabitSetupCommandHandler",
-          "User"
+          "SuggestHabitSetupCommandHandler"
         ]
       },
       {
@@ -5290,8 +5289,7 @@
         "references": [
           "SuggestTagsQuery",
           "SuggestTagsQueryHandler",
-          "Tag",
-          "User"
+          "Tag"
         ]
       },
       {
