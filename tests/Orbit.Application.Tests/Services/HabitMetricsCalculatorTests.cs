@@ -349,13 +349,34 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
-    public void Calculate_LegacyBadHabitCreatedEarlierAndScheduledToday_StartsToday()
+    public void Calculate_LegacyBadHabitWithCleanHistory_PreservesHistoricalWindow()
     {
+        var startDate = Today.AddDays(-5);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: startDate)).Value;
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        habit.CatchUpDueDate(Today);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(6);
+        metrics.LongestStreak.Should().Be(6);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_LegacyBadHabitFirstScheduledToday_StartsToday()
+    {
+        var createdDate = Today.AddDays(-5);
         var habit = Habit.Create(new HabitCreateParams(
             ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
             IsBadHabit: true, DueDate: Today)).Value;
         typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+            .SetValue(habit, createdDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        habit.UpdatedAtUtc = habit.CreatedAtUtc;
 
         var metrics = HabitMetricsCalculator.Calculate(habit, Today);
 
@@ -363,6 +384,24 @@ public class HabitMetricsCalculatorTests
         metrics.LongestStreak.Should().Be(1);
         metrics.WeeklyCompletionRate.Should().Be(100);
         metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_LegacyGoodHabitWithOnePreStartLog_DoesNotInferProgress()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
+            DueDate: Today)).Value;
+        habit.Log(Today.AddDays(-1), advanceDueDate: false);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, Today.AddDays(-5).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
     }
 
     [Fact]
