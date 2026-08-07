@@ -250,6 +250,124 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void Calculate_BadHabitScheduledInFuture_HasNoMetricsYet()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
+    public void Calculate_GoodHabitScheduledInFuture_HasNoMetricsYet()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
+            DueDate: Today.AddDays(5))).Value;
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
+    public void Calculate_LegacyBadHabitScheduledInFuture_HasNoMetricsYet()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
+    public void Calculate_BadHabitScheduledToday_StartsWithOneCleanDay()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today)).Value;
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(1);
+        metrics.LongestStreak.Should().Be(1);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_HabitStartedYesterday_ExcludesEarlierDates()
+    {
+        var yesterday = Today.AddDays(-1);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
+            DueDate: yesterday)).Value;
+        habit.Log(yesterday, advanceDueDate: false);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(1);
+        metrics.LongestStreak.Should().Be(1);
+        metrics.WeeklyCompletionRate.Should().Be(50);
+        metrics.MonthlyCompletionRate.Should().Be(50);
+    }
+
+    [Fact]
+    public void Calculate_AdvancedDueDate_PreservesOriginalExpectedWindow()
+    {
+        var startDate = Today.AddDays(-3);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "Morning walk", FrequencyUnit.Day, 1,
+            DueDate: startDate)).Value;
+
+        for (var date = startDate; date <= Today; date = date.AddDays(1))
+            habit.Log(date);
+
+        habit.DueDate.Should().Be(Today.AddDays(1));
+        typeof(Habit).GetProperty(nameof(Habit.ScheduledStartDate))!.SetValue(habit, null);
+        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
+            .SetValue(habit, startDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(4);
+        metrics.LongestStreak.Should().Be(4);
+        metrics.WeeklyCompletionRate.Should().Be(100);
+        metrics.MonthlyCompletionRate.Should().Be(100);
+    }
+
+    [Fact]
+    public void Calculate_BadHabitWithPreStartLog_HasNoMetricsYet()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
+        habit.Log(Today, advanceDueDate: false);
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today);
+
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
     public void Calculate_BadHabit_LoggedToday_CompletionRate0()
     {
         var habit = Habit.Create(new HabitCreateParams(
@@ -506,9 +624,7 @@ public class HabitMetricsCalculatorTests
     public void Calculate_StreakLongerThan365Days_NotCappedAt365()
     {
         var habit = Habit.Create(new HabitCreateParams(
-            ValidUserId, "Long Streak", FrequencyUnit.Day, 1, DueDate: Today)).Value;
-        typeof(Habit).GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, Today.AddDays(-600).ToDateTime(TimeOnly.MinValue));
+            ValidUserId, "Long Streak", FrequencyUnit.Day, 1, DueDate: Today.AddDays(-600))).Value;
 
         for (var day = 0; day < 500; day++)
             habit.Log(Today.AddDays(-day), advanceDueDate: false);

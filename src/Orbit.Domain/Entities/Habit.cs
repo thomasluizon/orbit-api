@@ -62,6 +62,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     public bool IsBadHabit { get; private set; }
     public bool IsCompleted { get; private set; }
     public DateOnly DueDate { get; private set; }
+    public DateOnly? ScheduledStartDate { get; private set; }
     /// <summary>
     /// For monthly/yearly habits, the original day-of-month from the first DueDate (1-31).
     /// Preserves the anchor across month-end clamping so a Jan 31 habit re-anchors to Mar 31
@@ -146,6 +147,7 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
             IsGeneral = p.IsGeneral,
             IsFlexible = p.IsFlexible,
             DueDate = p.DueDate,
+            ScheduledStartDate = p.DueDate,
             OriginalDayOfMonth = p.FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year
                 ? p.DueDate.Day
                 : null,
