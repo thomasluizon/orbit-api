@@ -49,7 +49,8 @@ public record HabitUpdateParams(
     DateOnly? EndDate = null,
     bool? ClearEndDate = null,
     IReadOnlyList<ScheduledReminderTime>? ScheduledReminders = null,
-    string? Emoji = null);
+    string? Emoji = null,
+    DateOnly? UserToday = null);
 
 public class Habit : Entity, ITimestamped, ISoftDeletable
 {
@@ -370,7 +371,17 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
         DueEndTime = p.DueEndTime;
 
         if (p.DueDate is not null)
+        {
+            var reschedulesUnstartedHabit = ScheduledStartDate.HasValue
+                && p.UserToday.HasValue
+                && ScheduledStartDate.Value > p.UserToday.Value
+                && DueDate == ScheduledStartDate.Value
+                && p.DueDate.Value != DueDate;
+
             DueDate = p.DueDate.Value;
+            if (reschedulesUnstartedHabit)
+                ScheduledStartDate = DueDate;
+        }
 
         if (FrequencyUnit is Enums.FrequencyUnit.Month or Enums.FrequencyUnit.Year)
             OriginalDayOfMonth = DueDate.Day;

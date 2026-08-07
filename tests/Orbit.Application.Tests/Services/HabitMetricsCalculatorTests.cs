@@ -350,6 +350,58 @@ public class HabitMetricsCalculatorTests
     }
 
     [Fact]
+    public void Calculate_FutureBadHabitRescheduledEarlier_StartsOnNewDate()
+    {
+        var newStart = Today.AddDays(2);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(5))).Value;
+
+        habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            newStart,
+            UserToday: Today));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, newStart);
+
+        habit.ScheduledStartDate.Should().Be(newStart);
+        metrics.CurrentStreak.Should().Be(1);
+        metrics.LongestStreak.Should().Be(1);
+    }
+
+    [Fact]
+    public void Calculate_FutureBadHabitRescheduledLater_HasNoPreStartMetrics()
+    {
+        var newStart = Today.AddDays(5);
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId, "No caffeine", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(2))).Value;
+
+        habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            habit.Days.ToList(),
+            habit.IsBadHabit,
+            newStart,
+            UserToday: Today));
+
+        var metrics = HabitMetricsCalculator.Calculate(habit, Today.AddDays(3));
+
+        habit.ScheduledStartDate.Should().Be(newStart);
+        metrics.CurrentStreak.Should().Be(0);
+        metrics.LongestStreak.Should().Be(0);
+        metrics.WeeklyCompletionRate.Should().Be(0);
+        metrics.MonthlyCompletionRate.Should().Be(0);
+    }
+
+    [Fact]
     public void Calculate_LegacyBadHabitWithCleanHistory_PreservesHistoricalWindow()
     {
         var startDate = Today.AddDays(-5);
