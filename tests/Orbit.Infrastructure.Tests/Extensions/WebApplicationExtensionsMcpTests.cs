@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using NSubstitute;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Interfaces;
@@ -72,8 +74,17 @@ public class WebApplicationExtensionsMcpTests
     [Fact]
     public void TryGetMcpToolCall_ValidCall_ExtractsToolNameIdAndFingerprint()
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(
-            "{\"method\":\"tools/call\",\"id\":42,\"params\":{\"name\":\"get_habits\",\"arguments\":{\"a\":1}}}");
+        using var document = CreateSdkToolCallDocument(
+            "get_habits",
+            new RequestId(42),
+            new Dictionary<string, JsonElement>
+            {
+                ["a"] = JsonSerializer.SerializeToElement(1)
+            });
+        document.RootElement.EnumerateObject().Select(property => property.Name)
+            .Should().BeEquivalentTo("jsonrpc", "id", "method", "params");
+        document.RootElement.GetProperty("params").EnumerateObject().Select(property => property.Name)
+            .Should().BeEquivalentTo("name", "arguments");
 
         var matched = WebApplicationExtensions.TryGetMcpToolCall(
             document?.RootElement,
@@ -93,8 +104,14 @@ public class WebApplicationExtensionsMcpTests
     [Fact]
     public void TryGetMcpToolCall_AgentOperation_CapturesOperationId()
     {
-        using var document = WebApplicationExtensions.TryParseMcpBody(
-            "{\"method\":\"tools/call\",\"params\":{\"name\":\"execute_agent_operation_v2\",\"operationId\":\"op-7\",\"arguments\":{\"x\":true}}}");
+        using var document = CreateSdkToolCallDocument(
+            "execute_agent_operation_v2",
+            new RequestId(7),
+            new Dictionary<string, JsonElement>
+            {
+                ["operationId"] = JsonSerializer.SerializeToElement("op-7"),
+                ["arguments"] = JsonSerializer.SerializeToElement(new { x = true })
+            });
 
         var matched = WebApplicationExtensions.TryGetMcpToolCall(
             document?.RootElement,
@@ -113,8 +130,7 @@ public class WebApplicationExtensionsMcpTests
     public void TryGetMcpToolCall_ClonedRequestId_SurvivesDocumentDisposal()
     {
         JsonElement? requestId;
-        using (var document = WebApplicationExtensions.TryParseMcpBody(
-            "{\"method\":\"tools/call\",\"id\":\"abc\",\"params\":{\"name\":\"get_habits\"}}"))
+        using (var document = CreateSdkToolCallDocument("get_habits", new RequestId("abc")))
         {
             WebApplicationExtensions.TryGetMcpToolCall(
                 document?.RootElement, out _, out requestId, out _, out _);
@@ -154,8 +170,7 @@ public class WebApplicationExtensionsMcpTests
     [Fact]
     public async Task TryApplyMcpRateLimitsAsync_NonToolRequest_PreservesRequestIdInRejection()
     {
-        using var requestDocument = WebApplicationExtensions.TryParseMcpBody(
-            "{\"jsonrpc\":\"2.0\",\"id\":\"list-7\",\"method\":\"tools/list\"}");
+        using var requestDocument = CreateSdkRequestDocument(RequestMethods.ToolsList, new RequestId("list-7"));
         var isToolCall = WebApplicationExtensions.TryGetMcpToolCall(
             requestDocument?.RootElement,
             out var toolName,
@@ -172,7 +187,11 @@ public class WebApplicationExtensionsMcpTests
 
         isToolCall.Should().BeFalse();
         toolName.Should().BeNull();
-        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(context, toolName, requestId))
+        (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            context,
+            toolName,
+            operationId: null,
+            requestId))
             .Should().BeFalse();
 
         context.Response.Body.Position = 0;
@@ -208,14 +227,17 @@ public class WebApplicationExtensionsMcpTests
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, firstKey),
             "get_habits",
+            operationId: null,
             requestId: null)).Should().BeTrue();
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, firstKey),
             "get_habits",
+            operationId: null,
             requestId: null)).Should().BeFalse();
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             CreateRateLimitContext(service, secondKey),
             "get_habits",
+            operationId: null,
             requestId: null)).Should().BeTrue();
     }
 
@@ -253,10 +275,12 @@ public class WebApplicationExtensionsMcpTests
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             allowedContext,
             toolName,
+            operationId: null,
             requestIdDocument.RootElement.Clone())).Should().BeTrue();
         (await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             rejectedContext,
             toolName,
+            operationId: null,
             requestIdDocument.RootElement.Clone())).Should().BeFalse();
 
         rejectedContext.Response.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
@@ -278,6 +302,53 @@ public class WebApplicationExtensionsMcpTests
             Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("get_daily_summary")]
+    [InlineData("get_retrospective")]
+    [InlineData("review_goals")]
+    public async Task TryApplyMcpRateLimitsAsync_WrappedAiOperation_UsesAiPolicy(string operationId)
+    {
+        using var document = CreateSdkToolCallDocument(
+            "execute_agent_operation_v2",
+            new RequestId(9),
+            new Dictionary<string, JsonElement>
+            {
+                ["operationId"] = JsonSerializer.SerializeToElement(operationId),
+                ["arguments"] = JsonSerializer.SerializeToElement(new { })
+            });
+        WebApplicationExtensions.TryGetMcpToolCall(
+            document.RootElement,
+            out var toolName,
+            out var requestId,
+            out var extractedOperationId,
+            out _).Should().BeTrue();
+        var service = Substitute.For<IDistributedRateLimitService>();
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 60, 1, DateTime.UtcNow.AddMinutes(1)));
+        service.TryAcquireAsync(
+                WebApplicationExtensions.McpAiRateLimitPolicy,
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 15, 15, DateTime.UtcNow.AddMinutes(1)));
+        var apiKeyId = Guid.NewGuid();
+
+        var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
+            CreateRateLimitContext(service, apiKeyId),
+            toolName,
+            extractedOperationId,
+            requestId);
+
+        allowed.Should().BeFalse();
+        extractedOperationId.Should().Be(operationId);
+        await service.Received(1).TryAcquireAsync(
+            WebApplicationExtensions.McpAiRateLimitPolicy,
+            $"api-key:{apiKeyId}",
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task TryApplyMcpRateLimitsAsync_JwtPrincipal_UsesUserPartition()
     {
@@ -293,6 +364,7 @@ public class WebApplicationExtensionsMcpTests
         var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             context,
             "get_habits",
+            operationId: null,
             requestId: null);
 
         allowed.Should().BeTrue();
@@ -311,6 +383,7 @@ public class WebApplicationExtensionsMcpTests
         var allowed = await WebApplicationExtensions.TryApplyMcpRateLimitsAsync(
             context,
             "get_daily_summary",
+            operationId: null,
             requestId: null);
 
         allowed.Should().BeTrue();
@@ -351,5 +424,38 @@ public class WebApplicationExtensionsMcpTests
         }
 
         return context;
+    }
+
+    private static JsonDocument CreateSdkToolCallDocument(
+        string toolName,
+        RequestId requestId,
+        IDictionary<string, JsonElement>? arguments = null)
+    {
+        var callParams = new CallToolRequestParams
+        {
+            Name = toolName,
+            Arguments = arguments
+        };
+
+        return CreateSdkRequestDocument(
+            RequestMethods.ToolsCall,
+            requestId,
+            JsonSerializer.SerializeToNode(callParams, McpJsonUtilities.DefaultOptions));
+    }
+
+    private static JsonDocument CreateSdkRequestDocument(
+        string method,
+        RequestId requestId,
+        System.Text.Json.Nodes.JsonNode? parameters = null)
+    {
+        var request = new JsonRpcRequest
+        {
+            Id = requestId,
+            Method = method,
+            Params = parameters
+        };
+
+        return JsonDocument.Parse(
+            JsonSerializer.Serialize<JsonRpcMessage>(request, McpJsonUtilities.DefaultOptions));
     }
 }

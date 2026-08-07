@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using Orbit.Api.Extensions;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -19,11 +21,15 @@ namespace Orbit.Api.Extensions;
 
 public static partial class WebApplicationExtensions
 {
+    private const string AgentOperationMcpTool = "execute_agent_operation_v2";
     internal const string McpRateLimitPolicy = "mcp";
     internal const string McpAiRateLimitPolicy = "mcp-ai";
 
     private static readonly HashSet<string> AiBearingMcpTools =
         new(StringComparer.OrdinalIgnoreCase) { "get_daily_summary", "get_goal_review", "get_retrospective" };
+
+    private static readonly HashSet<string> AiBearingAgentOperations =
+        new(StringComparer.OrdinalIgnoreCase) { "get_daily_summary", "get_retrospective", "review_goals" };
 
     public static async Task ConfigureOrbitPipeline(this WebApplication app)
     {
@@ -138,7 +144,7 @@ public static partial class WebApplicationExtensions
             out var operationId,
             out var operationFingerprint);
 
-        if (!await TryApplyMcpRateLimitsAsync(context, toolName, requestId))
+        if (!await TryApplyMcpRateLimitsAsync(context, toolName, operationId, requestId))
             return;
 
         if (!isToolCall)
@@ -157,6 +163,7 @@ public static partial class WebApplicationExtensions
     internal static async Task<bool> TryApplyMcpRateLimitsAsync(
         HttpContext context,
         string? toolName,
+        string? operationId,
         JsonElement? requestId)
     {
         if (context.User.Identity?.IsAuthenticated != true)
@@ -187,7 +194,7 @@ public static partial class WebApplicationExtensions
             return false;
         }
 
-        if (toolName is null || !AiBearingMcpTools.Contains(toolName))
+        if (!IsAiBearingMcpCall(toolName, operationId))
             return true;
 
         var aiDecision = await service.TryAcquireAsync(
@@ -204,6 +211,17 @@ public static partial class WebApplicationExtensions
             partitionKey,
             aiDecision);
         return false;
+    }
+
+    private static bool IsAiBearingMcpCall(string? toolName, string? operationId)
+    {
+        if (toolName is null)
+            return false;
+
+        return AiBearingMcpTools.Contains(toolName)
+            || (string.Equals(toolName, AgentOperationMcpTool, StringComparison.OrdinalIgnoreCase)
+                && operationId is not null
+                && AiBearingAgentOperations.Contains(operationId));
     }
 
     internal static JsonDocument? TryParseMcpBody(string body)
@@ -445,38 +463,62 @@ public static partial class WebApplicationExtensions
         if (root is not { ValueKind: JsonValueKind.Object } element)
             return false;
 
-        if (element.TryGetProperty("id", out var idElement))
-            requestId = idElement.Clone();
-
-        if (!element.TryGetProperty("method", out var methodElement) ||
-            !string.Equals(methodElement.GetString(), "tools/call", StringComparison.OrdinalIgnoreCase))
+        JsonRpcMessage? message;
+        try
+        {
+            message = element.Deserialize<JsonRpcMessage>(McpJsonUtilities.DefaultOptions);
+        }
+        catch (JsonException)
         {
             return false;
         }
 
-        if (!element.TryGetProperty("params", out var paramsElement))
+        if (message is not JsonRpcRequest request)
             return false;
 
-        if (paramsElement.TryGetProperty("name", out var nameElement))
-            toolName = nameElement.GetString();
+        requestId = JsonSerializer.SerializeToElement(request.Id, McpJsonUtilities.DefaultOptions);
+        if (!string.Equals(request.Method, RequestMethods.ToolsCall, StringComparison.OrdinalIgnoreCase))
+            return false;
 
-        if (string.Equals(toolName, "execute_agent_operation_v2", StringComparison.OrdinalIgnoreCase))
+        CallToolRequestParams? callParams;
+        try
         {
-            if (paramsElement.TryGetProperty("operationId", out var operationIdElement))
-                operationId = operationIdElement.GetString();
+            callParams = request.Params?.Deserialize<CallToolRequestParams>(McpJsonUtilities.DefaultOptions);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
 
-            operationFingerprint = paramsElement.TryGetProperty("arguments", out var argumentsElement)
+        if (callParams is null || string.IsNullOrWhiteSpace(callParams.Name))
+            return false;
+
+        toolName = callParams.Name;
+        var arguments = callParams.Arguments;
+        if (string.Equals(toolName, AgentOperationMcpTool, StringComparison.OrdinalIgnoreCase))
+        {
+            if (arguments is not null
+                && arguments.TryGetValue("operationId", out var operationIdElement)
+                && operationIdElement.ValueKind == JsonValueKind.String)
+            {
+                operationId = operationIdElement.GetString();
+            }
+
+            operationFingerprint = arguments is not null
+                && arguments.TryGetValue("arguments", out var argumentsElement)
                 ? AgentOperationFingerprint.Compute(operationId ?? string.Empty, argumentsElement.GetRawText())
                 : AgentOperationFingerprint.Compute(operationId ?? string.Empty, "{}");
         }
         else
         {
             operationFingerprint = AgentOperationFingerprint.Compute(
-                toolName ?? string.Empty,
-                paramsElement.GetRawText());
+                toolName,
+                arguments is null
+                    ? "{}"
+                    : JsonSerializer.Serialize(arguments, McpJsonUtilities.DefaultOptions));
         }
 
-        return !string.IsNullOrWhiteSpace(toolName);
+        return true;
     }
 
     private static async Task WriteMcpPolicyErrorAsync(
