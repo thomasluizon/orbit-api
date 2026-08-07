@@ -101,4 +101,23 @@ public class CacheInvalidationHelperTests
         cache.TryGetValue(otherUserKey, out _).Should().BeTrue();
         cache.TryGetValue(otherWindowKey, out _).Should().BeTrue();
     }
+
+    [Theory]
+    [InlineData("Week", "en")]
+    [InlineData("week", "")]
+    public void InvalidateRetrospectiveCache_RemovesAcceptedNoncanonicalKeys(
+        string period,
+        string language)
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var userId = Guid.NewGuid();
+        var today = new DateOnly(2020, 1, 15);
+        var (dateFrom, _) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay: 1);
+        var key = RetrospectiveCacheKey.Build(userId, period, dateFrom, language);
+        cache.Set(key, "target");
+
+        CacheInvalidationHelper.InvalidateRetrospectiveCache(cache, userId, today);
+
+        cache.TryGetValue(key, out _).Should().BeFalse();
+    }
 }
