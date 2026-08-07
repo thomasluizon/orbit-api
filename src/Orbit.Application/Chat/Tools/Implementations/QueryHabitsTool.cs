@@ -155,11 +155,12 @@ public class QueryHabitsTool(
                 && (!f.Date.HasValue || (!h.IsGeneral && (f.IncludeOverdue ? h.DueDate <= f.Date.Value : h.DueDate == f.Date.Value)))
                 && (normalizedSearch == null || h.Title.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
                 && (normalizedTag == null || h.Tags.Any(t => t.Name.Contains(normalizedTag, StringComparison.OrdinalIgnoreCase))),
-            includeMetrics
-                ? q => q.Include(h => h.Tags).Include(h => h.Logs)
-                : q => q
+            q => includeMetrics
+                ? q.Include(h => h.Tags).Include(h => h.Logs).AsSplitQuery()
+                : q
                     .Include(h => h.Tags)
-                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0)),
+                    .Include(h => h.Logs.Where(l => !l.IsDeleted && l.Date == today && l.Value > 0))
+                    .AsSplitQuery(),
             ct);
 
         var expectedCompletion = f.IsCompleted ?? false;
