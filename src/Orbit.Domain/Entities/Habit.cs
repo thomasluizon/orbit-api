@@ -382,7 +382,11 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     private void ApplyOptionalUpdates(HabitUpdateParams p)
     {
         if (p.IsGeneral.HasValue)
+        {
             IsGeneral = p.IsGeneral.Value;
+            if (IsGeneral)
+                IsCompleted = false;
+        }
         if (p.IsFlexible.HasValue)
             IsFlexible = p.IsFlexible.Value;
         if (p.ReminderEnabled.HasValue)

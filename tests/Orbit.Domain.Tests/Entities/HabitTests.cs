@@ -319,6 +319,21 @@ public class HabitTests
     }
 
     [Fact]
+    public void Update_CompletedOneTimeTaskToGeneral_ClearsPermanentCompletion()
+    {
+        var habit = CreateOneTimeHabit(dueDate: Yesterday);
+        habit.Log(Yesterday).IsSuccess.Should().BeTrue();
+
+        var result = habit.Update(new HabitUpdateParams(
+            "Read a book someday", null, null, null, null, false, Today, IsGeneral: true));
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsGeneral.Should().BeTrue();
+        habit.IsCompleted.Should().BeFalse();
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public void Log_Recurring_AdvancesDueDate()
     {
         var startDate = new DateOnly(2025, 1, 1);
