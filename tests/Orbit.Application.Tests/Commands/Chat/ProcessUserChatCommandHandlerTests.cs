@@ -1,12 +1,15 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Application.Chat.Models;
 using Orbit.Application.Chat.Tools;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -63,12 +66,28 @@ public class ProcessUserChatCommandHandlerTests
 
     private ProcessUserChatCommandHandler CreateHandler(params IAiTool[] tools)
     {
+        return CreateHandler(_payGate, tools);
+    }
+
+    private ProcessUserChatCommandHandler CreateHandler(
+        IPayGateService payGate,
+        params IAiTool[] tools)
+    {
+        return CreateHandler(_userRepo, _unitOfWork, payGate, tools);
+    }
+
+    private ProcessUserChatCommandHandler CreateHandler(
+        IGenericRepository<User> userRepository,
+        IUnitOfWork unitOfWork,
+        IPayGateService payGate,
+        params IAiTool[] tools)
+    {
         var toolRegistry = new AiToolRegistry(tools);
         SetupOperationExecutor(toolRegistry);
         var aiDeps = new ChatAiDependencies(_aiIntentService, toolRegistry, _promptBuilder, _catalogService);
-        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, _userRepo, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
+        var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
-            _userDateService, _userStreakService, _payGate, _unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore, _streakGoalReadSyncer, _gamificationService);
+            _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor, _pendingClarificationStore, _streakGoalReadSyncer, _gamificationService);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -208,8 +227,31 @@ public class ProcessUserChatCommandHandlerTests
     {
         user ??= User.Create("Thomas", "thomas@test.com").Value;
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>())
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>())
             .Returns(payGatePass ? Result.Success() : Result.PayGateFailure("AI message limit reached."));
+    }
+
+    private PayGateService CreateRealPayGate(User user)
+    {
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        return CreateRealPayGate(_userRepo);
+    }
+
+    private PayGateService CreateRealPayGate(IGenericRepository<User> userRepository)
+    {
+        var appConfig = Substitute.For<IAppConfigService>();
+        appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, Arg.Any<CancellationToken>())
+            .Returns(20);
+        appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, Arg.Any<CancellationToken>())
+            .Returns(500);
+
+        return new PayGateService(_habitRepo, userRepository, appConfig);
     }
 
     private static readonly AiConversationContext TestConversationContext = new()
@@ -259,6 +301,82 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_FaqCacheHit_ReturnsCachedAnswerWithoutReservingQuota()
+    {
+        SetupUserAndPayGate();
+        ChatFaqCache.StoreAnswer("bad_habits", "pt", "Resposta em cache");
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "O que e um mau habito?"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessage.Should().Be("Resposta em cache");
+        await _payGate.DidNotReceive()
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
+        await _aiIntentService.DidNotReceive().SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FaqCacheMiss_ReservesQuotaExactlyOnceBeforeCallingAi()
+    {
+        SetupUserAndPayGate();
+        SetupAiResponse(new AiResponse { TextMessage = "O Pro inclui recursos adicionais.", ToolCalls = null });
+        var handler = CreateHandler();
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Quais sao os recursos pro?"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await _payGate.Received(1)
+            .TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>());
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_TenConcurrentRequestsWithOneMessageRemaining_OnlyOneCallsAi()
+    {
+        const int requestCount = 10;
+        var persistence = new StaleSnapshotQuotaStore(initialCount: 19, requestCount);
+        SetupAiResponse(new AiResponse { TextMessage = "Reserved response", ToolCalls = null });
+        var command = new ProcessUserChatCommand(UserId, "Hello AI");
+        var handlers = Enumerable.Range(0, requestCount)
+            .Select(_ =>
+            {
+                var (repository, unitOfWork) = persistence.CreateRequestScope(UserId);
+                return CreateHandler(
+                    repository,
+                    unitOfWork,
+                    CreateRealPayGate(repository));
+            })
+            .ToList();
+
+        var results = await Task.WhenAll(
+            handlers.Select(handler => handler.Handle(command, CancellationToken.None)));
+
+        results.Should().ContainSingle(result => result.IsSuccess);
+        results.Count(result => result.IsFailure && result.ErrorCode == Result.PayGateErrorCode).Should().Be(requestCount - 1);
+        persistence.PersistedCount.Should().Be(20);
+        persistence.InitialSnapshotCount.Should().Be(requestCount);
+        persistence.DistinctInitialSnapshotCount.Should().Be(requestCount);
+        persistence.ConcurrencyFailureCount.Should().Be(requestCount - 1);
+        persistence.DiscardCount.Should().Be(requestCount - 1);
+        persistence.ReloadCount.Should().Be(requestCount - 1);
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_AiServiceFails_ReturnsFailure()
     {
         SetupUserAndPayGate();
@@ -270,6 +388,34 @@ public class ProcessUserChatCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("AI service unavailable");
+    }
+
+    [Fact]
+    public async Task Handle_AiServiceFails_RetainsConsumedQuota()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (var i = 0; i < 19; i++)
+            user.IncrementAiMessageCount();
+
+        _aiIntentService.SendWithToolsAsync(
+                Arg.Any<AiToolRequest>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                user.AiMessagesUsedThisMonth.Should().Be(20);
+                return Result.Failure<AiResponse>("AI service unavailable");
+            });
+        var handler = CreateHandler(CreateRealPayGate(user));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Hello AI"),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("AI service unavailable");
+        user.AiMessagesUsedThisMonth.Should().Be(20);
     }
 
     [Fact]
@@ -503,7 +649,7 @@ public class ProcessUserChatCommandHandlerTests
     public async Task Handle_NullUser_StillSucceeds()
     {
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns((User?)null);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
         SetupAiResponse(new AiResponse { TextMessage = "Response", ToolCalls = null });
         var handler = CreateHandler();
 
@@ -1272,7 +1418,7 @@ public class ProcessUserChatCommandHandlerTests
         var user = User.Create("Thomas", "thomas@test.com").Value;
         user.SetAiMemory(false);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.CanSendAiMessage(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _payGate.TryConsumeAiMessage(UserId, _unitOfWork, Arg.Any<CancellationToken>()).Returns(Result.Success());
         SetupAiResponse(new AiResponse { TextMessage = "Hi!", ToolCalls = null });
         var handler = CreateHandler();
 
@@ -1751,5 +1897,116 @@ public class ProcessUserChatCommandHandlerTests
                 return new ToolResult(true, EntityId: Guid.NewGuid().ToString(), EntityName: name);
             });
         return tool;
+    }
+
+    private sealed class StaleSnapshotQuotaStore(int initialCount, int expectedInitialLoads)
+    {
+        private readonly object _gate = new();
+        private readonly TaskCompletionSource _initialLoadsReady = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly HashSet<User> _initialSnapshots = new(ReferenceEqualityComparer.Instance);
+        private int _persistedCount = initialCount;
+        private int _version;
+        private int _initialSnapshotCount;
+        private int _concurrencyFailureCount;
+        private int _discardCount;
+        private int _reloadCount;
+
+        public int PersistedCount => Volatile.Read(ref _persistedCount);
+
+        public int InitialSnapshotCount => Volatile.Read(ref _initialSnapshotCount);
+
+        public int DistinctInitialSnapshotCount
+        {
+            get
+            {
+                lock (_gate)
+                    return _initialSnapshots.Count;
+            }
+        }
+
+        public int ConcurrencyFailureCount => Volatile.Read(ref _concurrencyFailureCount);
+
+        public int DiscardCount => Volatile.Read(ref _discardCount);
+
+        public int ReloadCount => Volatile.Read(ref _reloadCount);
+
+        public (IGenericRepository<User> Repository, IUnitOfWork UnitOfWork) CreateRequestScope(Guid userId)
+        {
+            var repository = Substitute.For<IGenericRepository<User>>();
+            var unitOfWork = Substitute.For<IUnitOfWork>();
+            User? trackedUser = null;
+            var trackedVersion = -1;
+
+            repository.GetByIdAsync(userId, Arg.Any<CancellationToken>())
+                .Returns(_ => CreateFreeUserSnapshot(PersistedCount));
+            repository.FindOneTrackedAsync(
+                    Arg.Any<Expression<Func<User, bool>>>(),
+                    Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                    Arg.Any<CancellationToken>())
+                .Returns(async _ =>
+                {
+                    lock (_gate)
+                    {
+                        trackedUser = CreateFreeUserSnapshot(_persistedCount);
+                        trackedVersion = _version;
+                        _initialSnapshots.Add(trackedUser);
+                        _initialSnapshotCount++;
+                        if (_initialSnapshotCount == expectedInitialLoads)
+                            _initialLoadsReady.TrySetResult();
+                    }
+
+                    await _initialLoadsReady.Task;
+                    return (User?)trackedUser;
+                });
+            repository.ReloadAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
+                .Returns(callInfo =>
+                {
+                    lock (_gate)
+                    {
+                        trackedUser = callInfo.Arg<User>();
+                        trackedVersion = _version;
+                        _reloadCount++;
+                    }
+
+                    return Task.CompletedTask;
+                });
+            unitOfWork.When(candidate => candidate.DiscardChanges())
+                .Do(_ => Interlocked.Increment(ref _discardCount));
+            unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                    lock (_gate)
+                    {
+                        if (trackedUser is null)
+                            throw new InvalidOperationException("No tracked user is available for save.");
+
+                        if (trackedVersion != _version)
+                        {
+                            _concurrencyFailureCount++;
+                            throw new DbUpdateConcurrencyException("The quota snapshot is stale.");
+                        }
+
+                        if (trackedUser.AiMessagesUsedThisMonth == _persistedCount)
+                            return 0;
+
+                        _persistedCount = trackedUser.AiMessagesUsedThisMonth;
+                        _version++;
+                        trackedVersion = _version;
+                        return 1;
+                    }
+                });
+
+            return (repository, unitOfWork);
+        }
+
+        private static User CreateFreeUserSnapshot(int messageCount)
+        {
+            var user = User.Create("Thomas", "thomas@test.com").Value;
+            user.StartTrial(DateTime.UtcNow.AddDays(-1));
+            for (var i = 0; i < messageCount; i++)
+                user.IncrementAiMessageCount();
+            return user;
+        }
     }
 }

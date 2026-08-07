@@ -1,10 +1,12 @@
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Habits.Queries;
 
 namespace Orbit.Application.Common;
 
 public static class CacheInvalidationHelper
 {
     private static readonly string[] RetrospectivePeriods = ["week", "month", "quarter", "semester", "year"];
+    private static readonly int[] RetrospectiveWeekStartDays = [0, 1];
     private static readonly string[] SummaryTimeBuckets = ["morning", "afternoon", "evening", "night", "timeless"];
 
     public static void InvalidateSummaryCache(IMemoryCache cache, Guid userId, DateOnly today)
@@ -28,13 +30,13 @@ public static class CacheInvalidationHelper
     /// </summary>
     public static void InvalidateRetrospectiveCache(IMemoryCache cache, Guid userId, DateOnly today)
     {
-        for (int i = -2; i <= 2; i++)
-        {
-            var date = today.AddDays(i);
-            foreach (var period in RetrospectivePeriods)
+        foreach (var period in RetrospectivePeriods)
+            foreach (var weekStartDay in RetrospectiveWeekStartDays)
+            {
+                var (dateFrom, _) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
                 foreach (var lang in AppConstants.SupportedLanguages)
-                    cache.Remove($"retro:{userId}:{period}:{date}:{lang}");
-        }
+                    cache.Remove(RetrospectiveCacheKey.Build(userId, period, dateFrom, lang));
+            }
     }
 
     /// <summary>

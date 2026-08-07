@@ -12880,6 +12880,16 @@
           },
           "type": {
             "$ref": "#/components/schemas/GoalType"
+          },
+          "habitIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       },

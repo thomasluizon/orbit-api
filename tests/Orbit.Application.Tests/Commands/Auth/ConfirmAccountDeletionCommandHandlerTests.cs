@@ -42,6 +42,110 @@ public class ConfirmAccountDeletionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ProPlanBeyondGraceCap_SchedulesDeletionAtThirtyDays()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(340));
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        var earliestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(30);
+
+        var result = await _handler.Handle(
+            new ConfirmAccountDeletionCommand(UserId, "123456"),
+            CancellationToken.None);
+
+        var latestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(30);
+        result.Value.Should().BeOnOrAfter(earliestScheduledDeletionAtUtc)
+            .And.BeOnOrBefore(latestScheduledDeletionAtUtc);
+    }
+
+    [Fact]
+    public async Task Handle_ProPlanWithinGraceCap_SchedulesDeletionSevenDaysAfterPlanExpiry()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        var planExpiresAtUtc = DateTime.UtcNow.AddDays(3);
+        user.SetStripeSubscription("sub_123", planExpiresAtUtc);
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+
+        var result = await _handler.Handle(
+            new ConfirmAccountDeletionCommand(UserId, "123456"),
+            CancellationToken.None);
+
+        result.Value.Should().Be(planExpiresAtUtc.AddDays(7));
+    }
+
+    [Fact]
+    public async Task Handle_ProPlanAtGraceCapBoundary_SchedulesDeletionSevenDaysAfterPlanExpiry()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        var planExpiresAtUtc = DateTime.UtcNow.AddDays(23);
+        user.SetStripeSubscription("sub_123", planExpiresAtUtc);
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+
+        var result = await _handler.Handle(
+            new ConfirmAccountDeletionCommand(UserId, "123456"),
+            CancellationToken.None);
+
+        result.Value.Should().Be(planExpiresAtUtc.AddDays(7));
+    }
+
+    [Fact]
+    public async Task Handle_FreeUser_SchedulesDeletionInSevenDays()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        var earliestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
+
+        var result = await _handler.Handle(
+            new ConfirmAccountDeletionCommand(UserId, "123456"),
+            CancellationToken.None);
+
+        var latestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
+        result.Value.Should().BeOnOrAfter(earliestScheduledDeletionAtUtc)
+            .And.BeOnOrBefore(latestScheduledDeletionAtUtc);
+    }
+
+    [Fact]
+    public async Task Handle_TrialUserWithoutPlanExpiry_SchedulesDeletionInSevenDays()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        var earliestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
+
+        var result = await _handler.Handle(
+            new ConfirmAccountDeletionCommand(UserId, "123456"),
+            CancellationToken.None);
+
+        var latestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
+        result.Value.Should().BeOnOrAfter(earliestScheduledDeletionAtUtc)
+            .And.BeOnOrBefore(latestScheduledDeletionAtUtc);
+    }
+
+    [Fact]
+    public async Task Handle_ExpiredProPlan_SchedulesDeletionInSevenDays()
+    {
+        var user = User.Create("Test", TestEmail).Value;
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(-1));
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        SetupUser(user);
+        SetupDeletionCode(TestEmail, "123456");
+        var earliestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
+
+        var result = await _handler.Handle(
+            new ConfirmAccountDeletionCommand(UserId, "123456"),
+            CancellationToken.None);
+
+        var latestScheduledDeletionAtUtc = DateTime.UtcNow.AddDays(7);
+        result.Value.Should().BeOnOrAfter(earliestScheduledDeletionAtUtc)
+            .And.BeOnOrBefore(latestScheduledDeletionAtUtc);
+    }
+
+    [Fact]
     public async Task Handle_ValidCode_ClearsGoogleOAuthTokens()
     {
         var user = User.Create("Test", TestEmail).Value;
@@ -85,6 +189,7 @@ public class ConfirmAccountDeletionCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("Invalid");
         user.IsDeactivated.Should().BeFalse();
+        user.ScheduledDeletionAt.Should().BeNull();
         _cache.TryGetValue($"delete-attempts:{TestEmail}", out int attempts).Should().BeTrue();
         attempts.Should().Be(1);
     }

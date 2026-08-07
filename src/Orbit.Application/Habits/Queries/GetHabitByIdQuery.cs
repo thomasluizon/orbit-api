@@ -79,6 +79,17 @@ public class GetHabitByIdQueryHandler(
             userToday,
             cancellationToken);
         var children = HabitDetailChildMapper.MapChildren(habit, userToday, descendantLogsByHabitId);
+        var isCompleted = habit.IsCompleted;
+        if (habit.IsGeneral)
+        {
+            var currentDateLogs = await habitLogRepository.FindAsync(
+                l => l.HabitId == habit.Id
+                    && l.Date == userToday
+                    && l.Value > 0
+                    && !l.IsDeleted,
+                cancellationToken);
+            isCompleted = currentDateLogs.Count > 0;
+        }
 
         return Result.Success(new HabitDetailResponse(
             habit.Id,
@@ -87,7 +98,7 @@ public class GetHabitByIdQueryHandler(
             habit.FrequencyUnit,
             habit.FrequencyQuantity,
             habit.IsBadHabit,
-            habit.IsCompleted,
+            isCompleted,
             habit.IsGeneral,
             habit.IsFlexible,
             habit.DueDate,
@@ -125,7 +136,7 @@ internal static class HabitDetailDescendantLogLoader
         var descendantLogs = await habitLogRepository.FindAsync(
             l => descendantIds.Contains(l.HabitId)
                 && l.Date >= descendantLogCutoff
-                && l.Date < userToday,
+                && l.Date <= userToday,
             cancellationToken);
 
         return descendantLogs
@@ -164,7 +175,7 @@ internal static class HabitDetailChildMapper
         child.FrequencyUnit,
         child.FrequencyQuantity,
         child.IsBadHabit,
-        child.IsCompleted,
+        GetResponseCompletion(child, userToday, descendantLogsByHabitId),
         child.IsGeneral,
         child.IsFlexible,
         child.Days.ToList(),
@@ -177,6 +188,20 @@ internal static class HabitDetailChildMapper
         DetermineOverdueStatus(child, userToday, descendantLogsByHabitId),
         MapChildren(child, userToday, descendantLogsByHabitId),
         Emoji: child.Emoji);
+
+    private static bool GetResponseCompletion(
+        Habit habit,
+        DateOnly userToday,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<HabitLog>>? descendantLogsByHabitId)
+    {
+        if (!habit.IsGeneral)
+            return habit.IsCompleted;
+
+        return HabitScheduleService.HasCompletedLogInRange(
+            GetLogs(habit, descendantLogsByHabitId),
+            userToday,
+            userToday);
+    }
 
     private static bool DetermineOverdueStatus(
         Habit habit,

@@ -11,6 +11,7 @@ using Orbit.Domain.Interfaces;
 namespace Orbit.Application.Profile.Queries;
 
 public record ProfileResponse(
+    Guid UserId,
     string Name,
     string Email,
     string? TimeZone,
@@ -99,6 +100,7 @@ public class GetProfileQueryHandler(
             user.PublicProfileShowTopHabits);
 
         return Result.Success(new ProfileResponse(
+            user.Id,
             user.Name,
             user.Email,
             user.TimeZone,

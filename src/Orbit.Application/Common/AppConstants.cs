@@ -41,6 +41,7 @@ public static class AppConstants
     public const int MaxLanguageLength = 10;
     public const int MaxVerificationAttempts = 3;
     public const int VerificationAttemptWindowMinutes = 15;
+    public const int MaxDeletionGraceDays = 30;
     public const int MaxChatMessageLength = 4000;
     public const int MaxClarificationValueLength = 2048;
     public const int MaxClarificationArgsLength = 16384;

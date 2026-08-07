@@ -7,6 +7,7 @@ using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
+using Orbit.Infrastructure.Services.Prompts;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -48,7 +49,7 @@ public sealed partial class AiHabitSuggestionService(
         var languageName = LocaleHelper.GetAiLanguageName(language);
 
         return $"""
-            A user is creating a habit titled "{title}".
+            A user is creating a habit titled {PromptDataSanitizer.QuoteInline(title, 100)}.
             Infer the most sensible setup by reasoning about what the title implies, then reply with a single JSON object using EXACTLY these fields:
             - "emoji": a single emoji that best represents the habit, or null.
             - "frequencyUnit": "Day", "Week", "Month", or "Year" for a habit that repeats, or null for a ONE-TIME task that is finished after a single completion.

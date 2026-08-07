@@ -16,7 +16,8 @@ public class MoveHabitParentToolTests
 
     private static readonly Guid UserId = Guid.NewGuid();
 
-    public MoveHabitParentToolTests() => _tool = new MoveHabitParentTool(_mediator);
+    public MoveHabitParentToolTests() =>
+        _tool = HabitToolTestFactory.CreateMoveHabitParentTool(_mediator, UserId, "Floss");
 
     [Fact]
     public void Metadata_IsExposed()
@@ -65,6 +66,7 @@ public class MoveHabitParentToolTests
 
         result.Success.Should().BeTrue();
         result.EntityId.Should().Be(habitId.ToString());
+        result.EntityName.Should().Be("Floss");
         captured!.ParentId.Should().BeNull();
         captured.UserId.Should().Be(UserId);
     }
@@ -94,6 +96,7 @@ public class MoveHabitParentToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Be("Cannot create a cycle.");
+        result.EntityName.Should().BeNull();
     }
 
     private async Task<ToolResult> Execute(string json) =>

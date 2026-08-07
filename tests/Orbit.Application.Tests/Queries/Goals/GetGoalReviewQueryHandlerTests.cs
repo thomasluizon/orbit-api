@@ -35,13 +35,6 @@ public class GetGoalReviewQueryHandlerTests
         return Goal.Create(UserId, "Active Goal", 100, "pages").Value;
     }
 
-    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
-    {
-        typeof(Habit)
-            .GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
-    }
-
     [Fact]
     public async Task Handle_GeneratesNewReview_WhenNotCached()
     {
@@ -75,8 +68,8 @@ public class GetGoalReviewQueryHandlerTests
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
         var badHabit = Habit.Create(new HabitCreateParams(
-            UserId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
-        SetCreatedAtUtc(badHabit, Today.AddDays(-3));
+            UserId, "Doom scrolling", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(-3))).Value;
         badHabit.AddGoal(streakGoal);
         streakGoal.AddHabit(badHabit);
 

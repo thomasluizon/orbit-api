@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -42,10 +41,6 @@ public partial class ProcessUserChatCommandHandler
             }
             activeGoals = loadedGoals;
         }
-
-        var messageGate = await execution.PayGateService.CanSendAiMessage(request.UserId, cancellationToken);
-        if (messageGate.IsFailure)
-            return messageGate.PropagateError<ChatContext>();
 
         IReadOnlyList<UserFact> userFacts = [];
         if (aiMemoryEnabled)

@@ -66,6 +66,13 @@ public partial class ProcessUserChatCommandHandler
 
         LogCallingAiIntentService(logger, toolDeclarations.Count);
 
+        var reservation = await execution.PayGateService.TryConsumeAiMessage(
+            request.UserId,
+            execution.UnitOfWork,
+            cancellationToken);
+        if (reservation.IsFailure)
+            return reservation.PropagateError<AiResponse>();
+
         return await ai.IntentService.SendWithToolsAsync(
             new AiToolRequest(
                 request.Message,

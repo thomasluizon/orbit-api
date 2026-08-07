@@ -55,11 +55,14 @@ public class GetHabitFullDetailQueryHandler(
         var allRootLogs = await habitLogRepository.FindAsync(
             l => l.HabitId == request.HabitId,
             cancellationToken);
+        var isCompleted = habit.IsGeneral
+            ? allRootLogs.Any(l => !l.IsDeleted && l.Date == userToday && l.Value > 0)
+            : habit.IsCompleted;
 
         var detail = new HabitDetailResponse(
             habit.Id, habit.Title, habit.Description,
             habit.FrequencyUnit, habit.FrequencyQuantity,
-            habit.IsBadHabit, habit.IsCompleted, habit.IsGeneral, habit.IsFlexible,
+            habit.IsBadHabit, isCompleted, habit.IsGeneral, habit.IsFlexible,
             habit.DueDate, habit.DueTime, habit.DueEndTime, habit.EndDate,
             habit.Days.ToList(), habit.Position,
             habit.ReminderEnabled, habit.ReminderTimes, habit.ScheduledReminders,
