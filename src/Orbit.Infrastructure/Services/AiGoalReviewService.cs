@@ -20,7 +20,7 @@ public sealed partial class AiGoalReviewService(
             return Result.Failure<string>(ErrorMessages.NoGoalsData);
 
         var languageName = LocaleHelper.GetAiLanguageName(language);
-        var sanitizedGoalsContext = PromptDataSanitizer.SanitizeBlock(goalsContext);
+        var sanitizedGoalsContext = PromptDataSanitizer.SanitizeBlock(goalsContext, goalsContext.Length);
 
         var prompt = $"""
             GOALS DATA:
