@@ -1,11 +1,26 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Habits.Queries;
 
 namespace Orbit.Application.Tests.Common;
 
 public class CacheInvalidationHelperTests
 {
+    public static TheoryData<string, string, int> RetrospectiveKeyCases
+    {
+        get
+        {
+            var cases = new TheoryData<string, string, int>();
+            foreach (var period in new[] { "week", "month", "quarter", "semester", "year" })
+                foreach (var language in AppConstants.SupportedLanguages)
+                    foreach (var weekStartDay in new[] { 0, 1 })
+                        cases.Add(period, language, weekStartDay);
+
+            return cases;
+        }
+    }
+
     [Fact]
     public void InvalidateSummaryCache_RemovesSummaryKeys()
     {
@@ -62,17 +77,28 @@ public class CacheInvalidationHelperTests
         cache.TryGetValue(utcKey, out _).Should().BeTrue("an unrelated UTC-dated key stays untouched");
     }
 
-    [Fact]
-    public void InvalidateRetrospectiveCache_RemovesKeysAroundSuppliedToday()
+    [Theory]
+    [MemberData(nameof(RetrospectiveKeyCases))]
+    public void InvalidateRetrospectiveCache_RemovesSharedKey_AndPreservesUnrelatedKeys(
+        string period,
+        string language,
+        int weekStartDay)
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
         var userId = Guid.NewGuid();
         var today = new DateOnly(2020, 1, 15);
-        var key = $"retro:{userId}:week:{today}:en";
-        cache.Set(key, "cached");
+        var (dateFrom, _) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
+        var targetKey = RetrospectiveCacheKey.Build(userId, period, dateFrom, language);
+        var otherUserKey = RetrospectiveCacheKey.Build(Guid.NewGuid(), period, dateFrom, language);
+        var otherWindowKey = RetrospectiveCacheKey.Build(userId, period, dateFrom.AddYears(-1), language);
+        cache.Set(targetKey, "target");
+        cache.Set(otherUserKey, "other-user");
+        cache.Set(otherWindowKey, "other-window");
 
         CacheInvalidationHelper.InvalidateRetrospectiveCache(cache, userId, today);
 
-        cache.TryGetValue(key, out _).Should().BeFalse();
+        cache.TryGetValue(targetKey, out _).Should().BeFalse();
+        cache.TryGetValue(otherUserKey, out _).Should().BeTrue();
+        cache.TryGetValue(otherWindowKey, out _).Should().BeTrue();
     }
 }
