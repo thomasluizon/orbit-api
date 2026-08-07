@@ -57,9 +57,8 @@ public static class HabitMetricsCalculator
     {
         var tz = userTimeZone ?? TimeZoneInfo.Utc;
         var createdDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.CreatedAtUtc, tz));
-        var updatedDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(habit.UpdatedAtUtc, tz));
         var habitStartDate = habit.ScheduledStartDate
-            ?? ResolveLegacyStartDate(habit, logs, today, createdDate, updatedDate);
+            ?? ResolveLegacyStartDate(habit, logs, createdDate);
 
         if (habit.FrequencyUnit is null || habit.FrequencyQuantity is null)
             return [habitStartDate];
@@ -73,38 +72,22 @@ public static class HabitMetricsCalculator
     private static DateOnly ResolveLegacyStartDate(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
-        DateOnly today,
-        DateOnly createdDate,
-        DateOnly updatedDate)
+        DateOnly createdDate)
     {
         var hasProgressingHistory = HasProgressingLegacyHistory(
             habit,
             logs,
-            today,
-            createdDate,
-            updatedDate);
+            createdDate);
         return hasProgressingHistory ? createdDate : habit.DueDate;
     }
 
     private static bool HasProgressingLegacyHistory(
         Habit habit,
         IReadOnlyCollection<HabitLog> logs,
-        DateOnly today,
-        DateOnly createdDate,
-        DateOnly updatedDate)
+        DateOnly createdDate)
     {
-        if (habit.FrequencyUnit is null)
+        if (habit.FrequencyUnit is null || habit.IsBadHabit)
             return false;
-
-        if (habit.IsBadHabit)
-        {
-            if (habit.DueDate < today)
-                return true;
-
-            return habit.DueDate == today
-                && updatedDate >= habit.DueDate
-                && updatedDate > createdDate;
-        }
 
         var resolvedDates = logs
             .Where(log => !log.IsDeleted)

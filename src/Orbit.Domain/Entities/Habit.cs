@@ -217,6 +217,9 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
     /// </summary>
     public void CatchUpDueDate(DateOnly today)
     {
+        if (ScheduledStartDate is null && DueDate < today && !IsCompleted)
+            ScheduledStartDate = DueDate;
+
         while (DueDate < today && !IsCompleted)
         {
             var prev = DueDate;
