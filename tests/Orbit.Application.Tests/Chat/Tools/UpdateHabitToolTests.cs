@@ -17,6 +17,7 @@ namespace Orbit.Application.Tests.Chat.Tools;
 public class UpdateHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly UpdateHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -24,7 +25,9 @@ public class UpdateHabitToolTests
 
     public UpdateHabitToolTests()
     {
-        _tool = new UpdateHabitTool(_habitRepo);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Today);
+        _tool = new UpdateHabitTool(_habitRepo, _userDateService);
     }
 
     [Fact]
@@ -47,7 +50,7 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("Habit limit reached"));
-        var tool = new UpdateHabitTool(_habitRepo, payGate);
+        var tool = new UpdateHabitTool(_habitRepo, _userDateService, payGate);
 
         var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
@@ -66,7 +69,7 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateHabitTool(_habitRepo, payGate);
+        var tool = new UpdateHabitTool(_habitRepo, _userDateService, payGate);
 
         var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
@@ -593,7 +596,7 @@ public class UpdateHabitToolTests
         }
 
         await using var context = CreateContext(databaseName);
-        var tool = new UpdateHabitTool(new GenericRepository<Habit>(context));
+        var tool = new UpdateHabitTool(new GenericRepository<Habit>(context), _userDateService);
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Hijacked"), attackerId, CancellationToken.None);

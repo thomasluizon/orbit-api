@@ -46,7 +46,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = CreateGoal();
         goal.UpdateProgress(5);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,1, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 1, "en");
 
         body.Should().Contain("due tomorrow");
         body.Should().Contain("5/10 km");
@@ -58,7 +58,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = CreateGoal();
         goal.UpdateProgress(3);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,1, "pt-br");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 1, "pt-br");
 
         body.Should().Contain("amanhã");
         body.Should().Contain("3/10 km");
@@ -69,7 +69,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         var goal = CreateGoal();
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,3, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, "en");
 
         body.Should().Contain("due in 3 days");
     }
@@ -79,7 +79,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         var goal = CreateGoal();
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,7, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 7, "en");
 
         body.Should().Contain("due in 7 days");
     }
@@ -89,7 +89,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         var goal = CreateGoal();
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,3, "pt-br");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, "pt-br");
 
         body.Should().Contain("termina em 3 dias");
     }
@@ -99,7 +99,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         var goal = CreateGoal();
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,7, "pt");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 7, "pt");
 
         body.Should().Contain("termina em 7 dias");
     }
@@ -110,7 +110,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = CreateGoal(targetValue: 100, unit: "pages");
         goal.UpdateProgress(42);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,3, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, "en");
 
         body.Should().Contain("42/100 pages");
     }
@@ -120,7 +120,7 @@ public class GoalDeadlineNotificationServiceTests
     {
         var goal = CreateGoal(targetValue: 50, unit: "sessions");
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,1, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 1, "en");
 
         body.Should().Contain("0/50 sessions");
     }
@@ -132,7 +132,7 @@ public class GoalDeadlineNotificationServiceTests
     public void FormatDeadlineBody_VariousDays_English_FormatsCorrectly(int days, string lang, string expected)
     {
         var goal = CreateGoal();
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,days, lang);
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, days, lang);
         body.Should().Contain(expected);
     }
 
@@ -143,7 +143,7 @@ public class GoalDeadlineNotificationServiceTests
     public void FormatDeadlineBody_VariousDays_Portuguese_FormatsCorrectly(int days, string lang, string expected)
     {
         var goal = CreateGoal();
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,days, lang);
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, days, lang);
         body.Should().Contain(expected);
     }
 
@@ -151,7 +151,7 @@ public class GoalDeadlineNotificationServiceTests
     public void FormatDeadlineBody_OneDayBefore_English_DoesNotContainDaysPlural()
     {
         var goal = CreateGoal();
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,1, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 1, "en");
 
         body.Should().Contain("tomorrow");
         body.Should().NotContain("in 1 days");
@@ -161,7 +161,7 @@ public class GoalDeadlineNotificationServiceTests
     public void FormatDeadlineBody_OneDayBefore_Portuguese_DoesNotContainDiasPlural()
     {
         var goal = CreateGoal();
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,1, "pt-br");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 1, "pt-br");
 
         body.Should().Contain("amanhã");
         body.Should().NotContain("em 1 dias");
@@ -173,7 +173,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = CreateGoal(targetValue: 10, unit: "miles");
         goal.UpdateProgress(3.5m);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,3, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 3, "en");
 
         body.Should().Contain("3.5/10 miles");
     }
@@ -184,7 +184,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = CreateGoal(targetValue: 10000, unit: "steps");
         goal.UpdateProgress(5000);
 
-        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue,7, "en");
+        var body = GoalDeadlineNotificationService.FormatDeadlineBody(goal, goal.CurrentValue, 7, "en");
 
         body.Should().Contain("5000/10000 steps");
     }
@@ -259,7 +259,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id, "Avoid doom scrolling", 7, "days",
             Deadline: Today.AddDays(1), Type: GoalType.Streak)).Value;
-        var badHabit = CreateBadHabitDueToday(user.Id);
+        var badHabit = CreateBadHabitStartedYesterday(user.Id);
         goal.AddHabit(badHabit);
 
         dbContext.Users.Add(user);
@@ -293,7 +293,7 @@ public class GoalDeadlineNotificationServiceTests
         var goal = Goal.Create(new Goal.CreateGoalParams(
             user.Id, "Avoid doom scrolling", 2, "days",
             Deadline: Today.AddDays(1), Type: GoalType.Streak)).Value;
-        var badHabit = CreateBadHabitDueToday(user.Id);
+        var badHabit = CreateBadHabitStartedYesterday(user.Id);
         goal.AddHabit(badHabit);
 
         dbContext.Users.Add(user);
@@ -510,19 +510,12 @@ public class GoalDeadlineNotificationServiceTests
         return (user, goal);
     }
 
-    private static Habit CreateBadHabitDueToday(Guid userId)
+    private static Habit CreateBadHabitStartedYesterday(Guid userId)
     {
         var habit = Habit.Create(new HabitCreateParams(
-            userId, "Doom scrolling", FrequencyUnit.Day, 1, IsBadHabit: true, DueDate: Today)).Value;
-        SetCreatedAtUtc(habit, Today.AddDays(-1));
+            userId, "Doom scrolling", FrequencyUnit.Day, 1,
+            IsBadHabit: true, DueDate: Today.AddDays(-1))).Value;
         return habit;
-    }
-
-    private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
-    {
-        typeof(Habit)
-            .GetProperty(nameof(Habit.CreatedAtUtc))!
-            .SetValue(habit, localDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
     }
 
     private static OrbitDbContext CreateInMemoryDbContext()
