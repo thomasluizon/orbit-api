@@ -112,8 +112,13 @@ provides a repository-qualified selector or full PR URL; caller cwd never choose
 ```bash
 gh pr view {N} --repo {OWNER/REPO} --json number,title,body,baseRefName,baseRefOid,headRefName,headRefOid,files,labels
 gh pr diff {N} --repo {OWNER/REPO} > <scratchpad>/pr-{N}.diff
+gh pr view {N} --repo {OWNER/REPO} --json baseRefOid,headRefOid
 git show {baseRefOid}:.claude/skills/pr-review/rubric.md > <scratchpad>/pr-{N}-rubric.md
 ```
+
+The second OID read is mandatory and occurs after the diff download. Compare both values byte-for-byte
+with the first read; any change discards the diff and restarts round 1. A diff is never paired with OIDs
+captured only before that separate GitHub call.
 
 If the base object is not present locally, fetch that exact OID from `origin` before `git show`;
 never substitute the current working-tree rubric. Record `baseRefOid`, `headRefOid`, the rubric
@@ -183,7 +188,8 @@ its SHA-256, derives the complete ordered Blocking ID list, and requires exact e
 caller-supplied status.
 After posting a BLOCKING round-one receipt, hand its exact path to the orchestrator and do not begin
 round two until it returns the independent `ROUND_ONE_REGISTERED` ledger path. The orchestrator runs
-`record-readiness.mjs --repo <key> --pr <n> --review <round-one-file> --register-round-one` before the
+`node <UI_PRIMARY_MAIN>/tools/record-readiness.mjs --repo <key> --pr <n> --review <round-one-file>
+--register-round-one` before the
 fixer transition and stores that returned ledger path in run-state. Final readiness requires the
 round-two path, SHA-256, base/head, and frozen IDs to match this pre-fixer ledger; values supplied only
 by the round-two artifact are not authority.
