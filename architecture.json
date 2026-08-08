@@ -7258,6 +7258,7 @@
         "testClass": "AccountDeletionServiceDbTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AccountDeletionServiceDbTests.cs",
         "references": [
+          "AiUsageDaily",
           "LogHabitCommand",
           "ProcessedRequest",
           "SentProactiveCheckin",
