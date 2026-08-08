@@ -175,6 +175,11 @@ Round 2 rewrites the same receipt, sets `rounds` to 2, and adds
 `frozenFindingIds` is the exact ordered list of round-1 Blocking IDs, is written in round 1 (an
 empty array for a clean round 1), and is never changed in round 2. Readiness rejects a round-2
 receipt when that list is absent, empty, duplicated, or no longer represented by Blocking entries.
+Round 1's receipt file is immutable. Round 2 writes a new receipt instead of rewriting it and adds
+`roundOneArtifactPath` plus `roundOneArtifactSha256`; readiness rereads that original file, verifies
+its SHA-256, derives the complete ordered Blocking ID list, and requires exact equality with
+`frozenFindingIds`. A round-one CLEAN receipt must contain no Blocking finding, regardless of any
+caller-supplied status.
 Every newly admitted round-2 blocker is appended with `status: "OPEN"`. Set `verdict` to `CLEAN`
 only when no frozen or admitted Blocking finding remains OPEN. Capture `reviewedHeadOid` and
 `baseSha` from the PR state reviewed; a review of any other head/base is stale by construction.
