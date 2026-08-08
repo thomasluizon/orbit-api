@@ -106,6 +106,109 @@ public class AiIntentServiceStreamingTests
         result.Value.TextMessage.Should().Be("Hi there");
         sink.Events.Should().BeEmpty();
         handler.LastRequestBody.Should().NotContain("\"stream\":true");
+        handler.LastRequestBody.Should().NotContain("stream_options");
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_BufferedRound_RecordsUsageForUser()
+    {
+        var userId = Guid.NewGuid();
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var (service, _) = BuildService(new JsonHandler(BufferedCompletion), usageRecorder);
+
+        var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
+
+        result.IsSuccess.Should().BeTrue();
+        await usageRecorder.Received(1).RecordAsync(
+            "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_StreamingRound_RequestsAndRecordsUsageForUser()
+    {
+        var userId = Guid.NewGuid();
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var handler = new SseHandler(
+            RoleChunk() + ContentChunk("Hello") + FinishChunk("stop") + UsageChunk() + Done());
+        var (service, sink) = BuildService(handler, usageRecorder);
+
+        var result = await service.SendWithToolsAsync(
+            new AiToolRequest("hello", "system", [], userId),
+            streamSink: sink.Handle);
+
+        result.IsSuccess.Should().BeTrue();
+        handler.LastRequestBody.Should().Contain("\"stream_options\":{\"include_usage\":true}");
+        await usageRecorder.Received(1).RecordAsync(
+            "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_StreamingRoundWithoutUsage_LogsAndDoesNotRecord()
+    {
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var body = RoleChunk() + ContentChunk("Hello") + FinishChunk("stop") + Done();
+        var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body), usageRecorder);
+        var sink = new CollectingSink();
+
+        var result = await service.SendWithToolsAsync(
+            new AiToolRequest("hello", "system", [], Guid.NewGuid()),
+            streamSink: sink.Handle);
+
+        result.IsSuccess.Should().BeTrue();
+        logger.WarningEventIds.Should().Contain(11);
+        await usageRecorder.DidNotReceiveWithAnyArgs().RecordAsync(
+            default!, default!, default, default, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task SendWithToolsAsync_RecorderFailure_DoesNotFailCompletedStream()
+    {
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        usageRecorder.RecordAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<long>(),
+                Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>(), Arg.Any<Guid?>())
+            .Returns(Task.FromException(new InvalidOperationException("recorder failed")));
+        var body = RoleChunk() + ContentChunk("Hello") + FinishChunk("stop") + UsageChunk() + Done();
+        var (service, logger) = BuildServiceWithRecordingLogger(new SseHandler(body), usageRecorder);
+        var sink = new CollectingSink();
+
+        var result = await service.SendWithToolsAsync(
+            new AiToolRequest("hello", "system", [], Guid.NewGuid()),
+            streamSink: sink.Handle);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TextMessage.Should().Be("Hello");
+        sink.Events.Should().ContainSingle();
+        logger.WarningEventIds.Should().Contain(12);
+    }
+
+    [Fact]
+    public async Task ContinueWithToolResultsAsync_TwoRounds_RecordTwoCallsForSameUser()
+    {
+        var userId = Guid.NewGuid();
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var handler = new SequenceSseHandler(
+            RoleChunk()
+                + ToolCallStartChunk(0, "call_1", "create_habit")
+                + ToolCallArgsChunk(0, "{}")
+                + FinishChunk("tool_calls")
+                + UsageChunk()
+                + Done(),
+            RoleChunk() + ContentChunk("Done") + FinishChunk("stop") + UsageChunk() + Done());
+        var (service, sink) = BuildService(handler, usageRecorder);
+
+        var first = await service.SendWithToolsAsync(
+            new AiToolRequest("create it", "system", [], userId),
+            streamSink: sink.Handle);
+        var second = await service.ContinueWithToolResultsAsync(
+            first.Value.ConversationContext!,
+            [new AiToolCallResult("create_habit", "call_1", true, null, null, null)],
+            streamSink: sink.Handle);
+
+        second.IsSuccess.Should().BeTrue();
+        second.Value.TextMessage.Should().Be("Done");
+        await usageRecorder.Received(2).RecordAsync(
+            "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
     }
 
     [Fact]
@@ -143,8 +246,9 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_WithUserId_SetsEndUserIdForCacheRouting()
     {
         var handler = new JsonHandler(BufferedCompletion);
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
         var userId = Guid.NewGuid();
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
@@ -156,8 +260,9 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_HistoryWithinWindow_DoesNotSummarize()
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(40)));
 
@@ -168,8 +273,9 @@ public class AiIntentServiceStreamingTests
     public async Task SendWithToolsAsync_HistoryOverflowsWindow_SummarizesOlderMessages()
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
@@ -179,7 +285,7 @@ public class AiIntentServiceStreamingTests
     private const string BufferedCompletion = """
         {"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-test",
          "choices":[{"index":0,"message":{"role":"assistant","content":"Hi there"},"finish_reason":"stop"}],
-         "usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}
+         "usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18,"prompt_tokens_details":{"cached_tokens":3}}}
         """;
 
     private static List<ChatHistoryMessage> BuildHistory(int count) =>
@@ -187,18 +293,24 @@ public class AiIntentServiceStreamingTests
             .Select(i => new ChatHistoryMessage(i % 2 == 0 ? "user" : "assistant", $"message {i}"))
             .ToList();
 
-    private static (AiIntentService Service, CollectingSink Sink) BuildService(HttpMessageHandler handler)
+    private static (AiIntentService Service, CollectingSink Sink) BuildService(
+        HttpMessageHandler handler,
+        IAiUsageRecorder? usageRecorder = null)
     {
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
-        var service = new AiIntentService(aiClient, NullLogger<AiIntentService>.Instance);
+        usageRecorder ??= Substitute.For<IAiUsageRecorder>();
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
+        var service = new AiIntentService(aiClient, usageRecorder, NullLogger<AiIntentService>.Instance);
         return (service, new CollectingSink());
     }
 
-    private static (AiIntentService Service, RecordingLogger Logger) BuildServiceWithRecordingLogger(HttpMessageHandler handler)
+    private static (AiIntentService Service, RecordingLogger Logger) BuildServiceWithRecordingLogger(
+        HttpMessageHandler handler,
+        IAiUsageRecorder? usageRecorder = null)
     {
-        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
+        usageRecorder ??= Substitute.For<IAiUsageRecorder>();
+        var aiClient = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
         var logger = new RecordingLogger();
-        var service = new AiIntentService(aiClient, logger);
+        var service = new AiIntentService(aiClient, usageRecorder, logger);
         return (service, logger);
     }
 
@@ -236,6 +348,11 @@ public class AiIntentServiceStreamingTests
 
     private static string FinishChunk(string reason) => Chunk("{}", $"\"{reason}\"");
 
+    private static string UsageChunk() =>
+        "data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"created\":1700000000," +
+        "\"model\":\"gpt-test\",\"choices\":[],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7," +
+        "\"total_tokens\":18,\"prompt_tokens_details\":{\"cached_tokens\":3}}}\n\n";
+
     private static string Done() => "data: [DONE]\n\n";
 
     private sealed class CollectingSink
@@ -272,6 +389,32 @@ public class AiIntentServiceStreamingTests
 
     private sealed class SseHandler(string body) : HttpMessageHandler
     {
+        public string? LastRequestBody { get; private set; }
+
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastRequestBody = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
+            return BuildResponse(request);
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Content is not null)
+                LastRequestBody = await request.Content.ReadAsStringAsync(cancellationToken);
+            return BuildResponse(request);
+        }
+
+        private HttpResponseMessage BuildResponse(HttpRequestMessage request)
+        {
+            var content = new StringContent(body, Encoding.UTF8, "text/event-stream");
+            return new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content };
+        }
+    }
+
+    private sealed class SequenceSseHandler(params string[] bodies) : HttpMessageHandler
+    {
+        private readonly Queue<string> _bodies = new(bodies);
+
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
             => BuildResponse(request);
 
@@ -280,7 +423,7 @@ public class AiIntentServiceStreamingTests
 
         private HttpResponseMessage BuildResponse(HttpRequestMessage request)
         {
-            var content = new StringContent(body, Encoding.UTF8, "text/event-stream");
+            var content = new StringContent(_bodies.Dequeue(), Encoding.UTF8, "text/event-stream");
             return new HttpResponseMessage(HttpStatusCode.OK) { RequestMessage = request, Content = content };
         }
     }

@@ -18,12 +18,15 @@ public class AiCompletionClientTests
     public async Task CompleteJsonAsync_SubTaskTier_OmitsTemperature()
     {
         var handler = new CapturingHandler();
-        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, Substitute.For<IAiUsageRecorder>());
+        var usageRecorder = Substitute.For<IAiUsageRecorder>();
+        var client = new AiCompletionClient(BuildChatClient(handler), NullLogger<AiCompletionClient>.Instance, usageRecorder);
 
         await client.CompleteJsonAsync<Probe>("You are a helpful assistant. Respond only with valid JSON.", "extract facts", purpose: "fact_extraction", tier: AiModelTier.SubTask);
 
         handler.LastRequestBody.Should().NotBeNull();
         handler.LastRequestBody.Should().NotContain("temperature");
+        await usageRecorder.Received(1).RecordAsync(
+            "fact_extraction", "subtask-test", 0, 1, 2, 3, Arg.Any<CancellationToken>());
     }
 
     [Fact]
