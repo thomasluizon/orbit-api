@@ -1,363 +1,230 @@
 ---
 name: pr-review
-description: Deep code review of a diff across both Orbit repos against one shared rubric, orchestrating the review subagents and a backward-compat guard. Use when the user asks to review a PR, file, folder, or staged changes in orbit-api or orbit-ui-mobile. Replaces /review and /security-review.
-argument-hint: <pr-number | api#N | pr-url | file | folder | blank=staged>
-context: fork
+description: Capped two-round review of ONE PR diff against rubric.md, by a session that did not write the code. Use when asked to review a PR in orbit-ui-mobile or orbit-api.
+argument-hint: <ui#N | api#N | pr-url>
 ---
 
 # PR Review
 
 **Input**: $ARGUMENTS
 
-Review a diff end-to-end against `rubric.md`, fold in the review subagents, guard
-against changes that break already-shipped mobile clients, and produce one
-severity-ranked report — posted to the PR when the scope is a PR.
+Review one diff against `rubric.md` and emit `findings.json`. This review is built to
+**terminate**, not to be exhaustive. Read the whole contract below before reading any code.
 
-This skill subsumes the old `/review` and `/security-review` commands: it does
-everything both did and adds the backward-compat guard and a single shared rubric.
+## Why this shape
 
-<!--
-Twin of orbit-ui-mobile/.claude/skills/pr-review/SKILL.md: two repos, so the copies cannot be
-deduped. They are mirrored BY HAND. Change a phase here and mirror it there in the same task,
-because only that discipline keeps the pair honest. Known intentional
-differences: the default repo (api here, ui there) and the mirror-image `ui#` / `api#`
-selector; the subagent set (security-reviewer + contract-aligner here, parity/i18n/design
-ui-only); and `dotnet` validate in Phase 7 vs the ui `/validate` skill.
--->
+PR #672 ran **9 local `/pr-review` rounds over 38 hours**. Verdict every time `NEEDS_WORK`.
+**19 findings, 19 unique, zero repeats.** The fixer fixed everything; the reviewer found
+brand-new issues every round on a 7,078-line diff. Termination required
+"the reviewer finds nothing", which on that diff has probability about zero. The skill was
+correctly implemented and mathematically unable to stop.
 
-**Golden rule**: every finding is constructive and actionable — a clear fix, a file:line,
-and the rule it traces to. Severity is about blast radius, not which dimension raised it.
+A severity floor alone would not have saved it: every one of the 19 was High or Critical, and
+there were no nitpicks. What was missing was a **round cap** and a **frozen finding list**.
 
----
-
-## Phase 0 — Provenance & self-containment
-
-The review dimensions in `rubric.md` were adapted at authoring time from the
-**code-review base on claudeskills.info** (https://claudeskills.info — the "code-review"
-/ reviewing-AI-code base), then specialized to Orbit's own standards (the ten Code
-Standards in root `CLAUDE.md`, the orbit-api hard rules, `eslint-rules/no-comments.cjs`,
-`DESIGN.md`, and the folded-in `/security-review` categories), which are richer than any
-generic base. The adapted result is committed in-repo at `rubric.md`.
-
-This skill is **self-contained**: it makes **no network call at run time** and has no
-runtime marketplace dependency. It reads only local repo files and runs `gh` / `git`
-against the project's own remotes. The provenance above is the single WHY-with-URL note
-the standard allows; nothing here is fetched live.
+Research backing: every mainstream reviewer converges on severity floors (Codex's GitHub surface
+flags only P0/P1) and on verification gating before a finding is shown. Practitioner consensus on
+round caps is 1-2 for CI automation, escalating to a human at the cap. Anthropic's own docs concede
+that "a rule like after the first review, suppress new nits and post Important findings only stops
+a one-line fix from reaching round seven on style alone."
 
 ---
 
-## Phase 1 — Resolve scope
+## The termination contract
 
-Parse `$ARGUMENTS` into a review target and detect which repos it touches.
+Six rules. All six bind. None is advisory, and none is negotiable mid-review.
 
-| Input | Repo | Example | Action |
-|---|---|---|---|
-| Number `123` | api (default) | `#123` | `gh pr view 123 --repo thomasluizon/orbit-api` |
-| `ui#123` or `orbit-ui-mobile#123` | ui-mobile | `ui#42` | `gh pr view 42 --repo thomasluizon/orbit-ui-mobile` |
-| Full PR URL | parsed from URL | `https://github.com/thomasluizon/orbit-ui-mobile/pull/9` | use the URL's repo |
-| File path | local repo | `src/Orbit.Application/Habits/Commands/CreateHabitCommand.cs` | review that single file |
-| Folder path | local repo | `src/Orbit.Api/Controllers/` | review every source file under it |
-| Blank | local | (none) | review staged changes; if none staged, review unstaged |
+**1. Freeze the ruleset before round 1.** Capture the PR's live `baseRefOid`, materialize
+`rubric.md` from that exact Git blob, and store both the OID and artifact path in the receipt.
+That snapshot supplies the dimensions and severity definitions for both rounds; never reload the
+mutable main-checkout copy in round 2. A base change or an unexpected head change invalidates the
+review and starts a fresh round 1. The single prescribed round-1-to-round-2 fixer head change keeps
+the frozen receipt only when the reviewer is handed that receipt plus both exact head OIDs; any
+other head transition restarts round 1. A bar raised after the captured base is a follow-up ticket
+against the rubric, never a new bar this review may apply.
 
-**For a PR:**
+**2. Cross-vendor reviewer, fresh session.** Normal: Claude Opus 5 at `high`. `--codex-only`:
+Sol at `xhigh` in a **separate** session, and the run prints `DEGRADED: same-vendor review` in its
+opening line and in the PR comment. **The invariant in both modes: the session that writes the code
+is never the session that reviews it.** Same model is acceptable; same session is not. LLM judges
+measurably favour their own family's output, and the bias extends across the whole vendor family
+(arXiv 2603.04582, arXiv 2508.06709). The direction is corroborated; the magnitude in a real PR
+loop is **unmeasured**. State it that honestly, and never claim the degraded mode is unbiased.
 
-```bash
-gh pr view {N} --repo {OWNER/REPO} --json number,title,body,author,baseRefName,headRefName,files,labels
-gh pr diff {N} --repo {OWNER/REPO}
-```
+**3. Apply the target repository's review floor, then classify each survivor as Blocking or
+Non-blocking.** `orbit-api/AGENTS.md` permits P0/P1 only: Critical maps to P0, High maps to P1,
+and Medium/Low/Info candidates are discarded before the receipt and create no ticket. For a
+surviving candidate, Blocking means it **breaks behaviour, security, or data integrity**.
+Everything else is **auto-filed as a follow-up Linear ticket** and never fixed in this PR. Apply
+the floor and classification once at report time; neither is renegotiated per round.
 
-**For a file / folder:** use Glob with `**/*.cs` scoped to the target path.
+**4. Diff-only scope.** Read `gh pr diff`. You are reviewing a diff, not a repository. Open a
+repository file only to resolve a symbol the diff itself cites. A defect reachable only by browsing
+code the diff never touched is out of scope; if it matters, it is a ticket. Dimension 7 has one
+bounded exception: when the target diff changes a request, response, endpoint, or schema contract,
+perform a targeted read/search in the sibling repository's primary `main` checkout for the shipped
+consumer or provider symbols cited by that contract. If the PR body links a paired contract PR,
+inspect that paired diff too. This is contract evidence, not permission to browse for unrelated
+defects.
 
-**For blank:**
+**5. Monotonic round 2.** Re-check **only** the frozen Blocking list, answering `CLOSED` or `OPEN`
+per finding. New findings are forbidden, with exactly one mechanical carve-out: **any defect on a
+line the fixer's own round-2 diff touched**. That line set is computed as `git diff <r1>..<r2>
+--unified=0` and handed to the reviewer as data it cannot widen.
 
-```bash
-git diff --cached --name-only
-git diff --cached
-```
+> The carve-out was widened during cross-model review. The original admitted a new finding only on
+> the cited line of an existing finding, which let a fixer break something elsewhere in the same
+> file unreported. GPT-5.6 Sol found the hole.
 
-(If nothing is staged, fall back to `git diff`.)
-
-Then classify the diff: **frontend** (`apps/`, `packages/`), **backend**
-(`orbit-api/src/`), or **both**. The classification drives which dimensions are gated in
-and which subagents fire in Phase 4.
-
----
-
-## Phase 2 — Load context
-
-In parallel:
-
-- `C:\Users\thoma\Documents\Programming\Projects\orbit-api\CLAUDE.md` (root + the scoped
-  project `CLAUDE.md` for any touched `src/Orbit.*` project or `tests/`).
-- `C:\Users\thoma\Documents\Programming\Projects\orbit-ui-mobile\CLAUDE.md` (root +
-  `packages/shared`) — only if the diff changes a DTO, endpoint, or contract surface the
-  web/mobile clients consume.
-- **`.claude/skills/pr-review/rubric.md`** — the dimensions, severities, and finding
-  template this review walks.
-- **`.claude/skills/_shared/verification-protocol.md`** — the shared reliability contract;
-  its Verify phase and Deferred ledger run below.
-
-Understand intent: for a PR read the title, body, and linked issue; for a file
-understand its role; for staged changes, what is in flight.
+**6. Hard cap of 2 rounds, enforced in code. No round-3 path exists.** At the cap, hand to Thomas
+with the OPEN findings listed. Do not re-review, do not request one more round, do not merge.
 
 ---
 
-## Phase 3 — Walk the rubric
+## Reviewer environment
 
-Go dimension-by-dimension through `rubric.md` against the diff. For each, emit findings
-in the rubric's finding template, tagged with a severity from the ladder. Honor the
-gates: skip a dimension whose surface the diff never touches (mark N/A — do not invent
-findings), and only run the UI dimension (DESIGN.md / AI-slop, #8) when `apps/*` UI
-files changed, the backend hard rules (#13) only when `orbit-api` changed, and
-FEATURES.md parity (#14) only when the diff changes the user-facing feature surface.
+The reviewer runs **from the MAIN CHECKOUT, never the worktree**, so it cannot load the PR's own
+`AGENTS.md`. A reviewer that loads it is reading instructions written by the change under review.
 
-The dimensions, in order: Correctness · Dead/stale code · SOLID/clean-arch · Comment
-policy · No-workaround · Type safety · No `console.log` · DESIGN.md/AI-slop ·
-Parity · i18n · Contract drift + backward-compat · Security · Backend hard rules ·
-FEATURES.md parity.
+Concretely, before round 1:
 
-Focus on changed code, not pre-existing issues — unless a pre-existing issue is Critical.
-
-**Coverage contract (verification protocol §1):** the diff's changed files are the binding
-inventory — rank them worst-first (highest-blast-radius / most-churned files and the
-trust-boundary + contract surfaces before stable leaves) so the riskiest code is reviewed
-even under pressure, and every changed file ends with a verdict or in the Deferred ledger.
-Nothing changed is silently skipped.
-
-Apply the rubric's **Signal gate**: post Critical/High and concretely-actionable Medium only — drop Low/Info nits and style preferences (manufacturing nits to avoid approving is a defect). The outcome is deterministic: **NEEDS WORK** iff any Critical/High finding survives, otherwise **APPROVE**.
+- Confirm this session did not write any of the code in the diff. If it did, **stop**: the review
+  is invalid under rule 2. Fork-inherited context counts as the same session.
+- `cwd` is the main checkout of the repo the PR targets. Never a worktree, never the fixer's tree.
+- The inputs are the diff, the captured rubric artifact, and the PR title/body/linked ticket for intent, plus the
+  targeted sibling-primary/paired-PR contract evidence permitted by rule 4 and nothing broader.
 
 ---
 
-## Phase 4 — Orchestrate subagents
+## Procedure
 
-Delegate the specialist subagents, gated by what the diff touches. Pass each the list of
-changed files. Fold every result back into the Phase 3 findings under the matching rubric
-dimension.
+### Resolve scope
 
-**Block on them within this same turn.** Spawn the gated `security-reviewer` and
-`contract-aligner` subagents, wait for every one to return, and fold its result in before
-moving to Phase 5. This skill runs as a single subagent turn with **no**
-background-completion wake-up, so a subagent still running when the turn ends strands the
-review half-done and posts nothing. If you cannot block on one, run its check inline
-yourself.
-
-| Subagent | Gate (fire when…) | Folds into rubric dimension |
+| Input | Repo | Command |
 |---|---|---|
-| `security-reviewer` | any `src/` code changed (i.e. every backend PR) | Security (#12, API side) |
-| `contract-aligner` | a DTO, Controller route, or sibling `packages/shared` type / `endpoints.ts` changed | Contract drift (#11) |
+| `ui#123` | orbit-ui-mobile | `gh pr view 123 --repo thomasluizon/orbit-ui-mobile` |
+| `api#123` | orbit-api | `gh pr view 123 --repo thomasluizon/orbit-api` |
+| Full PR URL | parsed from the URL | use the URL's repo |
 
-Launch both together when both gates fire.
-
-Parity (#9) and i18n (#10) are **frontend-only** dimensions owned by the `orbit-ui-mobile`
-side of the review: `parity-checker` and `i18n-syncer` do not live in this repo and never
-fire on an orbit-api diff. On a cross-repo PR reviewed from here, mark those dimensions
-"not verifiable here" and let the orbit-ui-mobile review cover them.
-
----
-
-## Phase 5 — Backward-compat guard
-
-Answer one question: **does this diff rename or remove a field that an already-shipped
-(old) mobile client still sends or reads?** Old Android builds run a frozen
-`@orbit/shared` snapshot, so a server/shared rename is invisible to them — they keep the
-old name and silently break. This leans on `contract-aligner`'s field comparison from
-Phase 4 and adds the direction + add/remove judgment.
-
-1. From the diff, isolate hunks in `packages/shared/src/types/*.ts` (Zod
-   `z.object({...})` schemas) and in `orbit-api/**/DTOs/*.cs` (records / classes).
-2. A **removed line** declaring a field (`fieldName: z.…` removed with no matching add),
-   OR a **renamed field** (one field removed + one added in the same schema, types
-   compatible), is a candidate.
-3. Classify each candidate and tag per `rubric.md` dimension 11:
-   - Removed/renamed in a **response** shape → old readers get `undefined` →
-     **`⚠️ breaks old mobile clients` (Critical)**, unless already optional AND unused
-     (cite the grep).
-   - Removed/renamed in a **request** shape, or a field made **newly-required** → old
-     senders are rejected by validation → **`⚠️ breaks old mobile clients` (Critical)**.
-   - **Added optional** field → forward-compatible → **Info**.
-   - **Enum value removed** → old clients may still send it → flag.
-4. In the fix, recommend the compatible alternative: keep-and-deprecate the old field,
-   accept both names server-side for a release, or gate behind the min-version gate.
-   When old-client reach is uncertain, downgrade to **High** with a "verify old-client
-   usage" note rather than over-claiming Critical.
-
-Scope is **field add/remove/rename in the reviewed diff**. Semantic/behavioral breaks
-under an unchanged field name are caught by Correctness (#1) and the human reviewer — do
-not over-claim completeness here.
-
----
-
-## Phase 6 — Verify findings (adversarial)
-
-Run `.claude/skills/_shared/verification-protocol.md` before validating — every finding
-that will decide the outcome has to survive a challenge first.
-
-1. **Adversarial pass (§2).** For every **Critical / High** finding (including any
-   `⚠️ breaks old mobile clients`), spawn an independent skeptic subagent (3 concurrent)
-   whose only job is to *refute* it — read the cited `file:line` in full diff context and
-   argue it is a false positive (the path is unreachable, the value already validated, the
-   field actually still present or optional-and-unused with the grep to prove it, a
-   duplicate, the severity inflated). Default to refuted when uncertain. Drop or downgrade
-   anything the skeptic disproves — a false Critical that blocks a clean PR is as costly as
-   a missed one. The survivors decide the recommendation.
-2. **Cross-model second opinion (§2, Critical and High survivors).** For each **Critical**
-   or **High** finding that survives step 1 (including any `⚠️ breaks old mobile clients`),
-   fire **`/second-opinion`**: pipe the finding dossier (title · severity ·
-   `repo/path:line` · the claimed defect · the cited code hunk) to
-   `node .claude/skills/second-opinion/second-opinion.mjs` and apply the verdict table that
-   skill carries. Scope is **Critical and High**: the two decisive findings of the
-   2026-07-28/29 run were both High, so a Critical-only scope would have skipped both. There
-   is no unattended mode to distinguish, because every review is this one local subagent and
-   no automated review path remains in either repository.
-   Never name a model here; `/second-opinion` owns which model answers. Two bindings are
-   this skill's own: a **DISAGREE** finding is tagged **`CONTESTED`**, records the other
-   model's `reasoning` beside Claude's, and keeps its severity for the human to resolve;
-   **UNAVAILABLE** (the second-opinion engine is absent, unauthenticated, capped, or
-   offline) leaves the finding exactly as step 1 left it, stated in one line. CONTESTED
-   never changes the deterministic recommendation, so a surviving Critical or High still
-   means NEEDS WORK.
-3. **Completeness pass (§3).** One pass only — a diff is its own boundary, so no loop: ask
-   *"what changed file or hunk did I not give a verdict, what dimension did I mark N/A
-   without checking its surface?"* and close the gap before reporting.
-4. **Deferred ledger (§4).** Every dimension marked N/A and every changed file not
-   verdicted goes into the report's **Deferred** line with a one-line reason — so "clean"
-   never hides "not looked at."
-
----
-
-## Phase 7 — Validate
-
-Run the backend checks from the orbit-api root:
+A bare number or blank scope is ambiguous across two repositories and must be refused. The caller
+provides a repository-qualified selector or full PR URL; caller cwd never chooses the repository.
 
 ```bash
-dotnet build
-dotnet test
+gh pr view {N} --repo {OWNER/REPO} --json number,title,body,baseRefName,baseRefOid,headRefName,headRefOid,files,labels
+gh pr diff {N} --repo {OWNER/REPO} > <scratchpad>/pr-{N}.diff
+gh pr view {N} --repo {OWNER/REPO} --json baseRefOid,headRefOid
+git show {baseRefOid}:.claude/skills/pr-review/rubric.md > <scratchpad>/pr-{N}-rubric.md
 ```
 
-Record each result as PASS / FAIL with the error summary for the report's validation
-table. For a file/folder scope with no working-tree changes, validation is N/A.
+The second OID read is mandatory and occurs after the diff download. Compare both values byte-for-byte
+with the first read; any change discards the diff and restarts round 1. A diff is never paired with OIDs
+captured only before that separate GitHub call.
+
+If the base object is not present locally, fetch that exact OID from `origin` before `git show`;
+never substitute the current working-tree rubric. Record `baseRefOid`, `headRefOid`, the rubric
+artifact path, and the complete live selected key/type evidence required by the target AGENTS.md.
+
+Read the captured rubric once, then classify repository-relative paths using the target repository:
+**frontend** is `apps/` or `packages/` in orbit-ui-mobile; **backend** is `src/` or `tests/` in
+orbit-api. A paired diff can be **both**. That classification gates which rubric dimensions apply.
+
+### Round 1
+
+1. Walk `rubric.md` dimension by dimension over the diff. Skip a dimension whose surface the diff
+   never touches and record it as N/A with the reason. Do not invent findings to fill a dimension.
+2. Verify each candidate finding against the diff text before writing it down: quote the line you
+   are claiming about. A finding you cannot anchor to a diff line does not get reported.
+3. Drop candidates below the target repository floor, then classify each survivor Blocking or
+   Non-blocking by rule 3.
+4. Write `findings.json`. **The list is now frozen.**
+5. File every Non-blocking finding as a follow-up Linear ticket (one per finding, title = the
+   claim, body = file, line, and the rubric dimension). They are not fixed in this PR.
+6. Zero Blocking findings means the review is over. Hand to Thomas.
+
+### Round 2
+
+1. Fetch both exact reviewed head OIDs from `origin`, verify both objects exist, then compute the
+   fixer's line set: `git diff <r1-sha>..<r2-sha> --unified=0`. Pass it as data. Never assume either
+   head object is already present in the mandated main checkout.
+2. For each frozen Blocking finding, answer `CLOSED` or `OPEN` with the line that settles it.
+3. A new finding is admissible **only** if its line is in the round-2 line set from step 1, and it
+   is Blocking. Append every admitted new blocker to `findings.json` with `status: "OPEN"`; it is
+   part of the open list and verdict calculation. Anything else is a follow-up ticket.
+4. Hand to Thomas as `CLEAN` only when every frozen blocker is `CLOSED` **and no admitted round-2
+   blocker is OPEN**. Otherwise stop with every open frozen or admitted blocker listed. There is no
+   round 3 and no opportunity to hide the new blocker behind the frozen list.
 
 ---
 
-## Phase 8 — Report
+## Output contract
 
-Write the report, then post it to the PR when the scope is a PR.
+`findings.json` is one receipt object. Its `findings` array contains one object per finding:
+
+```json
+{"reviewerKind":"independent","verdict":"BLOCKING","rounds":1,
+ "reviewedHeadOid":"<full head SHA>","baseSha":"<full base SHA>",
+ "rubricBaseOid":"<full base SHA>","rubricArtifactPath":"<absolute snapshot path>",
+ "artifactPath":"<absolute path to this file>",
+ "frozenFindingIds":["F1"],
+ "findings":[{"id":"F1","severity":"High","file":"apps/web/hooks/use-streak.ts","line":42,
+   "claim":"one sentence: what is wrong and what goes wrong if it ships","blocking":true}]}
+```
+
+`severity` is descriptive and comes from the rubric's ladder. A candidate below the target
+repository floor never enters this array. `blocking` is the decision for a surviving candidate:
+a High that does not break behaviour, security, or data integrity is `"blocking": false` and
+becomes a ticket where the repository floor permits it.
+
+Round 2 writes a separate receipt, sets `rounds` to 2, and adds
+`"status": "CLOSED" | "OPEN"` to every round-1 Blocking finding. Round-1 entries are never removed
+from the round-2 copy, while the round-one receipt itself remains byte-for-byte immutable.
+`frozenFindingIds` is the exact ordered list of round-1 Blocking IDs, is written in round 1 (an
+empty array for a clean round 1), and is never changed in round 2. Readiness rejects a round-2
+receipt when that list is absent, empty, duplicated, or no longer represented by Blocking entries.
+Round 1's receipt file is immutable. Round 2 writes a new receipt instead of rewriting it and adds
+`roundOneArtifactPath` plus `roundOneArtifactSha256`; readiness rereads that original file, verifies
+its SHA-256, derives the complete ordered Blocking ID list, and requires exact equality with
+`frozenFindingIds`. A round-one CLEAN receipt must contain no Blocking finding, regardless of any
+caller-supplied status.
+After posting a BLOCKING round-one receipt, hand its exact path to the orchestrator and do not begin
+round two until it returns the independent `ROUND_ONE_REGISTERED` ledger path. The orchestrator runs
+`node <UI_PRIMARY_MAIN>/tools/record-readiness.mjs --repo <key> --pr <n> --review <round-one-file>
+--register-round-one` before the
+fixer transition and stores that returned ledger path in run-state. Final readiness requires the
+round-two path, SHA-256, base/head, and frozen IDs to match this pre-fixer ledger; values supplied only
+by the round-two artifact are not authority.
+Every newly admitted round-2 blocker is appended with `status: "OPEN"`. Set `verdict` to `CLEAN`
+only when no frozen or admitted Blocking finding remains OPEN. Capture `reviewedHeadOid` and
+`baseSha` from the PR state reviewed; a review of any other head/base is stale by construction.
+
+### Posting
+
+Post the report as a **PR comment**, then hand to Thomas:
 
 ```bash
-mkdir -p .claude/reviews
+gh pr comment {N} --repo {OWNER/REPO} --body-file <scratchpad>/review-{N}.md
 ```
 
-**Output path**: `.claude/reviews/{scope-name}-review.md`
+Never `--approve` and never `--request-changes`. `required_approving_review_count` is **0** on both
+`main` branches, GitHub forbids a PR author approving their own PR, and no review status check
+exists in either repository, so a GitHub review state gates nothing and reads misleadingly. The
+verdict lives in `findings.json` and the comment body.
 
-```markdown
-# Code Review: {SCOPE}
-
-**Scope**: {PR #N in repo / file / folder / staged}
-**Recommendation**: APPROVE / NEEDS WORK
-
-## Summary
-
-{2-3 sentences: what was reviewed and the overall assessment.}
-
-## Findings
-
-### Critical
-{findings in the rubric template, or "None". `⚠️ breaks old mobile clients` findings sort here first.
-A finding a cross-model second opinion disputed carries a **`CONTESTED`** tag with both
-verdicts inline, for example "Claude: Critical · second opinion: DISAGREE, {its reasoning}",
-so the human sees the disagreement. It keeps its severity; the tag never downgrades it.}
-
-### High
-{… or "None"}
-
-### Medium
-{… or "None"}
-
-### Low / Info
-{… or "None"}
-
-## Subagents
-
-| Agent | Verdict |
-|---|---|
-| security-reviewer | PASS / FAIL / N/A |
-| contract-aligner | MATCH / DRIFT / NOT VERIFIABLE / N/A |
-
-## Validation
-
-| Check | Result |
-|---|---|
-| Build (dotnet) | PASS / FAIL / N/A |
-| Tests (dotnet) | PASS / FAIL / N/A |
-
-## Deferred — N/A dimensions & files not verdicted
-
-{Per the verification protocol §4: each dimension marked N/A (with why its surface wasn't
-touched) and any changed file not given a verdict — one line each. "Nothing deferred" if
-every dimension and file got a verdict.}
-
-## What's good
-
-{positive observations}
-
-## Recommendation
-
-{what needs to happen next}
-```
-
-### Post to GitHub (PR scope only)
-
-The review is **decisive** — it ends as APPROVE or REQUEST_CHANGES, never a bare comment.
-Map the deterministic recommendation (NEEDS WORK iff any Critical/High finding):
-
-```bash
-# NEEDS WORK — any Critical/High (incl. ⚠️ old-client break)
-gh pr review {N} --repo {OWNER/REPO} --request-changes --body-file .claude/reviews/{scope-name}-review.md
-# APPROVE — no Critical/High
-gh pr review {N} --repo {OWNER/REPO} --approve --body-file .claude/reviews/{scope-name}-review.md
-```
-
-Inline comments (Critical/High, tied to a specific line) via the PR review-comments
-endpoint / `mcp__github_inline_comment__create_inline_comment`.
-
-**Caller context decides who posts:**
-
-- **Orchestrator-side subagent**: `/orchestrate` runs this skill in a FRESH worktree at the
-  pull request head, as a subagent and never in the main session. Post the decisive review
-  yourself per the recommendation, and mark any dimension needing a repository that is not
-  checked out beside this one as "not verifiable here" rather than guessing.
-- **Local, a PR you do NOT own**: post the decisive review yourself per the recommendation.
-- **Local, your OWN PR** (GitHub blocks self-approval): write the report and post it with
-  `--comment` instead, and never fail trying to `--approve`.
-- **Local file / folder / staged** scope: only write the report file, never post.
-
-**There is no review status check in either repository** and
-`required_approving_review_count` is **0** on both `main` branches. `claude` was the only
-account that ever posted an approving review, GitHub forbids a pull request author
-approving their own pull request, and leaving the count at 1 with no producer would have
-made every merge an admin merge, which the conventions forbid an agent from performing.
-The blocking path is the deterministic `guards.yml` required contexts plus this local
-`/pr-review`, run by a session that did not write the code. So read this review's verdict from the
-report body, never from the GitHub review state: a `--comment` post reads neutral even
-when the verdict is NEEDS WORK.
+The comment body is: the verdict line (plus `DEGRADED: same-vendor review` when applicable), the
+Blocking findings with file and line, the follow-up tickets filed, and the dimensions marked N/A
+with why. **A machine never merges.**
 
 ---
 
-## Output
+## The risk this design accepts
 
-```markdown
-## Review Complete
+A frozen finding list can bury a defect the fixer introduced in round 2. Three nets catch it, and
+**none of them is the reviewer**:
 
-**Scope**: {what was reviewed}
-**Recommendation**: APPROVE / NEEDS WORK
+1. The mechanical carve-out on the round-2 diff line set (rule 5).
+2. The 18 required CI checks, which run on the fixer's commit independently of any reviewer verdict.
+3. Thomas reads the PR with exact advisory file/line counts and all required generated artifacts
+   attached to their source change.
 
-| Severity | Count |
-|---|---|
-| Critical (incl. ⚠️ old-client breaks) | {N} |
-| High | {N} |
-| Medium | {N} |
-| Low / Info | {N} |
-
-**Report**: `.claude/reviews/{scope-name}-review.md`
-{Posted to PR #N — only if scope was a PR}
-```
+This is a deliberate trade: a review that stops and hands a human a bounded review beats one that
+is still finding true defects on hour 38.
