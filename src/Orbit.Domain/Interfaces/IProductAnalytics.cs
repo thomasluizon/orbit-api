@@ -7,5 +7,5 @@ namespace Orbit.Domain.Interfaces;
 /// </summary>
 public interface IProductAnalytics
 {
-    void CaptureUserEvent(Guid userId, string eventName, string plan, bool isYearlyPro);
+    void CaptureUserEvent(Guid userId, string eventName, string plan);
 }

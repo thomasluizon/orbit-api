@@ -7,8 +7,8 @@ using PostHog;
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
-/// Pins the PostHog wire shape: the Orbit user id is the distinct id, and <c>plan</c>/<c>isYearlyPro</c>
-/// travel under <c>$set</c> so they land as person properties rather than plain event properties.
+/// Pins the PostHog wire shape: the Orbit user id is the distinct id, and <c>plan</c> travels under
+/// <c>$set</c> so it lands as a person property rather than a plain event property.
 /// </summary>
 public class PostHogProductAnalyticsTests
 {
@@ -24,7 +24,7 @@ public class PostHogProductAnalyticsTests
     {
         var userId = Guid.NewGuid();
 
-        _analytics.CaptureUserEvent(userId, "subscription_started", "Pro", true);
+        _analytics.CaptureUserEvent(userId, "subscription_started", "Pro");
 
         var arguments = _postHogClient.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IPostHogClient.Capture))
@@ -36,13 +36,13 @@ public class PostHogProductAnalyticsTests
         var properties = arguments[2].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
         var personProperties = properties["$set"].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
         personProperties["plan"].Should().Be("Pro");
-        personProperties["isYearlyPro"].Should().Be(true);
+        personProperties.Should().HaveCount(1);
     }
 
     [Fact]
     public void CaptureUserEvent_DoesNotStampAnExplicitTimestamp()
     {
-        _analytics.CaptureUserEvent(Guid.NewGuid(), "signup_completed", "Free", false);
+        _analytics.CaptureUserEvent(Guid.NewGuid(), "signup_completed", "Free");
 
         var arguments = _postHogClient.ReceivedCalls()
             .Single(call => call.GetMethodInfo().Name == nameof(IPostHogClient.Capture))

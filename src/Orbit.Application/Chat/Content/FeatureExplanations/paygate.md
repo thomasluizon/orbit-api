@@ -34,7 +34,4 @@ Upgrading to Pro unlocks:
 - Premium color schemes
 - Streak freezes
 - Gamification: XP, levels, and achievements
-
-## The retrospective is yearly-only
-
-The **retrospective** is the one feature that needs the **yearly** Pro plan specifically. A monthly Pro subscription does not include it; the yearly plan does.
+- Retrospectives

@@ -180,7 +180,7 @@ public class GoogleAuthCommandHandlerTests
         await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
 
         created.Should().NotBeNull();
-        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free", false);
+        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free");
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public class GoogleAuthCommandHandlerTests
         await _handler.Handle(new GoogleAuthCommand("valid-token"), CancellationToken.None);
 
         _analytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     private void SetupGoogleTokenResponse(string email, string name)

@@ -12,7 +12,7 @@ public sealed partial class PostHogProductAnalytics(
     IPostHogClient postHogClient,
     ILogger<PostHogProductAnalytics> logger) : IProductAnalytics
 {
-    public void CaptureUserEvent(Guid userId, string eventName, string plan, bool isYearlyPro)
+    public void CaptureUserEvent(Guid userId, string eventName, string plan)
     {
         var distinctId = userId.ToString();
 
@@ -20,8 +20,7 @@ public sealed partial class PostHogProductAnalytics(
         {
             ["$set"] = new Dictionary<string, object>
             {
-                ["plan"] = plan,
-                ["isYearlyPro"] = isYearlyPro
+                ["plan"] = plan
             }
         });
 
