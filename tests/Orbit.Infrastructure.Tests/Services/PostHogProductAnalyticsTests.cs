@@ -7,8 +7,8 @@ using PostHog;
 namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
-/// Pins the PostHog wire shape: the Orbit user id is the distinct id, and <c>plan</c> travels under
-/// <c>$set</c> so it lands as a person property rather than a plain event property.
+/// Pins the PostHog wire shape: the Orbit user id is the distinct id, <c>plan</c> travels under
+/// <c>$set</c>, and the retired yearly entitlement property travels under <c>$unset</c>.
 /// </summary>
 public class PostHogProductAnalyticsTests
 {
@@ -37,6 +37,7 @@ public class PostHogProductAnalyticsTests
         var personProperties = properties["$set"].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
         personProperties["plan"].Should().Be("Pro");
         personProperties.Should().HaveCount(1);
+        properties["$unset"].Should().BeEquivalentTo(new[] { "isYearlyPro" });
     }
 
     [Fact]

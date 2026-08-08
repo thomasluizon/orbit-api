@@ -21,7 +21,8 @@ public sealed partial class PostHogProductAnalytics(
             ["$set"] = new Dictionary<string, object>
             {
                 ["plan"] = plan
-            }
+            },
+            ["$unset"] = new[] { "isYearlyPro" }
         });
 
         LogCaptureEnqueued(logger, eventName, distinctId, enqueued);
