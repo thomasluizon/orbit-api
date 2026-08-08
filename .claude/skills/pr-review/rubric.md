@@ -156,7 +156,9 @@ detection does not: shared and DTO changes **add optional fields** and never ren
 field an old mobile client still reads, because mobile lags via the Play store.
 
 - Removed or renamed in a **response** DTO or schema: old clients read `undefined`. **Critical,
-  `BREAKS-OLD-CLIENTS`**, unless it was already optional AND unused (cite the grep).
+  `BREAKS-OLD-CLIENTS`**, unless it was already optional AND proven unused across every
+  still-supported shipped client build. Cite version-indexed source/artifacts or keep the field
+  append-only; a grep of the current UI checkout alone is never fleet-safe evidence.
 - Removed or renamed in a **request** DTO or schema, or made newly required: old clients still send the old
   shape and validation rejects it. **Critical, `BREAKS-OLD-CLIENTS`**.
 - Added as optional: forward-compatible, **Info**. Enum value removed: old clients may still send it.

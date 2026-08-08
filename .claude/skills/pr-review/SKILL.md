@@ -181,6 +181,12 @@ Round 1's receipt file is immutable. Round 2 writes a new receipt instead of rew
 its SHA-256, derives the complete ordered Blocking ID list, and requires exact equality with
 `frozenFindingIds`. A round-one CLEAN receipt must contain no Blocking finding, regardless of any
 caller-supplied status.
+After posting a BLOCKING round-one receipt, hand its exact path to the orchestrator and do not begin
+round two until it returns the independent `ROUND_ONE_REGISTERED` ledger path. The orchestrator runs
+`record-readiness.mjs --repo <key> --pr <n> --review <round-one-file> --register-round-one` before the
+fixer transition and stores that returned ledger path in run-state. Final readiness requires the
+round-two path, SHA-256, base/head, and frozen IDs to match this pre-fixer ledger; values supplied only
+by the round-two artifact are not authority.
 Every newly admitted round-2 blocker is appended with `status: "OPEN"`. Set `verdict` to `CLEAN`
 only when no frozen or admitted Blocking finding remains OPEN. Capture `reviewedHeadOid` and
 `baseSha` from the PR state reviewed; a review of any other head/base is stale by construction.
