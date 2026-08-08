@@ -160,6 +160,7 @@ orbit-api. A paired diff can be **both**. That classification gates which rubric
  "reviewedHeadOid":"<full head SHA>","baseSha":"<full base SHA>",
  "rubricBaseOid":"<full base SHA>","rubricArtifactPath":"<absolute snapshot path>",
  "artifactPath":"<absolute path to this file>",
+ "frozenFindingIds":["F1"],
  "findings":[{"id":"F1","severity":"High","file":"apps/web/hooks/use-streak.ts","line":42,
    "claim":"one sentence: what is wrong and what goes wrong if it ships","blocking":true}]}
 ```
@@ -171,6 +172,9 @@ becomes a ticket where the repository floor permits it.
 
 Round 2 rewrites the same receipt, sets `rounds` to 2, and adds
 `"status": "CLOSED" | "OPEN"` to every round-1 Blocking finding. Round-1 entries are never removed.
+`frozenFindingIds` is the exact ordered list of round-1 Blocking IDs, is written in round 1 (an
+empty array for a clean round 1), and is never changed in round 2. Readiness rejects a round-2
+receipt when that list is absent, empty, duplicated, or no longer represented by Blocking entries.
 Every newly admitted round-2 blocker is appended with `status: "OPEN"`. Set `verdict` to `CLEAN`
 only when no frozen or admitted Blocking finding remains OPEN. Capture `reviewedHeadOid` and
 `baseSha` from the PR state reviewed; a review of any other head/base is stale by construction.
