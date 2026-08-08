@@ -271,14 +271,17 @@ paired frontend PR.
 > the diff adds or changes a read of a CLI, GitHub/Linear/provider API, Git response, SDK, or library field,
 > flag, subcommand, exit code, enum, event argument, or response shape.
 
-Inspect the PR body's evidence for every such read. It must show the **complete selected key/type shape**
-or complete compared enum/value set from a real invocation or installed source, redact credentials and
-personal/account values, preserve literal formats the code parses, and include an exact reproduction
-command or installed `file:line`. An existing callsite, documentation, memory, and a fixture authored with
-the implementation are not evidence. Compare the code and its fixture to that evidence; a fixture that
-invents the same field proves nothing.
+Inspect the PR body's evidence for every such read. For fields and response shapes it must show the
+**complete selected key/type shape**; for enums or compared values, the complete accepted set; and for a
+flag, subcommand, exit code, or event argument, a real redacted invocation and its complete consumed
+result or the installed source/usage `file:line` that constructs it. Preserve literal formats the code
+parses and include an exact reproduction command. An existing callsite, documentation, memory, and a
+fixture authored with the implementation are not evidence. Compare the code and its fixture to that
+evidence; a fixture that invents the same interface contract proves nothing.
 
-Missing or guessed evidence for a field on the correctness path is **High and Blocking** because the
-implementation is unproven against the interface it will execute. If the diff redesigns so the unknown is
-not read and success depends only on a confirmed exit code, record why this dimension passes. Do not
-manufacture a failure from an absent unconfirmed field, and do not expose a credential while proving it.
+Missing or guessed evidence for any field, flag, subcommand, exit code, enum, event argument, or response
+shape on the correctness path is **High and Blocking** because the implementation is unproven against the
+interface it will execute. If the diff redesigns so the unknown is not read and success depends only on a
+confirmed exit code, cite the real invocation or installed source that confirms that exit signal and record
+why this dimension passes. Do not manufacture a failure from an absent unconfirmed field, and do not expose
+a credential while proving it.

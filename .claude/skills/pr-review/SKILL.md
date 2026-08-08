@@ -170,8 +170,9 @@ repository floor never enters this array. `blocking` is the decision for a survi
 a High that does not break behaviour, security, or data integrity is `"blocking": false` and
 becomes a ticket where the repository floor permits it.
 
-Round 2 rewrites the same receipt, sets `rounds` to 2, and adds
-`"status": "CLOSED" | "OPEN"` to every round-1 Blocking finding. Round-1 entries are never removed.
+Round 2 writes a separate receipt, sets `rounds` to 2, and adds
+`"status": "CLOSED" | "OPEN"` to every round-1 Blocking finding. Round-1 entries are never removed
+from the round-2 copy, while the round-one receipt itself remains byte-for-byte immutable.
 `frozenFindingIds` is the exact ordered list of round-1 Blocking IDs, is written in round 1 (an
 empty array for a clean round 1), and is never changed in round 2. Readiness rejects a round-2
 receipt when that list is absent, empty, duplicated, or no longer represented by Blocking entries.
