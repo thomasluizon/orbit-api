@@ -16,7 +16,7 @@ internal static partial class AnalyticsCapture
     {
         try
         {
-            analytics.CaptureUserEvent(user.Id, eventName, user.Plan.ToString(), user.IsYearlyPro);
+            analytics.CaptureUserEvent(user.Id, eventName, user.Plan.ToString());
         }
         catch (Exception ex)
         {

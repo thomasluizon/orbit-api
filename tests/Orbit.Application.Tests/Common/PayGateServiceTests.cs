@@ -41,7 +41,7 @@ public class PayGateServiceTests
     private static User CreateProUser()
     {
         var user = CreateFreeUser();
-        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1), SubscriptionInterval.Monthly);
         return user;
     }
 
@@ -408,7 +408,7 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanUseRetrospective_YearlyProUser_Success()
+    public async Task CanUseRetrospective_AnnualSubscription_Success()
     {
         var user = CreateFreeUser();
         user.SetStripeSubscription("sub_yearly", DateTime.UtcNow.AddYears(1), SubscriptionInterval.Yearly);
@@ -420,14 +420,37 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanUseRetrospective_MonthlyProUser_PayGateFailure()
+    public async Task CanUseRetrospective_MonthlySubscription_Success()
     {
-        var user = CreateProUser(); _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        var user = CreateProUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _sut.CanUseRetrospective(UserId);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CanUseRetrospective_LifetimePro_Success()
+    {
+        var user = CreateFreeUser();
+        user.GrantLifetimePro();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.CanUseRetrospective(UserId);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CanUseRetrospective_ActiveTrial_Success()
+    {
+        var user = CreateFreeUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.CanUseRetrospective(UserId);
+
+        result.IsSuccess.Should().BeTrue();
     }
 
     [Fact]
@@ -441,6 +464,22 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be("Retrospectives are a Pro feature. Upgrade to unlock!");
+    }
+
+    [Fact]
+    public async Task CanUseRetrospective_ExpiredSubscription_PayGateFailure()
+    {
+        var user = CreateFreeUser();
+        user.SetStripeSubscription("sub_expired", DateTime.UtcNow.AddDays(-1), SubscriptionInterval.Monthly);
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+
+        var result = await _sut.CanUseRetrospective(UserId);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be("PAY_GATE");
+        result.Error.Should().Be("Retrospectives are a Pro feature. Upgrade to unlock!");
     }
 
     [Fact]
