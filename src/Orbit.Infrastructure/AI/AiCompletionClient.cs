@@ -80,6 +80,8 @@ public sealed partial class AiCompletionClient
     /// </summary>
     public ChatClient ChatClient => _chatClient;
 
+    internal string ChatModel => _primaryModel;
+
     /// <summary>
     /// Requests a plain-text chat completion from the configured model tier.
     /// </summary>

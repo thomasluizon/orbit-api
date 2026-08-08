@@ -275,7 +275,9 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<AiUsageDaily>(entity =>
         {
-            entity.HasIndex(u => new { u.Date, u.Model, u.Purpose }).IsUnique();
+            entity.HasIndex(u => new { u.Date, u.Model, u.Purpose, u.UserId })
+                .IsUnique()
+                .AreNullsDistinct(false);
             entity.Property(u => u.Model).HasMaxLength(64);
             entity.Property(u => u.Purpose).HasMaxLength(64);
             entity.Property(u => u.CostUsd).HasColumnType("numeric");

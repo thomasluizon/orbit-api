@@ -17,6 +17,7 @@ namespace Orbit.Infrastructure.Services;
 
 public sealed partial class AiIntentService(
     AiCompletionClient aiClient,
+    IAiUsageRecorder usageRecorder,
     ILogger<AiIntentService> logger) : IAiIntentService
 {
     private static readonly JsonSerializerOptions SerializeOptions = new()
@@ -76,7 +77,8 @@ public sealed partial class AiIntentService(
                 options.Tools.Add(tool);
         }
 
-        return await CallWithToolsAsync(messages, options, streamSink, cancellationToken);
+        var usageUserId = userId == Guid.Empty ? (Guid?)null : userId;
+        return await CallWithToolsAsync(messages, options, usageUserId, streamSink, cancellationToken);
     }
 
     public async Task<Result<AiResponse>> ContinueWithToolResultsAsync(
@@ -107,12 +109,18 @@ public sealed partial class AiIntentService(
             messages.Add(new ToolChatMessage(result.Id, JsonSerializer.Serialize(payload)));
         }
 
-        return await CallWithToolsAsync(messages, options, streamSink, cancellationToken);
+        return await CallWithToolsAsync(
+            messages,
+            options,
+            conversationContext.UserId,
+            streamSink,
+            cancellationToken);
     }
 
     private async Task<Result<AiResponse>> CallWithToolsAsync(
         List<ChatMessage> messages,
         ChatCompletionOptions options,
+        Guid? userId,
         Func<AiStreamEvent, Task>? streamSink,
         CancellationToken cancellationToken)
     {
@@ -122,8 +130,8 @@ public sealed partial class AiIntentService(
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var round = streamSink is null
-                ? await CompleteBufferedRoundAsync(messages, options, cancellationToken)
-                : await CompleteStreamingRoundAsync(messages, options, streamSink, stopwatch, cancellationToken);
+                ? await CompleteBufferedRoundAsync(messages, options, userId, cancellationToken)
+                : await CompleteStreamingRoundAsync(messages, options, userId, streamSink, stopwatch, cancellationToken);
 
             stopwatch.Stop();
             LogAiApiResponded(logger, stopwatch.ElapsedMilliseconds);
@@ -135,7 +143,12 @@ public sealed partial class AiIntentService(
                 LogAiReturnedToolCalls(logger, toolCalls.Count,
                     string.Join(", ", toolCalls.Select(tc => tc.Name)));
 
-                var convCtx = new AiConversationContext { Messages = messages, Options = options };
+                var convCtx = new AiConversationContext
+                {
+                    Messages = messages,
+                    Options = options,
+                    UserId = userId
+                };
                 return Result.Success(new AiResponse { ToolCalls = toolCalls, ConversationContext = convCtx });
             }
 
@@ -158,12 +171,16 @@ public sealed partial class AiIntentService(
     }
 
     private async Task<CompletedRound> CompleteBufferedRoundAsync(
-        List<ChatMessage> messages, ChatCompletionOptions options, CancellationToken cancellationToken)
+        List<ChatMessage> messages,
+        ChatCompletionOptions options,
+        Guid? userId,
+        CancellationToken cancellationToken)
     {
         var completion = await aiClient.ChatClient.CompleteChatAsync(messages, options, cancellationToken);
         var result = completion.Value;
 
         LogChatUsage(result.Usage, "buffered");
+        await RecordChatUsageAsync(result.Usage, "buffered", userId, cancellationToken);
 
         messages.Add(new AssistantChatMessage(result));
 
@@ -179,6 +196,7 @@ public sealed partial class AiIntentService(
     private async Task<CompletedRound> CompleteStreamingRoundAsync(
         List<ChatMessage> messages,
         ChatCompletionOptions options,
+        Guid? userId,
         Func<AiStreamEvent, Task> streamSink,
         System.Diagnostics.Stopwatch stopwatch,
         CancellationToken cancellationToken)
@@ -188,6 +206,8 @@ public sealed partial class AiIntentService(
         ChatFinishReason? finishReason = null;
         var firstTokenLogged = false;
         ChatTokenUsage? streamedUsage = null;
+
+        IncludeUsage(options);
 
         await foreach (var update in aiClient.ChatClient.CompleteChatStreamingAsync(messages, options, cancellationToken))
         {
@@ -204,6 +224,7 @@ public sealed partial class AiIntentService(
         }
 
         LogChatUsage(streamedUsage, "streaming");
+        await RecordChatUsageAsync(streamedUsage, "streaming", userId, cancellationToken);
 
         if (finishReason == ChatFinishReason.ToolCalls && toolCallBuilders.Count > 0)
         {
@@ -415,6 +436,41 @@ public sealed partial class AiIntentService(
             usage.TotalTokenCount);
     }
 
+#pragma warning disable SCME0001
+    private static void IncludeUsage(ChatCompletionOptions options) =>
+        options.Patch.Set("$.stream_options.include_usage"u8, true);
+#pragma warning restore SCME0001
+
+    private async Task RecordChatUsageAsync(
+        ChatTokenUsage? usage,
+        string phase,
+        Guid? userId,
+        CancellationToken cancellationToken)
+    {
+        if (usage is null)
+        {
+            LogChatUsageMissing(logger, phase);
+            return;
+        }
+
+        try
+        {
+            await usageRecorder.RecordAsync(
+                "chat",
+                aiClient.ChatModel,
+                usage.InputTokenDetails?.CachedTokenCount ?? 0,
+                usage.InputTokenCount,
+                usage.OutputTokenCount,
+                usage.TotalTokenCount,
+                cancellationToken,
+                userId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogChatUsageRecordFailed(logger, aiClient.ChatModel, phase, ex);
+        }
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Calling AI API with tools...")]
     private static partial void LogCallingAiWithTools(ILogger logger);
 
@@ -444,5 +500,11 @@ public sealed partial class AiIntentService(
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "History overflow summary failed; falling back to truncation")]
     private static partial void LogHistorySummaryFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "AI token usage was missing from the {Phase} chat response")]
+    private static partial void LogChatUsageMissing(ILogger logger, string phase);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Warning, Message = "Failed to record chat usage for {Model} ({Phase})")]
+    private static partial void LogChatUsageRecordFailed(ILogger logger, string model, string phase, Exception ex);
 
 }

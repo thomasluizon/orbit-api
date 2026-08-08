@@ -10,9 +10,10 @@ namespace Orbit.Infrastructure.AI;
 
 /// <summary>
 /// Singleton recorder that converts one completion's tokens into a dollar cost from the configured
-/// per-model price map and atomically UPSERTs it into the daily (date, model, purpose) aggregate via a
-/// child DI scope, so the singleton AI client never holds a scoped DbContext. Best-effort: any write
-/// failure is logged once at Warning and swallowed so the user's AI response is never affected.
+/// per-model price map and atomically UPSERTs it into the daily
+/// (date, model, purpose, optional user) aggregate via a child DI scope, so the singleton AI client
+/// never holds a scoped DbContext. Best-effort: any write failure is logged once at Warning and
+/// swallowed so the user's AI response is never affected.
 /// </summary>
 public sealed partial class AiUsageRecorder(
     IServiceScopeFactory scopeFactory,
@@ -30,7 +31,8 @@ public sealed partial class AiUsageRecorder(
         long promptTokens,
         long completionTokens,
         long totalTokens,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? userId = null)
     {
         var costUsd = ComputeCostUsd(_pricing.GetValueOrDefault(model), cachedTokens, promptTokens, completionTokens);
 #pragma warning disable ORBIT0004 // WHY: pre-existing deliberate UTC-date window or UTC-keyed dedupe/aggregation bucket (not a user's calendar date), per-site justification ledger: https://github.com/thomasluizon/orbit-api/issues/431
@@ -43,9 +45,9 @@ public sealed partial class AiUsageRecorder(
             var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
             await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO "AiUsageDaily"
-                    ("Id", "Date", "Model", "Purpose", "Calls", "CachedTokens", "PromptTokens", "CompletionTokens", "TotalTokens", "CostUsd")
-                VALUES ({Guid.NewGuid()}, {date}, {model}, {purpose}, 1, {cachedTokens}, {promptTokens}, {completionTokens}, {totalTokens}, {costUsd})
-                ON CONFLICT ("Date", "Model", "Purpose") DO UPDATE SET
+                    ("Id", "Date", "Model", "Purpose", "UserId", "Calls", "CachedTokens", "PromptTokens", "CompletionTokens", "TotalTokens", "CostUsd")
+                VALUES ({Guid.NewGuid()}, {date}, {model}, {purpose}, {userId}, 1, {cachedTokens}, {promptTokens}, {completionTokens}, {totalTokens}, {costUsd})
+                ON CONFLICT ("Date", "Model", "Purpose", "UserId") DO UPDATE SET
                     "Calls" = "AiUsageDaily"."Calls" + 1,
                     "CachedTokens" = "AiUsageDaily"."CachedTokens" + EXCLUDED."CachedTokens",
                     "PromptTokens" = "AiUsageDaily"."PromptTokens" + EXCLUDED."PromptTokens",
