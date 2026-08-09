@@ -89,6 +89,24 @@ public class AccountResetRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteAllUserDataAsync_PreservesAttributedAiUsage()
+    {
+        SeedUser(_userId, "target@example.com");
+        _dbContext.AiUsageDaily.Add(AiUsageDaily.Create(
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            "gpt-4.1-mini",
+            "astra_chat",
+            new AiUsageTotals(1, 0, 100, 50, 150, 0.001m),
+            _userId));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        await _repository.DeleteAllUserDataAsync(_userId);
+
+        (await _dbContext.AiUsageDaily.AnyAsync(u => u.UserId == _userId)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task DeleteAllUserDataAsync_RemovesNewlyCascadedTablesForUser_LeavesOtherUserData()
     {
         SeedUser(_userId, "target@example.com");
