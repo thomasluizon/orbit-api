@@ -1,4 +1,12 @@
 src/Orbit.Api/openapi.json text eol=lf
+# Every markdown file under .claude/ checks out LF here, exactly as it does in
+# orbit-ui-mobile. The pr-review skill is single-sourced in the UI repo and mirrored
+# into this one, and tools/launch-worker.mjs refuses an API review when the two copies
+# disagree. Without this line core.autocrlf=true materialized the identical committed
+# blob as CRLF here and LF there, +230 bytes on SKILL.md and +289 on rubric.md, so the
+# gate compared different bytes for the same content and stood 76 tickets down on
+# 2026-08-08. `git status` stayed clean in both repos, which is why nothing looked wrong.
+.claude/**/*.md text eol=lf
 .claude/skills/**/*.mjs text eol=lf
 tools/*.mjs text eol=lf
 architecture.json text eol=lf
