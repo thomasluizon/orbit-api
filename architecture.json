@@ -7049,6 +7049,7 @@
         "references": [
           "AgentAuditLog",
           "AgentStepUpChallengeState",
+          "AiUsageDaily",
           "ApiKey",
           "BlockedUser",
           "ChecklistTemplate",
