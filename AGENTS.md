@@ -6,10 +6,10 @@ CLAUDE.md; this file holds the worker contract and the review rules and DEFERS t
 
 ## Worker contract
 
-- Your prompt is a Linear ticket body. Execute exactly it; an impossible or
+- Your prompt is a GitHub ticket body. Execute exactly it; an impossible or
   contradictory ticket means STOP and report, never improvise.
 - Finish = `dotnet build Orbit.slnx` 0 errors + `dotnet test` green, commit, push, one
-  PR to `main` linking `ORB-N`, then stop. Never merge.
+  PR to `main` linking the ticket reference (`ORB-N` or `#N`), then stop. Never merge.
 - Post the approach before you write the code. Open the pull request as your FIRST act
   after creating the branch, carrying no implementation yet, and immediately post your
   intended approach as a pull request comment: the change you mean to make, the files it
