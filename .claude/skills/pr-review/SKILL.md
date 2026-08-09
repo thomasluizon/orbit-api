@@ -55,7 +55,7 @@ loop is **unmeasured**. State it that honestly, and never claim the degraded mod
 Non-blocking.** `orbit-api/AGENTS.md` permits P0/P1 only: Critical maps to P0, High maps to P1,
 and Medium/Low/Info candidates are discarded before the receipt and create no ticket. For a
 surviving candidate, Blocking means it **breaks behaviour, security, or data integrity**.
-Everything else is **auto-filed as a follow-up Linear ticket** and never fixed in this PR. Apply
+Everything else is **auto-filed as a follow-up GitHub ticket** and never fixed in this PR. Apply
 the floor and classification once at report time; neither is renegotiated per round.
 
 **4. Diff-only scope.** Read `gh pr diff`. You are reviewing a diff, not a repository. Open a
@@ -137,7 +137,7 @@ orbit-api. A paired diff can be **both**. That classification gates which rubric
 3. Drop candidates below the target repository floor, then classify each survivor Blocking or
    Non-blocking by rule 3.
 4. Write `findings.json`. **The list is now frozen.**
-5. File every Non-blocking finding as a follow-up Linear ticket (one per finding, title = the
+5. File every Non-blocking finding as a follow-up GitHub ticket (one per finding, title = the
    claim, body = file, line, and the rubric dimension). They are not fixed in this PR.
 6. Zero Blocking findings means the review is over. Hand to Thomas.
 

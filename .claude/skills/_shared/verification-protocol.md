@@ -27,7 +27,7 @@ into the inventory in §1 and where the ledger in §4 is delivered.
 
 **D10, the output is never a report file.** A report is a photograph that starts lying the
 day after it is written. The four `/audit-*` skills and `/prod-readiness` turn verified
-findings into **Linear tickets behind one human approval gate**, via the shared pipeline in
+findings into **GitHub tickets behind one human approval gate**, via the shared pipeline in
 `.claude/skills/_shared/audit-to-tickets.md`. `/pr-review` delivers its findings against the
 diff, in session. None of the six persists a findings document, and none writes to
 `.claude/audits/`. Coverage, the Deferred ledger, and the convergence state are **provenance

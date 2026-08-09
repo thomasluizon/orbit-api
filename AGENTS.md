@@ -6,7 +6,7 @@ CLAUDE.md; this file holds the worker contract and the review rules and DEFERS t
 
 ## Worker contract
 
-- Your prompt is a Linear ticket body. Execute exactly it; an impossible or
+- Your prompt is a GitHub ticket body. Execute exactly it; an impossible or
   contradictory ticket means STOP and report, never improvise.
 - Finish = `dotnet build Orbit.slnx` 0 errors + `dotnet test` green, commit, push, one
   PR to `main` linking `ORB-N`, then stop. Never merge.

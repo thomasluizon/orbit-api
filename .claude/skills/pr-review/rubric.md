@@ -270,7 +270,7 @@ paired frontend PR.
 ### 13. External-interface evidence
 
 > Reference: root AGENTS.md "Never assume an external interface. Check it, then use it." Gated whenever
-> the diff adds or changes a read of a CLI, GitHub/Linear/provider API, Git response, SDK, or library field,
+> the diff adds or changes a read of a CLI, GitHub/provider API, Git response, SDK, or library field,
 > flag, subcommand, exit code, enum, event argument, or response shape.
 
 Inspect the PR body's evidence for every such read. For fields and response shapes it must show the
