@@ -13,5 +13,6 @@ public interface IAiUsageRecorder
         long promptTokens,
         long completionTokens,
         long totalTokens,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Guid? userId = null);
 }

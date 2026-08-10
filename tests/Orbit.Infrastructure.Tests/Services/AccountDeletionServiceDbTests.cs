@@ -103,6 +103,25 @@ public class AccountDeletionServiceDbTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_DeletesPastDueUsersAttributedAiUsage()
+    {
+        var userId = Guid.NewGuid();
+        SeedDeactivatedUser(userId, "ai-usage@example.com", DateTime.UtcNow.AddDays(-1));
+        _dbContext.AiUsageDaily.Add(AiUsageDaily.Create(
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            "gpt-4.1-mini",
+            "astra_chat",
+            new AiUsageTotals(1, 0, 100, 50, 150, 0.001m),
+            userId));
+        await _dbContext.SaveChangesAsync();
+        _dbContext.ChangeTracker.Clear();
+
+        await _service.RunAsync(CancellationToken.None);
+
+        (await _dbContext.AiUsageDaily.AnyAsync(u => u.UserId == userId)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task CleanupStaleSentRecords_RemovesProcessedRequestsOlderThan30Days_KeepsRecent()
     {
         var userId = Guid.NewGuid();

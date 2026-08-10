@@ -12,7 +12,8 @@ public record AiUsageTotals(
     decimal CostUsd);
 
 /// <summary>
-/// Aggregated AI token usage and computed dollar cost for a single (UTC date, model, purpose) triple.
+/// Aggregated AI token usage and computed dollar cost for a single
+/// (UTC date, model, purpose, optional user) tuple.
 /// Rows are UPSERTed at the AI completion chokepoint and read once per day by the usage-summary job.
 /// </summary>
 public class AiUsageDaily : Entity
@@ -20,6 +21,7 @@ public class AiUsageDaily : Entity
     public DateOnly Date { get; private set; }
     public string Model { get; private set; } = string.Empty;
     public string Purpose { get; private set; } = string.Empty;
+    public Guid? UserId { get; private set; }
     public long Calls { get; private set; }
     public long CachedTokens { get; private set; }
     public long PromptTokens { get; private set; }
@@ -33,13 +35,15 @@ public class AiUsageDaily : Entity
         DateOnly date,
         string model,
         string purpose,
-        AiUsageTotals totals)
+        AiUsageTotals totals,
+        Guid? userId = null)
     {
         return new AiUsageDaily
         {
             Date = date,
             Model = model,
             Purpose = purpose,
+            UserId = userId,
             Calls = totals.Calls,
             CachedTokens = totals.CachedTokens,
             PromptTokens = totals.PromptTokens,

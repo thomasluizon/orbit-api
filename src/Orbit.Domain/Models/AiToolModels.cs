@@ -38,6 +38,8 @@ public sealed class AiConversationContext
     public object Messages { get; init; } = null!;
     /// <summary>Opaque options object. Only consumed by AiIntentService.</summary>
     public object Options { get; init; } = null!;
+    /// <summary>User attributed to each model round in this conversation.</summary>
+    public Guid? UserId { get; init; }
 }
 
 public record AiResponse

@@ -352,7 +352,10 @@ public class OrbitDbContextTests
                 nameof(ProcessedRequest.UserId), nameof(ProcessedRequest.IdempotencyKey), nameof(ProcessedRequest.RequestType),
             }),
             (typeof(AiFactExtractionBatch), new[] { nameof(AiFactExtractionBatch.BatchId) }),
-            (typeof(AiUsageDaily), new[] { nameof(AiUsageDaily.Date), nameof(AiUsageDaily.Model), nameof(AiUsageDaily.Purpose) }),
+            (typeof(AiUsageDaily), new[]
+            {
+                nameof(AiUsageDaily.Date), nameof(AiUsageDaily.Model), nameof(AiUsageDaily.Purpose), nameof(AiUsageDaily.UserId),
+            }),
             (typeof(Referral), new[] { nameof(Referral.ReferredUserId) }),
             (typeof(UserAchievement), new[] { nameof(UserAchievement.UserId), nameof(UserAchievement.AchievementId) }),
             (typeof(StreakFreeze), new[] { nameof(StreakFreeze.UserId), nameof(StreakFreeze.UsedOnDate) }),

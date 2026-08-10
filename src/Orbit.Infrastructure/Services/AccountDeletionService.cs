@@ -100,6 +100,9 @@ public partial class AccountDeletionService(
                 var resetRepository = scope.ServiceProvider.GetRequiredService<IAccountResetRepository>();
                 await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
                 {
+                    await dbContext.AiUsageDaily
+                        .Where(u => u.UserId == userId)
+                        .ExecuteDeleteAsync(transactionToken);
                     await resetRepository.DeleteAllUserDataAsync(userId, transactionToken);
                     dbContext.Users.Remove(userToDelete);
                     await unitOfWork.SaveChangesAsync(transactionToken);
