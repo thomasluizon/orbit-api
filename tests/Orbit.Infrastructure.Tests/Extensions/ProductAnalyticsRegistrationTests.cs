@@ -45,7 +45,7 @@ public class ProductAnalyticsRegistrationTests
     public void NoOpProductAnalytics_Capture_DoesNothingAndDoesNotThrow()
     {
         var act = () => new NoOpProductAnalytics()
-            .CaptureUserEvent(Guid.NewGuid(), "subscription_started", "Pro", true);
+            .CaptureUserEvent(Guid.NewGuid(), "subscription_started", "Pro");
 
         act.Should().NotThrow();
     }

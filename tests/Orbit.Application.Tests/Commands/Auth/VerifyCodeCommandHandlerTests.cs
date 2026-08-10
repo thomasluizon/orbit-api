@@ -178,7 +178,7 @@ public class VerifyCodeCommandHandlerTests
         await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
 
         created.Should().NotBeNull();
-        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free", false);
+        _analytics.Received(1).CaptureUserEvent(created!.Id, "signup_completed", "Free");
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public class VerifyCodeCommandHandlerTests
         await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);
 
         _analytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class VerifyCodeCommandHandlerTests
     {
         SetupCacheWithCode("123456");
         _analytics
-            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>()))
+            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()))
             .Do(_ => throw new InvalidOperationException("PostHog unreachable"));
 
         var result = await _handler.Handle(new VerifyCodeCommand(TestEmail, "123456"), CancellationToken.None);

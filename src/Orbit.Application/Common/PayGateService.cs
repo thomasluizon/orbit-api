@@ -139,8 +139,8 @@ public class PayGateService(
             return Result.Failure(ErrorMessages.UserNotFound);
 
         var proOnly = await appConfig.GetAsync(AppConfigKeys.RetrospectiveProOnly, true, ct);
-        if (proOnly && !user.IsYearlyPro)
-            return Result.PayGateFailure("Retrospectives are available on the yearly Pro plan. Upgrade to unlock!");
+        if (proOnly && !user.HasProAccess)
+            return Result.PayGateFailure("Retrospectives are a Pro feature. Upgrade to unlock!");
 
         return Result.Success();
     }

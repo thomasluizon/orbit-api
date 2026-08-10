@@ -727,11 +727,11 @@ public class HandleWebhookCommandHandlerTests
 
         await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
-        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro", false);
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro");
     }
 
     [Fact]
-    public async Task Handle_CheckoutSessionCompleted_YearlyPlan_CapturesIsYearlyProTrue()
+    public async Task Handle_CheckoutSessionCompleted_AnnualPlan_CapturesSubscriptionStarted()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         _userRepo.FindOneTrackedIgnoringFiltersAsync(
@@ -748,7 +748,7 @@ public class HandleWebhookCommandHandlerTests
 
         await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
-        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro", true);
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_started", "Pro");
     }
 
     [Fact]
@@ -770,7 +770,7 @@ public class HandleWebhookCommandHandlerTests
 
         await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
-        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_renewed", "Pro", false);
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_renewed", "Pro");
     }
 
     [Fact]
@@ -789,7 +789,7 @@ public class HandleWebhookCommandHandlerTests
 
         await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
-        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_canceled", "Free", false);
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_canceled", "Free");
     }
 
     [Fact]
@@ -808,7 +808,7 @@ public class HandleWebhookCommandHandlerTests
 
         await _handler.Handle(new HandleWebhookCommand(json, signature), CancellationToken.None);
 
-        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_updated", "Pro", false);
+        _analytics.Received(1).CaptureUserEvent(user.Id, "subscription_updated", "Pro");
     }
 
     [Fact]
@@ -825,7 +825,7 @@ public class HandleWebhookCommandHandlerTests
             .Returns(CreateMockSubscription("sub_test"));
 
         _analytics
-            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>()))
+            .When(a => a.CaptureUserEvent(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>()))
             .Do(_ => throw new InvalidOperationException("PostHog unreachable"));
 
         var (json, signature) = BuildSignedEvent("checkout.session.completed", BuildCheckoutSessionJson(
@@ -860,7 +860,7 @@ public class HandleWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         _analytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Fact]
@@ -890,7 +890,7 @@ public class HandleWebhookCommandHandlerTests
         user.IsPro.Should().BeTrue();
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
         _analytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>());
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>());
     }
 
     private static Subscription CreateMockSubscription(string subscriptionId)

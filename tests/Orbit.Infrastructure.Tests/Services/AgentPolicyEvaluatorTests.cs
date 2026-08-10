@@ -58,6 +58,29 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
+    public void Evaluate_UnknownFeaturePlanRequirement_FailsClosed()
+    {
+        var user = _dbContext.Users.Single(item => item.Id == _userId);
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), Orbit.Domain.Enums.SubscriptionInterval.Monthly);
+        var unknownRequirement = string.Concat("Yearly", "Pro");
+        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create(
+            "ai_retrospective", true, unknownRequirement, "AI retrospective analysis"));
+        _dbContext.SaveChanges();
+
+        var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
+            AgentCapabilityIds.RetrospectiveRead,
+            _userId,
+            AgentExecutionSurface.Chat,
+            AgentAuthMethod.Jwt,
+            [],
+            "get_retrospective",
+            "Get retrospective"));
+
+        decision.Status.Should().Be(AgentPolicyDecisionStatus.Denied);
+        decision.Reason.Should().Be($"feature_plan_required:ai_retrospective:{unknownRequirement}");
+    }
+
+    [Fact]
     public void Evaluate_DestructiveOperationWithoutConfirmation_CreatesPendingOperation()
     {
         var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(

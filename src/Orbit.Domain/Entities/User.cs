@@ -88,9 +88,6 @@ public partial class User : Entity
     [NotMapped]
     public bool HasProAccess => IsPro || IsTrialActive;
 
-    [NotMapped]
-    public bool IsYearlyPro => IsPro && (IsLifetimePro || SubscriptionInterval == Enums.SubscriptionInterval.Yearly);
-
     private User() { }
 
     public static Result<User> Create(string name, string email)

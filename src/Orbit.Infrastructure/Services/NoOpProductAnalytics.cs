@@ -8,7 +8,7 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public sealed class NoOpProductAnalytics : IProductAnalytics
 {
-    public void CaptureUserEvent(Guid userId, string eventName, string plan, bool isYearlyPro)
+    public void CaptureUserEvent(Guid userId, string eventName, string plan)
     {
     }
 }

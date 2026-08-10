@@ -70,6 +70,23 @@ public class FeatureFlagAndAgentSupportTests : IDisposable
     }
 
     [Fact]
+    public async Task FeatureFlagService_UnknownPlanRequirement_FailsClosed()
+    {
+        var user = User.Create("Thomas", "thomas@example.com").Value;
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30), SubscriptionInterval.Monthly);
+        var unknownRequirement = string.Concat("Yearly", "Pro");
+        _dbContext.Users.Add(user);
+        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("stale_plan", true, unknownRequirement, "Stale plan"));
+        await _dbContext.SaveChangesAsync();
+
+        var service = new FeatureFlagService(_dbContext, new MemoryCache(new MemoryCacheOptions()));
+
+        var result = await service.GetEnabledKeysForUserAsync(user.Id);
+
+        result.Should().NotContain("stale_plan");
+    }
+
+    [Fact]
     public async Task AgentTargetOwnershipService_ReturnsNullWhenNoTargetsAreProvided()
     {
         var service = new AgentTargetOwnershipService(_dbContext);

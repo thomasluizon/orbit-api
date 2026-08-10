@@ -184,7 +184,6 @@ public class AgentPolicyEvaluator(
         return planRequirement.Trim().ToLowerInvariant() switch
         {
             "pro" => user.HasProAccess,
-            "yearlypro" or "yearly_pro" or "yearly-pro" => user.IsYearlyPro,
             "free" => true,
             _ => false
         };
