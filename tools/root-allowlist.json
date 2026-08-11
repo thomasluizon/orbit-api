@@ -12,6 +12,7 @@
     "CodeMetricsConfig.txt",
     "Directory.Build.props",
     "Dockerfile",
+    "LICENSE",
     "Orbit.slnx",
     "README.md",
     "appsettings.Development.json",
