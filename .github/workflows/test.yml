@@ -184,7 +184,7 @@ jobs:
 
       - name: Detect breaking API changes
         if: steps.base-spec.outputs.exists == 'true'
-        uses: oasdiff/oasdiff-action/breaking@b7c3adeb54330db1903d27c61db520e5661ad55b # v0.1.11
+        uses: oasdiff/oasdiff-action/breaking@033c15c845bef10f148afb0fa781bf1b2a7fe1bf # v0.1.12
         with:
           base: "origin/${{ github.base_ref }}:src/Orbit.Api/openapi.json"
           revision: "src/Orbit.Api/openapi.json"
