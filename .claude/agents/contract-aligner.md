@@ -1,12 +1,12 @@
 ---
 name: contract-aligner
-description: Cross-checks packages/shared/src/types/* and packages/shared/src/api/endpoints.ts against orbit-api DTOs and Controllers for drift. Auto-invoke during /pr-review when both repos have staged changes, or when the user asks to verify the API contract.
+description: Cross-checks packages/shared/src/types/* and packages/shared/src/api/endpoints.ts against orbit-api DTOs and Controllers for drift. Manual only. Nothing invokes it automatically. Invoke it by name when you want to verify the API contract, or let /audit-code-quality use it as a contract lens.
 tools: Glob, Grep, Read
 model: sonnet
 effort: medium
 ---
 
-<!-- LOCKSTEP COPY. Twin lives at orbit-ui-mobile/.claude/agents/contract-aligner.md. /pr-review runs from EITHER repo root, orchestrator-side in a fresh worktree at the pull request head, and subagents resolve from the launch repo's own .claude/agents/, so both copies are load-bearing: dedup is impossible across two separate git repos. Keep BEHAVIOR identical (steps, drift categories, output format, frontmatter). Sanctioned divergences: (1) path style, this copy uses absolute paths and the ui-mobile copy is ui-mobile-rooted/relative; (2) this copy adds a NOT_VERIFIABLE fallback for when the ui-mobile sibling isn't checked out. -->
+<!-- MANUAL ONLY. Nothing invokes this agent automatically. Pullfrog reviews every pull request from GitHub Actions, and a service in Actions cannot invoke a local Claude Code agent, so no review-time trigger exists. This file is the only copy: orbit-ui-mobile carries no twin. .opencode/agents/contract-aligner.md is a thin pointer to this body. The Zod side lives in the sibling orbit-ui-mobile checkout, so every path below is absolute and the agent reports NOT_VERIFIABLE when that checkout is absent. -->
 
 # Contract aligner
 
@@ -71,7 +71,9 @@ Contract alignment: FAIL
 
 ## When invoked
 
-- During `/pr-review` of a PR that touches both repos.
-- When the user explicitly asks to verify the API contract.
+Manual only. Nothing invokes this agent automatically.
+
+- When the user names this agent, or asks to verify the API contract.
+- When `/audit-code-quality` fans out and uses it as a contract lens.
 
 Do NOT invoke for purely internal handler changes that don't touch DTOs or routes.
