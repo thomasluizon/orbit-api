@@ -1,8 +1,12 @@
 # AGENTS.md (orbit-api)
 
-Instructions for Codex (CLI workers and the cloud reviewer). Claude Code reads
-CLAUDE.md; this file holds the worker contract and the review rules and DEFERS to
-`CLAUDE.md` (same directory) for repo conventions. Read CLAUDE.md before writing code.
+Instructions for Codex CLI workers. Claude Code reads CLAUDE.md; this file holds the
+worker contract and DEFERS to `CLAUDE.md` (same directory) for repo conventions. Read
+CLAUDE.md before writing code.
+
+Pullfrog reviews every pull request from GitHub Actions. Its review instructions live in
+the Pullfrog console, never in a repository file, because a pull request can edit any
+file on its own head. Nothing here configures that review.
 
 ## Worker contract
 
@@ -14,9 +18,8 @@ CLAUDE.md; this file holds the worker contract and the review rules and DEFERS t
   after creating the branch, carrying no implementation yet, and immediately post your
   intended approach as a pull request comment: the change you mean to make, the files it
   will land in, and why that shape rather than the alternatives you rejected. Only then
-  start writing. The cloud reviewer reads that comment before it reads a diff, so a wrong
-  shape costs one comment instead of a review round against code already written. Changing
-  a plan is free; changing a merged design is not.
+  start writing. A wrong shape then costs one comment instead of a review round against
+  code you already wrote. Changing a plan is free; changing a merged design is not.
 - Analyzer gates (silent in local builds, CI-fatal): ORBIT0001 narration comments,
   ORBIT0002 redundant rollbacks, ORBIT0003 controller authorization, ORBIT0004 raw
   `DateTime.UtcNow` for user-facing dates (use `IUserDateService.GetUserTodayAsync`),
@@ -86,9 +89,10 @@ whether or not the codebase already reads that field elsewhere. An existing read
 evidence: it may be the unverified guess this rule exists to catch. You may cite the pull
 request that first proved the field instead of running the command again.
 
-## Code Review Rules
+## Defects no gate catches
 
-Only what no gate can check; mechanical findings belong to CI. Flag P0/P1 only.
+Check these five before you open the pull request. CI owns the mechanical defects. These
+five are P0/P1, and no gate sees them.
 
 1. **A DTO field renamed, removed, or retyped that a shipped mobile client still
    reads.** No CI job knows the Play-fleet lag. Safe path: append-only optional

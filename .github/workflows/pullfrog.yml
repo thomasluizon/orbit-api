@@ -1,4 +1,4 @@
-# PULLFROG ACTION — DO NOT EDIT EXCEPT WHERE INDICATED
+# PULLFROG ACTION - DO NOT EDIT EXCEPT WHERE INDICATED
 name: Pullfrog
 run-name: ${{ inputs.name || github.workflow }}
 on:
@@ -57,11 +57,11 @@ jobs:
           # VERTEX_LOCATION: global
           # VERTEX_MODEL_ID: <vertex-model-id>
 
-          # for any OpenAI-compatible endpoint — LiteLLM, Cloudflare AI Gateway,
+          # for any OpenAI-compatible endpoint - LiteLLM, Cloudflare AI Gateway,
           # self-hosted vLLM (https://docs.pullfrog.com/openai-compatible)
           # OPENAI_COMPATIBLE_BASE_URL: https://litellm.example.com/v1
           # OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
           # OPENAI_COMPATIBLE_MODEL: <model-id>
-          # both limits are required — set them to the real limits of that model
+          # both limits are required - set them to the real limits of that model
           # OPENAI_COMPATIBLE_CONTEXT: "128000"
           # OPENAI_COMPATIBLE_MAX_OUTPUT: "16384"

@@ -1,6 +1,7 @@
 ---
 name: second-opinion
-description: Get an independent cross-model second opinion (GPT-5.6 Sol via Codex) on a specific, load-bearing technical claim or a Critical or High code-review finding. A different model reads the claim and code, then returns AGREE, DISAGREE, or UNSURE. Use to stress-test a single blocking finding, a risky assertion, or a close call before you commit to it. Auto-fired inside /pr-review on each Critical or High finding that survives the skeptic. Not for open-ended research (use /deep-research).
+description: >-
+  Get an independent cross-model second opinion (GPT-5.6 Sol via Codex) on a specific, load-bearing technical claim or a Critical or High code-review finding. A different model reads the claim and code, then returns AGREE, DISAGREE, or UNSURE. Use to stress-test a single blocking finding, a risky assertion, or a close call before you commit to it. Nothing fires it automatically: you invoke it deliberately, one claim per call. Not for open-ended research (use /deep-research).
 argument-hint: <a claim to test, optionally with a file:line to pull context from>
 ---
 
@@ -9,12 +10,12 @@ argument-hint: <a claim to test, optionally with a file:line to pull context fro
 **Input**: $ARGUMENTS
 
 Ask **GPT-5.6 Sol** through the local `codex` CLI to independently judge one concrete
-claim. Sol is reserved for this ambiguous, difficult, high-value decision: the helper
-runs once per surviving Critical or High finding, where the extra cost is justified by
-the consequence of getting the call wrong.
+claim. Sol is reserved for this ambiguous, difficult, high-value decision: you run the
+helper once per claim, where the extra cost is justified by the consequence of getting
+the call wrong.
 
 Moving to Sol through Codex intentionally trades guaranteed cross-vendor diversity for
-cross-model diversity. The calling reviewer or executor and this helper can now share the
+cross-model diversity. The caller and this helper can now share the
 Codex/OpenAI family, so their blind spots may correlate more than the previous
 cross-vendor pairing. That cost is accepted because Codex is the harness's supported
 external model path and Sol is the strongest fit for this narrow judgement. The second
@@ -28,7 +29,7 @@ gate.
   response. Every such path returns `UNAVAILABLE`: the skill says so in one line and
   moves on. It never blocks, invents a verdict, or treats "couldn't ask" as disagreement.
 - **Never force a decision.** A Sol verdict is input, not a gate. It never auto-merges,
-  auto-drops a finding, or overrides the reviewer's own judgement. It surfaces a second
+  auto-drops a finding, or overrides your own judgement. It surfaces a second
   view for a human to weigh.
 - **One claim per call.** Feed a single, self-contained finding and its code. Sol judges
   only from the text you send it, with no repo access, so include the cited hunk.
@@ -74,9 +75,9 @@ and `--timeout <ms>` (default 180000). The timeout is a backstop that yields
 | `OK` and **UNSURE** | The supplied context could not decide it. | Note it. The finding stands as the existing review already ruled. |
 | **UNAVAILABLE** | No second opinion was obtained. | Say so in one line with the `reason`. The finding stands unchanged. Never read this as agreement or disagreement. |
 
-## Standalone use
+## How you invoke it
 
-For a `/second-opinion <claim>` invocation outside a review:
+Nothing fires this skill automatically. You run it yourself, one claim per call:
 
 1. Build the dossier: the claim in one line, plus the relevant hunk when `$ARGUMENTS`
    names a `file:line` or snippet.
@@ -85,11 +86,6 @@ For a `/second-opinion <claim>` invocation outside a review:
    both cases and recommend how to resolve them. On `UNAVAILABLE`, answer from your own
    analysis and note that the second opinion was not reachable.
 
-## Inside /pr-review
-
-`/pr-review` Phase 6 fires this on each **Critical** and **High** finding that survives
-the adversarial skeptic. Both decisive findings of the 2026-07-28/29 run were High, so a
-Critical-only scope would have skipped both. The verdict contract is unchanged:
-`DISAGREE` tags the finding `CONTESTED` and shows both verdicts, `UNSURE` leaves the
-existing review in place, and `UNAVAILABLE` leaves the finding exactly as the skeptic
-left it.
+A Pullfrog finding is a valid claim to test. Paste the finding and its cited hunk into
+the dossier, then weigh Sol's verdict yourself. The verdict never resolves the Pullfrog
+thread and never merges the pull request.

@@ -39,7 +39,7 @@ The TypeScript consumer is `thomasluizon/orbit-ui-mobile` (Turborepo: Next.js we
 | New DTO field | `packages/shared/src/types/*.ts` Zod schema |
 | Renamed/removed field | Both Zod schema AND every callsite in both apps |
 
-If you're launched from `orbit-ui-mobile`, do the consumer edits in the same session. The mobile harness has a `contract-aligner` subagent — invoke it when both repos have staged changes.
+If you're launched from `orbit-ui-mobile`, do the consumer edits in the same session. This repository carries a `contract-aligner` subagent (`.claude/agents/contract-aligner.md`). Invoke it by name when both repos have staged changes.
 
 ## LSP
 
@@ -55,7 +55,7 @@ The workflow is tool-agnostic between Claude Code and opencode; `.claude/` stays
 
 ## Git workflow
 
-Branch protection on `main`: no direct pushes, no force pushes, no branch deletion. Branches: `feature/xxx`, `fix/xxx`, `chore/xxx`. **Squash merge only.** **No review status check exists in either repository and `main` requires zero approving reviews**: the blocking path is the deterministic `guards.yml` required contexts plus the local `/pr-review` run by a session that did not write the code, in a fresh worktree at the pull request head, never a CI job. Never reuse a branch after its PR is squash-merged. Never `--no-verify`/`--no-gpg-sign`. **Never perform an admin merge in any shape**: no `gh pr merge --admin`, no direct `PUT /repos/{owner}/{repo}/pulls/{number}/merge`, and no direct GraphQL `mergePullRequest` mutation. Naming the two raw API calls is deliberate; forbidding only the CLI flag leaves both API paths open. The admin override is Thomas's alone: if a merge genuinely needs one, STOP and ask him to merge it himself.
+Branch protection on `main`: no direct pushes, no force pushes, no branch deletion. Branches: `feature/xxx`, `fix/xxx`, `chore/xxx`. **Squash merge only.** **`main` requires zero approving reviews, and `pullfrog-approval` is a required status check pinned to app id `1768019`**: the blocking path is the required contexts, which hold the deterministic `guards.yml` jobs plus `pullfrog-approval`. Pullfrog is the only pull request reviewer. Its review instructions live in the Pullfrog console, never in a repository file, because a pull request can edit any file on its own head. Never reuse a branch after its PR is squash-merged. Never `--no-verify`/`--no-gpg-sign`. **Never perform an admin merge in any shape**: no `gh pr merge --admin`, no direct `PUT /repos/{owner}/{repo}/pulls/{number}/merge`, and no direct GraphQL `mergePullRequest` mutation. Naming the two raw API calls is deliberate; forbidding only the CLI flag leaves both API paths open. The admin override is Thomas's alone: if a merge genuinely needs one, STOP and ask him to merge it himself.
 
 Pre-commit hook: a git-level `pre-commit` (lefthook, `lefthook.yml`) runs `dotnet format Orbit.slnx --include <staged .cs>` on staged `.cs` files and re-stages the fixes. This repo has no Node, so there is no auto-install — bootstrap once per machine with `winget install evilmartians.lefthook` (fallbacks: `scoop install lefthook`, or a GitHub-release binary + `lefthook self-update`), then run `lefthook install` inside the clone to write `.git/hooks/pre-commit`.
 
