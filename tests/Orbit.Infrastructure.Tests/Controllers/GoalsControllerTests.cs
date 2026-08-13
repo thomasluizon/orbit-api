@@ -105,6 +105,27 @@ public class GoalsControllerTests
     }
 
     [Fact]
+    public async Task CreateGoal_WithHabitIds_ForwardsExactIdsToCommand()
+    {
+        var habitIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        CreateGoalCommand? capturedCommand = null;
+        _mediator.Send(Arg.Any<CreateGoalCommand>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                capturedCommand = callInfo.Arg<CreateGoalCommand>();
+                return Result.Success(Guid.NewGuid());
+            });
+
+        var request = new GoalsController.CreateGoalRequest(
+            "Test Goal", null, 100m, "pages", HabitIds: habitIds);
+
+        await _controller.CreateGoal(request, CancellationToken.None);
+
+        capturedCommand.Should().NotBeNull();
+        capturedCommand?.HabitIds.Should().Equal(habitIds);
+    }
+
+    [Fact]
     public async Task CreateGoal_Failure_ReturnsBadRequest()
     {
         _mediator.Send(Arg.Any<CreateGoalCommand>(), Arg.Any<CancellationToken>())
