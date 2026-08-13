@@ -28,6 +28,7 @@ public class LogHabitCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IChallengeProgressService _challengeProgressService = Substitute.For<IChallengeProgressService>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly MediatR.IMediator _mediator = Substitute.For<MediatR.IMediator>();
@@ -40,7 +41,13 @@ public class LogHabitCommandHandlerTests
     public LogHabitCommandHandlerTests()
     {
         var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
-        var services = new LogHabitServices(_userDateService, _userStreakService, _gamificationService, _challengeProgressService, _mediator);
+        var services = new LogHabitServices(
+            _userDateService,
+            _userStreakService,
+            _gamificationService,
+            _challengeProgressService,
+            _mediator,
+            _payGate);
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, _logger);
 
@@ -155,6 +162,34 @@ public class LogHabitCommandHandlerTests
         _habitLogRepo.DidNotReceive().Remove(Arg.Any<HabitLog>());
         habit.Logs.Should().ContainSingle(l => l.Date == Today).Which.IsDeleted.Should().BeTrue();
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_CompletedOneTimeTask_PayGateFailureRejectsWithoutChangingState()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Finished task", null, null, DueDate: Today)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        var existingLog = habit.Logs.Should().ContainSingle().Which;
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.PayGateFailure("Habit limit reached"));
+
+        var result = await _handler.Handle(
+            new LogHabitCommand(UserId, habit.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
+        habit.IsCompleted.Should().BeTrue();
+        habit.Logs.Should().ContainSingle().Which.Should().BeSameAs(existingLog);
+        existingLog.IsDeleted.Should().BeFalse();
+        await _payGate.Received(1).CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
