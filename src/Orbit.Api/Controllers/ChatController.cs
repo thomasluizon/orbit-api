@@ -26,12 +26,14 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     private const long MaxChatRequestBytes = 10 * 1024 * 1024;
 
     [HttpPost]
+    [ConcurrentChatLimit]
     [RequestSizeLimit(MaxChatRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ProcessChat(
         [FromForm] string message,
         [FromForm] string? history,
@@ -63,11 +65,13 @@ public partial class ChatController(IMediator mediator, IImageValidationService 
     }
 
     [HttpPost("stream")]
+    [ConcurrentChatLimit]
     [RequestSizeLimit(MaxChatRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxChatRequestBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ProcessChatStream(
         [FromForm] string message,
         [FromForm] string? history,

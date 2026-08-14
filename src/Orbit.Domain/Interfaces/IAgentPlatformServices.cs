@@ -126,6 +126,18 @@ public interface IDistributedRateLimitService
         string policyName,
         string partitionKey,
         CancellationToken cancellationToken = default);
+
+    Task<DistributedRateLimitDecision> TryAcquireLeaseAsync(
+        string policyName,
+        string partitionKey,
+        int permitLimit,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default);
+
+    Task ReleaseLeaseAsync(
+        string policyName,
+        string partitionKey,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IFeatureFlagService

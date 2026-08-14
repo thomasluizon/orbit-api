@@ -50,7 +50,8 @@ public class ActiveHabitsSectionTests
     private static PromptContext CreateContext(
         IReadOnlyList<Habit>? habits = null,
         DateOnly? userToday = null,
-        bool useDefaultToday = true)
+        bool useDefaultToday = true,
+        bool isHabitIndexPartial = false)
     {
         return new PromptContext(
             ActiveHabits: habits ?? [],
@@ -59,7 +60,8 @@ public class ActiveHabitsSectionTests
             RoutinePatterns: null,
             UserTags: null,
             UserToday: useDefaultToday ? (userToday ?? Today) : userToday,
-            HabitMetrics: null);
+            HabitMetrics: null,
+            IsHabitIndexPartial: isHabitIndexPartial);
     }
 
     [Fact]
@@ -260,6 +262,21 @@ public class ActiveHabitsSectionTests
 
         result.Should().Contain("query_habits");
         result.Should().Contain("create_habit");
+    }
+
+    [Fact]
+    public void Build_PartialIndex_DirectsModelToQueryNarrowly()
+    {
+        var context = CreateContext(
+            habits: [CreateHabit("Visible habit")],
+            isHabitIndexPartial: true);
+
+        var result = _sut.Build(context);
+
+        result.Should().Contain("habit index is partial");
+        result.Should().Contain("query_habits with a narrow filter");
+        result.Should().Contain("Never claim this partial index is complete");
+        result.Should().NotContain("This index is the source of truth");
     }
 
     [Fact]

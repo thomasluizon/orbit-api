@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using System.Security.Claims;
 using Orbit.Api.Controllers;
 using Orbit.Api.RateLimiting;
 using Orbit.Application.Auth.Validators;
@@ -116,6 +117,116 @@ public class DistributedRateLimitFilterTests
 
         capturedPartitionKey.Should().StartWith("ip:");
         capturedPartitionKey.Should().NotStartWith("refresh:token:");
+    }
+
+    [Fact]
+    public async Task ConcurrentChatLimit_SecondRequest_ReturnsMatchingRateLimitResponse()
+    {
+        var userId = Guid.NewGuid();
+        _service.TryAcquireLeaseAsync(
+                ConcurrentChatLimitFilter.PolicyName,
+                $"user:{userId}",
+                1,
+                TimeSpan.FromMinutes(5),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(false, 1, 1, DateTime.UtcNow.AddMinutes(4)));
+        var filter = new ConcurrentChatLimitFilter(
+            _service,
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+        var (context, httpContext) = CreateAuthenticatedExecutingContext(userId);
+        httpContext.TraceIdentifier = "req_concurrent_chat";
+
+        await filter.OnActionExecutionAsync(
+            context,
+            () => Task.FromResult(CreateExecutedContext(context)));
+
+        var result = context.Result.Should().BeOfType<ObjectResult>().Subject;
+        result.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        httpContext.Response.Headers.RetryAfter.Should().NotBeEmpty();
+        httpContext.Response.Headers["X-Orbit-Request-Id"].ToString().Should().Be("req_concurrent_chat");
+        await _service.DidNotReceiveWithAnyArgs().ReleaseLeaseAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task ConcurrentChatLimit_Success_ReleasesLease()
+    {
+        var userId = Guid.NewGuid();
+        SetupAllowedLease(userId);
+        var filter = new ConcurrentChatLimitFilter(
+            _service,
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+        var (context, _) = CreateAuthenticatedExecutingContext(userId);
+
+        await filter.OnActionExecutionAsync(
+            context,
+            () => Task.FromResult(CreateExecutedContext(context)));
+
+        await _service.Received(1).ReleaseLeaseAsync(
+            ConcurrentChatLimitFilter.PolicyName,
+            $"user:{userId}",
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task ConcurrentChatLimit_ActionException_ReleasesLease()
+    {
+        var userId = Guid.NewGuid();
+        SetupAllowedLease(userId);
+        var filter = new ConcurrentChatLimitFilter(
+            _service,
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+        var (context, _) = CreateAuthenticatedExecutingContext(userId);
+
+        var act = () => filter.OnActionExecutionAsync(
+            context,
+            () => Task.FromException<ActionExecutedContext>(new InvalidOperationException("action failed")));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        await _service.Received(1).ReleaseLeaseAsync(
+            ConcurrentChatLimitFilter.PolicyName,
+            $"user:{userId}",
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task ConcurrentChatLimit_ClientCancellation_ReleasesLease()
+    {
+        var userId = Guid.NewGuid();
+        SetupAllowedLease(userId);
+        var filter = new ConcurrentChatLimitFilter(
+            _service,
+            Substitute.For<ILogger<ConcurrentChatLimitFilter>>());
+        var (context, _) = CreateAuthenticatedExecutingContext(userId);
+
+        var act = () => filter.OnActionExecutionAsync(
+            context,
+            () => Task.FromException<ActionExecutedContext>(new OperationCanceledException("client disconnected")));
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await _service.Received(1).ReleaseLeaseAsync(
+            ConcurrentChatLimitFilter.PolicyName,
+            $"user:{userId}",
+            CancellationToken.None);
+    }
+
+    private void SetupAllowedLease(Guid userId)
+    {
+        _service.TryAcquireLeaseAsync(
+                ConcurrentChatLimitFilter.PolicyName,
+                $"user:{userId}",
+                1,
+                TimeSpan.FromMinutes(5),
+                Arg.Any<CancellationToken>())
+            .Returns(new DistributedRateLimitDecision(true, 1, 1, DateTime.UtcNow.AddMinutes(5)));
+    }
+
+    private static (ActionExecutingContext Context, HttpContext HttpContext) CreateAuthenticatedExecutingContext(Guid userId)
+    {
+        var result = CreateExecutingContext();
+        result.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, userId.ToString())],
+            "test"));
+        return result;
     }
 
     private static (ActionExecutingContext Context, HttpContext HttpContext) CreateExecutingContext(

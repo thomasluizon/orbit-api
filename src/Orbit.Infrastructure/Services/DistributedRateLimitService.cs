@@ -10,6 +10,8 @@ namespace Orbit.Infrastructure.Services;
 
 public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider clock) : IDistributedRateLimitService
 {
+    private static readonly DateTime LeaseWindowStartUtc = DateTime.UnixEpoch;
+
     private static readonly Dictionary<string, RateLimitPolicy> Policies =
         new Dictionary<string, RateLimitPolicy>(StringComparer.OrdinalIgnoreCase)
         {
@@ -74,6 +76,113 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         }
 
         throw new InvalidOperationException("Rate-limit acquisition failed after retrying transactional conflicts.");
+    }
+
+    public async Task<DistributedRateLimitDecision> TryAcquireLeaseAsync(
+        string policyName,
+        string partitionKey,
+        int permitLimit,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(permitLimit, 1);
+        if (leaseDuration <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(leaseDuration));
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        var leaseEndsAtUtc = now.Add(leaseDuration);
+        await DeleteExpiredLeasesAsync(policyName, partitionKey, now, cancellationToken);
+
+        var existingLease = await dbContext.DistributedRateLimitBuckets
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                bucket => bucket.PolicyName == policyName &&
+                          bucket.PartitionKey == partitionKey &&
+                          bucket.WindowStartUtc == LeaseWindowStartUtc,
+                cancellationToken);
+
+        if (existingLease is not null)
+        {
+            return new DistributedRateLimitDecision(
+                false,
+                permitLimit,
+                1,
+                existingLease.WindowEndsAtUtc);
+        }
+
+        dbContext.DistributedRateLimitBuckets.Add(DistributedRateLimitBucket.Create(
+            policyName,
+            partitionKey,
+            LeaseWindowStartUtc,
+            leaseEndsAtUtc));
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new DistributedRateLimitDecision(true, permitLimit, 1, leaseEndsAtUtc);
+        }
+        catch (DbUpdateException exception) when (IsLeaseUniqueViolation(exception))
+        {
+            dbContext.ChangeTracker.Clear();
+            var winningLeaseEndsAtUtc = await dbContext.DistributedRateLimitBuckets
+                .AsNoTracking()
+                .Where(bucket => bucket.PolicyName == policyName &&
+                                 bucket.PartitionKey == partitionKey &&
+                                 bucket.WindowStartUtc == LeaseWindowStartUtc)
+                .Select(bucket => (DateTime?)bucket.WindowEndsAtUtc)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            return new DistributedRateLimitDecision(
+                false,
+                permitLimit,
+                1,
+                winningLeaseEndsAtUtc ?? leaseEndsAtUtc);
+        }
+    }
+
+    public async Task ReleaseLeaseAsync(
+        string policyName,
+        string partitionKey,
+        CancellationToken cancellationToken = default)
+    {
+        var leases = await dbContext.DistributedRateLimitBuckets
+            .Where(bucket => bucket.PolicyName == policyName &&
+                             bucket.PartitionKey == partitionKey &&
+                             bucket.WindowStartUtc == LeaseWindowStartUtc)
+            .ToListAsync(cancellationToken);
+
+        if (leases.Count == 0)
+            return;
+
+        dbContext.DistributedRateLimitBuckets.RemoveRange(leases);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task DeleteExpiredLeasesAsync(
+        string policyName,
+        string partitionKey,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var expiredLeases = dbContext.DistributedRateLimitBuckets
+            .Where(bucket => bucket.PolicyName == policyName &&
+                             bucket.PartitionKey == partitionKey &&
+                             bucket.WindowStartUtc == LeaseWindowStartUtc &&
+                             bucket.WindowEndsAtUtc <= now);
+
+        if (dbContext.Database.ProviderName?.Contains("InMemory", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var expiredEntities = await expiredLeases.ToListAsync(cancellationToken);
+            if (expiredEntities.Count > 0)
+            {
+                dbContext.DistributedRateLimitBuckets.RemoveRange(expiredEntities);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            return;
+        }
+
+        await expiredLeases.ExecuteDeleteAsync(cancellationToken);
     }
 
     private async Task<DistributedRateLimitDecision> ExecuteRelationalAttemptAsync(
@@ -183,6 +292,17 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         {
             DbUpdateException dbUpdateException => IsRetryableRateLimitConflict(dbUpdateException.InnerException ?? dbUpdateException),
             PostgresException postgresException => postgresException.SqlState is PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.SerializationFailure,
+            _ => false
+        };
+    }
+
+    private static bool IsLeaseUniqueViolation(Exception exception)
+    {
+        return exception switch
+        {
+            DbUpdateException { InnerException: { } innerException } =>
+                IsLeaseUniqueViolation(innerException),
+            PostgresException postgresException => postgresException.SqlState == PostgresErrorCodes.UniqueViolation,
             _ => false
         };
     }

@@ -23,7 +23,15 @@ public class ActiveHabitsSection : IPromptSection
 
         sb.AppendLine($"## User's Habits ({total} total, {general} general, {dueToday} due today, {overdue} overdue)");
         sb.AppendLine();
-        sb.AppendLine("This index is the source of truth for the user's habits: hierarchy, IDs, due status, and general/bad/completed flags. Answer listing and schedule questions directly from it - do not call query_habits to re-fetch it.");
+        if (context.IsHabitIndexPartial)
+        {
+            sb.AppendLine("This habit index is partial. It contains the highest priority active habits and their required ancestors, not the user's complete habit list.");
+            sb.AppendLine("Use query_habits with a narrow filter to retrieve habits missing from this index. Never claim this partial index is complete.");
+        }
+        else
+        {
+            sb.AppendLine("This index is the source of truth for the user's habits: hierarchy, IDs, due status, and general/bad/completed flags. Answer listing and schedule questions directly from it - do not call query_habits to re-fetch it.");
+        }
         sb.AppendLine("Repeated identical habits are marked (n of N) - each is a separate, individually-tracked entry. When listing, output every numbered instance; never merge them into one.");
         if (context.UserToday.HasValue)
             sb.AppendLine("When asked what is due, scheduled, or left for today: enumerate EVERY entry labeled TODAY or OVERDUE below - the heading counts state exactly how many; verify your list matches those counts before answering. Entries without those labels (including habits already completed today) are not part of today and must not be listed.");

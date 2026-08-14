@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -20,11 +21,19 @@ public partial class ProcessUserChatCommandHandler
             q => q,
             cancellationToken);
         var activeHabits = userHabits.Where(habit => !habit.IsCompleted).ToList();
-        var promptHabits = BuildPromptHabitIndex(userHabits);
+        var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var promptHabitIndex = BuildPromptHabitIndex(userHabits, userToday);
+        if (promptHabitIndex.IsPartial)
+        {
+            LogPromptHabitIndexTruncated(
+                logger,
+                promptHabitIndex.OriginalEntryCount,
+                promptHabitIndex.Habits.Count,
+                AppConstants.MaxPromptHabitEntries);
+        }
         var user = await data.UserRepository.GetByIdAsync(request.UserId, cancellationToken);
         var hasProAccess = user?.HasProAccess ?? false;
         var aiMemoryEnabled = user is { HasProAccess: true, AiMemoryEnabled: true };
-        var userToday = await execution.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
 
         IReadOnlyList<Goal> activeGoals = [];
         if (hasProAccess)
@@ -67,7 +76,8 @@ public partial class ProcessUserChatCommandHandler
 
         return Result.Success(new ChatContext(
             activeHabits,
-            promptHabits,
+            promptHabitIndex.Habits,
+            promptHabitIndex.IsPartial,
             user,
             hasProAccess,
             aiMemoryEnabled,
@@ -80,19 +90,21 @@ public partial class ProcessUserChatCommandHandler
             dbStopwatch.ElapsedMilliseconds));
     }
 
-    private static List<Habit> BuildPromptHabitIndex(IReadOnlyCollection<Habit> userHabits)
+    internal static PromptHabitIndex BuildPromptHabitIndex(
+        IReadOnlyCollection<Habit> userHabits,
+        DateOnly userToday)
     {
         if (userHabits.Count == 0)
-            return [];
+            return new PromptHabitIndex([], false, 0);
 
         var habitsById = userHabits.ToDictionary(habit => habit.Id);
-        var indexedHabitIds = new HashSet<Guid>();
+        var allIndexedHabitIds = new HashSet<Guid>();
 
         foreach (var habit in userHabits.Where(habit => !habit.IsCompleted))
         {
             var current = habit;
 
-            while (indexedHabitIds.Add(current.Id) &&
+            while (allIndexedHabitIds.Add(current.Id) &&
                    current.ParentHabitId is Guid parentId &&
                    habitsById.TryGetValue(parentId, out var parent))
             {
@@ -100,14 +112,85 @@ public partial class ProcessUserChatCommandHandler
             }
         }
 
-        return userHabits
-            .Where(habit => indexedHabitIds.Contains(habit.Id))
+        if (allIndexedHabitIds.Count <= AppConstants.MaxPromptHabitEntries)
+        {
+            return new PromptHabitIndex(
+                userHabits.Where(habit => allIndexedHabitIds.Contains(habit.Id)).ToList(),
+                false,
+                allIndexedHabitIds.Count);
+        }
+
+        var selectedHabitIds = new HashSet<Guid>();
+        var prioritizedActiveHabits = userHabits
+            .Where(habit => !habit.IsCompleted)
+            .OrderBy(habit => GetPromptPriority(habit, userToday))
+            .ThenBy(habit => habit.Position ?? int.MaxValue)
+            .ThenBy(habit => habit.Id)
             .ToList();
+
+        foreach (var habit in prioritizedActiveHabits)
+        {
+            var missingPath = BuildMissingHabitPath(habit, habitsById, selectedHabitIds);
+            if (selectedHabitIds.Count + missingPath.Count > AppConstants.MaxPromptHabitEntries)
+                continue;
+
+            foreach (var pathHabit in missingPath)
+                selectedHabitIds.Add(pathHabit.Id);
+
+            if (selectedHabitIds.Count == AppConstants.MaxPromptHabitEntries)
+                break;
+        }
+
+        return new PromptHabitIndex(
+            userHabits.Where(habit => selectedHabitIds.Contains(habit.Id)).ToList(),
+            true,
+            allIndexedHabitIds.Count);
     }
+
+    private static int GetPromptPriority(Habit habit, DateOnly userToday)
+    {
+        if (!habit.IsGeneral && habit.DueDate < userToday)
+            return 0;
+
+        return !habit.IsGeneral && habit.DueDate == userToday ? 1 : 2;
+    }
+
+    private static List<Habit> BuildMissingHabitPath(
+        Habit habit,
+        IReadOnlyDictionary<Guid, Habit> habitsById,
+        IReadOnlySet<Guid> selectedHabitIds)
+    {
+        var path = new List<Habit>();
+        var visitedHabitIds = new HashSet<Guid>();
+        var current = habit;
+
+        while (visitedHabitIds.Add(current.Id))
+        {
+            if (!selectedHabitIds.Contains(current.Id))
+                path.Add(current);
+
+            if (current.ParentHabitId is not Guid parentId ||
+                !habitsById.TryGetValue(parentId, out var parent))
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        path.Reverse();
+        return path;
+    }
+
+    internal sealed record PromptHabitIndex(
+        List<Habit> Habits,
+        bool IsPartial,
+        int OriginalEntryCount);
 
     private sealed record ChatContext(
         List<Habit> ActiveHabits,
         List<Habit> PromptHabits,
+        bool IsPromptHabitIndexPartial,
         User? User,
         bool HasProAccess,
         bool AiMemoryEnabled,

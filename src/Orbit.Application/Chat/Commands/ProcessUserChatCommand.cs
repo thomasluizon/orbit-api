@@ -135,7 +135,9 @@ public partial class ProcessUserChatCommandHandler(
 
         var executionResults = new ToolExecutionAccumulator();
         var actionsStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var (aiResponse, iterations) = await RunToolCallLoopAsync(response.Value, request, executionResults, aiStreamSink, cancellationToken);
+        var toolLoopResult = await RunToolCallLoopAsync(response.Value, request, executionResults, aiStreamSink, cancellationToken);
+        var aiResponse = toolLoopResult.FinalResponse;
+        var iterations = toolLoopResult.Iterations;
         actionsStopwatch.Stop();
         LogToolExecutionCompleted(logger, actionsStopwatch.ElapsedMilliseconds, iterations, executionResults.ActionResults.Count);
 
@@ -144,6 +146,9 @@ public partial class ProcessUserChatCommandHandler(
         await PersistExecutionResultsAsync(request.UserId, executionResults.ActionResults, cancellationToken);
         saveStopwatch.Stop();
         LogChangesSaved(logger, saveStopwatch.ElapsedMilliseconds);
+
+        if (toolLoopResult.TokenBudgetExceeded && string.IsNullOrWhiteSpace(aiResponse.TextMessage))
+            return Result.Failure<ChatResponse>(ErrorMessages.AiUnavailable);
 
         var (aiMessage, habitList, goalList) = BuildResponseCards(
             StripJsonWrapper(aiResponse.TextMessage), request, context);
@@ -277,4 +282,18 @@ public partial class ProcessUserChatCommandHandler(
 
     [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Background post-response work failed")]
     private static partial void LogBackgroundPostResponseFailed(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 27, Level = LogLevel.Warning, Message = "Prompt habit index truncated. OriginalEntryCount={OriginalEntryCount} RetainedEntryCount={RetainedEntryCount} MaxEntries={MaxEntries}")]
+    private static partial void LogPromptHabitIndexTruncated(
+        ILogger logger,
+        int originalEntryCount,
+        int retainedEntryCount,
+        int maxEntries);
+
+    [LoggerMessage(EventId = 28, Level = LogLevel.Warning, Message = "AI request token ceiling reached. TotalReportedTokens={TotalReportedTokens} MaxTokens={MaxTokens} ToolIterations={ToolIterations}")]
+    private static partial void LogAiRequestTokenCeilingReached(
+        ILogger logger,
+        long totalReportedTokens,
+        int maxTokens,
+        int toolIterations);
 }

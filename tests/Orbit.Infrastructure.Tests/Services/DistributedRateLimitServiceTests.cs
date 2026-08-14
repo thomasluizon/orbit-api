@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.Persistence;
@@ -59,6 +60,64 @@ public class DistributedRateLimitServiceTests : IDisposable
         blocked.PermitLimit.Should().Be(20);
         otherPartition.Allowed.Should().BeTrue();
         otherPartition.CurrentCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ChatLease_AcquireRefuseRelease_AllowsUsersIndependently()
+    {
+        var leaseDuration = TimeSpan.FromMinutes(5);
+
+        var firstUser = await _service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+        var blockedFirstUser = await _service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+        var secondUser = await _service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:B",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+
+        firstUser.Allowed.Should().BeTrue();
+        blockedFirstUser.Allowed.Should().BeFalse();
+        secondUser.Allowed.Should().BeTrue();
+
+        await _service.ReleaseLeaseAsync("chat-in-flight", "user:A");
+        var reacquired = await _service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+
+        reacquired.Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ChatLease_ExpiredWithoutRelease_IsReclaimed()
+    {
+        var clock = new MutableTimeProvider(MidWindowInstant);
+        var service = new DistributedRateLimitService(_dbContext, clock);
+        var leaseDuration = TimeSpan.FromMinutes(5);
+
+        (await service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration)).Allowed.Should().BeTrue();
+        clock.Advance(leaseDuration.Add(TimeSpan.FromSeconds(1)));
+
+        var reacquired = await service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+
+        reacquired.Allowed.Should().BeTrue();
     }
 
     [Fact]

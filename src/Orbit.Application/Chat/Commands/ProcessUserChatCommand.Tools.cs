@@ -10,7 +10,7 @@ namespace Orbit.Application.Chat.Commands;
 
 public partial class ProcessUserChatCommandHandler
 {
-    private async Task<(AiResponse FinalResponse, int Iterations)> RunToolCallLoopAsync(
+    private async Task<ToolLoopResult> RunToolCallLoopAsync(
         AiResponse initialResponse,
         ProcessUserChatCommand request,
         ToolExecutionAccumulator executionResults,
@@ -19,8 +19,19 @@ public partial class ProcessUserChatCommandHandler
     {
         var aiResponse = initialResponse;
         var iteration = 0;
+        long totalReportedTokens = initialResponse.ReportedTokenCount;
+        var tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
 
-        while (aiResponse.HasToolCalls && iteration < MaxToolIterations)
+        if (tokenBudgetExceeded)
+        {
+            LogAiRequestTokenCeilingReached(
+                logger,
+                totalReportedTokens,
+                AppConstants.MaxAiRequestTotalTokens,
+                iteration);
+        }
+
+        while (aiResponse.HasToolCalls && iteration < MaxToolIterations && !tokenBudgetExceeded)
         {
             iteration++;
             if (request.StreamSink is not null)
@@ -38,10 +49,25 @@ public partial class ProcessUserChatCommandHandler
                 break;
 
             aiResponse = continueResponse;
+            totalReportedTokens += continueResponse.ReportedTokenCount;
+            tokenBudgetExceeded = totalReportedTokens > AppConstants.MaxAiRequestTotalTokens;
+            if (tokenBudgetExceeded)
+            {
+                LogAiRequestTokenCeilingReached(
+                    logger,
+                    totalReportedTokens,
+                    AppConstants.MaxAiRequestTotalTokens,
+                    iteration);
+            }
         }
 
-        return (aiResponse, iteration);
+        return new ToolLoopResult(aiResponse, iteration, tokenBudgetExceeded);
     }
+
+    private sealed record ToolLoopResult(
+        AiResponse FinalResponse,
+        int Iterations,
+        bool TokenBudgetExceeded);
 
     /// <summary>
     /// Processes one iteration of AI tool calls: orders them, executes each, and sends results
