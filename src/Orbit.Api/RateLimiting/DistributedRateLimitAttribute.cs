@@ -322,6 +322,7 @@ public sealed partial class ConcurrentChatLimitFilter(
             await distributedRateLimitService.ReleaseLeaseAsync(
                 PolicyName,
                 partitionKey,
+                decision.WindowEndsAtUtc,
                 CancellationToken.None);
         }
     }

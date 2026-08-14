@@ -87,7 +87,10 @@ public class DistributedRateLimitServiceTests : IDisposable
         blockedFirstUser.Allowed.Should().BeFalse();
         secondUser.Allowed.Should().BeTrue();
 
-        await _service.ReleaseLeaseAsync("chat-in-flight", "user:A");
+        await _service.ReleaseLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            firstUser.WindowEndsAtUtc);
         var reacquired = await _service.TryAcquireLeaseAsync(
             "chat-in-flight",
             "user:A",
@@ -95,6 +98,39 @@ public class DistributedRateLimitServiceTests : IDisposable
             leaseDuration);
 
         reacquired.Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ChatLease_StaleRelease_DoesNotDeleteSuccessorLease()
+    {
+        var clock = new MutableTimeProvider(MidWindowInstant);
+        var service = new DistributedRateLimitService(_dbContext, clock);
+        var leaseDuration = TimeSpan.FromMinutes(5);
+        var expiredLease = await service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+        clock.Advance(leaseDuration.Add(TimeSpan.FromSeconds(1)));
+        var successorLease = await service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+
+        await service.ReleaseLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            expiredLease.WindowEndsAtUtc);
+        var blockedBySuccessor = await service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            leaseDuration);
+
+        successorLease.Allowed.Should().BeTrue();
+        blockedBySuccessor.Allowed.Should().BeFalse();
+        blockedBySuccessor.WindowEndsAtUtc.Should().Be(successorLease.WindowEndsAtUtc);
     }
 
     [Fact]

@@ -137,6 +137,7 @@ public interface IDistributedRateLimitService
     Task ReleaseLeaseAsync(
         string policyName,
         string partitionKey,
+        DateTime leaseEndsAtUtc,
         CancellationToken cancellationToken = default);
 }
 

@@ -144,7 +144,7 @@ public class DistributedRateLimitFilterTests
         result.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
         httpContext.Response.Headers.RetryAfter.Should().NotBeEmpty();
         httpContext.Response.Headers["X-Orbit-Request-Id"].ToString().Should().Be("req_concurrent_chat");
-        await _service.DidNotReceiveWithAnyArgs().ReleaseLeaseAsync(default!, default!, default);
+        await _service.DidNotReceiveWithAnyArgs().ReleaseLeaseAsync(default!, default!, default, default);
     }
 
     [Fact]
@@ -164,6 +164,7 @@ public class DistributedRateLimitFilterTests
         await _service.Received(1).ReleaseLeaseAsync(
             ConcurrentChatLimitFilter.PolicyName,
             $"user:{userId}",
+            Arg.Any<DateTime>(),
             CancellationToken.None);
     }
 
@@ -185,6 +186,7 @@ public class DistributedRateLimitFilterTests
         await _service.Received(1).ReleaseLeaseAsync(
             ConcurrentChatLimitFilter.PolicyName,
             $"user:{userId}",
+            Arg.Any<DateTime>(),
             CancellationToken.None);
     }
 
@@ -206,6 +208,7 @@ public class DistributedRateLimitFilterTests
         await _service.Received(1).ReleaseLeaseAsync(
             ConcurrentChatLimitFilter.PolicyName,
             $"user:{userId}",
+            Arg.Any<DateTime>(),
             CancellationToken.None);
     }
 
