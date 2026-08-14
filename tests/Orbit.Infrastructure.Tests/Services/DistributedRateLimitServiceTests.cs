@@ -65,19 +65,21 @@ public class DistributedRateLimitServiceTests : IDisposable
     [Fact]
     public async Task ChatLease_AcquireRefuseRelease_AllowsUsersIndependently()
     {
+        using var scope = new RelationalRateLimitScope(new FixedTimeProvider(MidWindowInstant));
+        var service = scope.Service;
         var leaseDuration = TimeSpan.FromMinutes(5);
 
-        var firstUser = await _service.TryAcquireLeaseAsync(
+        var firstUser = await service.TryAcquireLeaseAsync(
             "chat-in-flight",
             "user:A",
             AppConstants.MaxConcurrentChatRequestsPerUser,
             leaseDuration);
-        var blockedFirstUser = await _service.TryAcquireLeaseAsync(
+        var blockedFirstUser = await service.TryAcquireLeaseAsync(
             "chat-in-flight",
             "user:A",
             AppConstants.MaxConcurrentChatRequestsPerUser,
             leaseDuration);
-        var secondUser = await _service.TryAcquireLeaseAsync(
+        var secondUser = await service.TryAcquireLeaseAsync(
             "chat-in-flight",
             "user:B",
             AppConstants.MaxConcurrentChatRequestsPerUser,
@@ -87,11 +89,11 @@ public class DistributedRateLimitServiceTests : IDisposable
         blockedFirstUser.Allowed.Should().BeFalse();
         secondUser.Allowed.Should().BeTrue();
 
-        await _service.ReleaseLeaseAsync(
+        await service.ReleaseLeaseAsync(
             "chat-in-flight",
             "user:A",
             firstUser.WindowEndsAtUtc);
-        var reacquired = await _service.TryAcquireLeaseAsync(
+        var reacquired = await service.TryAcquireLeaseAsync(
             "chat-in-flight",
             "user:A",
             AppConstants.MaxConcurrentChatRequestsPerUser,
@@ -104,7 +106,8 @@ public class DistributedRateLimitServiceTests : IDisposable
     public async Task ChatLease_StaleRelease_DoesNotDeleteSuccessorLease()
     {
         var clock = new MutableTimeProvider(MidWindowInstant);
-        var service = new DistributedRateLimitService(_dbContext, clock);
+        using var scope = new RelationalRateLimitScope(clock);
+        var service = scope.Service;
         var leaseDuration = TimeSpan.FromMinutes(5);
         var expiredLease = await service.TryAcquireLeaseAsync(
             "chat-in-flight",
@@ -137,7 +140,8 @@ public class DistributedRateLimitServiceTests : IDisposable
     public async Task ChatLease_ExpiredWithoutRelease_IsReclaimed()
     {
         var clock = new MutableTimeProvider(MidWindowInstant);
-        var service = new DistributedRateLimitService(_dbContext, clock);
+        using var scope = new RelationalRateLimitScope(clock);
+        var service = scope.Service;
         var leaseDuration = TimeSpan.FromMinutes(5);
 
         (await service.TryAcquireLeaseAsync(
@@ -154,6 +158,34 @@ public class DistributedRateLimitServiceTests : IDisposable
             leaseDuration);
 
         reacquired.Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ChatLease_Release_DoesNotSaveUnrelatedTrackedChanges()
+    {
+        using var scope = new RelationalRateLimitScope(new FixedTimeProvider(MidWindowInstant));
+        var service = scope.Service;
+        var lease = await service.TryAcquireLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            TimeSpan.FromMinutes(5));
+        var pendingBucket = DistributedRateLimitBucket.Create(
+            "chat",
+            "user:pending",
+            MidWindowInstant.UtcDateTime,
+            MidWindowInstant.UtcDateTime.AddMinutes(1));
+        scope.Context.DistributedRateLimitBuckets.Add(pendingBucket);
+
+        await service.ReleaseLeaseAsync(
+            "chat-in-flight",
+            "user:A",
+            lease.WindowEndsAtUtc);
+
+        scope.Context.Entry(pendingBucket).State.Should().Be(EntityState.Added);
+        (await scope.Context.DistributedRateLimitBuckets
+            .AsNoTracking()
+            .AnyAsync(bucket => bucket.Id == pendingBucket.Id)).Should().BeFalse();
     }
 
     [Fact]
@@ -313,6 +345,33 @@ public class DistributedRateLimitServiceTests : IDisposable
         public override DateTimeOffset GetUtcNow() => _instant;
 
         public void Advance(TimeSpan duration) => _instant = _instant.Add(duration);
+    }
+
+    private sealed class RelationalRateLimitScope : IDisposable
+    {
+        private readonly SqliteConnection _connection;
+
+        public RelationalRateLimitScope(TimeProvider clock)
+        {
+            _connection = new SqliteConnection("Data Source=:memory:");
+            _connection.Open();
+            var options = new DbContextOptionsBuilder<OrbitDbContext>()
+                .UseSqlite(_connection)
+                .Options;
+            Context = new RateLimitOnlyOrbitDbContext(options);
+            Context.Database.EnsureCreated();
+            Service = new DistributedRateLimitService(Context, clock);
+        }
+
+        public RateLimitOnlyOrbitDbContext Context { get; }
+
+        public DistributedRateLimitService Service { get; }
+
+        public void Dispose()
+        {
+            Context.Dispose();
+            _connection.Dispose();
+        }
     }
 
     private class RateLimitOnlyOrbitDbContext(DbContextOptions<OrbitDbContext> options)

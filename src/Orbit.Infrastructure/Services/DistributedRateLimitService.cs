@@ -146,18 +146,12 @@ public class DistributedRateLimitService(OrbitDbContext dbContext, TimeProvider 
         DateTime leaseEndsAtUtc,
         CancellationToken cancellationToken = default)
     {
-        var leases = await dbContext.DistributedRateLimitBuckets
+        await dbContext.DistributedRateLimitBuckets
             .Where(bucket => bucket.PolicyName == policyName &&
                              bucket.PartitionKey == partitionKey &&
                              bucket.WindowStartUtc == LeaseWindowStartUtc &&
                              bucket.WindowEndsAtUtc == leaseEndsAtUtc)
-            .ToListAsync(cancellationToken);
-
-        if (leases.Count == 0)
-            return;
-
-        dbContext.DistributedRateLimitBuckets.RemoveRange(leases);
-        await dbContext.SaveChangesAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     private async Task DeleteExpiredLeasesAsync(
