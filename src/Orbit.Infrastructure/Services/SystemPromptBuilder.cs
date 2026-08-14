@@ -57,5 +57,6 @@ public class SystemPromptBuilder : ISystemPromptBuilder
             request.UserTags,
             request.UserToday,
             request.HabitMetrics,
-            request.ActiveGoals);
+            request.ActiveGoals,
+            request.IsHabitIndexPartial);
 }

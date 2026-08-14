@@ -12,4 +12,5 @@ public record PromptContext(
     IReadOnlyList<Tag>? UserTags,
     DateOnly? UserToday,
     IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics,
-    IReadOnlyList<Goal>? ActiveGoals = null);
+    IReadOnlyList<Goal>? ActiveGoals = null,
+    bool IsHabitIndexPartial = false);

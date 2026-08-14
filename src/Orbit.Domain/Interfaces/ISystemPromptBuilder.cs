@@ -12,7 +12,8 @@ public record PromptBuildRequest(
     IReadOnlyList<Tag>? UserTags = null,
     DateOnly? UserToday = null,
     IReadOnlyDictionary<Guid, HabitMetrics>? HabitMetrics = null,
-    IReadOnlyList<Goal>? ActiveGoals = null);
+    IReadOnlyList<Goal>? ActiveGoals = null,
+    bool IsHabitIndexPartial = false);
 
 public interface ISystemPromptBuilder
 {

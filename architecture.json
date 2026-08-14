@@ -2882,9 +2882,9 @@
       "Behaviors": 12,
       "Calendar": 16,
       "Challenges": 14,
-      "Chat": 59,
+      "Chat": 60,
       "ChecklistTemplates": 9,
-      "Common": 163,
+      "Common": 167,
       "Gamification": 33,
       "Goals": 38,
       "Habits": 81,
@@ -3321,6 +3321,14 @@
         "file": "tests/Orbit.Application.Tests/Chat/HabitListCardBuilderTests.cs",
         "references": [
           "Habit"
+        ]
+      },
+      {
+        "testClass": "PromptHabitIndexTests",
+        "file": "tests/Orbit.Application.Tests/Chat/PromptHabitIndexTests.cs",
+        "references": [
+          "Habit",
+          "ProcessUserChatCommandHandler"
         ]
       },
       {
@@ -6468,6 +6476,11 @@
         ]
       },
       {
+        "testClass": "AiIntentServiceStreamingTests",
+        "file": "tests/Orbit.Infrastructure.Tests/AI/AiIntentServiceStreamingTests.cs",
+        "references": []
+      },
+      {
         "testClass": "ContentModerationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/AI/ContentModerationServiceTests.cs",
         "references": [
@@ -7248,7 +7261,9 @@
       {
         "testClass": "DistributedRateLimitFilterTests",
         "file": "tests/Orbit.Infrastructure.Tests/RateLimiting/DistributedRateLimitFilterTests.cs",
-        "references": []
+        "references": [
+          "User"
+        ]
       },
       {
         "testClass": "DistributedRateLimitPartitionKeyTests",

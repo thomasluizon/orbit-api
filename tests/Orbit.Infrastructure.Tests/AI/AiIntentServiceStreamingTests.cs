@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using OpenAI;
 using OpenAI.Chat;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 using Orbit.Infrastructure.AI;
@@ -119,6 +120,7 @@ public class AiIntentServiceStreamingTests
         var result = await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], userId));
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.ReportedTokenCount.Should().Be(18);
         await usageRecorder.Received(1).RecordAsync(
             "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
     }
@@ -137,6 +139,7 @@ public class AiIntentServiceStreamingTests
             streamSink: sink.Handle);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.ReportedTokenCount.Should().Be(18);
         handler.LastRequestBody.Should().Contain("\"stream_options\":{\"include_usage\":true}");
         await usageRecorder.Received(1).RecordAsync(
             "chat", "primary-test", 3, 11, 7, 18, Arg.Any<CancellationToken>(), userId);
@@ -212,6 +215,48 @@ public class AiIntentServiceStreamingTests
     }
 
     [Fact]
+    public async Task ContinueWithToolResultsAsync_OversizedPayload_SendsValidDropMarker()
+    {
+        var handler = new SequenceSseHandler(
+            RoleChunk()
+                + ToolCallStartChunk(0, "call_1", "list_tags")
+                + ToolCallArgsChunk(0, "{}")
+                + FinishChunk("tool_calls")
+                + UsageChunk()
+                + Done(),
+            RoleChunk() + ContentChunk("Use a narrower filter") + FinishChunk("stop") + UsageChunk() + Done());
+        var (service, sink) = BuildService(handler);
+        var first = await service.SendWithToolsAsync(
+            new AiToolRequest("list tags", "system", [], Guid.NewGuid()),
+            streamSink: sink.Handle);
+        var oversizedPayload = Enumerable.Range(0, 2_000)
+            .Select(index => new { id = Guid.NewGuid(), name = $"tag-{index:D4}-{new string('x', 20)}" })
+            .ToList();
+
+        var second = await service.ContinueWithToolResultsAsync(
+            first.Value.ConversationContext!,
+            [new AiToolCallResult("list_tags", "call_1", true, null, null, null, oversizedPayload)],
+            streamSink: sink.Handle);
+
+        second.IsSuccess.Should().BeTrue();
+        handler.RequestBodies.Should().HaveCount(2);
+        using var requestDocument = JsonDocument.Parse(handler.RequestBodies[1]);
+        var toolMessage = requestDocument.RootElement
+            .GetProperty("messages")
+            .EnumerateArray()
+            .Single(message => message.GetProperty("role").GetString() == "tool");
+        var toolContent = toolMessage.GetProperty("content").GetString();
+        toolContent.Should().NotBeNull();
+        toolContent!.Length.Should().BeLessThan(AppConstants.MaxAiToolPayloadJsonLength);
+        using var toolDocument = JsonDocument.Parse(toolContent);
+        var payload = toolDocument.RootElement.GetProperty("payload");
+        payload.GetProperty("dropped").GetBoolean().Should().BeTrue();
+        payload.GetProperty("original_length").GetInt32().Should().BeGreaterThan(AppConstants.MaxAiToolPayloadJsonLength);
+        payload.GetProperty("instruction").GetString().Should().Contain("narrower filter");
+        toolContent.Should().NotContain("tag-1999");
+    }
+
+    [Fact]
     public async Task SendWithToolsAsync_BufferedLengthFinish_LogsTruncationWarningAndKeepsText()
     {
         const string completion = """
@@ -270,7 +315,7 @@ public class AiIntentServiceStreamingTests
     }
 
     [Fact]
-    public async Task SendWithToolsAsync_HistoryOverflowsWindow_SummarizesOlderMessages()
+    public async Task SendWithToolsAsync_HistoryAboveControllerLimit_DoesNotIssueSummaryCall()
     {
         var handler = new CountingJsonHandler(BufferedCompletion);
         var usageRecorder = Substitute.For<IAiUsageRecorder>();
@@ -279,7 +324,7 @@ public class AiIntentServiceStreamingTests
 
         await service.SendWithToolsAsync(new AiToolRequest("hello", "system", [], Guid.NewGuid(), History: BuildHistory(50)));
 
-        handler.RequestCount.Should().Be(2);
+        handler.RequestCount.Should().Be(1);
     }
 
     private const string BufferedCompletion = """
@@ -414,12 +459,21 @@ public class AiIntentServiceStreamingTests
     private sealed class SequenceSseHandler(params string[] bodies) : HttpMessageHandler
     {
         private readonly Queue<string> _bodies = new(bodies);
+        public List<string> RequestBodies { get; } = [];
 
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
-            => BuildResponse(request);
+        {
+            if (request.Content is not null)
+                RequestBodies.Add(request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult());
+            return BuildResponse(request);
+        }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => Task.FromResult(BuildResponse(request));
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.Content is not null)
+                RequestBodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
+            return BuildResponse(request);
+        }
 
         private HttpResponseMessage BuildResponse(HttpRequestMessage request)
         {

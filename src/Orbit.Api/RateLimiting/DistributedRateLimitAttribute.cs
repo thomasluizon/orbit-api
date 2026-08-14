@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Orbit.Api.Extensions;
 using Orbit.Application.Auth.Validators;
+using Orbit.Application.Common;
 using Orbit.Domain.Interfaces;
 using Orbit.Domain.Models;
 
@@ -252,4 +253,91 @@ public sealed partial class DistributedRateLimitFilter(
         string path,
         string requestId,
         Exception exception);
+}
+
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class ConcurrentChatLimitAttribute : Attribute, IFilterFactory
+{
+    public bool IsReusable => false;
+
+    public IFilterMetadata CreateInstance(IServiceProvider serviceProvider)
+        => new ConcurrentChatLimitFilter(
+            serviceProvider.GetRequiredService<IDistributedRateLimitService>(),
+            serviceProvider.GetRequiredService<ILogger<ConcurrentChatLimitFilter>>());
+}
+
+public sealed partial class ConcurrentChatLimitFilter(
+    IDistributedRateLimitService distributedRateLimitService,
+    ILogger<ConcurrentChatLimitFilter> logger) : IAsyncActionFilter
+{
+    internal const string PolicyName = "chat-in-flight";
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+    {
+        var partitionKey = $"user:{context.HttpContext.GetUserId()}";
+        var decision = await distributedRateLimitService.TryAcquireLeaseAsync(
+            PolicyName,
+            partitionKey,
+            AppConstants.MaxConcurrentChatRequestsPerUser,
+            LeaseDuration,
+            context.HttpContext.RequestAborted);
+
+        if (!decision.Allowed)
+        {
+            var retryAfterSeconds = Math.Max(
+                1,
+                (int)Math.Ceiling((decision.WindowEndsAtUtc - TimeProvider.System.GetUtcNow().UtcDateTime).TotalSeconds));
+            context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+            context.HttpContext.Response.Headers[HttpContextExtensions.RequestIdHeaderName] = context.HttpContext.GetRequestId();
+            LogConcurrentChatRejected(
+                logger,
+                partitionKey,
+                decision.CurrentCount,
+                decision.PermitLimit,
+                retryAfterSeconds,
+                context.HttpContext.Request.Method,
+                context.HttpContext.Request.Path,
+                context.HttpContext.GetRequestId());
+            context.Result = new ObjectResult(new
+            {
+                error = "Too many requests",
+                requestId = context.HttpContext.GetRequestId(),
+                limit = decision.PermitLimit,
+                count = decision.CurrentCount,
+                retryAfterUtc = decision.WindowEndsAtUtc
+            })
+            {
+                StatusCode = StatusCodes.Status429TooManyRequests
+            };
+            return;
+        }
+
+        try
+        {
+            await next();
+        }
+        finally
+        {
+            await distributedRateLimitService.ReleaseLeaseAsync(
+                PolicyName,
+                partitionKey,
+                decision.WindowEndsAtUtc,
+                CancellationToken.None);
+        }
+    }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Warning,
+        Message = "Concurrent chat request rejected. PartitionKey={PartitionKey} Count={CurrentCount}/{PermitLimit} RetryAfterSeconds={RetryAfterSeconds} {Method} {Path} RequestId={RequestId}")]
+    private static partial void LogConcurrentChatRejected(
+        ILogger logger,
+        string partitionKey,
+        int currentCount,
+        int permitLimit,
+        int retryAfterSeconds,
+        string method,
+        string path,
+        string requestId);
 }

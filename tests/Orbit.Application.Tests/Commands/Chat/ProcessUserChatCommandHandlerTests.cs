@@ -718,6 +718,50 @@ public class ProcessUserChatCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ToolLoopCrossesTokenCeiling_StopsBeforeThirdCompletion()
+    {
+        SetupUserAndPayGate();
+        var tool = FakeTool("query_habits");
+        tool.ExecuteAsync(Arg.Any<JsonElement>(), UserId, Arg.Any<CancellationToken>())
+            .Returns(new ToolResult(true, Payload: new { count = 1 }));
+        var handler = CreateHandler(tool);
+        var toolCall = new AiToolCall("query_habits", "call_1", JsonDocument.Parse("{}").RootElement);
+        SetupAiResponse(new AiResponse
+        {
+            ToolCalls = [toolCall],
+            ConversationContext = TestConversationContext,
+            ReportedTokenCount = 60_000
+        });
+        _aiIntentService.ContinueWithToolResultsAsync(
+                Arg.Any<AiConversationContext>(),
+                Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+                Arg.Any<Func<AiStreamEvent, Task>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Success(new AiResponse
+            {
+                ToolCalls = [toolCall with { Id = "call_2" }],
+                ConversationContext = TestConversationContext,
+                ReportedTokenCount = 60_001
+            }));
+
+        var result = await handler.Handle(
+            new ProcessUserChatCommand(UserId, "Keep using tools"),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(ErrorMessages.AiUnavailable.Code);
+        await _aiIntentService.Received(1).SendWithToolsAsync(
+            Arg.Any<AiToolRequest>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+        await _aiIntentService.Received(1).ContinueWithToolResultsAsync(
+            Arg.Any<AiConversationContext>(),
+            Arg.Any<IReadOnlyList<AiToolCallResult>>(),
+            Arg.Any<Func<AiStreamEvent, Task>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WithStreamSink_EmitsRoundPerIterationAndBridgesAiEvents()
     {
         SetupUserAndPayGate();

@@ -22,7 +22,10 @@ public partial class ProcessUserChatCommandHandler
         var promptRequest = new PromptBuildRequest(
             context.PromptHabits, context.UserFacts,
             HasImage: request.ImageData is not null,
-            UserTags: context.UserTags, UserToday: context.UserToday, ActiveGoals: context.ActiveGoals);
+            UserTags: context.UserTags,
+            UserToday: context.UserToday,
+            ActiveGoals: context.ActiveGoals,
+            IsHabitIndexPartial: context.IsPromptHabitIndexPartial);
         var agentSnapshot = BuildAgentContextSnapshot(
             context.User,
             request.ClientContext,
