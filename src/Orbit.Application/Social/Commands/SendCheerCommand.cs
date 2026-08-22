@@ -1,12 +1,9 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
-using Orbit.Application.Gamification;
-using Orbit.Application.Gamification.Models;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
-using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Application.Social.Commands;
@@ -15,8 +12,7 @@ namespace Orbit.Application.Social.Commands;
 public record SendCheerRepositories(
     IGenericRepository<User> Users,
     IGenericRepository<Habit> Habits,
-    IGenericRepository<Cheer> Cheers,
-    IGenericRepository<UserAchievement> Achievements);
+    IGenericRepository<Cheer> Cheers);
 
 public record SendCheerCommand(Guid UserId, Guid RecipientId, Guid? HabitId, string? Note) : IRequest<Result<Guid>>;
 
@@ -24,11 +20,9 @@ public partial class SendCheerCommandHandler(
     SocialInteractionServices social,
     SendCheerRepositories repositories,
     IContentModerationService contentModerationService,
-    IXpAwarder xpAwarder,
     IUnitOfWork unitOfWork,
     ILogger<SendCheerCommandHandler> logger) : IRequestHandler<SendCheerCommand, Result<Guid>>
 {
-    private const string CheerleaderAchievementId = "cheerleader";
     private const string RecipientNotificationUrl = "/social?tab=feed";
 
     public async Task<Result<Guid>> Handle(SendCheerCommand request, CancellationToken cancellationToken)
@@ -69,8 +63,6 @@ public partial class SendCheerCommandHandler(
             return createResult.PropagateError<Guid>();
 
         await repositories.Cheers.AddAsync(createResult.Value, cancellationToken);
-        await AwardFirstCheerAsync(sender, cancellationToken);
-        await AwardCheerleaderAsync(sender, cancellationToken);
 
         var notification = BuildRecipientNotification(recipient, sender);
         await social.NotificationDispatcher.StageAsync(notification, cancellationToken);
@@ -100,49 +92,6 @@ public partial class SendCheerCommandHandler(
             LogModerationUnavailable(logger, senderId);
 
         return Result.Success();
-    }
-
-    private Task AwardFirstCheerAsync(User sender, CancellationToken cancellationToken) =>
-        TryGrantAchievementAsync(sender, AchievementDefinitions.FirstCheer, cancellationToken);
-
-    /// <summary>
-    /// Awards "Cheerleader" once the sender has sent the achievement's <see cref="AchievementDefinition.ProgressTarget"/> cheers (counting
-    /// the one being persisted in this unit of work, which is not yet in the database). The conventional
-    /// achievement id stays dormant — <see cref="AchievementChecks.TryGrant"/> no-ops on an unknown id —
-    /// until the definition ships, then this lights up automatically.
-    /// See https://github.com/thomasluizon/orbit-ui-mobile/issues/196.
-    /// </summary>
-    private async Task AwardCheerleaderAsync(User sender, CancellationToken cancellationToken)
-    {
-        var priorCheerCount = await repositories.Cheers.CountAsync(
-            c => c.SenderId == sender.Id, cancellationToken);
-        if (priorCheerCount + 1 < AchievementChecks.TargetFor(CheerleaderAchievementId))
-            return;
-
-        await TryGrantAchievementAsync(sender, CheerleaderAchievementId, cancellationToken);
-    }
-
-    private async Task TryGrantAchievementAsync(User sender, string achievementId, CancellationToken cancellationToken)
-    {
-        var alreadyEarned = await repositories.Achievements.AnyAsync(
-            a => a.UserId == sender.Id && a.AchievementId == achievementId,
-            cancellationToken);
-        if (alreadyEarned)
-            return;
-
-        var earned = new HashSet<string>();
-        var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
-        AchievementChecks.TryGrant(achievementId, sender, earned, newAchievements);
-
-        if (newAchievements.Count == 0)
-            return;
-
-        await repositories.Achievements.AddAsync(newAchievements[0].Entity, cancellationToken);
-        await xpAwarder.AwardAsync(
-            sender, newAchievements[0].Definition.XpReward, XpAwardSource.Achievement,
-            newAchievements[0].Entity.Id, awardedAtUtc: DateTime.UtcNow, cancellationToken);
-
-        LevelDefinitions.SyncLevel(sender);
     }
 
     private static Notification BuildRecipientNotification(User recipient, User sender)

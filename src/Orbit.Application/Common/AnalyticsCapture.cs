@@ -12,11 +12,15 @@ namespace Orbit.Application.Common;
 internal static partial class AnalyticsCapture
 {
     public static void SafeCaptureUserEvent(
-        IProductAnalytics analytics, ILogger logger, User user, string eventName)
+        IProductAnalytics analytics,
+        ILogger logger,
+        User user,
+        string eventName,
+        IReadOnlyDictionary<string, object>? properties = null)
     {
         try
         {
-            analytics.CaptureUserEvent(user.Id, eventName, user.Plan.ToString());
+            analytics.CaptureUserEvent(user.Id, eventName, user.Plan.ToString(), properties);
         }
         catch (Exception ex)
         {

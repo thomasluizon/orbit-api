@@ -107,22 +107,18 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Challenge>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipant>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.ChallengeParticipantHabit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>()));
         builder.Services.AddScoped<Orbit.Application.Social.Commands.SendCheerRepositories>(sp =>
             new Orbit.Application.Social.Commands.SendCheerRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Cheer>>()));
         builder.Services.AddScoped<Orbit.Application.Accountability.Services.AccountabilityPairService>();
         builder.Services.AddScoped<Orbit.Application.Accountability.Commands.AccountabilityRepositories>(sp =>
             new Orbit.Application.Accountability.Commands.AccountabilityRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityPair>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.AccountabilityCheckIn>>()));
         builder.Services.AddScoped<Orbit.Application.Goals.Commands.GoalRepositories>(sp =>
             new Orbit.Application.Goals.Commands.GoalRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),

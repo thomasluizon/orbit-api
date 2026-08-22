@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
@@ -42,7 +43,9 @@ public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IFeatureFlagService featureFlagService,
-    IAchievementProgressService progressService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
+    IAchievementProgressService progressService,
+    IProductAnalytics productAnalytics,
+    ILogger<GetGamificationProfileQueryHandler> logger) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
     public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
     {
@@ -60,22 +63,16 @@ public class GetGamificationProfileQueryHandler(
         var nextLevelNumber = currentLevel.Level + 1;
         var nextLevelXpRequired = LevelDefinitions.XpRequiredForLevel(nextLevelNumber);
 
-        var achievementsLocked = !user.HasProAccess;
         var (achievements, userAchievements, achievementsEarned) =
-            achievementsLocked
-                ? (new List<AchievementDto>(), new List<UserAchievementDto>(), 0)
-                : await BuildAchievementsAsync(user, cancellationToken);
+            await BuildAchievementsAsync(user, cancellationToken);
 
-        var proTeaser = user.HasProAccess
-            ? null
-            : new GamificationProTeaser("achievements", true);
         var nextReward = new NextRewardCarrot(
             nextLevelNumber,
             LevelDefinitions.TitleForLevel(nextLevelNumber),
             xpToNext,
-            proTeaser);
+            null);
 
-        return Result.Success(new GamificationProfileResponse(
+        var response = new GamificationProfileResponse(
             user.TotalXp,
             currentLevel.Level,
             currentLevel.Title,
@@ -84,15 +81,28 @@ public class GetGamificationProfileQueryHandler(
             nextLevelXpRequired,
             xpToNext,
             achievementsEarned,
-            AchievementDefinitions.All.Count,
+            AchievementDefinitions.Active.Count,
             achievements,
             userAchievements,
             user.CurrentStreak,
             user.LongestStreak,
             user.LastActiveDate,
             user.HasProAccess,
-            achievementsLocked,
-            nextReward));
+            false,
+            nextReward);
+
+        AnalyticsCapture.SafeCaptureUserEvent(
+            productAnalytics,
+            logger,
+            user,
+            "achievements_viewed",
+            new Dictionary<string, object>
+            {
+                ["isPro"] = user.HasProAccess,
+                ["earnedCount"] = achievementsEarned
+            });
+
+        return Result.Success(response);
     }
 
     private async Task<(List<AchievementDto> Achievements, List<UserAchievementDto> UserAchievements, int EarnedCount)> BuildAchievementsAsync(
@@ -104,7 +114,9 @@ public class GetGamificationProfileQueryHandler(
 
         var metrics = await progressService.LoadAsync(user, earnedIds, cancellationToken);
 
-        var achievements = AchievementDefinitions.All.Select(def =>
+        var achievements = AchievementDefinitions.All
+            .Where(def => !def.IsRetired || earnedMap.ContainsKey(def.Id))
+            .Select(def =>
         {
             var isEarned = earnedMap.TryGetValue(def.Id, out var earnedAt);
             var (progressCurrent, progressTarget) = AchievementProgressCalculator.Compute(def, metrics, isEarned);
@@ -113,7 +125,7 @@ public class GetGamificationProfileQueryHandler(
                 def.Category.ToString(), def.Rarity.ToString(),
                 def.XpReward, def.IconKey, isEarned, isEarned ? earnedAt : null,
                 progressCurrent, progressTarget);
-        }).ToList();
+            }).ToList();
 
         var userAchievements = earned.Select(e =>
             new UserAchievementDto(e.AchievementId, e.EarnedAtUtc)).ToList();

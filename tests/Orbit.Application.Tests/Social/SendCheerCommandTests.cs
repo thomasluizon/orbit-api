@@ -3,8 +3,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
-using Orbit.Application.Gamification;
-using Orbit.Application.Gamification.Services;
 using Orbit.Application.Social.Commands;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
@@ -19,9 +17,7 @@ public class SendCheerCommandTests
     private readonly IGenericRepository<BlockedUser> _blockedUserRepository = Substitute.For<IGenericRepository<BlockedUser>>();
     private readonly IGenericRepository<Habit> _habitRepository = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Cheer> _cheerRepository = Substitute.For<IGenericRepository<Cheer>>();
-    private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGenericRepository<Notification> _notificationRepository = Substitute.For<IGenericRepository<Notification>>();
-    private readonly IGenericRepository<XpAwardLog> _xpAwardLogRepository = Substitute.For<IGenericRepository<XpAwardLog>>();
     private readonly IContentModerationService _moderation = Substitute.For<IContentModerationService>();
     private readonly IPushNotificationService _push = Substitute.For<IPushNotificationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -36,18 +32,16 @@ public class SendCheerCommandTests
     {
         var guard = new SocialAccessGuard(_userRepository);
         var friendGraph = new FriendGraphService(_userRepository, _friendshipRepository, _blockedUserRepository);
-        var repos = new SendCheerRepositories(_userRepository, _habitRepository, _cheerRepository, _achievementRepository);
+        var repos = new SendCheerRepositories(_userRepository, _habitRepository, _cheerRepository);
         var dispatcher = new SocialNotificationDispatcher(
             _notificationRepository, _push, Substitute.For<ILogger<SocialNotificationDispatcher>>());
         _handler = new SendCheerCommandHandler(
             new SocialInteractionServices(guard, friendGraph, dispatcher), repos, _moderation,
-            new XpAwarder(_xpAwardLogRepository), _unitOfWork,
-            Substitute.For<ILogger<SendCheerCommandHandler>>());
+            _unitOfWork, Substitute.For<ILogger<SendCheerCommandHandler>>());
 
         SocialTestHelpers.StubUsers(_userRepository, _sender, _recipient);
         SocialTestHelpers.StubFind(_friendshipRepository, AcceptedFriendship());
         SocialTestHelpers.StubFind(_blockedUserRepository);
-        SocialTestHelpers.StubFind(_achievementRepository);
         _habitRepository.AnyAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(true);
         _moderation.CheckTextAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new ModerationResult(false, false, []));
@@ -162,31 +156,6 @@ public class SendCheerCommandTests
     }
 
     [Fact]
-    public async Task FirstCheer_AwardsAchievementAndXp()
-    {
-        var xpBefore = _sender.TotalXp;
-
-        var result = await _handler.Handle(Command(), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _achievementRepository.Received(1).AddAsync(
-            Arg.Is<UserAchievement>(a => a.UserId == _sender.Id && a.AchievementId == AchievementDefinitions.FirstCheer),
-            Arg.Any<CancellationToken>());
-        _sender.TotalXp.Should().BeGreaterThan(xpBefore);
-    }
-
-    [Fact]
-    public async Task FirstCheer_NotReAwardedWhenAlreadyEarned()
-    {
-        SocialTestHelpers.StubFind(_achievementRepository, UserAchievement.Create(_sender.Id, AchievementDefinitions.FirstCheer));
-
-        var result = await _handler.Handle(Command(), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        await _achievementRepository.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task NullHabitId_PersistsGeneralCheerAndSkipsHabitOwnershipCheck()
     {
         _habitRepository.AnyAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>()).Returns(false);
@@ -201,18 +170,13 @@ public class SendCheerCommandTests
     }
 
     [Fact]
-    public async Task ThresholdSentCheer_PersistsCheerAndEvaluatesCheerleaderThreshold()
+    public async Task SendCheer_PersistsWithoutQueryingRetiredAchievementProgress()
     {
-        _cheerRepository.CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(CheerleaderThreshold - 1);
-
         var result = await _handler.Handle(Command(), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         await _cheerRepository.Received(1).AddAsync(Arg.Any<Cheer>(), Arg.Any<CancellationToken>());
-        await _cheerRepository.Received().CountAsync(Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>());
+        await _cheerRepository.DidNotReceive().CountAsync(
+            Arg.Any<Expression<Func<Cheer, bool>>>(), Arg.Any<CancellationToken>());
     }
-
-    private static readonly int CheerleaderThreshold =
-        AchievementChecks.TargetFor(AchievementDefinitions.Cheerleader);
 }

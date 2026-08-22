@@ -51,4 +51,27 @@ public class PostHogProductAnalyticsTests
 
         arguments[^1].Should().BeNull();
     }
+
+    [Fact]
+    public void CaptureUserEvent_IncludesEventPropertiesAlongsidePersonProperties()
+    {
+        _analytics.CaptureUserEvent(
+            Guid.NewGuid(),
+            "achievements_viewed",
+            "Free",
+            new Dictionary<string, object>
+            {
+                ["isPro"] = false,
+                ["earnedCount"] = 4
+            });
+
+        var arguments = _postHogClient.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(IPostHogClient.Capture))
+            .GetArguments();
+        var properties = arguments[2].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
+
+        properties["isPro"].Should().Be(false);
+        properties["earnedCount"].Should().Be(4);
+        properties["$set"].Should().BeAssignableTo<Dictionary<string, object>>();
+    }
 }

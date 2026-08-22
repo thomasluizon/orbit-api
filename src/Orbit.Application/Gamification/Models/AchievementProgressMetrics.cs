@@ -12,12 +12,10 @@ public sealed record AchievementProgressMetrics(
     int TotalCompletions,
     int GoalsCreated,
     int GoalsCompleted,
-    int FriendsCount,
-    int CheersSent,
     int EarlyLogs,
     int NightLogs)
 {
-    public static readonly AchievementProgressMetrics Empty = new(0, 0, 0, 0, 0, 0, 0, 0);
+    public static readonly AchievementProgressMetrics Empty = new(0, 0, 0, 0, 0, 0);
 
     public int ValueFor(ProgressMetric metric) => metric switch
     {
@@ -25,8 +23,6 @@ public sealed record AchievementProgressMetrics(
         ProgressMetric.TotalCompletions => TotalCompletions,
         ProgressMetric.GoalsCreated => GoalsCreated,
         ProgressMetric.GoalsCompleted => GoalsCompleted,
-        ProgressMetric.FriendsCount => FriendsCount,
-        ProgressMetric.CheersSent => CheersSent,
         ProgressMetric.EarlyLogs => EarlyLogs,
         ProgressMetric.NightLogs => NightLogs,
         _ => 0,

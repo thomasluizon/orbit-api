@@ -12,7 +12,7 @@ public record ReportEventCommand(Guid UserId, string EventKey) : IRequest<Result
 /// <summary>
 /// Maps a whitelisted client event key to its achievement and grants it through the shared idempotent
 /// funnel. The key is validated against the whitelist before the handler runs, so a known mapping is
-/// guaranteed here. No Pro gate: free users earn these social/sharing badges (display stays Pro-gated).
+/// guaranteed here. No Pro gate: free users earn these sharing badges.
 /// </summary>
 public class ReportEventCommandHandler(IGamificationService gamificationService)
     : IRequestHandler<ReportEventCommand, Result<ReportEventResponse>>

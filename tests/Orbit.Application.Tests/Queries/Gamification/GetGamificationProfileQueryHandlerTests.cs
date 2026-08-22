@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
@@ -17,6 +18,7 @@ public class GetGamificationProfileQueryHandlerTests
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
+    private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly GetGamificationProfileQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -27,7 +29,13 @@ public class GetGamificationProfileQueryHandlerTests
             .Returns(Array.Empty<string>());
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
-        _handler = new GetGamificationProfileQueryHandler(_userRepo, _achievementRepo, _featureFlagService, _progressService);
+        _handler = new GetGamificationProfileQueryHandler(
+            _userRepo,
+            _achievementRepo,
+            _featureFlagService,
+            _progressService,
+            _productAnalytics,
+            Substitute.For<ILogger<GetGamificationProfileQueryHandler>>());
     }
 
     private void EnableFreeTierFlag()
@@ -78,7 +86,14 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.LevelTitle.Should().Be("Explorer");
         result.Value.LevelTitleKey.Should().Be("explorer");
         result.Value.AchievementsEarned.Should().Be(2);
-        result.Value.AchievementsTotal.Should().Be(AchievementDefinitions.All.Count);
+        result.Value.AchievementsTotal.Should().Be(32);
+        result.Value.Achievements.Should().HaveCount(32);
+        _productAnalytics.Received(1).CaptureUserEvent(
+            user.Id,
+            "achievements_viewed",
+            "Pro",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                properties["isPro"].Equals(true) && properties["earnedCount"].Equals(2)));
     }
 
     [Fact]
@@ -157,10 +172,11 @@ public class GetGamificationProfileQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
+        _productAnalytics.DidNotReceiveWithAnyArgs().CaptureUserEvent(default, default!, default!, default);
     }
 
     [Fact]
-    public async Task Handle_FreeUser_FlagOn_ExposesXpLevelStreak_HidesAchievements()
+    public async Task Handle_FreeUser_FlagOn_ReturnsActiveAchievementsWithoutLockOrTeaser()
     {
         var user = CreateFreeUser();
         user.AddXp(150);
@@ -183,14 +199,19 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.CurrentStreak.Should().Be(5);
         result.Value.LongestStreak.Should().Be(12);
         result.Value.IsPro.Should().BeFalse();
-        result.Value.AchievementsLocked.Should().BeTrue();
-        result.Value.Achievements.Should().BeEmpty();
-        result.Value.AchievementsEarned.Should().Be(0);
-        result.Value.AchievementsTotal.Should().Be(AchievementDefinitions.All.Count);
-        result.Value.NextReward.ProTeaser.Should().NotBeNull();
-        result.Value.NextReward.ProTeaser!.Kind.Should().Be("achievements");
-        result.Value.NextReward.ProTeaser.Locked.Should().BeTrue();
+        result.Value.AchievementsLocked.Should().BeFalse();
+        result.Value.Achievements.Should().HaveCount(32);
+        result.Value.AchievementsEarned.Should().Be(1);
+        result.Value.Achievements.Count(a => a.IsEarned).Should().Be(result.Value.AchievementsEarned);
+        result.Value.AchievementsTotal.Should().Be(32);
+        result.Value.NextReward.ProTeaser.Should().BeNull();
         result.Value.NextReward.NextLevel.Should().Be(3);
+        _productAnalytics.Received(1).CaptureUserEvent(
+            user.Id,
+            "achievements_viewed",
+            "Free",
+            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
+                properties["isPro"].Equals(false) && properties["earnedCount"].Equals(1)));
     }
 
     [Fact]
@@ -229,7 +250,7 @@ public class GetGamificationProfileQueryHandlerTests
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(new AchievementProgressMetrics(
                 CurrentStreak: 5, TotalCompletions: 120, GoalsCreated: 1, GoalsCompleted: 2,
-                FriendsCount: 3, CheersSent: 10, EarlyLogs: 4, NightLogs: 0));
+                EarlyLogs: 4, NightLogs: 0));
 
         var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
 
@@ -250,6 +271,31 @@ public class GetGamificationProfileQueryHandlerTests
         weekWarrior.IsEarned.Should().BeTrue();
         weekWarrior.ProgressCurrent.Should().Be(7);
         weekWarrior.ProgressTarget.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task Handle_RetiredAchievementEarned_IncludesHistoricalBadgeOutsideActiveTotal()
+    {
+        var user = CreateProUser();
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement>
+            {
+                UserAchievement.Create(UserId, AchievementDefinitions.BattleBuddy)
+            });
+
+        var result = await _handler.Handle(new GetGamificationProfileQuery(UserId), CancellationToken.None);
+
+        result.Value.AchievementsTotal.Should().Be(32);
+        result.Value.AchievementsEarned.Should().Be(1);
+        result.Value.Achievements.Should().HaveCount(33);
+        var retired = result.Value.Achievements.Single(a => a.Id == AchievementDefinitions.BattleBuddy);
+        retired.IsEarned.Should().BeTrue();
+        retired.EarnedAtUtc.Should().NotBeNull();
+        retired.Name.Should().Be("Battle Buddy");
+        retired.Description.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
