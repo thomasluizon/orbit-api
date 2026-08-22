@@ -2673,7 +2673,7 @@
       "Behaviors": 4,
       "Calendar": 15,
       "Challenges": 15,
-      "Chat": 79,
+      "Chat": 80,
       "ChecklistTemplates": 5,
       "Common": 34,
       "Gamification": 26,
@@ -2882,12 +2882,12 @@
       "Behaviors": 12,
       "Calendar": 16,
       "Challenges": 14,
-      "Chat": 60,
+      "Chat": 61,
       "ChecklistTemplates": 9,
       "Common": 167,
-      "Gamification": 33,
+      "Gamification": 34,
       "Goals": 38,
-      "Habits": 81,
+      "Habits": 83,
       "Marketing": 6,
       "Notifications": 16,
       "Profile": 38,
@@ -3322,6 +3322,11 @@
         "references": [
           "Habit"
         ]
+      },
+      {
+        "testClass": "MetricsCardBuilderTests",
+        "file": "tests/Orbit.Application.Tests/Chat/MetricsCardBuilderTests.cs",
+        "references": []
       },
       {
         "testClass": "PromptHabitIndexTests",
@@ -3904,6 +3909,7 @@
         "file": "tests/Orbit.Application.Tests/Commands/Chat/ProcessUserChatCommandHandlerTests.cs",
         "references": [
           "ChecklistTemplate",
+          "GetRecapQuery",
           "Goal",
           "Habit",
           "ProcessUserChatCommand",

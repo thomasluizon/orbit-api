@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Orbit.Application.Chat;
 using Orbit.Application.Chat.Commands;
 using Orbit.Domain.Models;
 
@@ -55,5 +56,14 @@ public class FaqTurnShareabilityTests
         results.Add("manage_calendar_sync", null, null, null, pending);
 
         ProcessUserChatCommandHandler.IsShareableFaqTurn(results).Should().BeFalse();
+    }
+
+    [Fact]
+    public void MetricsCardProduced_IsNotShareable()
+    {
+        var results = new ProcessUserChatCommandHandler.ToolExecutionAccumulator();
+        var metricsCard = new MetricsCard("week", 50, 2, 4, 2, 1, 3, true, "progress");
+
+        ProcessUserChatCommandHandler.IsShareableFaqTurn(results, metricsCard).Should().BeFalse();
     }
 }

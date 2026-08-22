@@ -133,6 +133,15 @@ public partial class AgentCatalogService
         return
         [
             new AppSurface(
+                "progress",
+                "Progress",
+                "Shows completion, activity, and streak metrics for the user's selected period.",
+                ["Open Progress.", "Review completion and activity metrics.", "Change the period to compare progress over time."],
+                ["Metrics use the user's timezone and week-start preference.", "The client owns the route for this surface id."],
+                [AgentCapabilityIds.HabitsInsightsRead, AgentCapabilityIds.GamificationRead],
+                ["GamificationController.GetRecap"]),
+
+            new AppSurface(
                 "gamification",
                 "Gamification",
                 "Shows streaks, freezes, XP, levels, and achievements.",
