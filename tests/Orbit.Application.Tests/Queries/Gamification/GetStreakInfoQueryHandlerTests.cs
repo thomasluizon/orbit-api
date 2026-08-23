@@ -95,6 +95,8 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.IsRepairAvailable.Should().BeFalse();
         result.Value.RepairDate.Should().BeNull();
         result.Value.RepairsRemainingThisMonth.Should().Be(0);
+        result.Value.LastFreezeCoveredDate.Should().BeNull();
+        result.Value.FreezeBankRemaining.Should().BeNull();
     }
 
     [Fact]
@@ -143,7 +145,7 @@ public class GetStreakInfoQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithRecentFreezes_CalculatesCorrectly()
+    public async Task Handle_WithRecentFreezes_ReportsLatestCoveredDateAndRemainingBank()
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
@@ -167,6 +169,8 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.FreezesAvailable.Should().Be(0);
         result.Value.RecentFreezeDates.Should().HaveCount(2);
         result.Value.IsFrozenToday.Should().BeFalse();
+        result.Value.LastFreezeCoveredDate.Should().Be(Today.AddDays(-1));
+        result.Value.FreezeBankRemaining.Should().Be(0);
     }
 
     [Fact]

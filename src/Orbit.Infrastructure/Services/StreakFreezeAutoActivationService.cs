@@ -12,7 +12,7 @@ using Orbit.Infrastructure.Services.Hosting;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Temporarily preserves automatic streak freezes while clients adopt the person initiated repair flow.
+/// Permanently provides automatic streak coverage. Its configuration flag is an operational kill switch.
 /// </summary>
 public partial class StreakFreezeAutoActivationService(
     IServiceScopeFactory scopeFactory,

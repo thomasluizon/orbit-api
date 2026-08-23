@@ -31,8 +31,8 @@ public class FeatureExplanationDriftTests
         body.Should().Contain(N(AppConstants.StreakDaysPerFreeze));
         body.Should().Contain(N(AppConstants.MaxStreakFreezesAccumulated));
         body.Should().Contain(N(AppConstants.MaxStreakFreezesPerMonth));
-        body.Should().NotContain("automatic");
-        body.Should().Contain("lets you choose");
+        body.Should().Contain("automatically spends");
+        body.Should().Contain("manual repair");
     }
 
     [Fact]

@@ -115,6 +115,9 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddSingleton<IScheduledJob>(sp => sp.GetRequiredService<TJob>());
     }
 
+    /// <summary>
+    /// Reads the permanent operational kill switch for automatic streak coverage, which defaults to enabled.
+    /// </summary>
     internal static bool IsStreakFreezeAutoActivationEnabled(IConfiguration configuration) =>
         configuration.GetValue("BackgroundServices:StreakFreezeAutoActivationEnabled", true);
 }
