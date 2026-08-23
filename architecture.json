@@ -2720,7 +2720,7 @@
       "Challenges": 15,
       "Chat": 80,
       "ChecklistTemplates": 5,
-      "Common": 35,
+      "Common": 36,
       "Gamification": 31,
       "Goals": 35,
       "Habits": 74,
@@ -2929,7 +2929,7 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 178,
+      "Common": 182,
       "Gamification": 38,
       "Goals": 54,
       "Habits": 86,
@@ -4822,6 +4822,13 @@
         "testClass": "ErrorCodesAndMessagesTests",
         "file": "tests/Orbit.Application.Tests/Common/ErrorCodesAndMessagesTests.cs",
         "references": []
+      },
+      {
+        "testClass": "HabitCeilingLockTests",
+        "file": "tests/Orbit.Application.Tests/Common/HabitCeilingLockTests.cs",
+        "references": [
+          "Habit"
+        ]
       },
       {
         "testClass": "LocaleHelperTests",
