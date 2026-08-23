@@ -71,6 +71,56 @@ public class ApiKeysControllerTests
     }
 
     [Fact]
+    public async Task CreateApiKey_ChallengeRequired_ReturnsTypedPreconditionFailure()
+    {
+        _mediator.Send(Arg.Any<CreateApiKeyCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<CreateApiKeyResponse>(ErrorMessages.ApiKeyCreationChallengeRequired));
+
+        var result = await _controller.CreateApiKey(
+            new ApiKeysController.CreateApiKeyRequest("Test Key"),
+            CancellationToken.None);
+
+        var objectResult = result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status428PreconditionRequired);
+        objectResult.Value.Should().BeEquivalentTo(new
+        {
+            error = ErrorMessages.ApiKeyCreationChallengeRequired.Message,
+            errorCode = ErrorCodes.ApiKeyCreationChallengeRequired,
+        });
+    }
+
+    [Fact]
+    public async Task RequestCreationChallenge_Success_ReturnsOk()
+    {
+        _mediator.Send(Arg.Any<RequestApiKeyCreationChallengeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+
+        var result = await _controller.RequestCreationChallenge(CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<RequestApiKeyCreationChallengeCommand>(command => command.UserId == UserId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ConfirmCreationChallenge_ValidCode_ReturnsOk()
+    {
+        _mediator.Send(Arg.Any<ConfirmApiKeyCreationChallengeCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+
+        var result = await _controller.ConfirmCreationChallenge(
+            new ApiKeysController.ConfirmApiKeyCreationChallengeRequest("123456"),
+            CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        await _mediator.Received(1).Send(
+            Arg.Is<ConfirmApiKeyCreationChallengeCommand>(command =>
+                command.UserId == UserId && command.Code == "123456"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GetApiKeys_Success_ReturnsOk()
     {
         _mediator.Send(Arg.Any<GetApiKeysQuery>(), Arg.Any<CancellationToken>())

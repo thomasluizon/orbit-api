@@ -197,6 +197,9 @@ public class AgentStepUpServiceTests : IDisposable
         public Task SendAccountDeletionCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
+        public Task SendApiKeyCreationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
         public Task SendWaitlistConfirmationAsync(string toEmail, string confirmUrl, string language = "en", CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 

@@ -79,6 +79,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
         builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
+        builder.Services.AddSingleton<Orbit.Application.Auth.Services.EmailChallengeService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IStreakGoalReadSyncer, StreakGoalReadSyncer>();

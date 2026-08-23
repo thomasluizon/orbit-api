@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Orbit.Application.Common;
 using Orbit.Domain.Entities;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
@@ -56,6 +57,20 @@ public class AppConfigServiceTests
         var value = await service.GetAsync("feature_on", false);
 
         value.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ApiKeyCreationStepUp_SeedDefaultsOff()
+    {
+        await using var dbContext = NewDbContext();
+        await dbContext.Database.EnsureCreatedAsync();
+        var service = Create(dbContext);
+
+        var value = await service.GetAsync(
+            AppConfigKeys.RequireApiKeyCreationStepUp,
+            true);
+
+        value.Should().BeFalse();
     }
 
     [Fact]
