@@ -18,6 +18,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? FirstCompletedAtUtc { get; private set; }
     public DateTime? StreakSyncedAtUtc { get; private set; }
     public bool IsDeleted { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
@@ -228,8 +229,15 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
             return false;
 
         Status = GoalStatus.Completed;
-        CompletedAtUtc = DateTime.UtcNow;
+        RecordCompletion();
         return true;
+    }
+
+    private void RecordCompletion()
+    {
+        var completedAtUtc = DateTime.UtcNow;
+        CompletedAtUtc = completedAtUtc;
+        FirstCompletedAtUtc ??= completedAtUtc;
     }
 
     /// <summary>
@@ -255,7 +263,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         if (Status == GoalStatus.Active && CurrentValue >= TargetValue)
         {
             Status = GoalStatus.Completed;
-            CompletedAtUtc = DateTime.UtcNow;
+            RecordCompletion();
             return Result.Success(GoalEditTransition.Completed);
         }
 
@@ -282,7 +290,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
             return Result.Failure(DomainErrors.GoalAlreadyCompleted);
 
         Status = GoalStatus.Completed;
-        CompletedAtUtc = DateTime.UtcNow;
+        RecordCompletion();
         UpdatedAtUtc = DateTime.UtcNow;
         return Result.Success();
     }

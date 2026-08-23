@@ -29,6 +29,7 @@ public class GamificationServiceTests
     private readonly IFriendFeedEventEmitter _feedEmitter = Substitute.For<IFriendFeedEventEmitter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
+    private readonly IFoundingAchievementReader _foundingAchievementReader = Substitute.For<IFoundingAchievementReader>();
     private readonly GamificationService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -38,7 +39,8 @@ public class GamificationServiceTests
     public GamificationServiceTests()
     {
         var repos = new GamificationRepositories(
-            _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo, _xpAwardLogRepo);
+            _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo, _xpAwardLogRepo,
+            _foundingAchievementReader);
         _sut = new GamificationService(
             repos, new GamificationNotifiers(_pushService, _feedEmitter), _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
             _featureFlagService, Substitute.For<ILogger<GamificationService>>());
@@ -47,6 +49,11 @@ public class GamificationServiceTests
             .Returns(Today);
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<IReadOnlyList<string>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<IReadOnlyList<string>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
     }
 
     private void EnableFreeTierFlag()
@@ -1187,6 +1194,183 @@ public class GamificationServiceTests
             Arg.Is<Notification>(n => n.Title.Contains("Achievement Unlocked")),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileFoundingAchievementsAsync_ThreeEligible_GrantsExactlyThree()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        _foundingAchievementReader.ReadEvidenceAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new FoundingAchievementEvidence(
+                HasHabitLog: true,
+                HasTopLevelHabit: false,
+                HasGoal: true,
+                HasCompletedGoal: false,
+                HasCompletedOnboardingChecklist: true));
+
+        var granted = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        granted.Should().BeEquivalentTo(
+            AchievementDefinitions.Liftoff,
+            AchievementDefinitions.MissionControl,
+            AchievementDefinitions.OnboardingComplete);
+        await _achievementRepo.Received(3).AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>());
+        user.TotalXp.Should().Be(
+            AchievementDefinitions.GetById(AchievementDefinitions.Liftoff)!.XpReward
+            + AchievementDefinitions.GetById(AchievementDefinitions.MissionControl)!.XpReward
+            + AchievementDefinitions.GetById(AchievementDefinitions.OnboardingComplete)!.XpReward);
+    }
+
+    [Fact]
+    public async Task ReconcileFoundingAchievementsAsync_RunTwice_SecondRunIsNoOp()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        var foundingAchievements = new[]
+        {
+            AchievementDefinitions.Liftoff,
+            AchievementDefinitions.FirstOrbit,
+            AchievementDefinitions.MissionControl,
+            AchievementDefinitions.GoalCrusher,
+            AchievementDefinitions.OnboardingComplete
+        };
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                new List<UserAchievement>(),
+                new List<UserAchievement>(),
+                foundingAchievements.Select(id => UserAchievement.Create(UserId, id)).ToList());
+        _foundingAchievementReader.ReadEvidenceAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new FoundingAchievementEvidence(true, true, true, true, true));
+
+        var first = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+        var second = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        first.Should().BeEquivalentTo(foundingAchievements);
+        second.Should().BeEmpty();
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _foundingAchievementReader.Received(1).ReadEvidenceAsync(
+            UserId,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileFoundingAchievementsAsync_FlagCycles_ReexaminesPreviouslyUnlockedUser()
+    {
+        var user = CreateFreeUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        EnableFreeTierFlag();
+        _foundingAchievementReader.ReadEvidenceAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new FoundingAchievementEvidence(true, false, false, false, false));
+
+        var first = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
+        _foundingAchievementReader.ReadEvidenceAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new FoundingAchievementEvidence(true, false, true, false, false));
+        var whileLocked = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        EnableFreeTierFlag();
+        SetupEarnedAchievements(AchievementDefinitions.Liftoff);
+        var afterUnlock = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        first.Should().ContainSingle().Which.Should().Be(AchievementDefinitions.Liftoff);
+        whileLocked.Should().BeEmpty();
+        afterUnlock.Should().ContainSingle().Which.Should().Be(AchievementDefinitions.MissionControl);
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileFoundingAchievementsAsync_UniqueConflict_RereadsEvidenceBeforeRetry()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        _foundingAchievementReader.ReadEvidenceAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(
+                new FoundingAchievementEvidence(true, false, false, false, false),
+                new FoundingAchievementEvidence(false, false, false, false, false));
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException(
+                "duplicate key value violates unique constraint",
+                new PostgresException(
+                    "duplicate key",
+                    "ERROR",
+                    "ERROR",
+                    PostgresErrorCodes.UniqueViolation)));
+
+        var granted = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        granted.Should().BeEmpty();
+        await _foundingAchievementReader.Received(2).ReadEvidenceAsync(
+            UserId,
+            Arg.Any<CancellationToken>());
+        _unitOfWork.Received(1).ResetTracking();
+        await _pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessHabitsLogged_ReconciliationWinsBadgeRace_RetriesAndCommitsHabitXp()
+    {
+        var losingAttemptUser = CreateProUser();
+        var persistedWinnerUser = CreateProUser();
+        var liftoffXp = AchievementDefinitions.GetById(AchievementDefinitions.Liftoff)!.XpReward;
+        persistedWinnerUser.AddXp(liftoffXp);
+        _userRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(losingAttemptUser, persistedWinnerUser);
+
+        var alreadyEarned = AchievementDefinitions.Active
+            .Select(definition => definition.Id)
+            .Where(id => id != AchievementDefinitions.Liftoff)
+            .ToArray();
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(
+                alreadyEarned.Select(id => UserAchievement.Create(UserId, id)).ToList(),
+                alreadyEarned
+                    .Append(AchievementDefinitions.Liftoff)
+                    .Select(id => UserAchievement.Create(UserId, id))
+                    .ToList());
+
+        var habit = CreateTestHabit();
+        habit.Log(Today);
+        SetupUserHabits(habit);
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromException<int>(new DbUpdateException(
+                    "duplicate key value violates unique constraint",
+                    new PostgresException(
+                        "duplicate key",
+                        "ERROR",
+                        "ERROR",
+                        PostgresErrorCodes.UniqueViolation))),
+                Task.FromResult(1));
+
+        var results = await _sut.ProcessHabitsLogged(UserId, [habit.Id]);
+
+        results.Should().ContainSingle().Which.XpEarned.Should().Be(11);
+        persistedWinnerUser.TotalXp.Should().Be(liftoffXp + 11);
+        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        _unitOfWork.Received(1).ResetTracking();
+        await _achievementRepo.Received(1).AddAsync(
+            Arg.Is<UserAchievement>(achievement => achievement.AchievementId == AchievementDefinitions.Liftoff),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

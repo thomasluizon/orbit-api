@@ -30,6 +30,7 @@ public class GetAchievementsQueryHandler(
     IGenericRepository<UserAchievement> achievementRepository,
     IFeatureFlagService featureFlagService,
     IAchievementProgressService progressService,
+    IGamificationService gamificationService,
     IProductAnalytics productAnalytics,
     ILogger<GetAchievementsQueryHandler> logger) : IRequestHandler<GetAchievementsQuery, Result<AchievementsResponse>>
 {
@@ -47,6 +48,10 @@ public class GetAchievementsQueryHandler(
             if (!enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier))
                 return Result.PayGateFailure<AchievementsResponse>("Gamification is a Pro feature. Upgrade to unlock!");
         }
+
+        await gamificationService.ReconcileFoundingAchievementsAsync(
+            request.UserId,
+            cancellationToken);
 
         var earnedList = await achievementRepository.FindAsync(a => a.UserId == request.UserId, cancellationToken);
         var earnedMap = earnedList.ToDictionary(a => a.AchievementId, a => a.EarnedAtUtc);
@@ -72,7 +77,7 @@ public class GetAchievementsQueryHandler(
                 isEarned ? earnedAt : null,
                 progressCurrent,
                 progressTarget);
-            }).ToList();
+        }).ToList();
 
         AnalyticsCapture.SafeCaptureUserEvent(
             productAnalytics,

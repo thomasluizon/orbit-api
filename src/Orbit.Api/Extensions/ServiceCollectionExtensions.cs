@@ -76,6 +76,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
         builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
         builder.Services.AddScoped<IAccountResetRepository, AccountResetRepository>();
+        builder.Services.AddScoped<IFoundingAchievementReader, FoundingAchievementReader>();
         builder.Services.AddScoped<IIdempotencyStore, IdempotencyStore>();
         builder.Services.AddScoped<IClosedMonthRecapStore, ClosedMonthRecapStore>();
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
@@ -94,7 +95,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.XpAwardLog>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.XpAwardLog>>(),
+                sp.GetRequiredService<IFoundingAchievementReader>()));
         builder.Services.AddScoped<IXpAwarder, Orbit.Application.Gamification.Services.XpAwarder>();
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.IAchievementProgressService, Orbit.Application.Gamification.Services.AchievementProgressService>();

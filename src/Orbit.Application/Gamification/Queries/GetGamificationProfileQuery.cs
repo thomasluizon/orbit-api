@@ -42,7 +42,8 @@ public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IFeatureFlagService featureFlagService,
-    IAchievementProgressService progressService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
+    IAchievementProgressService progressService,
+    IGamificationService gamificationService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
     public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
     {
@@ -55,6 +56,16 @@ public class GetGamificationProfileQueryHandler(
             || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
         if (!unlocked)
             return Result.PayGateFailure<GamificationProfileResponse>("Gamification is a Pro feature. Upgrade to unlock!");
+
+        var reconciled = await gamificationService.ReconcileFoundingAchievementsAsync(
+            request.UserId,
+            cancellationToken);
+        if (reconciled.Count > 0)
+        {
+            user = await userRepository.GetByIdAsync(request.UserId, cancellationToken);
+            if (user is null)
+                return Result.Failure<GamificationProfileResponse>(ErrorMessages.UserNotFound);
+        }
 
         var currentLevel = LevelDefinitions.GetLevelForXp(user.TotalXp);
         var xpToNext = LevelDefinitions.GetXpToNextLevel(user.TotalXp);

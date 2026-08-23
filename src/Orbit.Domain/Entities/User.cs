@@ -618,6 +618,10 @@ public partial class User : Entity
     {
         HasCompletedOnboarding = false;
         HasCompletedTour = false;
+        HasCreatedFirstHabit = false;
+        HasLoggedFirstHabit = false;
+        HasTriedAstra = false;
+        HasCompletedOnboardingChecklist = false;
         TotalXp = 0;
         Level = 1;
         CurrentStreak = 0;

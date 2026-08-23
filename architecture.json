@@ -2929,15 +2929,15 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 177,
-      "Gamification": 36,
+      "Common": 178,
+      "Gamification": 38,
       "Goals": 54,
       "Habits": 86,
       "Marketing": 6,
       "Notifications": 19,
-      "Profile": 39,
+      "Profile": 40,
       "Referrals": 13,
-      "Social": 34,
+      "Social": 35,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -5470,6 +5470,21 @@
         ]
       },
       {
+        "testClass": "FoundingAchievementResetRaceTests",
+        "file": "tests/Orbit.Application.Tests/Services/FoundingAchievementResetRaceTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "HabitLog",
+          "Notification",
+          "ResetAccountCommand",
+          "ResetAccountCommandHandler",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
+        ]
+      },
+      {
         "testClass": "FuzzyMatcherTests",
         "file": "tests/Orbit.Application.Tests/Services/FuzzyMatcherTests.cs",
         "references": []
@@ -7222,7 +7237,8 @@
           "Tag",
           "User",
           "UserAchievement",
-          "UserFact"
+          "UserFact",
+          "XpAwardLog"
         ]
       },
       {
@@ -7266,6 +7282,17 @@
           "Goal",
           "GoalProgressLog",
           "Notification"
+        ]
+      },
+      {
+        "testClass": "FoundingAchievementReaderTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Persistence/FoundingAchievementReaderTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {

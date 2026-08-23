@@ -20,7 +20,8 @@ public record GamificationRepositories(
     IGenericRepository<Goal> GoalRepository,
     IGenericRepository<UserAchievement> AchievementRepository,
     IGenericRepository<Notification> NotificationRepository,
-    IGenericRepository<XpAwardLog> XpAwardLogRepository);
+    IGenericRepository<XpAwardLog> XpAwardLogRepository,
+    IFoundingAchievementReader FoundingAchievementReader);
 
 /// <summary>Groups the outbound notification channels gamification emits through to keep the service constructor small.</summary>
 public record GamificationNotifiers(
@@ -40,6 +41,15 @@ public partial class GamificationService(
     private const int StreakLogWindowDays = 1100;
     private const int TotalCompletionWindowDays = 2750;
     private const int MaxConcurrencyAttempts = 3;
+
+    private static readonly string[] FoundingAchievementIds =
+    [
+        AchievementDefinitions.Liftoff,
+        AchievementDefinitions.FirstOrbit,
+        AchievementDefinitions.MissionControl,
+        AchievementDefinitions.GoalCrusher,
+        AchievementDefinitions.OnboardingComplete
+    ];
 
     private sealed record PendingPush(Guid UserId, string Title, string Body);
 
@@ -75,6 +85,13 @@ public partial class GamificationService(
                 await unitOfWork.SaveChangesAsync(ct);
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+                continue;
+            }
+            catch (DbUpdateException exception) when (
+                DbUniqueViolation.IsUniqueViolation(exception)
+                && attempt < MaxConcurrencyAttempts)
             {
                 attempt++;
                 continue;
@@ -329,6 +346,13 @@ public partial class GamificationService(
                 attempt++;
                 continue;
             }
+            catch (DbUpdateException exception) when (
+                DbUniqueViolation.IsUniqueViolation(exception)
+                && attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+                continue;
+            }
             await FlushPushesAsync(pushes, ct);
             return;
         }
@@ -387,6 +411,99 @@ public partial class GamificationService(
                 user.MarkAstraUsed();
                 break;
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> ReconcileFoundingAchievementsAsync(
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var attempt = 1;
+        while (true)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            try
+            {
+                var granted = await unitOfWork.ExecuteInTransactionAsync(async transactionCt =>
+                {
+                    await unitOfWork.AcquireAdvisoryLockAsync(
+                        ClosedMonthRecapLock.ForUser(userId),
+                        transactionCt);
+                    return await ComputeFoundingReconciliationAsync(userId, pushes, transactionCt);
+                }, ct);
+
+                await FlushPushesAsync(pushes, ct);
+                return granted;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+            }
+            catch (DbUpdateException exception) when (
+                DbUniqueViolation.IsUniqueViolation(exception)
+                && attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> ComputeFoundingReconciliationAsync(
+        Guid userId,
+        List<PendingPush> pushes,
+        CancellationToken ct)
+    {
+        if (!await IsGamificationUnlockedForUserAsync(userId, ct))
+            return [];
+
+        var earned = await LoadEarnedAchievementIds(userId, ct);
+        if (FoundingAchievementIds.All(earned.Contains))
+            return [];
+
+        var evidence = await repos.FoundingAchievementReader.ReadEvidenceAsync(userId, ct);
+        if (evidence is null)
+            return [];
+
+        var eligible = new List<string>(FoundingAchievementIds.Length);
+        AddIfEligible(AchievementDefinitions.Liftoff, evidence.HasHabitLog, earned, eligible);
+        AddIfEligible(AchievementDefinitions.FirstOrbit, evidence.HasTopLevelHabit, earned, eligible);
+        AddIfEligible(AchievementDefinitions.MissionControl, evidence.HasGoal, earned, eligible);
+        AddIfEligible(AchievementDefinitions.GoalCrusher, evidence.HasCompletedGoal, earned, eligible);
+        AddIfEligible(
+            AchievementDefinitions.OnboardingComplete,
+            evidence.HasCompletedOnboardingChecklist,
+            earned,
+            eligible);
+
+        if (eligible.Count == 0 || !await IsGamificationUnlockedForUserAsync(userId, ct))
+            return [];
+
+        var granted = await ComputeGrantAchievementsAsync(userId, eligible, pushes, ct);
+        if (granted.Count > 0)
+            await unitOfWork.SaveChangesAsync(ct);
+
+        return granted;
+    }
+
+    private static void AddIfEligible(
+        string achievementId,
+        bool isEligible,
+        HashSet<string> earned,
+        List<string> eligible)
+    {
+        if (isEligible && !earned.Contains(achievementId))
+            eligible.Add(achievementId);
+    }
+
+    private async Task<bool> IsGamificationUnlockedForUserAsync(Guid userId, CancellationToken ct)
+    {
+        var user = await repos.UserRepository.FindOneTrackedAsync(
+            candidate => candidate.Id == userId,
+            cancellationToken: ct);
+        return user is not null && await IsGamificationUnlockedAsync(user, ct);
     }
 
     public async Task<IReadOnlyList<string>> TryGrantAchievementsAsync(
@@ -491,6 +608,13 @@ public partial class GamificationService(
                 await unitOfWork.SaveChangesAsync(ct);
             }
             catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+                continue;
+            }
+            catch (DbUpdateException exception) when (
+                DbUniqueViolation.IsUniqueViolation(exception)
+                && attempt < MaxConcurrencyAttempts)
             {
                 attempt++;
                 continue;

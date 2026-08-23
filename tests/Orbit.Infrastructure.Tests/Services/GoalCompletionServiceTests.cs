@@ -318,7 +318,8 @@ public class GoalCompletionServiceTests
             new GenericRepository<Goal>(dbContext),
             new GenericRepository<UserAchievement>(dbContext),
             new GenericRepository<Notification>(dbContext),
-            new GenericRepository<XpAwardLog>(dbContext));
+            new GenericRepository<XpAwardLog>(dbContext),
+            new FoundingAchievementReader(dbContext));
         return new GamificationService(
             repos,
             new GamificationNotifiers(

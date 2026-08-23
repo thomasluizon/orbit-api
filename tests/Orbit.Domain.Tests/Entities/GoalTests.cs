@@ -544,12 +544,14 @@ public class GoalTests
     {
         var goal = CreateValidGoal(targetValue: 100);
         goal.UpdateProgress(100);
+        var firstCompletedAtUtc = goal.FirstCompletedAtUtc;
         goal.Status.Should().Be(GoalStatus.Completed);
 
         var result = goal.Update("Title", null, 200, "pages", null);
 
         goal.Status.Should().Be(GoalStatus.Active);
         goal.CompletedAtUtc.Should().BeNull();
+        goal.FirstCompletedAtUtc.Should().Be(firstCompletedAtUtc);
         result.Value.Should().Be(GoalEditTransition.Reopened);
     }
 
@@ -607,6 +609,7 @@ public class GoalTests
         result.IsSuccess.Should().BeTrue();
         goal.Status.Should().Be(GoalStatus.Completed);
         goal.CompletedAtUtc.Should().NotBeNull();
+        goal.FirstCompletedAtUtc.Should().Be(goal.CompletedAtUtc);
     }
 
     [Fact]
@@ -662,12 +665,14 @@ public class GoalTests
     {
         var goal = CreateValidGoal();
         goal.MarkCompleted();
+        var firstCompletedAtUtc = goal.FirstCompletedAtUtc;
 
         var result = goal.MarkAbandoned();
 
         result.IsSuccess.Should().BeTrue();
         goal.Status.Should().Be(GoalStatus.Abandoned);
         goal.CompletedAtUtc.Should().BeNull();
+        goal.FirstCompletedAtUtc.Should().Be(firstCompletedAtUtc);
     }
 
     [Fact]
@@ -675,12 +680,14 @@ public class GoalTests
     {
         var goal = CreateValidGoal();
         goal.MarkCompleted();
+        var firstCompletedAtUtc = goal.FirstCompletedAtUtc;
 
         var result = goal.Reactivate();
 
         result.IsSuccess.Should().BeTrue();
         goal.Status.Should().Be(GoalStatus.Active);
         goal.CompletedAtUtc.Should().BeNull();
+        goal.FirstCompletedAtUtc.Should().Be(firstCompletedAtUtc);
     }
 
     [Fact]

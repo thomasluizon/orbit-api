@@ -169,6 +169,12 @@ public class AccountResetRepositoryTests : IDisposable
         deletedNotification.SoftDelete();
         _dbContext.Notifications.Add(deletedNotification);
         _dbContext.UserAchievements.Add(UserAchievement.Create(userId, "first_habit"));
+        _dbContext.XpAwardLogs.Add(XpAwardLog.Create(
+            userId,
+            100,
+            XpAwardSource.GoalCompleted,
+            goal.Id,
+            DateTime.UtcNow));
         _dbContext.PushSubscriptions.Add(
             PushSubscription.Create(userId, $"https://push/{userId}", "p256dh", "auth").Value);
         _dbContext.StreakFreezes.Add(StreakFreeze.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
@@ -201,6 +207,7 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.UserFacts.IgnoreQueryFilters().CountAsync(f => f.UserId == _userId)).Should().Be(0);
         (await _dbContext.Notifications.IgnoreQueryFilters().CountAsync(n => n.UserId == _userId)).Should().Be(0);
         (await _dbContext.UserAchievements.CountAsync(ua => ua.UserId == _userId)).Should().Be(0);
+        (await _dbContext.XpAwardLogs.CountAsync(award => award.UserId == _userId)).Should().Be(0);
         (await _dbContext.HabitLogs.IgnoreQueryFilters()
             .CountAsync(l => _dbContext.Habits.IgnoreQueryFilters()
                 .Any(h => h.Id == l.HabitId && h.UserId == _userId))).Should().Be(0);
@@ -224,6 +231,7 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.Tags.IgnoreQueryFilters().CountAsync(t => t.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.Notifications.IgnoreQueryFilters().CountAsync(n => n.UserId == _otherUserId)).Should().Be(2);
         (await _dbContext.ClosedMonthRecaps.CountAsync(recap => recap.UserId == _otherUserId)).Should().Be(1);
+        (await _dbContext.XpAwardLogs.CountAsync(award => award.UserId == _otherUserId)).Should().Be(1);
     }
 
     [Fact]
