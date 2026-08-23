@@ -22,8 +22,18 @@ public class UserDateService(
     public async Task<DateOnly> GetUserTodayAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var preferences = await GetPreferencesAsync(userId, cancellationToken);
-        var timeZone = TimeZoneHelper.FindTimeZone(preferences.TimeZone);
-        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
+        return await GetUserTodayAsync(preferences.TimeZone, userId, cancellationToken);
+    }
+
+    public Task<DateOnly> GetUserTodayAsync(
+        string? timeZoneId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var timeZone = TimeZoneHelper.FindTimeZone(timeZoneId, userId: userId);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone));
+        return Task.FromResult(today);
     }
 
     public async Task<int> GetUserWeekStartDayAsync(Guid userId, CancellationToken cancellationToken = default)

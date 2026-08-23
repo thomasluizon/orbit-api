@@ -1,13 +1,20 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.Text.Json.Serialization;
 using Orbit.Api.Extensions;
+using Orbit.Api.RateLimiting;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Commands;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Habits.Queries;
 using Orbit.Domain.Interfaces;
 
 namespace Orbit.Api.Controllers;
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class RepairStreakRequest;
 
 [Authorize]
 [ApiController]
@@ -50,6 +57,23 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
         var result = await mediator.Send(query, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
+    }
+
+    [HttpPost("streak/repair")]
+    [DistributedRateLimit("streak-repair")]
+    [ProducesResponseType(typeof(StreakInfoResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> RepairStreak(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RepairStreakRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var command = new RepairStreakCommand(HttpContext.GetUserId());
+        var result = await mediator.Send(command, cancellationToken);
+
+        return result.ToPayGateAwareResult(value => Ok(value));
     }
 
     [HttpGet("recap")]

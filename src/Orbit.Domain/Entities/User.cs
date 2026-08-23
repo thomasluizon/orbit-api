@@ -493,11 +493,6 @@ public partial class User : Entity
             LongestStreak = CurrentStreak;
     }
 
-    public void ApplyStreakFreeze(DateOnly today)
-    {
-        LastActiveDate = today;
-    }
-
     public void SetStreakState(int currentStreak, int longestStreak, DateOnly? lastActiveDate)
     {
         var normalizedStreak = Math.Max(0, currentStreak);

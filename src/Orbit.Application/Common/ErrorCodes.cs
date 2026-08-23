@@ -138,4 +138,5 @@ public static class ErrorCodes
     public const string PairLimitReached = "PAIR_LIMIT_REACHED";
     public const string AlreadyPaired = "ALREADY_PAIRED";
     public const string AlreadyCheckedIn = "ALREADY_CHECKED_IN";
+    public const string StreakRepairUnavailable = "STREAK_REPAIR_UNAVAILABLE";
 }

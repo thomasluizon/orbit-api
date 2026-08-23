@@ -149,4 +149,5 @@ public static class ErrorMessages
     public static readonly AppError PairLimitReached = new(ErrorCodes.PairLimitReached, "You've reached the maximum of {0} accountability pairs.");
     public static readonly AppError AlreadyPaired = new(ErrorCodes.AlreadyPaired, "You already have an accountability pair with this person.");
     public static readonly AppError AlreadyCheckedIn = new(ErrorCodes.AlreadyCheckedIn, "You've already checked in for today.");
+    public static readonly AppError StreakRepairUnavailable = new(ErrorCodes.StreakRepairUnavailable, "No streak repair is available for yesterday.");
 }

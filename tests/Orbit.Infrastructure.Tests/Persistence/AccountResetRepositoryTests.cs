@@ -172,8 +172,6 @@ public class AccountResetRepositoryTests : IDisposable
         _dbContext.PushSubscriptions.Add(
             PushSubscription.Create(userId, $"https://push/{userId}", "p256dh", "auth").Value);
         _dbContext.StreakFreezes.Add(StreakFreeze.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
-        _dbContext.SentStreakFreezeAlerts.Add(
-            SentStreakFreezeAlert.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
         _dbContext.ApiKeys.Add(
             ApiKey.Create(userId, "key", ["habits:read"]).Value.Entity);
 
@@ -207,7 +205,6 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.GoalProgressLogs.IgnoreQueryFilters().CountAsync()).Should().Be(2);
         (await _dbContext.PushSubscriptions.CountAsync(p => p.UserId == _userId)).Should().Be(0);
         (await _dbContext.StreakFreezes.CountAsync(sf => sf.UserId == _userId)).Should().Be(0);
-        (await _dbContext.SentStreakFreezeAlerts.CountAsync(a => a.UserId == _userId)).Should().Be(0);
         (await _dbContext.ApiKeys.CountAsync(k => k.UserId == _userId)).Should().Be(0);
 
         (await _dbContext.Database.SqlQueryRaw<int>(
