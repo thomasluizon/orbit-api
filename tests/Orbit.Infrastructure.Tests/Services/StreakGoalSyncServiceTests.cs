@@ -4,11 +4,17 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Common;
+using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Services;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using Orbit.Infrastructure.Tests.Persistence;
 
 namespace Orbit.Infrastructure.Tests.Services;
 
@@ -71,29 +77,78 @@ public class StreakGoalSyncServiceTests
     [Fact]
     public async Task SyncActiveGoals_LinkedStandardAtTarget_AutoCompletesAndGamifiesOnce()
     {
-        await using var dbContext = CreateInMemoryDbContext();
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
         var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.GrantLifetimePro();
         var habit = Habit.Create(new HabitCreateParams(
             user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
         var goal = Goal.Create(user.Id, "Exercise twice", 2, "sessions").Value;
         goal.AddHabit(habit);
         habit.Log(Today);
-        habit.Log(Today);
+        habit.Log(Today.AddDays(-1));
 
         dbContext.Users.Add(user);
         dbContext.Habits.Add(habit);
         dbContext.Goals.Add(goal);
         await dbContext.SaveChangesAsync();
 
-        var gamification = Substitute.For<IGamificationService>();
-        var service = CreateService(dbContext, gamification);
+        var unitOfWork = CreateUnitOfWork(dbContext);
+        var service = CreateService(dbContext, CreateGamificationService(dbContext, unitOfWork), unitOfWork);
+        await service.SyncActiveGoals(CancellationToken.None);
         await service.SyncActiveGoals(CancellationToken.None);
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.CurrentValue.Should().Be(2);
         reloaded.Status.Should().Be(GoalStatus.Completed);
         reloaded.CompletedAtUtc.Should().NotBeNull();
-        await gamification.Received(1).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        (await dbContext.XpAwardLogs.CountAsync(x =>
+            x.UserId == user.Id && x.Source == XpAwardSource.GoalCompleted)).Should().Be(1);
+        (await dbContext.UserAchievements.CountAsync(a =>
+            a.UserId == user.Id && a.AchievementId == AchievementDefinitions.GoalCrusher)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SyncActiveGoals_GamificationFailure_RollsBackAndRetriesCompletion()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        var goal = Goal.Create(user.Id, "Exercise twice", 2, "sessions").Value;
+        goal.AddHabit(habit);
+        habit.Log(Today);
+        habit.Log(Today.AddDays(-1));
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        dbContext.Goals.Add(goal);
+        await dbContext.SaveChangesAsync();
+
+        var attempts = 0;
+        var gamification = Substitute.For<IGamificationService>();
+        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => ++attempts == 1
+                ? Task.FromException(new InvalidOperationException("Forced award failure"))
+                : Task.CompletedTask);
+        var service = CreateService(dbContext, gamification);
+
+        var firstSweep = () => service.SyncActiveGoals(CancellationToken.None);
+        await firstSweep.Should().ThrowAsync<InvalidOperationException>();
+
+        var afterFailure = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        afterFailure.CurrentValue.Should().Be(0);
+        afterFailure.Status.Should().Be(GoalStatus.Active);
+        afterFailure.CompletedAtUtc.Should().BeNull();
+
+        await service.SyncActiveGoals(CancellationToken.None);
+
+        var afterRetry = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        afterRetry.CurrentValue.Should().Be(2);
+        afterRetry.Status.Should().Be(GoalStatus.Completed);
+        afterRetry.CompletedAtUtc.Should().NotBeNull();
+        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -220,16 +275,47 @@ public class StreakGoalSyncServiceTests
         return new OrbitDbContext(options);
     }
 
-    private static StreakGoalSyncService CreateService(OrbitDbContext dbContext, IGamificationService gamificationService)
+    private static StreakGoalSyncService CreateService(
+        OrbitDbContext dbContext,
+        IGamificationService gamificationService,
+        IUnitOfWork? unitOfWork = null)
     {
+        unitOfWork ??= CreateUnitOfWork(dbContext);
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(gamificationService)
+            .AddSingleton(unitOfWork)
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new StreakGoalSyncService(
             scopeFactory,
             NullLogger<StreakGoalSyncService>.Instance,
             new ConfigurationBuilder().Build());
+    }
+
+    private static IUnitOfWork CreateUnitOfWork(OrbitDbContext dbContext) =>
+        new UnitOfWork(dbContext, new DatabaseConnectionSettings());
+
+    private static IGamificationService CreateGamificationService(
+        OrbitDbContext dbContext,
+        IUnitOfWork unitOfWork)
+    {
+        var repos = new GamificationRepositories(
+            new GenericRepository<User>(dbContext),
+            new GenericRepository<Habit>(dbContext),
+            new GenericRepository<HabitLog>(dbContext),
+            new GenericRepository<Goal>(dbContext),
+            new GenericRepository<UserAchievement>(dbContext),
+            new GenericRepository<Notification>(dbContext));
+        return new GamificationService(
+            repos,
+            new GamificationNotifiers(
+                Substitute.For<IPushNotificationService>(),
+                Substitute.For<IFriendFeedEventEmitter>()),
+            Substitute.For<IUserDateService>(),
+            new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
+            unitOfWork,
+            Substitute.For<IFeatureFlagService>(),
+            NullLogger<GamificationService>.Instance);
     }
 }

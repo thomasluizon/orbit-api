@@ -69,6 +69,8 @@ public partial class StreakGoalSyncService(
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var gamificationService = scope.ServiceProvider.GetRequiredService<IGamificationService>();
 
         var goals = await dbContext.Goals
             .Where(g => g.Status == GoalStatus.Active
@@ -86,7 +88,6 @@ public partial class StreakGoalSyncService(
             .ToDictionaryAsync(u => u.Id, ct);
 
         var synced = 0;
-        var usersWithCompletedGoal = new HashSet<Guid>();
         foreach (var goal in goals)
         {
             if (!users.TryGetValue(goal.UserId, out var user)) continue;
@@ -99,15 +100,12 @@ public partial class StreakGoalSyncService(
                 : GoalProgressSyncService.SyncCurrentProgress(goal, userToday);
             if (!outcome.Synced) continue;
 
-            if (!await TrySaveGoalAsync(goal, dbContext, ct)) continue;
+            if (!await TrySaveGoalAsync(
+                    goal, outcome.JustCompleted, dbContext, unitOfWork, gamificationService, ct))
+                continue;
 
             synced++;
-            if (outcome.JustCompleted)
-                usersWithCompletedGoal.Add(goal.UserId);
         }
-
-        if (usersWithCompletedGoal.Count > 0)
-            await ProcessCompletedGoalsAsync(scope.ServiceProvider, usersWithCompletedGoal, ct);
 
         if (synced > 0 && logger.IsEnabled(LogLevel.Information))
             LogDerivedGoalsSynced(logger, synced);
@@ -116,36 +114,29 @@ public partial class StreakGoalSyncService(
     private static GoalProgressSyncOutcome ToProgressOutcome(StreakSyncOutcome outcome) =>
         new(outcome.Synced, outcome.JustCompleted);
 
-    private async Task<bool> TrySaveGoalAsync(Goal goal, OrbitDbContext dbContext, CancellationToken ct)
+    private async Task<bool> TrySaveGoalAsync(
+        Goal goal,
+        bool justCompleted,
+        OrbitDbContext dbContext,
+        IUnitOfWork unitOfWork,
+        IGamificationService gamificationService,
+        CancellationToken ct)
     {
         try
         {
-            await dbContext.SaveChangesAsync(ct);
+            await unitOfWork.ExecuteInTransactionAsync(async transactionCt =>
+            {
+                await dbContext.SaveChangesAsync(transactionCt);
+                if (justCompleted)
+                    await gamificationService.ProcessGoalCompleted(goal.UserId, transactionCt);
+            }, ct);
             return true;
         }
         catch (Exception ex) when (ex is DbUpdateConcurrencyException || DbUniqueViolation.IsUniqueViolation(ex))
         {
-            await dbContext.Entry(goal).ReloadAsync(ct);
             if (logger.IsEnabled(LogLevel.Debug))
                 LogGoalProgressSyncConflict(logger, goal.Id);
             return false;
-        }
-    }
-
-    private async Task ProcessCompletedGoalsAsync(
-        IServiceProvider scopedProvider, HashSet<Guid> userIds, CancellationToken ct)
-    {
-        var gamificationService = scopedProvider.GetRequiredService<IGamificationService>();
-        foreach (var userId in userIds)
-        {
-            try
-            {
-                await gamificationService.ProcessGoalCompleted(userId, ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogGamificationGoalCompletionFailed(logger, ex, userId);
-            }
         }
     }
 
@@ -160,9 +151,6 @@ public partial class StreakGoalSyncService(
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Synced {Count} active derived goals")]
     private static partial void LogDerivedGoalsSynced(ILogger logger, int count);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "Gamification processing failed for derived goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Goal {GoalId} progress sync raced a concurrent writer; skipping")]
     private static partial void LogGoalProgressSyncConflict(ILogger logger, Guid goalId);
