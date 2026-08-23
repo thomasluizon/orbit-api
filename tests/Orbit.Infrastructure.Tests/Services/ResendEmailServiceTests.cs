@@ -197,6 +197,29 @@ public class ResendEmailServiceTests
     }
 
     [Fact]
+    public async Task SendApiKeyCreationCodeAsync_English_UsesApiKeyWording()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendApiKeyCreationCodeAsync("user@test.com", "654321", "en");
+
+        _handler.LastRequestBody.Should().Contain("Confirm your Orbit API key creation");
+        _handler.LastRequestBody.Should().Contain("No API key will be created");
+        _handler.LastRequestBody.Should().NotContain("account deletion");
+    }
+
+    [Fact]
+    public async Task SendApiKeyCreationCodeAsync_Portuguese_UsesApiKeyWording()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendApiKeyCreationCodeAsync("user@test.com", "654321", "pt-BR");
+
+        _handler.LastRequestBody.Should().Contain("chave de API do Orbit");
+        _handler.LastRequestBody.Should().NotContain("exclus");
+    }
+
+    [Fact]
     public async Task SendSupportEmailAsync_SendsToSupportEmail()
     {
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
@@ -268,6 +291,17 @@ public class ResendEmailServiceTests
         _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
 
         await _sut.SendAccountDeletionCodeAsync("user@test.com", "654321", "en");
+
+        _handler.LastRequestBody.Should().Contain("\"text\":");
+        _handler.LastRequestBody.Should().Contain("654321");
+    }
+
+    [Fact]
+    public async Task SendApiKeyCreationCodeAsync_IncludesPlainTextPart()
+    {
+        _handler.ResponseToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+
+        await _sut.SendApiKeyCreationCodeAsync("user@test.com", "654321", "en");
 
         _handler.LastRequestBody.Should().Contain("\"text\":");
         _handler.LastRequestBody.Should().Contain("654321");

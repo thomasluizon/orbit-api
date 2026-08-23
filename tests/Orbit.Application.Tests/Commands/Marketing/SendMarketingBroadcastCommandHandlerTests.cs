@@ -216,6 +216,7 @@ public class SendMarketingBroadcastCommandHandlerTests
         public Task SendVerificationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendSupportEmailAsync(string fromName, string fromEmail, string subject, string message, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendAccountDeletionCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task SendApiKeyCreationCodeAsync(string toEmail, string code, string language = "en", CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SendWaitlistConfirmationAsync(string toEmail, string confirmUrl, string language = "en", CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
