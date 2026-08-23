@@ -73,10 +73,10 @@ public class SendCheerCommandTests
             Arg.Is<Cheer>(c => c.SenderId == _sender.Id && c.RecipientId == _recipient.Id && c.HabitId == _habitId),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _recipient.Id && n.Url == "/social?tab=feed"),
+            Arg.Is<Notification>(n => n.UserId == _recipient.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _recipient.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=feed", Arg.Any<CancellationToken>());
+            _recipient.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
     }
 
     [Fact]

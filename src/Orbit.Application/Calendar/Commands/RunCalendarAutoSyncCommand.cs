@@ -6,6 +6,7 @@ using Orbit.Application.Behaviors;
 using Orbit.Application.Calendar.Queries;
 using Orbit.Application.Calendar.Services;
 using Orbit.Application.Common;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -265,7 +266,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             isPortuguese
                 ? "A sincronização automática está pausada. Reconecte para retomar."
                 : "Auto-sync paused. Reconnect to resume.",
-            url: "/calendar-sync");
+            url: NotificationUrls.CalendarSync);
         await deps.NotificationRepository.AddAsync(notification, ct);
 
         await deps.UnitOfWork.SaveChangesAsync(ct);
@@ -276,7 +277,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
         var cutoff = utcNow - NotificationRateLimitWindow;
         return await deps.NotificationRepository.AnyAsync(
             n => n.UserId == userId
-                && n.Url == "/calendar-sync?mode=review"
+                && n.Url == NotificationUrls.CalendarSyncReview
                 && n.CreatedAtUtc > cutoff,
             ct);
     }
@@ -296,7 +297,7 @@ public partial class RunCalendarAutoSyncCommandHandler(
             user.Id,
             title,
             body,
-            url: "/calendar-sync?mode=review");
+            url: NotificationUrls.CalendarSyncReview);
         await deps.NotificationRepository.AddAsync(notification, ct);
     }
 

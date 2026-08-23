@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using FirebaseAdmin.Messaging;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
@@ -261,6 +262,50 @@ public sealed class PushNotificationServiceTests : IDisposable
     [InlineData(MessagingErrorCode.SenderIdMismatch)]
     public void IsStaleFcmError_PermanentlyInvalidTokens_PrunesSubscription(MessagingErrorCode code) =>
         PushNotificationService.IsStaleFcmError(code).Should().BeTrue();
+
+    [Fact]
+    public void CreateFcmMessage_NullUrl_OmitsDestination()
+    {
+        var message = PushNotificationService.CreateFcmMessage("device-token", "Title", "Body", null);
+
+        message.Token.Should().Be("device-token");
+        message.Notification.Title.Should().Be("Title");
+        message.Notification.Body.Should().Be("Body");
+        message.Data.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CreateFcmMessage_RealUrl_PreservesEveryField()
+    {
+        var message = PushNotificationService.CreateFcmMessage("device-token", "Title", "Body", "/progress");
+
+        message.Token.Should().Be("device-token");
+        message.Notification.Title.Should().Be("Title");
+        message.Notification.Body.Should().Be("Body");
+        message.Data.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, string>("url", "/progress"));
+    }
+
+    [Fact]
+    public void CreateWebPushPayload_NullUrl_OmitsDestination()
+    {
+        using var payload = JsonDocument.Parse(PushNotificationService.CreateWebPushPayload("Title", "Body", null));
+
+        payload.RootElement.EnumerateObject().Should().HaveCount(2);
+        payload.RootElement.GetProperty("title").GetString().Should().Be("Title");
+        payload.RootElement.GetProperty("body").GetString().Should().Be("Body");
+        payload.RootElement.TryGetProperty("url", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateWebPushPayload_RealUrl_PreservesEveryField()
+    {
+        using var payload = JsonDocument.Parse(PushNotificationService.CreateWebPushPayload("Title", "Body", "/progress"));
+
+        payload.RootElement.EnumerateObject().Should().HaveCount(3);
+        payload.RootElement.GetProperty("title").GetString().Should().Be("Title");
+        payload.RootElement.GetProperty("body").GetString().Should().Be("Body");
+        payload.RootElement.GetProperty("url").GetString().Should().Be("/progress");
+    }
 
     [Fact]
     public void SanitizeForDelivery_StripsControlCharacters()
