@@ -78,6 +78,7 @@ public partial class User : Entity
     public bool PublicProfileShowLevel { get; private set; } = true;
     public bool PublicProfileShowAchievements { get; private set; } = true;
     public bool PublicProfileShowTopHabits { get; private set; } = false;
+    public DateTime? AchievementEligibilityReconciledAtUtc { get; private set; }
 
     [NotMapped]
     public bool IsPro => IsLifetimePro || (Plan == UserPlan.Pro && PlanExpiresAt.HasValue && PlanExpiresAt.Value > DateTime.UtcNow);
@@ -216,6 +217,8 @@ public partial class User : Entity
     public void MarkAstraUsed() => HasTriedAstra = true;
 
     public void CompleteOnboardingChecklist() => HasCompletedOnboardingChecklist = true;
+
+    public void MarkAchievementEligibilityReconciled() => AchievementEligibilityReconciledAtUtc = DateTime.UtcNow;
 
     public void CompleteTour() => HasCompletedTour = true;
 

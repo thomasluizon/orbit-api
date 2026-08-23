@@ -97,9 +97,6 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<
             Orbit.Application.Gamification.Backfill.IAchievementEligibilityReconciliationService,
             Orbit.Application.Gamification.Backfill.AchievementEligibilityReconciliationService>();
-        builder.Services.AddSingleton<
-            Orbit.Application.Gamification.Backfill.IAchievementReconciliationState,
-            Orbit.Application.Gamification.Backfill.AchievementReconciliationState>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialAccessGuard>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.FriendGraphService>();
         builder.Services.AddScoped<Orbit.Application.Social.Services.SocialNotificationDispatcher>();

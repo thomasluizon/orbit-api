@@ -1,10 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Gamification.Backfill;
-using Orbit.Domain.Entities;
-using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Infrastructure.Services;
 
@@ -14,10 +11,8 @@ namespace Orbit.Infrastructure.Services;
 /// </summary>
 public sealed partial class AchievementEligibilityReconciliationHostedService(
     IServiceScopeFactory scopeFactory,
-    IAchievementReconciliationState reconciliationState,
     ILogger<AchievementEligibilityReconciliationHostedService> logger) : IHostedService
 {
-    private const string CompletionKey = "AchievementEligibilityReconciliationComplete";
     private CancellationTokenSource? _retryCancellation;
     private Task? _retryTask;
 
@@ -68,15 +63,6 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
         try
         {
             using var scope = scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-
-            if (await db.AppConfigs.AnyAsync(config => config.Key == CompletionKey, stoppingToken))
-            {
-                reconciliationState.MarkComplete();
-                LogAlreadyComplete(logger);
-                return ReconciliationRunStatus.Complete;
-            }
-
             var service = scope.ServiceProvider.GetRequiredService<IAchievementEligibilityReconciliationService>();
             var result = await service.ReconcileAllAsync(stoppingToken);
             if (result.AccountsDeferred > 0)
@@ -85,13 +71,6 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
                 return ReconciliationRunStatus.Deferred;
             }
 
-            db.AppConfigs.Add(AppConfig.Create(
-                CompletionKey,
-                "true",
-                "Set automatically after the one-time achievement eligibility reconciliation"));
-            await db.SaveChangesAsync(stoppingToken);
-
-            reconciliationState.MarkComplete();
             LogCompleted(logger, result.AccountsGranted, result.AchievementsGranted);
             return ReconciliationRunStatus.Complete;
         }
@@ -113,16 +92,13 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
         }
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation already completed; skipping")]
-    private static partial void LogAlreadyComplete(ILogger logger);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation granted {AchievementCount} achievements across {AccountCount} accounts")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation granted {AchievementCount} achievements across {AccountCount} accounts")]
     private static partial void LogCompleted(ILogger logger, int accountCount, int achievementCount);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Achievement eligibility reconciliation deferred for {AccountCount} feature-locked accounts")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Achievement eligibility reconciliation deferred for {AccountCount} feature-locked accounts")]
     private static partial void LogDeferred(ILogger logger, int accountCount);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Achievement eligibility reconciliation failed; retrying")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Achievement eligibility reconciliation failed; retrying")]
     private static partial void LogFailed(ILogger logger, Exception ex);
 }
 

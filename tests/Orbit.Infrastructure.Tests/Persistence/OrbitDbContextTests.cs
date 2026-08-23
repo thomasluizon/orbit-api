@@ -137,6 +137,19 @@ public class OrbitDbContextTests
     }
 
     [Fact]
+    public void Model_AchievementReconciliationIndex_TargetsOnlyPendingUsers()
+    {
+        using var context = CreatePostgresContext();
+
+        var user = context.Model.FindEntityType(typeof(User))!;
+        var index = user.GetIndexes().Single(i =>
+            i.Properties.Select(p => p.Name)
+                .SequenceEqual(new[] { nameof(User.AchievementEligibilityReconciledAtUtc) }));
+
+        index.GetFilter().Should().Be("\"AchievementEligibilityReconciledAtUtc\" IS NULL");
+    }
+
+    [Fact]
     public void Model_UnboundedStringColumns_AreConstrainedToMaxLengths()
     {
         using var context = CreatePostgresContext();

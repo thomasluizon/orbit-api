@@ -27,7 +27,8 @@ public sealed class AchievementEligibilityReconciliationService(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IGamificationService gamificationService,
-    IFeatureFlagService featureFlagService) : IAchievementEligibilityReconciliationService
+    IFeatureFlagService featureFlagService,
+    IUnitOfWork unitOfWork) : IAchievementEligibilityReconciliationService
 {
     private static readonly string[] ReconciledAchievementIds =
     [
@@ -41,13 +42,18 @@ public sealed class AchievementEligibilityReconciliationService(
     public async Task<AchievementEligibilityReconciliationResult> ReconcileAllAsync(
         CancellationToken cancellationToken = default)
     {
-        var activeUsers = await userRepository.GetAllAsync(cancellationToken);
-        var freeUsers = activeUsers.Where(user => !user.HasProAccess).ToList();
+        var candidates = await userRepository.FindTrackedAsync(
+            user => user.AchievementEligibilityReconciledAtUtc == null,
+            cancellationToken);
+        if (candidates.Count == 0)
+            return new AchievementEligibilityReconciliationResult(0, 0);
+
+        var freeUsers = candidates.Where(user => !user.HasProAccess).ToList();
         var unlockedFreeUserIds = await featureFlagService.GetUserIdsWithEnabledKeyAsync(
             Common.FeatureFlagKeys.GamificationFreeTier,
             freeUsers,
             cancellationToken);
-        var users = activeUsers
+        var users = candidates
             .Where(user => user.HasProAccess || unlockedFreeUserIds.Contains(user.Id))
             .ToList();
         var accountsDeferred = freeUsers.Count(user => !unlockedFreeUserIds.Contains(user.Id));
@@ -114,20 +120,24 @@ public sealed class AchievementEligibilityReconciliationService(
                 completedGoalOwnerIds.Contains(user.Id));
             var missing = eligible.Where(id => !earned.Contains(id)).ToList();
 
-            if (missing.Count == 0)
-                continue;
+            if (missing.Count > 0)
+            {
+                var granted = await gamificationService.TryGrantAchievementsAsync(
+                    user.Id,
+                    missing,
+                    cancellationToken);
 
-            var granted = await gamificationService.TryGrantAchievementsAsync(
-                user.Id,
-                missing,
-                cancellationToken);
+                if (granted.Count > 0)
+                {
+                    accountsGranted++;
+                    achievementsGranted += granted.Count;
+                }
+            }
 
-            if (granted.Count == 0)
-                continue;
-
-            accountsGranted++;
-            achievementsGranted += granted.Count;
+            user.MarkAchievementEligibilityReconciled();
         }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AchievementEligibilityReconciliationResult(
             accountsGranted,

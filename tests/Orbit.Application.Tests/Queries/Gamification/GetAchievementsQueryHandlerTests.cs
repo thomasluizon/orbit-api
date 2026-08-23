@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
-using Orbit.Application.Gamification.Backfill;
 using Orbit.Application.Gamification.Models;
 using Orbit.Application.Gamification.Queries;
 using Orbit.Application.Gamification.Services;
@@ -18,7 +17,6 @@ public class GetAchievementsQueryHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
-    private readonly IAchievementReconciliationState _reconciliationState = Substitute.For<IAchievementReconciliationState>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly GetAchievementsQueryHandler _handler;
@@ -29,14 +27,12 @@ public class GetAchievementsQueryHandlerTests
     {
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
-        _reconciliationState.IsComplete.Returns(true);
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
         _handler = new GetAchievementsQueryHandler(
             _userRepo,
             _achievementRepo,
             _featureFlagService,
-            _reconciliationState,
             _progressService,
             _productAnalytics,
             Substitute.For<ILogger<GetAchievementsQueryHandler>>());
@@ -49,10 +45,12 @@ public class GetAchievementsQueryHandlerTests
         return user;
     }
 
-    private static User CreateFreeUser()
+    private static User CreateFreeUser(bool reconciled = true)
     {
         var user = User.Create("Test User", "test@example.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        if (reconciled)
+            user.MarkAchievementEligibilityReconciled();
         return user;
     }
 
@@ -204,8 +202,7 @@ public class GetAchievementsQueryHandlerTests
     [Fact]
     public async Task Handle_FreeUser_BeforeReconciliationCompletes_ReturnsPayGateFailure()
     {
-        var user = CreateFreeUser();
-        _reconciliationState.IsComplete.Returns(false);
+        var user = CreateFreeUser(reconciled: false);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);

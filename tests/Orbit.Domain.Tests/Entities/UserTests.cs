@@ -891,6 +891,19 @@ public class UserTests
     }
 
     [Fact]
+    public void MarkAchievementEligibilityReconciled_RecordsUtcTimestamp()
+    {
+        var user = CreateValidUser();
+        var before = DateTime.UtcNow;
+
+        user.MarkAchievementEligibilityReconciled();
+
+        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrAfter(before);
+        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrBefore(DateTime.UtcNow);
+        user.AchievementEligibilityReconciledAtUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
     public void Deactivate_ClearsGoogleCalendarConnection()
     {
         var user = CreateValidUser();

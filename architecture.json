@@ -2691,7 +2691,7 @@
       "Chat": 80,
       "ChecklistTemplates": 5,
       "Common": 34,
-      "Gamification": 30,
+      "Gamification": 29,
       "Goals": 33,
       "Habits": 74,
       "Marketing": 4,
@@ -2896,7 +2896,7 @@
       "Chat": 61,
       "ChecklistTemplates": 9,
       "Common": 169,
-      "Gamification": 33,
+      "Gamification": 34,
       "Goals": 38,
       "Habits": 83,
       "Marketing": 6,
@@ -7119,6 +7119,17 @@
         ]
       },
       {
+        "testClass": "AchievementEligibilityReconciliationQueryTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Persistence/AchievementEligibilityReconciliationQueryTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "HabitLog",
+          "User",
+          "UserAchievement"
+        ]
+      },
+      {
         "testClass": "ApplyOnboardingConcurrencyTests",
         "file": "tests/Orbit.Infrastructure.Tests/Persistence/ApplyOnboardingConcurrencyTests.cs",
         "references": [
@@ -7322,9 +7333,7 @@
       {
         "testClass": "AchievementEligibilityReconciliationHostedServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AchievementEligibilityReconciliationHostedServiceTests.cs",
-        "references": [
-          "AppConfig"
-        ]
+        "references": []
       },
       {
         "testClass": "ActiveHabitsSectionTests",

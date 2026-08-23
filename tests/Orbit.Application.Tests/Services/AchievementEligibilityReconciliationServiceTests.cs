@@ -21,6 +21,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly AchievementEligibilityReconciliationService _sut;
 
     public AchievementEligibilityReconciliationServiceTests()
@@ -32,7 +33,8 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             _goalRepository,
             _achievementRepository,
             _gamificationService,
-            _featureFlagService);
+            _featureFlagService,
+            _unitOfWork);
 
         ArrangePersistedState([], [], [], [], []);
         _featureFlagService.GetUserIdsWithEnabledKeyAsync(
@@ -130,6 +132,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         first.Should().Be(new AchievementEligibilityReconciliationResult(1, 2));
         second.Should().Be(new AchievementEligibilityReconciliationResult(0, 0));
         awardedXp.Should().Be(xpAfterFirstRun);
+        user.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
         await _gamificationService.Received(1).TryGrantAchievementsAsync(
             user.Id,
             Arg.Any<IReadOnlyList<string>>(),
@@ -245,6 +248,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(0, 0, 1));
+        user.AchievementEligibilityReconciledAtUtc.Should().BeNull();
         await _habitRepository.DidNotReceive().FindTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>());
@@ -274,6 +278,8 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(1, 1, 1));
+        unlockedUser.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
+        lockedUser.AchievementEligibilityReconciledAtUtc.Should().BeNull();
         await _featureFlagService.Received(1).GetUserIdsWithEnabledKeyAsync(
             FeatureFlagKeys.GamificationFreeTier,
             Arg.Is<IReadOnlyCollection<User>>(users => users.Count == 2),
@@ -333,10 +339,12 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             });
 
         var deferred = await _sut.ReconcileAllAsync();
+        user.AchievementEligibilityReconciledAtUtc.Should().BeNull();
         var reconciled = await _sut.ReconcileAllAsync();
 
         deferred.Should().Be(new AchievementEligibilityReconciliationResult(0, 0, 1));
         reconciled.Should().Be(new AchievementEligibilityReconciliationResult(1, 1));
+        user.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
         await _featureFlagService.Received(2).GetUserIdsWithEnabledKeyAsync(
             FeatureFlagKeys.GamificationFreeTier,
             Arg.Is<IReadOnlyCollection<User>>(users => users.Count == 1 && users.Single().Id == user.Id),
@@ -348,6 +356,23 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.OnboardingComplete })),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileAll_FullyReconciledFleet_StopsAfterCandidateRead()
+    {
+        var user = CreateFreeUser();
+        user.MarkAchievementEligibilityReconciled();
+        ArrangePersistedState([user], [], [], [], []);
+
+        var result = await _sut.ReconcileAllAsync();
+
+        result.Should().Be(new AchievementEligibilityReconciliationResult(0, 0));
+        await _featureFlagService.DidNotReceive().GetUserIdsWithEnabledKeyAsync(
+            Arg.Any<string>(),
+            Arg.Any<IReadOnlyCollection<User>>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -394,7 +419,12 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         IReadOnlyCollection<Goal> goals,
         IReadOnlyCollection<UserAchievement> achievements)
     {
-        _userRepository.GetAllAsync(Arg.Any<CancellationToken>()).Returns(users.ToList());
+        _userRepository.FindTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => users
+                .Where(user => user.AchievementEligibilityReconciledAtUtc is null)
+                .ToList());
         _habitRepository.FindTrackedIgnoringFiltersAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
                 Arg.Any<CancellationToken>())
