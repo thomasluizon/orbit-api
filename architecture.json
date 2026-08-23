@@ -4840,6 +4840,7 @@
         "testClass": "PayGateServiceTests",
         "file": "tests/Orbit.Application.Tests/Common/PayGateServiceTests.cs",
         "references": [
+          "Goal",
           "Habit",
           "User"
         ]
@@ -7491,7 +7492,6 @@
         "references": [
           "ApiKey",
           "AppFeatureFlag",
-          "Goal",
           "User"
         ]
       },
