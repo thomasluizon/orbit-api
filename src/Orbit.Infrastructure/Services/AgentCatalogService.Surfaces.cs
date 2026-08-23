@@ -113,7 +113,7 @@ public partial class AgentCatalogService
                 "Advanced And API",
                 "Holds API keys, MCP integration, and metadata endpoints for AI clients.",
                 ["Open Advanced/API.", "Review scopes and metadata.", "Create or revoke keys only with human review."],
-                ["API-key creation and revocation require fresh confirmation plus step-up authorization.", "MCP tool calls use the same policy catalog as chat."],
+                ["API key creation requires emailed confirmation; direct revocation remains immediate.", "Agent mutations keep their existing confirmation policy."],
                 [AgentCapabilityIds.ApiKeysRead, AgentCapabilityIds.ApiKeysManage, AgentCapabilityIds.CatalogCapabilitiesRead],
                 ["ApiKeysController.GetApiKeys", "AiController.GetCapabilitiesMetadata"]),
 

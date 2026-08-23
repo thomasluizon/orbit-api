@@ -16,4 +16,5 @@ public static class AppConfigKeys
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
     public const string GoalsProOnly = "GoalsProOnly";
     public const string MinSupportedVersion = "MinSupportedVersion";
+    public const string RequireApiKeyCreationStepUp = "RequireApiKeyCreationStepUp";
 }

@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Auth.Commands;
+using Orbit.Application.Auth.Services;
 using Orbit.Application.Behaviors;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -20,7 +21,10 @@ public class ConfirmAccountDeletionCommandHandlerTests
 
     public ConfirmAccountDeletionCommandHandlerTests()
     {
-        _handler = new ConfirmAccountDeletionCommandHandler(_cache, _userRepo, _unitOfWork);
+        _handler = new ConfirmAccountDeletionCommandHandler(
+            new EmailChallengeService(_cache, TimeProvider.System),
+            _userRepo,
+            _unitOfWork);
     }
 
     [Fact]

@@ -44,6 +44,7 @@ public static class ResultActionResultExtensions
         [ErrorCodes.SocialDisabled] = StatusCodes.Status403Forbidden,
         [ErrorCodes.Blocked] = StatusCodes.Status403Forbidden,
         [ErrorCodes.NotChallengeParticipant] = StatusCodes.Status403Forbidden,
+        [ErrorCodes.ApiKeyCreationChallengeRequired] = StatusCodes.Status428PreconditionRequired,
 
         [ErrorCodes.FriendRequestNotFound] = StatusCodes.Status404NotFound,
         [ErrorCodes.ChallengeNotFound] = StatusCodes.Status404NotFound,
