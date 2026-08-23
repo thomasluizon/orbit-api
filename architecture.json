@@ -7124,6 +7124,7 @@
           "BlockedUser",
           "ChecklistTemplate",
           "Cheer",
+          "ClosedMonthRecap",
           "FriendFeedEvent",
           "Friendship",
           "Goal",
