@@ -2931,7 +2931,7 @@
       "ChecklistTemplates": 9,
       "Common": 176,
       "Gamification": 40,
-      "Goals": 52,
+      "Goals": 54,
       "Habits": 86,
       "Marketing": 6,
       "Notifications": 16,
@@ -3562,7 +3562,8 @@
         "testClass": "GoalReviewToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/GoalReviewToolTests.cs",
         "references": [
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -4125,6 +4126,7 @@
         "references": [
           "BulkDeleteHabitsCommand",
           "BulkDeleteHabitsCommandHandler",
+          "Goal",
           "Habit"
         ]
       },
@@ -4180,6 +4182,7 @@
         "references": [
           "DeleteHabitCommand",
           "DeleteHabitCommandHandler",
+          "Goal",
           "Habit"
         ]
       },
@@ -4252,6 +4255,7 @@
         "testClass": "RestoreHabitCommandHandlerTests",
         "file": "tests/Orbit.Application.Tests/Commands/Habits/RestoreHabitCommandHandlerTests.cs",
         "references": [
+          "Goal",
           "Habit",
           "RestoreHabitCommand",
           "RestoreHabitCommandHandler"
