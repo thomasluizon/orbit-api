@@ -28,6 +28,8 @@ public class GetSubscriptionStatusQueryHandler(
             await payGate.GetAiMessageLimit(user.Id, cancellationToken),
             user.IsLifetimePro,
             user.SubscriptionInterval?.ToString().ToLowerInvariant(),
-            user.SubscriptionSource.ToApiValue()));
+            user.SubscriptionSource.ToApiValue(),
+            user.SubscriptionLapseReason.ToApiValue(),
+            user.SubscriptionEndedAtUtc));
     }
 }

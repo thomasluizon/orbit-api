@@ -73,7 +73,8 @@ public partial class HandlePlayNotificationCommandHandler(
             return Result.Success();
 
         var grantsPro = state.GrantsOrbitPro(_settings);
-        var consumedCouponId = ApplySubscriptionState(user, state, notification.PurchaseToken, grantsPro);
+        var consumedCouponId = ApplySubscriptionState(
+            user, state, notification.PurchaseToken, notification.NotificationType, grantsPro);
 
         if (!string.IsNullOrEmpty(decoded.MessageId))
             await processedNotificationRepository.AddAsync(ProcessedPlayNotification.Create(decoded.MessageId), cancellationToken);
@@ -127,11 +128,11 @@ public partial class HandlePlayNotificationCommandHandler(
     }
 
     private string? ApplySubscriptionState(
-        User user, PlaySubscriptionState state, string purchaseToken, bool grantsPro)
+        User user, PlaySubscriptionState state, string purchaseToken, int notificationType, bool grantsPro)
     {
         if (!grantsPro)
         {
-            user.CancelPlaySubscription();
+            user.CancelPlaySubscription(GetPlayLapseReason(notificationType, user.SubscriptionLapseReason));
             return null;
         }
 
@@ -146,8 +147,23 @@ public partial class HandlePlayNotificationCommandHandler(
             user.SetPlaySubscription(purchaseToken, state.ExpiresAt, state.Interval);
         }
 
+        if (notificationType == 3)
+            user.RecordSubscriptionLapseReason(
+                SubscriptionSource.GooglePlay, SubscriptionLapseReason.Canceled);
+
         return consumedCouponId;
     }
+
+    private static SubscriptionLapseReason GetPlayLapseReason(
+        int notificationType, SubscriptionLapseReason? existingReason) => notificationType switch
+        {
+            5 => SubscriptionLapseReason.PaymentFailed,
+            3 => existingReason == SubscriptionLapseReason.PaymentFailed
+                ? SubscriptionLapseReason.PaymentFailed
+                : SubscriptionLapseReason.Canceled,
+            13 => existingReason ?? SubscriptionLapseReason.Expired,
+            _ => SubscriptionLapseReason.Expired,
+        };
 
     private static bool StripeCoversLaterPeriod(User user, PlaySubscriptionState state) =>
         user.SubscriptionSource == SubscriptionSource.Stripe

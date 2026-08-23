@@ -2690,9 +2690,9 @@
       "Challenges": 15,
       "Chat": 80,
       "ChecklistTemplates": 5,
-      "Common": 34,
+      "Common": 35,
       "Gamification": 28,
-      "Goals": 34,
+      "Goals": 35,
       "Habits": 74,
       "Marketing": 4,
       "Notifications": 12,
@@ -2895,10 +2895,10 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 169,
+      "Common": 171,
       "Gamification": 38,
-      "Goals": 39,
-      "Habits": 85,
+      "Goals": 52,
+      "Habits": 86,
       "Marketing": 6,
       "Notifications": 16,
       "Profile": 38,
@@ -4801,6 +4801,11 @@
       {
         "testClass": "StripeSettingsTests",
         "file": "tests/Orbit.Application.Tests/Common/StripeSettingsTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "SubscriptionLapseReasonExtensionsTests",
+        "file": "tests/Orbit.Application.Tests/Common/SubscriptionLapseReasonExtensionsTests.cs",
         "references": []
       },
       {
@@ -7546,6 +7551,19 @@
         "references": [
           "AppFeatureFlag",
           "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "GoalCompletionServiceTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Services/GoalCompletionServiceTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "LinkGoalsToHabitCommand",
+          "LinkGoalsToHabitCommandHandler",
+          "LinkHabitsToGoalCommand",
+          "LinkHabitsToGoalCommandHandler",
           "User"
         ]
       },
