@@ -698,6 +698,10 @@ public class OrbitDbContext : DbContext
                 .HasConversion<string>()
                 .HasMaxLength(32);
 
+            entity.Property(u => u.SubscriptionLapseReason)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
             entity.Property(u => u.GoogleCalendarLastSyncError).HasMaxLength(500);
 
             entity.Property(u => u.GoogleCalendarSelectedIds).HasColumnType("text");
