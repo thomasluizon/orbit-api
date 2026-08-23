@@ -32,8 +32,8 @@ public partial class User : Entity
     public DateTime? PlanExpiresAt { get; private set; }
     public DateTime? TrialEndsAt { get; private set; }
     public bool IsLifetimePro { get; private set; } = false;
-    public int AiMessagesUsedThisMonth { get; private set; } = 0;
-    public DateTime? AiMessagesResetAt { get; private set; }
+    public int AiMessagesUsedToday { get; private set; } = 0;
+    public DateOnly? AiMessagesLocalDate { get; private set; }
     public SubscriptionInterval? SubscriptionInterval { get; private set; }
     public SubscriptionSource? SubscriptionSource { get; private set; }
     public SubscriptionLapseReason? SubscriptionLapseReason { get; private set; }
@@ -342,18 +342,22 @@ public partial class User : Entity
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;
 
-    public void IncrementAiMessageCount() => IncrementAiMessageCount(DateTime.UtcNow);
-
-    public void IncrementAiMessageCount(DateTime utcNow)
+    public void IncrementAiMessageCount(DateOnly userToday)
     {
-        if (!AiMessagesResetAt.HasValue || AiMessagesResetAt.Value <= utcNow)
+        if (!AiMessagesLocalDate.HasValue || AiMessagesLocalDate.Value < userToday)
         {
-            AiMessagesUsedThisMonth = 0;
+            AiMessagesUsedToday = 0;
             AdRewardBonusMessages = 0;
-            AiMessagesResetAt = utcNow.AddDays(30);
+            AiMessagesLocalDate = userToday;
         }
-        AiMessagesUsedThisMonth++;
+        AiMessagesUsedToday++;
     }
+
+    public int GetAiMessagesUsedToday(DateOnly userToday) =>
+        AiMessagesLocalDate == userToday ? AiMessagesUsedToday : 0;
+
+    public int GetAiMessagesUsedForQuota(DateOnly userToday) =>
+        AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
 
     public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
     {
@@ -611,8 +615,8 @@ public partial class User : Entity
 
     /// <summary>
     /// Resets progress and integration state (onboarding, gamification, calendar) to defaults while
-    /// preserving identity, preferences, subscription, and metered AI usage — the monthly message
-    /// quota and ad-reward allowances are kept so an account reset cannot refill the AI paygate.
+    /// preserving identity, preferences, subscription, and metered AI usage. The daily message
+    /// quota and ad reward allowances are kept so an account reset cannot refill the AI paygate.
     /// </summary>
     public void ResetAccount()
     {

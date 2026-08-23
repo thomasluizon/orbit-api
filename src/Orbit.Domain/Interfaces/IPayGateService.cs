@@ -15,7 +15,7 @@ public interface IPayGateService
     Task<Result> CanCreateSubHabits(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can send AI messages (free: 20/month, Pro: 500/month).
+    /// Checks if the user can send AI messages (free: 5/day, Pro: 50/day).
     /// </summary>
     Task<Result> CanSendAiMessage(Guid userId, CancellationToken ct = default);
 

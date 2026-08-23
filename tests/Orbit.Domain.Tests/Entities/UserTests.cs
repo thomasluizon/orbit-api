@@ -443,53 +443,94 @@ public class UserTests
     public void IncrementAiMessageCount_FirstTime_ResetsAndIncrements()
     {
         var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
 
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(today);
 
-        user.AiMessagesUsedThisMonth.Should().Be(1);
-        user.AiMessagesResetAt.Should().NotBeNull();
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.AiMessagesLocalDate.Should().Be(today);
     }
 
     [Fact]
-    public void IncrementAiMessageCount_WithinPeriod_JustIncrements()
+    public void IncrementAiMessageCount_SameLocalDate_JustIncrements()
     {
         var user = CreateValidUser();
-        user.IncrementAiMessageCount(); var resetAt = user.AiMessagesResetAt;
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today);
 
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(today);
 
-        user.AiMessagesUsedThisMonth.Should().Be(2);
-        user.AiMessagesResetAt.Should().Be(resetAt);
+        user.AiMessagesUsedToday.Should().Be(2);
+        user.AiMessagesLocalDate.Should().Be(today);
     }
 
     [Fact]
-    public void IncrementAiMessageCount_PastReset_ResetsCounter()
+    public void IncrementAiMessageCount_NextLocalDate_ResetsCounter()
     {
         var user = CreateValidUser();
-        var now = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
-        user.IncrementAiMessageCount(now);
-        user.IncrementAiMessageCount(now);
-        user.AiMessagesUsedThisMonth.Should().Be(2);
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today);
+        user.IncrementAiMessageCount(today);
+        user.AiMessagesUsedToday.Should().Be(2);
 
-        user.IncrementAiMessageCount(now.AddDays(31));
+        user.IncrementAiMessageCount(today.AddDays(1));
 
-        user.AiMessagesUsedThisMonth.Should().Be(1);
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.AiMessagesLocalDate.Should().Be(today.AddDays(1));
     }
 
     [Fact]
-    public void IncrementAiMessageCount_PastReset_ZeroesAdRewardBonus()
+    public void IncrementAiMessageCount_PreviousLocalDateAfterTimezoneChange_PreservesBucket()
     {
         var user = CreateValidUser();
-        var now = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var today = new DateOnly(2026, 3, 1);
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(today.AddDays(1));
+
+        user.IncrementAiMessageCount(today);
+
+        user.AiMessagesUsedToday.Should().Be(6);
+        user.AiMessagesLocalDate.Should().Be(today.AddDays(1));
+    }
+
+    [Fact]
+    public void GetAiMessagesUsedToday_StoredDateMismatch_ReturnsZero()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today.AddDays(-1));
+
+        var result = user.GetAiMessagesUsedToday(today);
+
+        result.Should().Be(0);
+    }
+
+    [Fact]
+    public void GetAiMessagesUsedForQuota_StoredFutureDate_ReturnsExistingUsage()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today.AddDays(1));
+
+        var result = user.GetAiMessagesUsedForQuota(today);
+
+        result.Should().Be(1);
+    }
+
+    [Fact]
+    public void IncrementAiMessageCount_NextLocalDate_ZeroesAdRewardBonus()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        user.IncrementAiMessageCount(now);
-        user.GrantAdReward(DateOnly.FromDateTime(now), bonusMessages: 5);
-        user.IncrementAiMessageCount(now);
+        user.IncrementAiMessageCount(today);
+        user.GrantAdReward(today, bonusMessages: 5);
+        user.IncrementAiMessageCount(today);
         user.AdRewardBonusMessages.Should().Be(5);
 
-        user.IncrementAiMessageCount(now.AddDays(31));
+        user.IncrementAiMessageCount(today.AddDays(1));
 
-        user.AiMessagesUsedThisMonth.Should().Be(1);
+        user.AiMessagesUsedToday.Should().Be(1);
         user.AdRewardBonusMessages.Should().Be(0);
     }
 
@@ -498,18 +539,18 @@ public class UserTests
     {
         var user = CreateValidUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        var today = new DateOnly(2026, 3, 1);
         for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
-        user.GrantAdReward(DateOnly.FromDateTime(DateTime.UtcNow), bonusMessages: 5);
-        var resetAt = user.AiMessagesResetAt;
+            user.IncrementAiMessageCount(today);
+        user.GrantAdReward(today, bonusMessages: 5);
 
         user.ResetAccount();
 
-        user.AiMessagesUsedThisMonth.Should().Be(20);
-        user.AiMessagesResetAt.Should().Be(resetAt);
+        user.AiMessagesUsedToday.Should().Be(20);
+        user.AiMessagesLocalDate.Should().Be(today);
         user.AdRewardBonusMessages.Should().Be(5);
         user.AdRewardsClaimedToday.Should().Be(1);
-        user.LastAdRewardLocalDate.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
+        user.LastAdRewardLocalDate.Should().Be(today);
     }
 
     [Fact]
@@ -533,13 +574,14 @@ public class UserTests
     public void ResetAccount_ThenSendMessage_DoesNotRefillQuota()
     {
         var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
         for (int i = 0; i < 20; i++)
-            user.IncrementAiMessageCount();
+            user.IncrementAiMessageCount(today);
 
         user.ResetAccount();
-        user.IncrementAiMessageCount();
+        user.IncrementAiMessageCount(today);
 
-        user.AiMessagesUsedThisMonth.Should().Be(21);
+        user.AiMessagesUsedToday.Should().Be(21);
     }
 
     [Fact]

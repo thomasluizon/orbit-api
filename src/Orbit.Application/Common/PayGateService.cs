@@ -8,7 +8,8 @@ namespace Orbit.Application.Common;
 public class PayGateService(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<User> userRepository,
-    IAppConfigService appConfig) : IPayGateService
+    IAppConfigService appConfig,
+    IUserDateService userDateService) : IPayGateService
 {
     public async Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default)
     {
@@ -48,16 +49,16 @@ public class PayGateService(
         if (IsProductionSmokeAccount(user.Email))
             return Result.Success();
 
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
-        var baseLimit = user.HasProAccess ? proLimit : freeLimit;
-        var messageLimit = baseLimit + user.AdRewardBonusMessages;
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        var messageLimit = user.HasProAccess ? proLimit : freeLimit;
+        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
 
-        if (user.AiMessagesUsedThisMonth >= messageLimit)
+        if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)
         {
             var errorMessage = user.HasProAccess
-                ? $"You've reached your monthly AI message limit ({messageLimit})."
-                : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+                ? $"You've reached your daily AI message limit ({messageLimit})."
+                : $"You've reached your daily AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per day.";
 
             return Result.PayGateFailure(errorMessage);
         }
@@ -70,8 +71,9 @@ public class PayGateService(
         IUnitOfWork unitOfWork,
         CancellationToken ct = default)
     {
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        var userToday = await userDateService.GetUserTodayAsync(userId, ct);
 
         var consumption = await ConcurrencyRetry.ExecuteAsync(
             userRepository,
@@ -79,22 +81,20 @@ public class PayGateService(
             token => userRepository.FindOneTrackedAsync(user => user.Id == userId, cancellationToken: token),
             user =>
             {
-                var currentAtUtc = DateTime.UtcNow;
                 if (!IsProductionSmokeAccount(user.Email))
                 {
-                    var messageLimit = (user.HasProAccess ? proLimit : freeLimit) + user.AdRewardBonusMessages;
-                    var cycleIsActive = user.AiMessagesResetAt.HasValue && user.AiMessagesResetAt.Value > currentAtUtc;
-                    if (cycleIsActive && user.AiMessagesUsedThisMonth >= messageLimit)
+                    var messageLimit = user.HasProAccess ? proLimit : freeLimit;
+                    if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)
                     {
                         var errorMessage = user.HasProAccess
-                            ? $"You've reached your monthly AI message limit ({messageLimit})."
-                            : $"You've reached your monthly AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per month.";
+                            ? $"You've reached your daily AI message limit ({messageLimit})."
+                            : $"You've reached your daily AI message limit ({messageLimit}). Upgrade to Pro for {proLimit} messages per day.";
 
                         return Task.FromResult(Result.PayGateFailure(errorMessage));
                     }
                 }
 
-                user.IncrementAiMessageCount(currentAtUtc);
+                user.IncrementAiMessageCount(userToday);
                 return Task.FromResult(Result.Success());
             },
             ErrorMessages.UserNotFound,
@@ -191,10 +191,9 @@ public class PayGateService(
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null) return AppConstants.DefaultFreeAiMessages;
 
-        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerMonth, AppConstants.DefaultFreeAiMessages, ct);
-        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerMonth, AppConstants.DefaultProAiMessages, ct);
-        var baseLimit = user.HasProAccess ? proLimit : freeLimit;
-        return baseLimit + user.AdRewardBonusMessages;
+        var freeLimit = await appConfig.GetAsync(AppConfigKeys.FreeAiMessagesPerDay, AppConstants.DefaultFreeAiMessages, ct);
+        var proLimit = await appConfig.GetAsync(AppConfigKeys.ProAiMessagesPerDay, AppConstants.DefaultProAiMessages, ct);
+        return user.HasProAccess ? proLimit : freeLimit;
     }
 
     private static bool IsProductionSmokeAccount(string email)

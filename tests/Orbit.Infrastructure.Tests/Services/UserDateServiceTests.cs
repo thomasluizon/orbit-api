@@ -19,7 +19,34 @@ public class UserDateServiceTests
 
     public UserDateServiceTests()
     {
-        _sut = new UserDateService(_userRepo, _cache);
+        _sut = new UserDateService(_userRepo, _cache, TimeProvider.System);
+    }
+
+    [Fact]
+    public async Task GetUserTodayAsync_AucklandAndSaoPauloRollOverIndependently()
+    {
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 23, 12, 30, 0, TimeSpan.Zero));
+        var service = new UserDateService(_userRepo, _cache, clock);
+
+        var aucklandToday = await service.GetUserTodayAsync("Pacific/Auckland", Guid.NewGuid());
+        var saoPauloToday = await service.GetUserTodayAsync("America/Sao_Paulo", Guid.NewGuid());
+
+        aucklandToday.Should().Be(new DateOnly(2026, 8, 24));
+        saoPauloToday.Should().Be(new DateOnly(2026, 8, 23));
+    }
+
+    [Fact]
+    public async Task GetUserTodayAsync_NullTimezone_RollsOverAtUtcMidnight()
+    {
+        var clock = new MutableTimeProvider(new DateTimeOffset(2026, 8, 23, 23, 30, 0, TimeSpan.Zero));
+        var service = new UserDateService(_userRepo, _cache, clock);
+
+        var beforeMidnight = await service.GetUserTodayAsync(null, UserId);
+        clock.Advance(TimeSpan.FromHours(1));
+        var afterMidnight = await service.GetUserTodayAsync(null, UserId);
+
+        beforeMidnight.Should().Be(new DateOnly(2026, 8, 23));
+        afterMidnight.Should().Be(new DateOnly(2026, 8, 24));
     }
 
     [Fact]
@@ -120,7 +147,7 @@ public class UserDateServiceTests
         await _sut.GetUserWeekStartDayAsync(UserId);
 
         var secondInstanceRepo = Substitute.For<IGenericRepository<User>>();
-        var secondInstance = new UserDateService(secondInstanceRepo, _cache);
+        var secondInstance = new UserDateService(secondInstanceRepo, _cache, TimeProvider.System);
 
         var result = await secondInstance.GetUserWeekStartDayAsync(UserId);
 
@@ -130,4 +157,16 @@ public class UserDateServiceTests
 
     private static MemoryDistributedCache NewDistributedCache() =>
         new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+
+        public void Advance(TimeSpan amount) => now = now.Add(amount);
+    }
 }

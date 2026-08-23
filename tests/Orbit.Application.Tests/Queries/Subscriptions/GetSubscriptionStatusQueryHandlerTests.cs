@@ -11,13 +11,16 @@ public class GetSubscriptionStatusQueryHandlerTests
 {
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly GetSubscriptionStatusQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateOnly Today = new(2026, 8, 23);
 
     public GetSubscriptionStatusQueryHandlerTests()
     {
-        _handler = new GetSubscriptionStatusQueryHandler(_userRepo, _payGate);
+        _handler = new GetSubscriptionStatusQueryHandler(_userRepo, _payGate, _userDateService);
+        _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
     }
 
     private static User CreateTestUser()
@@ -30,7 +33,7 @@ public class GetSubscriptionStatusQueryHandlerTests
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(500);
+        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(50);
 
         var query = new GetSubscriptionStatusQuery(UserId);
 
@@ -41,7 +44,7 @@ public class GetSubscriptionStatusQueryHandlerTests
         result.Value.HasProAccess.Should().BeTrue();
         result.Value.IsTrialActive.Should().BeTrue();
         result.Value.AiMessagesUsed.Should().Be(0);
-        result.Value.AiMessagesLimit.Should().Be(500);
+        result.Value.AiMessagesLimit.Should().Be(50);
         result.Value.LapseReason.Should().BeNull();
         result.Value.SubscriptionEndedAtUtc.Should().BeNull();
     }
@@ -66,7 +69,7 @@ public class GetSubscriptionStatusQueryHandlerTests
         var user = CreateTestUser();
         user.SetPlaySubscription("tok_123", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(500);
+        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(50);
 
         var result = await _handler.Handle(new GetSubscriptionStatusQuery(UserId), CancellationToken.None);
 
@@ -80,7 +83,7 @@ public class GetSubscriptionStatusQueryHandlerTests
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(500);
+        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(50);
 
         var query = new GetSubscriptionStatusQuery(UserId);
 
@@ -90,6 +93,23 @@ public class GetSubscriptionStatusQueryHandlerTests
         result.Value.IsTrialActive.Should().BeTrue();
         result.Value.HasProAccess.Should().BeTrue();
         result.Value.Plan.Should().Be("pro");
+    }
+
+    [Fact]
+    public async Task Handle_AfterLocalMidnight_ReturnsZeroDailyAiUsage()
+    {
+        var user = CreateTestUser();
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(50);
+
+        var result = await _handler.Handle(
+            new GetSubscriptionStatusQuery(UserId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessagesUsed.Should().Be(0);
     }
 
     [Fact]
