@@ -14,6 +14,15 @@ public interface IGamificationService
     Task ProcessOnboardingChecklistAsync(Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default);
 
     /// <summary>
+    /// Repairs missing founding achievements from durable evidence and grants them through the normal
+    /// XP funnel. This inline repair persists only missing awards rather than recalculating response
+    /// data on every read; once all five awards exist, later reads short-circuit without evidence work.
+    /// </summary>
+    Task<IReadOnlyList<string>> ReconcileFoundingAchievementsAsync(
+        Guid userId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Idempotently grants the given achievements to a user, awarding each definition's XP through the
     /// audited funnel, advancing the level, and queuing achievement/level-up notifications. Already-earned
     /// ids are skipped. Returns the ids that were newly granted (empty when all were already earned).

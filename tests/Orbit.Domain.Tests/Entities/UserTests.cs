@@ -454,12 +454,13 @@ public class UserTests
     public void IncrementAiMessageCount_WithinPeriod_JustIncrements()
     {
         var user = CreateValidUser();
-        user.IncrementAiMessageCount();        var resetAt = user.AiMessagesResetAt;
+        user.IncrementAiMessageCount(); var resetAt = user.AiMessagesResetAt;
 
         user.IncrementAiMessageCount();
 
         user.AiMessagesUsedThisMonth.Should().Be(2);
-        user.AiMessagesResetAt.Should().Be(resetAt);    }
+        user.AiMessagesResetAt.Should().Be(resetAt);
+    }
 
     [Fact]
     public void IncrementAiMessageCount_PastReset_ResetsCounter()
@@ -509,6 +510,23 @@ public class UserTests
         user.AdRewardBonusMessages.Should().Be(5);
         user.AdRewardsClaimedToday.Should().Be(1);
         user.LastAdRewardLocalDate.Should().Be(DateOnly.FromDateTime(DateTime.UtcNow));
+    }
+
+    [Fact]
+    public void ResetAccount_ClearsOnboardingChecklistEvidence()
+    {
+        var user = CreateValidUser();
+        user.MarkFirstHabitCreated();
+        user.MarkFirstHabitLogged();
+        user.MarkAstraUsed();
+        user.CompleteOnboardingChecklist();
+
+        user.ResetAccount();
+
+        user.HasCreatedFirstHabit.Should().BeFalse();
+        user.HasLoggedFirstHabit.Should().BeFalse();
+        user.HasTriedAstra.Should().BeFalse();
+        user.HasCompletedOnboardingChecklist.Should().BeFalse();
     }
 
     [Fact]
@@ -770,7 +788,8 @@ public class UserTests
         user.UpdateStreak(new DateOnly(2026, 3, 11));
         user.UpdateStreak(new DateOnly(2026, 3, 12));
         user.CurrentStreak.Should().Be(3);
-        user.LongestStreak.Should().Be(5);    }
+        user.LongestStreak.Should().Be(5);
+    }
 
     [Fact]
     public void UpdateStreak_LongerStreakUpdatesLongest()

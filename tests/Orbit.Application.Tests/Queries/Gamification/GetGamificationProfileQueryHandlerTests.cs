@@ -17,6 +17,7 @@ public class GetGamificationProfileQueryHandlerTests
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly GetGamificationProfileQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -27,11 +28,16 @@ public class GetGamificationProfileQueryHandlerTests
             .Returns(Array.Empty<string>());
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
+        _gamificationService.ReconcileFoundingAchievementsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
         _handler = new GetGamificationProfileQueryHandler(
             _userRepo,
             _achievementRepo,
             _featureFlagService,
-            _progressService);
+            _progressService,
+            _gamificationService);
     }
 
     private void EnableFreeTierFlag()
@@ -84,6 +90,39 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsEarned.Should().Be(2);
         result.Value.AchievementsTotal.Should().Be(32);
         result.Value.Achievements.Should().HaveCount(32);
+        await _gamificationService.Received(1).ReconcileFoundingAchievementsAsync(
+            UserId,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ReconciliationGrantsAchievement_RefreshesXpBeforeBuildingProfile()
+    {
+        var beforeReconciliation = CreateProUser();
+        var afterReconciliation = CreateProUser();
+        var liftoffXp = AchievementDefinitions.GetById(AchievementDefinitions.Liftoff)!.XpReward;
+        afterReconciliation.AddXp(liftoffXp);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(beforeReconciliation, afterReconciliation);
+        _gamificationService.ReconcileFoundingAchievementsAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(new[] { AchievementDefinitions.Liftoff });
+        _achievementRepo.FindAsync(
+                Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<UserAchievement>
+            {
+                UserAchievement.Create(UserId, AchievementDefinitions.Liftoff)
+            });
+
+        var result = await _handler.Handle(
+            new GetGamificationProfileQuery(UserId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalXp.Should().Be(liftoffXp);
+        result.Value.Achievements.Single(achievement => achievement.Id == AchievementDefinitions.Liftoff)
+            .IsEarned.Should().BeTrue();
+        await _userRepo.Received(2).GetByIdAsync(UserId, Arg.Any<CancellationToken>());
     }
 
     [Fact]

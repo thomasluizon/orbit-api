@@ -54,9 +54,9 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
-    public void AllThirteenRecurringSchedulers_AreRegisteredAsJobs()
+    public void AllFourteenRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(13);
+        BuildAll().Should().HaveCount(14);
     }
 
     [Theory]
@@ -130,6 +130,10 @@ public class ScheduledJobRegistryTests
         new CalendarAutoSyncService(ScopeFactory(), NullLogger<CalendarAutoSyncService>.Instance, EmptyConfiguration, TimeProvider.System),
         new OpenAiBatchPollerService(ScopeFactory(), NullLogger<OpenAiBatchPollerService>.Instance, EmptyConfiguration, new MemoryCache(new MemoryCacheOptions())),
         new AiUsageSummaryService(ScopeFactory(), NullLogger<AiUsageSummaryService>.Instance, EmptyConfiguration, Options.Create(new AiSettings())),
+        new FoundingAchievementReconciliationService(
+            ScopeFactory(),
+            NullLogger<FoundingAchievementReconciliationService>.Instance,
+            EmptyConfiguration),
     ];
 
     private static IServiceScopeFactory ScopeFactory() => Substitute.For<IServiceScopeFactory>();

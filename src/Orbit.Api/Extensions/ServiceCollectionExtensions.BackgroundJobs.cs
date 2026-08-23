@@ -54,6 +54,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddHostedService<CalendarAutoSyncService>();
         builder.Services.AddHostedService<OpenAiBatchPollerService>();
         builder.Services.AddHostedService<AiUsageSummaryService>();
+        builder.Services.AddHostedService<FoundingAchievementReconciliationService>();
     }
 
     /// <summary>
@@ -104,6 +105,7 @@ public static partial class ServiceCollectionExtensions
         AddScheduledJob<CalendarAutoSyncService>(builder);
         AddScheduledJob<OpenAiBatchPollerService>(builder);
         AddScheduledJob<AiUsageSummaryService>(builder);
+        AddScheduledJob<FoundingAchievementReconciliationService>(builder);
 
         builder.Services.AddHostedService<HangfireRecurringJobRegistrar>();
     }

@@ -558,7 +558,8 @@ public class BulkLogHabitsCommandHandlerTests
 
         var realGamification = new GamificationService(
             new GamificationRepositories(
-                userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo),
+                userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo,
+                Substitute.For<IFoundingAchievementReader>()),
             new GamificationNotifiers(
                 Substitute.For<IPushNotificationService>(),
                 Substitute.For<IFriendFeedEventEmitter>()),

@@ -18,6 +18,7 @@ public class GetAchievementsQueryHandlerTests
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly GetAchievementsQueryHandler _handler;
 
@@ -29,11 +30,16 @@ public class GetAchievementsQueryHandlerTests
             .Returns(new[] { FeatureFlagKeys.GamificationFreeTier });
         _progressService.LoadAsync(Arg.Any<User>(), Arg.Any<IReadOnlySet<string>>(), Arg.Any<CancellationToken>())
             .Returns(AchievementProgressMetrics.Empty);
+        _gamificationService.ReconcileFoundingAchievementsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
         _handler = new GetAchievementsQueryHandler(
             _userRepo,
             _achievementRepo,
             _featureFlagService,
             _progressService,
+            _gamificationService,
             _productAnalytics,
             Substitute.For<ILogger<GetAchievementsQueryHandler>>());
     }
@@ -74,6 +80,9 @@ public class GetAchievementsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Achievements.Should().HaveCount(32);
+        await _gamificationService.Received(1).ReconcileFoundingAchievementsAsync(
+            UserId,
+            Arg.Any<CancellationToken>());
 
         var firstOrbit = result.Value.Achievements.First(a => a.Id == AchievementDefinitions.FirstOrbit);
         firstOrbit.IsEarned.Should().BeTrue();
