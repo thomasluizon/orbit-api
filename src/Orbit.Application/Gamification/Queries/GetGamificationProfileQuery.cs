@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
@@ -43,9 +42,7 @@ public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IFeatureFlagService featureFlagService,
-    IAchievementProgressService progressService,
-    IProductAnalytics productAnalytics,
-    ILogger<GetGamificationProfileQueryHandler> logger) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
+    IAchievementProgressService progressService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
     public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
     {
@@ -91,17 +88,6 @@ public class GetGamificationProfileQueryHandler(
             false,
             nextReward);
 
-        AnalyticsCapture.SafeCaptureUserEvent(
-            productAnalytics,
-            logger,
-            user,
-            "achievements_viewed",
-            new Dictionary<string, object>
-            {
-                ["isPro"] = user.HasProAccess,
-                ["earnedCount"] = achievementsEarned
-            });
-
         return Result.Success(response);
     }
 
@@ -125,7 +111,7 @@ public class GetGamificationProfileQueryHandler(
                 def.Category.ToString(), def.Rarity.ToString(),
                 def.XpReward, def.IconKey, isEarned, isEarned ? earnedAt : null,
                 progressCurrent, progressTarget);
-            }).ToList();
+        }).ToList();
 
         var userAchievements = earned.Select(e =>
             new UserAchievementDto(e.AchievementId, e.EarnedAtUtc)).ToList();

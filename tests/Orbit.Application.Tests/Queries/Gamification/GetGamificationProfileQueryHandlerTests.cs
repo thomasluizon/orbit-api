@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
@@ -18,7 +17,6 @@ public class GetGamificationProfileQueryHandlerTests
     private readonly IGenericRepository<UserAchievement> _achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
     private readonly IAchievementProgressService _progressService = Substitute.For<IAchievementProgressService>();
-    private readonly IProductAnalytics _productAnalytics = Substitute.For<IProductAnalytics>();
     private readonly GetGamificationProfileQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -33,9 +31,7 @@ public class GetGamificationProfileQueryHandlerTests
             _userRepo,
             _achievementRepo,
             _featureFlagService,
-            _progressService,
-            _productAnalytics,
-            Substitute.For<ILogger<GetGamificationProfileQueryHandler>>());
+            _progressService);
     }
 
     private void EnableFreeTierFlag()
@@ -88,12 +84,6 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsEarned.Should().Be(2);
         result.Value.AchievementsTotal.Should().Be(32);
         result.Value.Achievements.Should().HaveCount(32);
-        _productAnalytics.Received(1).CaptureUserEvent(
-            user.Id,
-            "achievements_viewed",
-            "Pro",
-            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
-                properties["isPro"].Equals(true) && properties["earnedCount"].Equals(2)));
     }
 
     [Fact]
@@ -172,7 +162,6 @@ public class GetGamificationProfileQueryHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be("PAY_GATE");
-        _productAnalytics.DidNotReceiveWithAnyArgs().CaptureUserEvent(default, default!, default!, default);
     }
 
     [Fact]
@@ -206,12 +195,6 @@ public class GetGamificationProfileQueryHandlerTests
         result.Value.AchievementsTotal.Should().Be(32);
         result.Value.NextReward.ProTeaser.Should().BeNull();
         result.Value.NextReward.NextLevel.Should().Be(3);
-        _productAnalytics.Received(1).CaptureUserEvent(
-            user.Id,
-            "achievements_viewed",
-            "Free",
-            Arg.Is<IReadOnlyDictionary<string, object>>(properties =>
-                properties["isPro"].Equals(false) && properties["earnedCount"].Equals(1)));
     }
 
     [Fact]

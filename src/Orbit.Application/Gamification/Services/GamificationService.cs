@@ -173,7 +173,6 @@ public partial class GamificationService(
                 user, habit, new AchievementAccumulator(earned, newAchievements), context, today, metrics.CurrentStreak, ct);
 
         if (habit.IsBadHabit
-            && user.HasProAccess
             && !earned.Contains(AchievementDefinitions.BadHabitBreaker)
             && metrics.CurrentStreak >= 30)
         {
@@ -204,11 +203,10 @@ public partial class GamificationService(
 
     /// <summary>
     /// Grants the base + streak XP and runs every generic completion achievement check for a good
-    /// habit log. Bad-habit logs never reach this — logging a habit you are trying to quit is a slip,
+    /// habit log. Bad-habit logs never reach this because logging a habit you are trying to quit is a slip,
     /// not progress, so it earns no XP and no generic achievements (only <c>BadHabitBreaker</c>,
-    /// evaluated separately, rewards a sustained abstinence streak). XP is awarded whenever gamification
-    /// is unlocked (free tier included); the achievement checks run only for Pro users — free users earn
-    /// XP and level up, but the achievement catalog stays Pro-gated. Returns the XP awarded.
+    /// evaluated separately, rewards a sustained abstinence streak). XP and achievements are awarded
+    /// whenever gamification is unlocked, including for free users under the free-tier flag. Returns the XP awarded.
     /// </summary>
     private async Task<int> AwardLoggedHabitXpAndAchievementsAsync(
         User user, Habit habit, AchievementAccumulator accumulator, LoggedHabitsContext context, DateOnly today,
@@ -221,9 +219,6 @@ public partial class GamificationService(
             .Select(l => (Guid?)l.Id)
             .FirstOrDefault();
         await AwardXpAsync(user, xp, XpAwardSource.HabitLog, habitLogId, awardedAtUtc: DateTime.UtcNow, ct);
-
-        if (!user.HasProAccess)
-            return xp;
 
         if (!earned.Contains(AchievementDefinitions.Liftoff) && context.TotalLogCount == 1)
             AchievementChecks.TryGrant(AchievementDefinitions.Liftoff, user, earned, newAchievements);
@@ -253,8 +248,6 @@ public partial class GamificationService(
     {
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
-            if (!user.HasProAccess) return;
-
             if (!earned.Contains(AchievementDefinitions.FirstOrbit))
             {
                 var habitCount = await repos.HabitRepository.CountAsync(h => h.UserId == userId && h.ParentHabitId == null, ct);
@@ -268,8 +261,6 @@ public partial class GamificationService(
     {
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
-            if (!user.HasProAccess) return;
-
             var goalCount = await repos.GoalRepository.CountAsync(g => g.UserId == userId, ct);
 
             if (!earned.Contains(AchievementDefinitions.MissionControl) && goalCount == 1)
@@ -285,8 +276,6 @@ public partial class GamificationService(
         await ProcessGamificationEventAsync(userId, async (user, earned, newAchievements) =>
         {
             await AwardXpAsync(user, 100, XpAwardSource.GoalCompleted, sourceId: null, awardedAtUtc: DateTime.UtcNow, ct);
-
-            if (!user.HasProAccess) return;
 
             var completedGoals = await repos.GoalRepository.CountAsync(
                 g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Completed, ct);
@@ -305,9 +294,9 @@ public partial class GamificationService(
     /// <summary>
     /// Advances the onboarding setup-checklist flags from a single signal and, once all three
     /// (habit created, habit logged, Astra used) are set, marks the checklist complete. The signal
-    /// and completion flags apply to every user un-gated so the client card hides consistently;
-    /// the <see cref="AchievementDefinitions.OnboardingComplete"/> achievement is granted only to
-    /// users with Pro access (#186). Short-circuits once the checklist is already complete.
+    /// and completion flags apply to every user un-gated so the client card hides consistently.
+    /// The <see cref="AchievementDefinitions.OnboardingComplete"/> achievement follows the same
+    /// gamification unlock predicate as the rest of the catalog. Short-circuits once the checklist is already complete.
     /// </summary>
     public async Task ProcessOnboardingChecklistAsync(
         Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default)
@@ -352,7 +341,7 @@ public partial class GamificationService(
 
         user.CompleteOnboardingChecklist();
 
-        if (!user.HasProAccess)
+        if (!await IsGamificationUnlockedAsync(user, ct))
             return true;
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
@@ -533,9 +522,8 @@ public partial class GamificationService(
     }
 
     /// <summary>
-    /// Whether gamification earning (streak, XP, levels) is active for the user: always for Pro, and for
-    /// free users once the <see cref="FeatureFlagKeys.GamificationFreeTier"/> flag is enabled. Achievement
-    /// awards remain Pro-gated independently of this predicate.
+    /// Whether gamification earning, including streaks, XP, levels, and achievements, is active for the user:
+    /// always for Pro, and for free users once the <see cref="FeatureFlagKeys.GamificationFreeTier"/> flag is enabled.
     /// </summary>
     private async Task<bool> IsGamificationUnlockedAsync(User user, CancellationToken ct)
     {
