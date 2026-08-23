@@ -48,7 +48,6 @@ public partial class BulkLogHabitsCommandHandler(
     {
         var today = await services.UserDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkLogItemResult>();
-        var anyGoalJustCompleted = false;
 
         var habitMap = await BulkHabitLoader.LoadHabitsWithRecentLogsAsync(
             habitRepository, request.Items.Select(i => i.HabitId), request.UserId, today, cancellationToken);
@@ -92,7 +91,14 @@ public partial class BulkLogHabitsCommandHandler(
                     q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
                     ct);
                 foreach (var goal in goals)
-                    anyGoalJustCompleted |= GoalProgressSyncService.SyncCurrentProgress(goal, today).JustCompleted;
+                {
+                    var outcome = GoalProgressSyncService.SyncCurrentProgress(goal, today);
+                    if (!outcome.JustCompleted)
+                        continue;
+
+                    await unitOfWork.SaveChangesAsync(ct);
+                    await services.GamificationService.ProcessGoalCompleted(request.UserId, ct);
+                }
             }
 
             await unitOfWork.SaveChangesAsync(ct);
@@ -111,17 +117,6 @@ public partial class BulkLogHabitsCommandHandler(
                     c => services.UserStreakService.RecalculateAsync(request.UserId, cancellationToken: c),
                     ct);
 
-                if (anyGoalJustCompleted)
-                {
-                    try
-                    {
-                        await services.GamificationService.ProcessGoalCompleted(request.UserId, ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        LogGamificationGoalCompletionFailed(logger, ex, request.UserId);
-                    }
-                }
             }
         }, cancellationToken);
 
@@ -176,6 +171,4 @@ public partial class BulkLogHabitsCommandHandler(
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for bulk log by user {UserId}")]
     private static partial void LogGamificationBulkLogFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }
