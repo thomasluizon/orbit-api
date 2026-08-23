@@ -91,7 +91,6 @@ public class GoalCompletionServiceTests
             new GoalRepositories(
                 new GenericRepository<Goal>(dbContext),
                 new GenericRepository<GoalProgressLog>(dbContext)),
-            SuccessfulPayGate(),
             CreateCompletionService(dbContext, gamification, unitOfWork),
             unitOfWork,
             StubToday(user.Id),
@@ -170,7 +169,6 @@ public class GoalCompletionServiceTests
         var handler = new LinkGoalsToHabitCommandHandler(
             new GenericRepository<Habit>(dbContext),
             new GenericRepository<Goal>(dbContext),
-            SuccessfulPayGate(),
             CreateCompletionService(dbContext, gamification, unitOfWork),
             StubToday(user.Id));
 
@@ -208,7 +206,6 @@ public class GoalCompletionServiceTests
         var handler = new LinkHabitsToGoalCommandHandler(
             new GenericRepository<Goal>(dbContext),
             new GenericRepository<Habit>(dbContext),
-            SuccessfulPayGate(),
             CreateCompletionService(dbContext, gamification, unitOfWork),
             StubToday(user.Id),
             cache);
@@ -330,16 +327,6 @@ public class GoalCompletionServiceTests
             unitOfWork,
             Substitute.For<IFeatureFlagService>(),
             NullLogger<GamificationService>.Instance);
-    }
-
-    private static IPayGateService SuccessfulPayGate()
-    {
-        var payGate = Substitute.For<IPayGateService>();
-        payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        return payGate;
     }
 
     private static IUserDateService StubToday(Guid userId)

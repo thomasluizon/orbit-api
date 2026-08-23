@@ -53,7 +53,7 @@ public record ApplyOnboardingCommand(
 /// <summary>
 /// Applies the buffer of answers a user built during pre-auth onboarding in a single transaction:
 /// creates the habits (trimmed to the free-plan allowance), an optional first log, an optional
-/// Pro-gated goal, week-start/color preferences, and flips <c>HasCompletedOnboarding</c>. Idempotent
+/// goal, week-start/color preferences, and flips <c>HasCompletedOnboarding</c>. Idempotent
 /// by construction — an already-onboarded user is a no-op (<c>Applied:false</c>) — so the client can
 /// flush unconditionally after any successful auth and retry safely under the concurrency pipeline.
 /// </summary>
@@ -65,7 +65,6 @@ public record ApplyOnboardingRepositories(
 
 public class ApplyOnboardingCommandHandler(
     ApplyOnboardingRepositories repos,
-    IPayGateService payGate,
     IUserDateService userDateService,
     IAppConfigService appConfig,
     IUnitOfWork unitOfWork,
@@ -121,7 +120,7 @@ public class ApplyOnboardingCommandHandler(
             loggedFirstHabit = true;
         }
 
-        var goalResult = await CreateGoalIfAllowedAsync(request.UserId, request.Goal, today, ct);
+        var goalResult = await CreateGoalAsync(request.UserId, request.Goal, today, ct);
         if (goalResult.IsFailure)
             return goalResult.PropagateError<ApplyOnboardingResponse>();
         var createdGoal = goalResult.Value;
@@ -189,14 +188,10 @@ public class ApplyOnboardingCommandHandler(
         return Result.Success(createdHabits);
     }
 
-    private async Task<Result<bool>> CreateGoalIfAllowedAsync(
+    private async Task<Result<bool>> CreateGoalAsync(
         Guid userId, ApplyGoalInput? goalInput, DateOnly today, CancellationToken cancellationToken)
     {
         if (goalInput is null)
-            return Result.Success(false);
-
-        var goalGate = await payGate.CanAccessGoals(userId, cancellationToken);
-        if (goalGate.IsFailure)
             return Result.Success(false);
 
         if (goalInput.Deadline is { } deadline && deadline < today)

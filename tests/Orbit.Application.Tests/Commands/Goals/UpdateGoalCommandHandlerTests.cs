@@ -18,7 +18,6 @@ public class UpdateGoalCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<GoalProgressLog> _progressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -32,10 +31,8 @@ public class UpdateGoalCommandHandlerTests
     public UpdateGoalCommandHandlerTests()
     {
         _handler = new UpdateGoalCommandHandler(
-            new GoalRepositories(_goalRepo, _progressLogRepo), _payGate, _userDateService,
+            new GoalRepositories(_goalRepo, _progressLogRepo), _userDateService,
             _goalCompletionService, _unitOfWork, _cache);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
     }
@@ -143,21 +140,6 @@ public class UpdateGoalCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         goal.Deadline.Should().Be(deadline);
-    }
-
-    [Fact]
-    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
-
-        var command = new UpdateGoalCommand(UserId, GoalId, "Title", null, 100, "km", null);
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

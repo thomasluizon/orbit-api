@@ -357,7 +357,6 @@ public class ConcurrencyRetryTests
             new GoalRepositories(
                 goalRepository,
                 new GenericRepository<GoalProgressLog>(context)),
-            PassingGoalGate(),
             completionService,
             unitOfWork,
             StubToday(new DateOnly(2026, 3, 20)),
@@ -383,13 +382,6 @@ public class ConcurrencyRetryTests
     {
         var payGate = Substitute.For<IPayGateService>();
         payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(25);
-        return payGate;
-    }
-
-    private static IPayGateService PassingGoalGate()
-    {
-        var payGate = Substitute.For<IPayGateService>();
-        payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         return payGate;
     }
 

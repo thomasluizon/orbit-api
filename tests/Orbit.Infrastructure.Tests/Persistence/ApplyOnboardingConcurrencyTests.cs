@@ -45,7 +45,6 @@ public class ApplyOnboardingConcurrencyTests
                 new GenericRepository<User>(context),
                 new GenericRepository<Habit>(context),
                 new GenericRepository<Goal>(context)),
-            Substitute.For<IPayGateService>(),
             StubToday(new DateOnly(2026, 7, 5)),
             Substitute.For<IAppConfigService>(),
             unitOfWork,

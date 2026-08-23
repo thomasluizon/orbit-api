@@ -43,14 +43,9 @@ public interface IPayGateService
     Task<Result> CanUseRetrospective(Guid userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks if the user can access goals (Pro-only feature).
+    /// Checks if the user can use AI goal reviews (Pro-only feature).
     /// </summary>
-    Task<Result> CanAccessGoals(Guid userId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Checks if the user can create goals (Pro-only feature).
-    /// </summary>
-    Task<Result> CanCreateGoals(Guid userId, CancellationToken ct = default);
+    Task<Result> CanUseGoalReview(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Checks if the user can read calendar integration data (Pro-only feature).
@@ -117,8 +112,4 @@ public interface IPayGateService
     /// </summary>
     Task<Result> CanUseSlipAlerts(Guid userId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Checks if the user can manage goal links on habits (Pro-only feature).
-    /// </summary>
-    Task<Result> CanLinkGoalsToHabits(Guid userId, CancellationToken ct = default);
 }

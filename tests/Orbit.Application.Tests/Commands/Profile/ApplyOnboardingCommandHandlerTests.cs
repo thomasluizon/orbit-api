@@ -16,7 +16,6 @@ public class ApplyOnboardingCommandHandlerTests
     private readonly IGenericRepository<User> _userRepo = Substitute.For<IGenericRepository<User>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IAppConfigService _appConfig = Substitute.For<IAppConfigService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
@@ -28,8 +27,6 @@ public class ApplyOnboardingCommandHandlerTests
     public ApplyOnboardingCommandHandlerTests()
     {
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _appConfig.GetAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(AppConstants.DefaultFreeMaxHabits);
         _unitOfWork.ExecuteInTransactionAsync(
@@ -45,7 +42,7 @@ public class ApplyOnboardingCommandHandlerTests
 
     private ApplyOnboardingCommandHandler CreateHandler() => new(
         new ApplyOnboardingRepositories(_userRepo, _habitRepo, _goalRepo),
-        _payGate, _userDateService, _appConfig, _unitOfWork, _cache);
+        _userDateService, _appConfig, _unitOfWork, _cache);
 
     private void SetupUser(User user)
     {
@@ -215,12 +212,10 @@ public class ApplyOnboardingCommandHandlerTests
     }
 
     [Fact]
-    public async Task Apply_GoalGateFails_SkipsGoalButStillApplies()
+    public async Task Apply_FreeUserGoal_CreatesGoalAndApplies()
     {
         var user = CreateFreeUser();
         SetupUser(user);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.PayGateFailure("Goals are a Pro feature. Upgrade to unlock!")));
 
         var command = new ApplyOnboardingCommand(
             UserId, [Habit("Drink water")], null,
@@ -230,9 +225,9 @@ public class ApplyOnboardingCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Applied.Should().BeTrue();
-        result.Value.CreatedGoal.Should().BeFalse();
+        result.Value.CreatedGoal.Should().BeTrue();
         result.Value.CreatedHabitCount.Should().Be(1);
-        await _goalRepo.DidNotReceive().AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
+        await _goalRepo.Received(1).AddAsync(Arg.Any<Goal>(), Arg.Any<CancellationToken>());
         user.HasCompletedOnboarding.Should().BeTrue();
     }
 
