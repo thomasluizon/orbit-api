@@ -98,12 +98,12 @@ public class GetStreakInfoQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_RecalculatesStreakOnRead_AndReturnsFreshValues()
+    public async Task Handle_CalculatesStreakWithoutMutation_AndReturnsFreshValues()
     {
         var user = CreateTestUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
-        _userStreakService.RecalculateAsync(UserId, awardFreezeIfEligible: false, Arg.Any<CancellationToken>())
+        _userStreakService.CalculateAsync(UserId, Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(11, 43, Today));
 
         _streakFreezeRepo.FindAsync(
@@ -119,9 +119,12 @@ public class GetStreakInfoQueryHandlerTests
         result.Value.CurrentStreak.Should().Be(11);
         result.Value.LongestStreak.Should().Be(43);
         result.Value.LastActiveDate.Should().Be(Today);
-        await _userStreakService.Received(1).RecalculateAsync(
+        await _userStreakService.Received(1).CalculateAsync(
             UserId,
-            awardFreezeIfEligible: false,
+            Arg.Any<CancellationToken>());
+        await _userStreakService.DidNotReceive().RecalculateAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<bool>(),
             Arg.Any<CancellationToken>());
     }
 

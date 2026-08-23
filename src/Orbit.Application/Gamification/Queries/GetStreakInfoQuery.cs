@@ -49,8 +49,8 @@ public class GetStreakInfoQueryHandler(
         if (!unlocked)
             return Result.PayGateFailure<StreakInfoResponse>("Streak insights are a Pro feature. Upgrade to unlock!");
 
-        var recalculatedStreak = await userStreakService.RecalculateAsync(
-            request.UserId, awardFreezeIfEligible: false, cancellationToken);
+        var recalculatedStreak = await userStreakService.CalculateAsync(
+            request.UserId, cancellationToken);
 
         var currentStreak = recalculatedStreak?.CurrentStreak ?? user.CurrentStreak;
         var longestStreak = recalculatedStreak?.LongestStreak ?? user.LongestStreak;

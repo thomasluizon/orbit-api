@@ -4,6 +4,7 @@ using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
+using Orbit.Domain.Models;
 using Orbit.Infrastructure.Services;
 
 namespace Orbit.Infrastructure.Tests.Services;
@@ -50,6 +51,10 @@ public class UserStreakServiceTests
 
     private void SetupUser(User user, DateOnly today)
     {
+        _userRepository.FindAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<User> { user });
         _userRepository.FindOneTrackedAsync(
             Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
             Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
@@ -142,6 +147,48 @@ public class UserStreakServiceTests
         result!.CurrentStreak.Should().Be(3);
         result.LongestStreak.Should().Be(3);
         user.CurrentStreak.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task CalculateAsync_DailyHabit_ReturnsFreshStateWithoutMutatingUserOrEmittingEvent()
+    {
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        user.SetStreakState(1, 9, new DateOnly(2026, 4, 1));
+        var habit = CreateDailyHabitLoggedOn(
+            [new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 2), new DateOnly(2026, 4, 3)],
+            new DateOnly(2026, 4, 1));
+
+        SetupUser(user, new DateOnly(2026, 4, 3));
+        SetupHabits([habit]);
+        SetupFreezes([]);
+
+        var result = await _sut.CalculateAsync(UserId, CancellationToken.None);
+
+        result.Should().Be(new UserStreakState(3, 3, new DateOnly(2026, 4, 3)));
+        user.CurrentStreak.Should().Be(1);
+        user.LongestStreak.Should().Be(9);
+        user.LastActiveDate.Should().Be(new DateOnly(2026, 4, 1));
+        await _feedEmitter.DidNotReceive().EmitStreakMilestonesAsync(
+            Arg.Any<User>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+        await _userRepository.DidNotReceive().FindOneTrackedAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CalculateAsync_UserNotFound_ReturnsNull()
+    {
+        _userRepository.FindAsync(
+            Arg.Any<System.Linq.Expressions.Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<User>());
+
+        var result = await _sut.CalculateAsync(UserId, CancellationToken.None);
+
+        result.Should().BeNull();
     }
 
     [Fact]

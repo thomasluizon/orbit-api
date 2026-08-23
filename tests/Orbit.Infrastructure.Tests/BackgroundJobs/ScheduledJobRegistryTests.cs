@@ -1,8 +1,10 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -12,6 +14,7 @@ using Orbit.Infrastructure.BackgroundJobs;
 using Orbit.Infrastructure.Configuration;
 using Orbit.Infrastructure.Persistence;
 using Orbit.Infrastructure.Services;
+using OrbitServiceCollectionExtensions = Orbit.Api.Extensions.ServiceCollectionExtensions;
 
 namespace Orbit.Infrastructure.Tests.BackgroundJobs;
 
@@ -51,9 +54,46 @@ public class ScheduledJobRegistryTests
     }
 
     [Fact]
-    public void AllTwelveRecurringSchedulers_AreRegisteredAsJobs()
+    public void AllThirteenRecurringSchedulers_AreRegisteredAsJobs()
     {
-        BuildAll().Should().HaveCount(12);
+        BuildAll().Should().HaveCount(13);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void InProcessRegistration_RespectsDefaultOnStreakFreezeFlag(
+        string? configuredValue,
+        bool expectedRegistered)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["BackgroundServices:StreakFreezeAutoActivationEnabled"] = configuredValue;
+
+        OrbitServiceCollectionExtensions.AddInProcessSchedulers(builder);
+
+        builder.Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(IHostedService)
+            && descriptor.ImplementationType == typeof(StreakFreezeAutoActivationService))
+            .Should().Be(expectedRegistered);
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void DurableRegistration_RespectsDefaultOnStreakFreezeFlag(
+        string? configuredValue,
+        bool expectedRegistered)
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["BackgroundServices:StreakFreezeAutoActivationEnabled"] = configuredValue;
+
+        OrbitServiceCollectionExtensions.AddDurableRecurringJobs(builder);
+
+        builder.Services.Any(descriptor =>
+            descriptor.ServiceType == typeof(StreakFreezeAutoActivationService))
+            .Should().Be(expectedRegistered);
     }
 
     [Fact]
@@ -80,6 +120,11 @@ public class ScheduledJobRegistryTests
         new ProactiveCheckinSchedulerService(ScopeFactory(), NullLogger<ProactiveCheckinSchedulerService>.Instance, EmptyConfiguration),
         new AccountDeletionService(ScopeFactory(), NullLogger<AccountDeletionService>.Instance, EmptyConfiguration),
         new HabitDueDateAdvancementService(ScopeFactory(), NullLogger<HabitDueDateAdvancementService>.Instance, EmptyConfiguration),
+        new StreakFreezeAutoActivationService(
+            ScopeFactory(),
+            NullLogger<StreakFreezeAutoActivationService>.Instance,
+            EmptyConfiguration,
+            TimeProvider.System),
         new StreakGoalSyncService(ScopeFactory(), NullLogger<StreakGoalSyncService>.Instance, EmptyConfiguration),
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
