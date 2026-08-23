@@ -152,6 +152,52 @@ public class StreakGoalSyncServiceTests
     }
 
     [Fact]
+    public async Task SyncActiveGoals_ConcurrencyConflict_StopsDetachedGoalsAndRetriesNextSweep()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var firstUser = User.Create("Alice", "alice@test.com").Value;
+        var secondUser = User.Create("Bob", "bob@test.com").Value;
+        var firstHabit = CreateStandardHabit(firstUser.Id);
+        var secondHabit = CreateStandardHabit(secondUser.Id);
+        var firstGoal = Goal.Create(firstUser.Id, "Exercise twice", 2, "sessions").Value;
+        var secondGoal = Goal.Create(secondUser.Id, "Exercise twice", 2, "sessions").Value;
+        firstGoal.AddHabit(firstHabit);
+        secondGoal.AddHabit(secondHabit);
+        firstHabit.Log(Today);
+        firstHabit.Log(Today.AddDays(-1));
+        secondHabit.Log(Today);
+        secondHabit.Log(Today.AddDays(-1));
+
+        dbContext.Users.AddRange(firstUser, secondUser);
+        dbContext.Habits.AddRange(firstHabit, secondHabit);
+        dbContext.Goals.AddRange(firstGoal, secondGoal);
+        await dbContext.SaveChangesAsync();
+
+        var attempts = 0;
+        var gamification = Substitute.For<IGamificationService>();
+        gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ++attempts == 1
+                ? Task.FromException(new DbUpdateConcurrencyException("Forced completion conflict"))
+                : Task.CompletedTask);
+        var service = CreateService(dbContext, gamification);
+
+        await service.SyncActiveGoals(CancellationToken.None);
+
+        var afterConflict = await dbContext.Goals.AsNoTracking().ToListAsync();
+        afterConflict.Should().OnlyContain(g => g.Status == GoalStatus.Active);
+        await gamification.Received(1)
+            .ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+
+        await service.SyncActiveGoals(CancellationToken.None);
+
+        var afterRetry = await dbContext.Goals.AsNoTracking().ToListAsync();
+        afterRetry.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
+        await gamification.Received(3)
+            .ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task SyncActiveGoals_StreakAlreadySyncedToday_LeavesValueAndSkipsGamification()
     {
         await using var dbContext = CreateInMemoryDbContext();
@@ -259,6 +305,10 @@ public class StreakGoalSyncServiceTests
     private static Goal CreateStreakGoal(Guid userId, decimal target) =>
         Goal.Create(new Goal.CreateGoalParams(
             userId, "Daily streak", target, "days", Type: GoalType.Streak)).Value;
+
+    private static Habit CreateStandardHabit(Guid userId) =>
+        Habit.Create(new HabitCreateParams(
+            userId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
 
     private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
     {

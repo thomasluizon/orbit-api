@@ -102,7 +102,7 @@ public partial class StreakGoalSyncService(
 
             if (!await TrySaveGoalAsync(
                     goal, outcome.JustCompleted, dbContext, unitOfWork, gamificationService, ct))
-                continue;
+                break;
 
             synced++;
         }
