@@ -49,6 +49,11 @@ public class GamificationServiceTests
             .Returns(Today);
         _featureFlagService.GetEnabledKeysForUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<IReadOnlyList<string>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<IReadOnlyList<string>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
     }
 
     private void EnableFreeTierFlag()
@@ -1280,6 +1285,40 @@ public class GamificationServiceTests
         whileLocked.Should().BeEmpty();
         afterUnlock.Should().ContainSingle().Which.Should().Be(AchievementDefinitions.MissionControl);
         await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileFoundingAchievementsAsync_UniqueConflict_RereadsEvidenceBeforeRetry()
+    {
+        var user = CreateProUser();
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+        _foundingAchievementReader.ReadEvidenceAsync(UserId, Arg.Any<CancellationToken>())
+            .Returns(
+                new FoundingAchievementEvidence(true, false, false, false, false),
+                new FoundingAchievementEvidence(false, false, false, false, false));
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .ThrowsAsync(new DbUpdateException(
+                "duplicate key value violates unique constraint",
+                new PostgresException(
+                    "duplicate key",
+                    "ERROR",
+                    "ERROR",
+                    PostgresErrorCodes.UniqueViolation)));
+
+        var granted = await _sut.ReconcileFoundingAchievementsAsync(UserId);
+
+        granted.Should().BeEmpty();
+        await _foundingAchievementReader.Received(2).ReadEvidenceAsync(
+            UserId,
+            Arg.Any<CancellationToken>());
+        _unitOfWork.Received(1).ResetTracking();
+        await _pushService.DidNotReceive().SendToUserAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

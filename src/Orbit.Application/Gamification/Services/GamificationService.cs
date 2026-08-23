@@ -418,6 +418,44 @@ public partial class GamificationService(
         Guid userId,
         CancellationToken ct = default)
     {
+        var attempt = 1;
+        while (true)
+        {
+            if (attempt > 1)
+                unitOfWork.ResetTracking();
+
+            var pushes = new List<PendingPush>();
+            try
+            {
+                var granted = await unitOfWork.ExecuteInTransactionAsync(async transactionCt =>
+                {
+                    await unitOfWork.AcquireAdvisoryLockAsync(
+                        ClosedMonthRecapLock.ForUser(userId),
+                        transactionCt);
+                    return await ComputeFoundingReconciliationAsync(userId, pushes, transactionCt);
+                }, ct);
+
+                await FlushPushesAsync(pushes, ct);
+                return granted;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+            }
+            catch (DbUpdateException exception) when (
+                DbUniqueViolation.IsUniqueViolation(exception)
+                && attempt < MaxConcurrencyAttempts)
+            {
+                attempt++;
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> ComputeFoundingReconciliationAsync(
+        Guid userId,
+        List<PendingPush> pushes,
+        CancellationToken ct)
+    {
         if (!await IsGamificationUnlockedForUserAsync(userId, ct))
             return [];
 
@@ -443,7 +481,11 @@ public partial class GamificationService(
         if (eligible.Count == 0 || !await IsGamificationUnlockedForUserAsync(userId, ct))
             return [];
 
-        return await TryGrantAchievementsAsync(userId, eligible, ct);
+        var granted = await ComputeGrantAchievementsAsync(userId, eligible, pushes, ct);
+        if (granted.Count > 0)
+            await unitOfWork.SaveChangesAsync(ct);
+
+        return granted;
     }
 
     private static void AddIfEligible(

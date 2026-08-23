@@ -86,6 +86,51 @@ public class FoundingAchievementReaderTests
     }
 
     [Fact]
+    public async Task ReadEvidenceAndCandidates_SkipAndBadHabitLogs_DoNotQualifyLiftoff()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var context = factory.Context;
+        var skippedUser = User.Create("Skipped User", "skipped@example.com").Value;
+        var badHabitUser = User.Create("Bad Habit User", "bad-habit@example.com").Value;
+        context.Users.AddRange(skippedUser, badHabitUser);
+
+        var flexibleHabit = Habit.Create(new HabitCreateParams(
+            skippedUser.Id,
+            "Flexible Habit",
+            FrequencyUnit.Day,
+            1,
+            DueDate: new DateOnly(2026, 8, 1),
+            IsFlexible: true)).Value;
+        flexibleHabit.SkipFlexible(new DateOnly(2026, 8, 1));
+        context.Habits.Add(flexibleHabit);
+
+        var badHabit = Habit.Create(new HabitCreateParams(
+            badHabitUser.Id,
+            "Bad Habit",
+            FrequencyUnit.Day,
+            1,
+            DueDate: new DateOnly(2026, 8, 1),
+            IsBadHabit: true)).Value;
+        badHabit.Log(new DateOnly(2026, 8, 1));
+        context.Habits.Add(badHabit);
+
+        context.UserAchievements.AddRange(
+            UserAchievement.Create(skippedUser.Id, AchievementDefinitions.FirstOrbit),
+            UserAchievement.Create(badHabitUser.Id, AchievementDefinitions.FirstOrbit));
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var reader = new FoundingAchievementReader(context);
+        var skippedEvidence = await reader.ReadEvidenceAsync(skippedUser.Id);
+        var badHabitEvidence = await reader.ReadEvidenceAsync(badHabitUser.Id);
+        var candidates = await reader.ReadCandidatePageAsync(null, 100);
+
+        skippedEvidence!.HasHabitLog.Should().BeFalse();
+        badHabitEvidence!.HasHabitLog.Should().BeFalse();
+        candidates.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ReadCandidatePageAsync_SkipsCompleteDeactivatedAndResetAccounts()
     {
         using var factory = new SqliteOrbitDbContextFactory();

@@ -20,7 +20,8 @@ public sealed class FoundingAchievementReader(OrbitDbContext context) : IFoundin
             .Where(user => user.Id == userId && !user.IsDeactivated)
             .Select(user => new FoundingAchievementEvidence(
                 habits.Any(habit => habit.UserId == user.Id
-                    && habitLogs.Any(log => log.HabitId == habit.Id)),
+                    && !habit.IsBadHabit
+                    && habitLogs.Any(log => log.HabitId == habit.Id && log.Value > 0)),
                 habits.Any(habit => habit.UserId == user.Id && habit.ParentHabitId == null),
                 goals.Any(goal => goal.UserId == user.Id),
                 context.XpAwardLogs.Any(award => award.UserId == user.Id
@@ -53,7 +54,8 @@ public sealed class FoundingAchievementReader(OrbitDbContext context) : IFoundin
                 (!achievements.Any(achievement => achievement.UserId == user.Id
                     && achievement.AchievementId == AchievementDefinitions.Liftoff)
                     && habits.Any(habit => habit.UserId == user.Id
-                        && habitLogs.Any(log => log.HabitId == habit.Id)))
+                        && !habit.IsBadHabit
+                        && habitLogs.Any(log => log.HabitId == habit.Id && log.Value > 0)))
                 || (!achievements.Any(achievement => achievement.UserId == user.Id
                     && achievement.AchievementId == AchievementDefinitions.FirstOrbit)
                     && habits.Any(habit => habit.UserId == user.Id && habit.ParentHabitId == null))
