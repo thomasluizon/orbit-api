@@ -48,12 +48,6 @@ public sealed class GoalCompletionService(
     {
         return unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
         {
-            var wasAlreadyCompleted = await goalRepository.AnyAsync(
-                g => g.Id == goalId && g.UserId == userId && g.Status == GoalStatus.Completed,
-                transactionToken);
-            if (wasAlreadyCompleted)
-                return;
-
             await unitOfWork.SaveChangesAsync(transactionToken);
             await AwardCompletedGoalAsync(userId, goalId, transactionToken);
         }, cancellationToken);
@@ -134,7 +128,7 @@ public sealed class GoalCompletionService(
 
         if (goal.Type == GoalType.Standard)
         {
-            if (goal.Habits.Count == 0)
+            if (!goal.HasActiveLinkedHabits)
                 return null;
 
             var completionCount = GoalProgressSyncService.CalculateStandardCompletions(goal);
@@ -150,7 +144,7 @@ public sealed class GoalCompletionService(
         if (passiveSync && !GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
             return null;
 
-        if (goal.Habits.Count == 0)
+        if (!goal.HasActiveLinkedHabits)
         {
             var shouldReset = goal.CurrentValue != 0 || (!passiveSync && goal.StreakSyncedAtUtc is not null);
             return shouldReset
@@ -281,6 +275,6 @@ public sealed class GoalCompletionService(
         if (goal?.Status != GoalStatus.Completed)
             throw new InvalidOperationException($"Goal {goalId} was not persisted as completed before its rewards were processed.");
 
-        await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
+        await gamificationService.ProcessGoalCompleted(userId, goalId, cancellationToken);
     }
 }

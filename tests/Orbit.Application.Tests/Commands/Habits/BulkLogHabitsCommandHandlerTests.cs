@@ -558,7 +558,7 @@ public class BulkLogHabitsCommandHandlerTests
 
         var realGamification = new GamificationService(
             new GamificationRepositories(
-                userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo),
+                userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo),
             new GamificationNotifiers(
                 Substitute.For<IPushNotificationService>(),
                 Substitute.For<IFriendFeedEventEmitter>()),
@@ -568,9 +568,9 @@ public class BulkLogHabitsCommandHandlerTests
             featureFlags,
             Substitute.For<ILogger<GamificationService>>());
         var gamification = Substitute.For<IGamificationService>();
-        gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(call => realGamification.ProcessGoalCompleted(
-                call.ArgAt<Guid>(0), call.ArgAt<CancellationToken>(1)));
+                call.ArgAt<Guid>(0), call.ArgAt<Guid>(1), call.ArgAt<CancellationToken>(2)));
         gamification.ProcessHabitsLogged(
             Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(Array.Empty<HabitLogGamificationResult>());
@@ -594,7 +594,8 @@ public class BulkLogHabitsCommandHandlerTests
         repeatResult.IsSuccess.Should().BeTrue();
         xpAwards.Where(a => a.Source == XpAwardSource.GoalCompleted).Sum(a => a.Amount).Should().Be(300);
         earnedAchievements.Count(a => a.AchievementId == AchievementDefinitions.GoalCrusher).Should().Be(1);
-        await gamification.Received(3).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(3).ProcessGoalCompleted(
+            user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

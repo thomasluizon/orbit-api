@@ -119,6 +119,21 @@ public class GoalProgressReadSyncerTests
     }
 
     [Fact]
+    public void CalculateStandardCompletions_ExcludesSoftDeletedLinkedHabits()
+    {
+        var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        goal.AddHabit(habit);
+        habit.Log(Today);
+        habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));
+
+        var completions = GoalProgressSyncService.CalculateStandardCompletions(goal);
+
+        completions.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ComputeFreshValuesAsync_NoActiveStreakGoals_ReturnsEmpty()
     {
         ArrangeGoals();

@@ -39,15 +39,15 @@ public class RestoreHabitCommandHandler(
         var restoredHabits = HabitHierarchy.SelfAndDescendants(habit, childrenByParentId)
             .Where(inSubtree => inSubtree.IsDeleted && inSubtree.DeletedAtUtc == cascadeDeletedAtUtc)
             .ToList();
+        foreach (var inSubtree in restoredHabits)
+            inSubtree.Restore();
+
         var goalIds = restoredHabits
             .SelectMany(restoredHabit => restoredHabit.Goals)
-            .Where(goal => !goal.IsDeleted && goal.UserId == request.UserId)
+            .Where(goal => !goal.IsDeleted && goal.UserId == request.UserId && goal.IsProgressDerived)
             .Select(goal => goal.Id)
             .Distinct()
             .ToList();
-
-        foreach (var inSubtree in restoredHabits)
-            inSubtree.Restore();
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         if (goalIds.Count > 0)

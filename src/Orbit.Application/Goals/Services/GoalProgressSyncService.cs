@@ -17,7 +17,7 @@ public static class GoalProgressSyncService
 
         return goal.Type switch
         {
-            GoalType.Standard when goal.Habits.Count > 0 => CalculateStandardCompletions(goal),
+            GoalType.Standard when goal.HasActiveLinkedHabits => CalculateStandardCompletions(goal),
             GoalType.Streak => GoalStreakSyncService.ComputeReadValue(goal, userToday),
             _ => null
         };
@@ -34,7 +34,7 @@ public static class GoalProgressSyncService
             return new GoalProgressSyncOutcome(streakOutcome.Synced, streakOutcome.JustCompleted);
         }
 
-        if (goal.Habits.Count == 0)
+        if (!goal.HasActiveLinkedHabits)
             return GoalProgressSyncOutcome.NotSynced;
 
         var result = goal.SyncStandardProgress(CalculateStandardCompletions(goal));
@@ -60,6 +60,7 @@ public static class GoalProgressSyncService
 
     public static int CalculateStandardCompletions(Goal goal) =>
         goal.Habits
+            .Where(habit => !habit.IsDeleted)
             .SelectMany(habit => habit.Logs)
             .Count(log => !log.IsDeleted && log.Value > 0 && log.CreatedAtUtc >= goal.CreatedAtUtc);
 }

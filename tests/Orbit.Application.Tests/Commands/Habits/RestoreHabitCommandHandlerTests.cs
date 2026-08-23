@@ -124,11 +124,13 @@ public class RestoreHabitCommandHandlerTests
         var goal = Goal.Create(UserId, "Exercise", 10, "sessions").Value;
         goal.AddHabit(habit);
         habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));
+        goal.IsProgressDerived.Should().BeFalse();
         SetupUserHabits(habit);
 
         var result = await _handler.Handle(new RestoreHabitCommand(UserId, habit.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        goal.IsProgressDerived.Should().BeTrue();
         await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
             UserId,
             Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 1 && ids.Contains(goal.Id)),

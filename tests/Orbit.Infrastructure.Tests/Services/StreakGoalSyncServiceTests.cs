@@ -72,7 +72,7 @@ public class StreakGoalSyncServiceTests
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.Status.Should().Be(GoalStatus.Completed);
         reloaded.CompletedAtUtc.Should().NotBeNull();
-        await gamification.Received(1).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(1).ProcessGoalCompleted(user.Id, goal.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -99,10 +99,20 @@ public class StreakGoalSyncServiceTests
         await service.SyncActiveGoals(CancellationToken.None);
         await service.SyncActiveGoals(CancellationToken.None);
 
+        var completedGoal = await dbContext.Goals.SingleAsync(g => g.Id == goal.Id);
+        completedGoal.Reactivate().IsSuccess.Should().BeTrue();
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+        await service.SyncActiveGoals(CancellationToken.None);
+
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.CurrentValue.Should().Be(2);
         reloaded.Status.Should().Be(GoalStatus.Completed);
         reloaded.CompletedAtUtc.Should().NotBeNull();
+        (await dbContext.XpAwardLogs.CountAsync(x =>
+            x.UserId == user.Id
+            && x.Source == XpAwardSource.GoalCompleted
+            && x.SourceId == goal.Id)).Should().Be(1);
         (await dbContext.XpAwardLogs.CountAsync(x =>
             x.UserId == user.Id && x.Source == XpAwardSource.GoalCompleted)).Should().Be(1);
         (await dbContext.UserAchievements.CountAsync(a =>
@@ -129,7 +139,7 @@ public class StreakGoalSyncServiceTests
 
         var attempts = 0;
         var gamification = Substitute.For<IGamificationService>();
-        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+        gamification.ProcessGoalCompleted(user.Id, goal.Id, Arg.Any<CancellationToken>())
             .Returns(_ => ++attempts == 1
                 ? Task.FromException(new InvalidOperationException("Forced award failure"))
                 : Task.CompletedTask);
@@ -149,7 +159,7 @@ public class StreakGoalSyncServiceTests
         afterRetry.CurrentValue.Should().Be(2);
         afterRetry.Status.Should().Be(GoalStatus.Completed);
         afterRetry.CompletedAtUtc.Should().NotBeNull();
-        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(2).ProcessGoalCompleted(user.Id, goal.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -177,7 +187,7 @@ public class StreakGoalSyncServiceTests
 
         var attempts = 0;
         var gamification = Substitute.For<IGamificationService>();
-        gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(_ => ++attempts == 1
                 ? Task.FromException(new DbUpdateConcurrencyException("Forced completion conflict"))
                 : Task.CompletedTask);
@@ -189,14 +199,14 @@ public class StreakGoalSyncServiceTests
         var afterConflict = await dbContext.Goals.AsNoTracking().ToListAsync();
         afterConflict.Should().OnlyContain(g => g.Status == GoalStatus.Active);
         await gamification.Received(1)
-            .ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            .ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
 
         await service.SyncActiveGoals(CancellationToken.None);
 
         var afterRetry = await dbContext.Goals.AsNoTracking().ToListAsync();
         afterRetry.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
         await gamification.Received(3)
-            .ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            .ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -220,7 +230,8 @@ public class StreakGoalSyncServiceTests
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         reloaded.CurrentValue.Should().Be(3);
-        await gamification.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await gamification.DidNotReceive().ProcessGoalCompleted(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -247,8 +258,8 @@ public class StreakGoalSyncServiceTests
 
         var reloaded = await dbContext.Goals.AsNoTracking().ToListAsync();
         reloaded.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
-        await gamification.Received(1).ProcessGoalCompleted(firstUser.Id, Arg.Any<CancellationToken>());
-        await gamification.Received(1).ProcessGoalCompleted(secondUser.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(1).ProcessGoalCompleted(firstUser.Id, firstGoal.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(1).ProcessGoalCompleted(secondUser.Id, secondGoal.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -290,7 +301,8 @@ public class StreakGoalSyncServiceTests
         reloaded.CurrentValue.Should().Be(2);
         reloaded.Status.Should().Be(GoalStatus.Active);
         reloaded.IsProgressDerived.Should().BeFalse();
-        await gamification.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await gamification.DidNotReceive().ProcessGoalCompleted(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -403,7 +415,8 @@ public class StreakGoalSyncServiceTests
             new GenericRepository<HabitLog>(dbContext),
             new GenericRepository<Goal>(dbContext),
             new GenericRepository<UserAchievement>(dbContext),
-            new GenericRepository<Notification>(dbContext));
+            new GenericRepository<Notification>(dbContext),
+            new GenericRepository<XpAwardLog>(dbContext));
         return new GamificationService(
             repos,
             new GamificationNotifiers(

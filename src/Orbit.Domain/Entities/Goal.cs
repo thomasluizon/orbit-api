@@ -27,7 +27,8 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
     private readonly List<Habit> _habits = [];
     public IReadOnlyCollection<Habit> Habits => _habits.AsReadOnly();
-    public bool IsProgressDerived => Type == GoalType.Streak || _habits.Count > 0;
+    public bool HasActiveLinkedHabits => _habits.Any(habit => !habit.IsDeleted);
+    public bool IsProgressDerived => Type == GoalType.Streak || HasActiveLinkedHabits;
 
     public void AddHabit(Habit habit)
     {
@@ -45,7 +46,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
 
         habit.RemoveGoal(this);
         UpdatedAtUtc = DateTime.UtcNow;
-        if (_habits.Count != 0)
+        if (HasActiveLinkedHabits)
             return;
 
         if (Type == GoalType.Streak)
@@ -205,7 +206,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
         if (Type != GoalType.Standard)
             return Result.Failure<bool>(DomainErrors.NotStandardGoal);
 
-        if (_habits.Count == 0)
+        if (!HasActiveLinkedHabits)
             return Result.Failure<bool>(DomainErrors.StandardGoalHasNoLinkedHabits);
 
         if (Status != GoalStatus.Active)

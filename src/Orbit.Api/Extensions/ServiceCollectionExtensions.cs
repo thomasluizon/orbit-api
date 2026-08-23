@@ -93,7 +93,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.UserAchievement>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Notification>>(),
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.XpAwardLog>>()));
         builder.Services.AddScoped<IXpAwarder, Orbit.Application.Gamification.Services.XpAwarder>();
         builder.Services.AddScoped<IGamificationService, GamificationService>();
         builder.Services.AddScoped<Orbit.Application.Gamification.Services.IAchievementProgressService, Orbit.Application.Gamification.Services.AchievementProgressService>();

@@ -186,6 +186,25 @@ public class UpdateGoalProgressCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OnlyLinkedHabitIsSoftDeleted_AcceptsManualProgress()
+    {
+        var goal = Goal.Create(UserId, "Complete sessions", 10, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", Domain.Enums.FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));
+        SetupGoalFound(goal);
+
+        var result = await _handler.Handle(
+            new UpdateGoalProgressCommand(UserId, GoalId, 4),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.CurrentValue.Should().Be(4);
+        goal.IsProgressDerived.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Handle_GoalProgressDoesNotTouchUserStreakState()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;

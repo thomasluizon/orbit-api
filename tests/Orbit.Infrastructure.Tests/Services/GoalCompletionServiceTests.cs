@@ -1,11 +1,14 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Services;
 using Orbit.Application.Goals.Commands;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -26,20 +29,59 @@ public class GoalCompletionServiceTests
         using var factory = new SqliteOrbitDbContextFactory();
         var dbContext = factory.Context;
         var user = User.Create("Replay User", "replay@example.com").Value;
+        user.GrantLifetimePro();
         var goal = Goal.Create(user.Id, "Replay-safe goal", 1, "session").Value;
         dbContext.AddRange(user, goal);
         await dbContext.SaveChangesAsync();
 
         goal.MarkCompleted().IsSuccess.Should().BeTrue();
-        var gamification = Substitute.For<IGamificationService>();
         var unitOfWork = new AmbiguousCommitReplayUnitOfWork(CreateUnitOfWork(dbContext));
+        var gamification = CreateGamificationService(dbContext, unitOfWork);
         var service = CreateCompletionService(dbContext, gamification, unitOfWork);
 
         await service.SaveCompletedGoalAsync(user.Id, goal.Id);
 
         var persistedGoal = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         persistedGoal.Status.Should().Be(GoalStatus.Completed);
-        await gamification.Received(1).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        (await dbContext.XpAwardLogs.CountAsync(award =>
+            award.UserId == user.Id
+            && award.Source == XpAwardSource.GoalCompleted
+            && award.SourceId == goal.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UpdateGoalProgress_ManualCompletion_AwardsOnceAfterProgressFlush()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Manual User", "manual@example.com").Value;
+        user.GrantLifetimePro();
+        var goal = Goal.Create(user.Id, "Manual goal", 1, "session").Value;
+        dbContext.AddRange(user, goal);
+        await dbContext.SaveChangesAsync();
+
+        var unitOfWork = CreateUnitOfWork(dbContext);
+        var gamification = CreateGamificationService(dbContext, unitOfWork);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new UpdateGoalProgressCommandHandler(
+            new GoalRepositories(
+                new GenericRepository<Goal>(dbContext),
+                new GenericRepository<GoalProgressLog>(dbContext)),
+            SuccessfulPayGate(),
+            CreateCompletionService(dbContext, gamification, unitOfWork),
+            unitOfWork,
+            StubToday(user.Id),
+            cache);
+
+        var result = await handler.Handle(
+            new UpdateGoalProgressCommand(user.Id, goal.Id, 1),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        (await dbContext.XpAwardLogs.CountAsync(award =>
+            award.UserId == user.Id
+            && award.Source == XpAwardSource.GoalCompleted
+            && award.SourceId == goal.Id)).Should().Be(1);
     }
 
     [Fact]
@@ -76,6 +118,7 @@ public class GoalCompletionServiceTests
         persistedGoal.CurrentValue.Should().Be(0);
         await gamification.DidNotReceive().ProcessGoalCompleted(
             Arg.Any<Guid>(),
+            Arg.Any<Guid>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -94,7 +137,7 @@ public class GoalCompletionServiceTests
 
         var awardCounts = new List<int>();
         var gamification = Substitute.For<IGamificationService>();
-        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+        gamification.ProcessGoalCompleted(user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(async _ =>
             {
                 awardCounts.Add(await dbContext.Goals.CountAsync(g => g.Status == GoalStatus.Completed));
@@ -115,7 +158,7 @@ public class GoalCompletionServiceTests
         var goals = await dbContext.Goals.AsNoTracking().OrderBy(g => g.Title).ToListAsync();
         goals.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
         awardCounts.Should().Equal(1, 2);
-        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -132,7 +175,7 @@ public class GoalCompletionServiceTests
 
         var attempts = 0;
         var gamification = Substitute.For<IGamificationService>();
-        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+        gamification.ProcessGoalCompleted(user.Id, goal.Id, Arg.Any<CancellationToken>())
             .Returns(_ => ++attempts == 1
                 ? Task.FromException(new InvalidOperationException("Forced award failure"))
                 : Task.CompletedTask);
@@ -161,7 +204,7 @@ public class GoalCompletionServiceTests
         var afterRetry = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
         afterRetry.Status.Should().Be(GoalStatus.Completed);
         afterRetry.CurrentValue.Should().Be(1);
-        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(2).ProcessGoalCompleted(user.Id, goal.Id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -193,7 +236,7 @@ public class GoalCompletionServiceTests
 
         var awardAttempts = 0;
         var gamification = Substitute.For<IGamificationService>();
-        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+        gamification.ProcessGoalCompleted(user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
                 if (++awardAttempts == 1)
@@ -201,7 +244,7 @@ public class GoalCompletionServiceTests
                     await ConcurrencyRetry.SaveWithRetryAsync(
                         retryUnitOfWork,
                         _ => Task.CompletedTask,
-                        call.ArgAt<CancellationToken>(1),
+                        call.ArgAt<CancellationToken>(2),
                         maxAttempts: 2);
                 }
             });
@@ -216,7 +259,7 @@ public class GoalCompletionServiceTests
         var persistedGoals = await dbContext.Goals.AsNoTracking().ToListAsync();
         persistedGoals.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
         retryUnitOfWork.Received(1).ResetTracking();
-        await gamification.Received(3).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+        await gamification.Received(3).ProcessGoalCompleted(user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     private static Habit CreateHabit(Guid userId, string title)
@@ -239,6 +282,30 @@ public class GoalCompletionServiceTests
 
     private static IUnitOfWork CreateUnitOfWork(OrbitDbContext dbContext) =>
         new UnitOfWork(dbContext, new DatabaseConnectionSettings());
+
+    private static IGamificationService CreateGamificationService(
+        OrbitDbContext dbContext,
+        IUnitOfWork unitOfWork)
+    {
+        var repos = new GamificationRepositories(
+            new GenericRepository<User>(dbContext),
+            new GenericRepository<Habit>(dbContext),
+            new GenericRepository<HabitLog>(dbContext),
+            new GenericRepository<Goal>(dbContext),
+            new GenericRepository<UserAchievement>(dbContext),
+            new GenericRepository<Notification>(dbContext),
+            new GenericRepository<XpAwardLog>(dbContext));
+        return new GamificationService(
+            repos,
+            new GamificationNotifiers(
+                Substitute.For<IPushNotificationService>(),
+                Substitute.For<IFriendFeedEventEmitter>()),
+            Substitute.For<IUserDateService>(),
+            new XpAwarder(new GenericRepository<XpAwardLog>(dbContext)),
+            unitOfWork,
+            Substitute.For<IFeatureFlagService>(),
+            NullLogger<GamificationService>.Instance);
+    }
 
     private static IPayGateService SuccessfulPayGate()
     {

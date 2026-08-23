@@ -876,6 +876,7 @@ public class OrbitDbContext : DbContext
     {
         modelBuilder.Entity<Goal>(entity =>
         {
+            entity.Ignore(g => g.HasActiveLinkedHabits);
             entity.Ignore(g => g.IsProgressDerived);
             entity.HasIndex(g => g.UserId);
             entity.HasIndex(g => new { g.UserId, g.IsDeleted });
