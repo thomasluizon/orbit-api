@@ -40,15 +40,16 @@ public class MoveHabitParentTool(
             parentId = parsedParentId;
         }
 
-        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
-        if (habit is null)
-            return HabitToolHelpers.HabitNotFoundResult(habitId);
-
         var result = await mediator.Send(new MoveHabitParentCommand(userId, habitId, parentId), ct);
 
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        return new ToolResult(true, EntityId: habitId.ToString(), EntityName: habit.Title);
+        var habits = await habitRepository.FindAsync(
+            habit => habit.Id == habitId && habit.UserId == userId, ct);
+        return new ToolResult(
+            true,
+            EntityId: habitId.ToString(),
+            EntityName: habits.FirstOrDefault()?.Title);
     }
 }

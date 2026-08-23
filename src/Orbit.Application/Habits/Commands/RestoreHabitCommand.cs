@@ -17,13 +17,26 @@ public record RestoreHabitCommand(
 
 public class RestoreHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
+    IPayGateService payGate,
     IUserStreakService userStreakService,
     IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<RestoreHabitCommand, Result>
 {
-    public async Task<Result> Handle(RestoreHabitCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(RestoreHabitCommand request, CancellationToken cancellationToken) =>
+        HabitCeilingLock.ExecuteEntryAsync(
+            unitOfWork,
+            request.UserId,
+            payGate,
+            ct => PrepareRestoreAsync(request, ct),
+            state => HabitLiveRootEntry.FromRestore(state.Habit),
+            (state, ct) => RestoreAsync(request.UserId, state, ct),
+            cancellationToken);
+
+    private async Task<Result<RestoreState>> PrepareRestoreAsync(
+        RestoreHabitCommand request,
+        CancellationToken cancellationToken)
     {
         var userHabits = await habitRepository.FindTrackedIgnoringFiltersAsync(
             h => h.UserId == request.UserId && h.IsDeleted,
@@ -32,16 +45,26 @@ public class RestoreHabitCommandHandler(
 
         var habit = userHabits.FirstOrDefault(h => h.Id == request.HabitId);
         if (habit is null || !habit.IsDeleted)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure<RestoreState>(ErrorMessages.HabitNotFound);
 
         var childrenByParentId = userHabits.ToLookup(h => h.ParentHabitId);
         var cascadeDeletedAtUtc = habit.DeletedAtUtc;
         var restoredHabits = HabitHierarchy.SelfAndDescendants(habit, childrenByParentId)
             .Where(inSubtree => inSubtree.IsDeleted && inSubtree.DeletedAtUtc == cascadeDeletedAtUtc)
             .ToList();
+
+        return Result.Success(new RestoreState(habit, restoredHabits));
+    }
+
+    private async Task<Result> RestoreAsync(
+        Guid userId,
+        RestoreState state,
+        CancellationToken cancellationToken)
+    {
+        var restoredHabits = state.RestoredHabits;
         var goalIds = restoredHabits
             .SelectMany(restoredHabit => restoredHabit.Goals)
-            .Where(goal => !goal.IsDeleted && goal.UserId == request.UserId && goal.IsProgressDerived)
+            .Where(goal => !goal.IsDeleted && goal.UserId == userId && goal.IsProgressDerived)
             .Select(goal => goal.Id)
             .Distinct()
             .ToList();
@@ -49,11 +72,11 @@ public class RestoreHabitCommandHandler(
         foreach (var inSubtree in restoredHabits)
             inSubtree.Restore();
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
         if (goalIds.Count > 0)
         {
             await goalCompletionService.SyncDerivedGoalsAsync(
-                request.UserId,
+                userId,
                 goalIds,
                 today,
                 cancellationToken: cancellationToken);
@@ -65,11 +88,13 @@ public class RestoreHabitCommandHandler(
 
         await ConcurrencyRetry.SaveWithRetryAsync(
             unitOfWork,
-            ct => userStreakService.RecalculateAsync(request.UserId, cancellationToken: ct),
+            ct => userStreakService.RecalculateAsync(userId, cancellationToken: ct),
             cancellationToken);
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, userId, today);
 
         return Result.Success();
     }
+
+    private sealed record RestoreState(Habit Habit, IReadOnlyList<Habit> RestoredHabits);
 }

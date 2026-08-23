@@ -15,9 +15,22 @@ public record MoveHabitParentCommand(
 public class MoveHabitParentCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IUnitOfWork unitOfWork,
-    IAppConfigService appConfigService) : IRequestHandler<MoveHabitParentCommand, Result>
+    IAppConfigService appConfigService,
+    IPayGateService payGate) : IRequestHandler<MoveHabitParentCommand, Result>
 {
-    public async Task<Result> Handle(MoveHabitParentCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(MoveHabitParentCommand request, CancellationToken cancellationToken) =>
+        HabitCeilingLock.ExecuteEntryAsync(
+            unitOfWork,
+            request.UserId,
+            payGate,
+            ct => LoadHabitAsync(request, ct),
+            habit => HabitLiveRootEntry.FromPromotion(habit, request.ParentId),
+            (habit, ct) => MoveAsync(request, habit, ct),
+            cancellationToken);
+
+    private async Task<Result<Habit>> LoadHabitAsync(
+        MoveHabitParentCommand request,
+        CancellationToken cancellationToken)
     {
         var habit = await habitRepository.FindOneTrackedAsync(
             h => h.Id == request.HabitId && h.UserId == request.UserId,
@@ -25,8 +38,16 @@ public class MoveHabitParentCommandHandler(
             cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure<Habit>(ErrorMessages.HabitNotFound);
 
+        return Result.Success(habit);
+    }
+
+    private async Task<Result> MoveAsync(
+        MoveHabitParentCommand request,
+        Habit habit,
+        CancellationToken cancellationToken)
+    {
         if (request.ParentId is null)
         {
             habit.SetParentHabitId(null);

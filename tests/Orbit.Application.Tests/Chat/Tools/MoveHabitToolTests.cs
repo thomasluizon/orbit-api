@@ -1,20 +1,22 @@
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
+using MediatR;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
-using Orbit.Infrastructure.Persistence;
 
 namespace Orbit.Application.Tests.Chat.Tools;
 
 public class MoveHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
+    private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly MoveHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -22,43 +24,51 @@ public class MoveHabitToolTests
 
     public MoveHabitToolTests()
     {
-        _tool = new MoveHabitTool(_habitRepo);
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        _tool = new MoveHabitTool(_mediator, _habitRepo);
     }
 
     [Fact]
-    public async Task MoveUnderParent_SetsParentId()
+    public async Task MoveUnderParent_RoutesToGuardedCommand()
     {
         var child = CreateHabit("Floss");
         var parent = CreateHabit("Before Bed");
-        SetupFindOneTracked(child, parent);
-        SetupFindAsyncForCycleCheck(parent);
+        SetupFindAsyncSingle(child);
 
         var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}", "new_parent_id": "{{{parent.Id}}}"}""");
 
         result.Success.Should().BeTrue();
         result.EntityName.Should().Be("Floss");
+        await _mediator.Received(1).Send(
+            Arg.Is<MoveHabitParentCommand>(command =>
+                command.UserId == UserId
+                && command.HabitId == child.Id
+                && command.ParentId == parent.Id),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task PromoteToTopLevel_ClearsParentId()
+    public async Task PromoteToTopLevel_RoutesToGuardedCommand()
     {
         var child = CreateHabit("Floss");
-        SetupFindOneTrackedSingle(child);
+        child.SetParentHabitId(Guid.NewGuid());
+        SetupFindAsyncSingle(child);
 
         var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}"}""");
 
         result.Success.Should().BeTrue();
+        await _mediator.Received(1).Send(
+            Arg.Is<MoveHabitParentCommand>(command => command.ParentId == null),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task HabitNotFound_ReturnsError()
     {
         var id = Guid.NewGuid();
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>()
-        ).Returns((Habit?)null);
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Habit not found."));
 
         var result = await Execute($$$"""{"habit_id": "{{{id}}}"}""");
 
@@ -72,16 +82,8 @@ public class MoveHabitToolTests
         var child = CreateHabit("Floss");
         var missingParentId = Guid.NewGuid();
 
-        var callCount = 0;
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(callInfo =>
-        {
-            callCount++;
-            return callCount == 1 ? child : null;
-        });
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Target parent habit not found."));
 
         var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}", "new_parent_id": "{{{missingParentId}}}"}""");
 
@@ -93,18 +95,8 @@ public class MoveHabitToolTests
     public async Task SelfReference_ReturnsError()
     {
         var habit = CreateHabit("Water");
-        SetupFindOneTrackedSingle(habit);
-
-        var callCount = 0;
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(callInfo =>
-        {
-            callCount++;
-            return habit;
-        });
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("A habit cannot be its own parent."));
 
         var result = await Execute($$$"""{"habit_id": "{{{habit.Id}}}", "new_parent_id": "{{{habit.Id}}}"}""");
 
@@ -122,89 +114,60 @@ public class MoveHabitToolTests
     }
 
     [Fact]
-    public async Task WrongUser_CannotMoveAnothersHabit_OwnerCan_RealContext()
+    public async Task WrongUser_CommandFailurePreventsDisplayLookup()
     {
-        var databaseName = $"MoveHabitIsolation_{Guid.NewGuid()}";
-        Guid parentId;
-        Guid childId;
-        await using (var seed = CreateContext(databaseName))
-        {
-            var parent = CreateHabit("Owner parent");
-            var child = Habit.Create(new HabitCreateParams(
-                UserId, "Owner child", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: parent.Id)).Value;
-            seed.Habits.AddRange(parent, child);
-            await seed.SaveChangesAsync();
-            parentId = parent.Id;
-            childId = child.Id;
-        }
-
-        await using var context = CreateContext(databaseName);
-        var tool = new MoveHabitTool(new GenericRepository<Habit>(context));
-
+        var child = CreateHabit("Owner child");
         var attackerId = Guid.NewGuid();
-        var attackerResult = await tool.ExecuteAsync(PromoteArgs(childId), attackerId, CancellationToken.None);
-        await context.SaveChangesAsync();
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Habit not found."));
+
+        var attackerResult = await _tool.ExecuteAsync(
+            PromoteArgs(child.Id), attackerId, CancellationToken.None);
 
         attackerResult.Success.Should().BeFalse();
         attackerResult.Error.Should().Contain("not found");
-        await using (var afterAttack = CreateContext(databaseName))
-            (await afterAttack.Habits.SingleAsync(h => h.Id == childId)).ParentHabitId
-                .Should().Be(parentId, "a foreign user must not re-parent another user's habit");
+        await _mediator.Received(1).Send(
+            Arg.Is<MoveHabitParentCommand>(command =>
+                command.UserId == attackerId && command.HabitId == child.Id),
+            Arg.Any<CancellationToken>());
+        await _habitRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>());
+    }
 
-        var ownerResult = await tool.ExecuteAsync(PromoteArgs(childId), UserId, CancellationToken.None);
-        await context.SaveChangesAsync();
+    [Fact]
+    public async Task PromoteAtCeiling_ReturnsNeutralFailureWithoutMutatingChild()
+    {
+        var parentId = Guid.NewGuid();
+        var child = CreateHabit("Floss");
+        child.SetParentHabitId(parentId);
+        _mediator.Send(
+                Arg.Is<MoveHabitParentCommand>(command => command.ParentId == null),
+                Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("You've reached the 1000 habit limit."));
 
-        ownerResult.Success.Should().BeTrue("the owner can move their own habit");
-        await using (var afterOwner = CreateContext(databaseName))
-            (await afterOwner.Habits.SingleAsync(h => h.Id == childId)).ParentHabitId.Should().BeNull();
+        var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}"}""");
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
+        result.ErrorCode.Should().BeNull();
+        child.ParentHabitId.Should().Be(parentId);
     }
 
     private static JsonElement PromoteArgs(Guid habitId) =>
         JsonDocument.Parse($$"""{"habit_id":"{{habitId}}"}""").RootElement;
-
-    private static OrbitDbContext CreateContext(string databaseName) =>
-        new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);
 
     private static Habit CreateHabit(string title)
     {
         return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
     }
 
-    /// <summary>
-    /// Sets up FindOneTrackedAsync to return child on first call, parent on second call.
-    /// </summary>
-    private void SetupFindOneTracked(Habit child, Habit parent)
-    {
-        var callCount = 0;
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(callInfo =>
-        {
-            callCount++;
-            return callCount == 1 ? child : parent;
-        });
-    }
-
-    private void SetupFindOneTrackedSingle(Habit habit)
-    {
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>()
-        ).Returns(habit);
-    }
-
-    /// <summary>
-    /// Sets up FindAsync for cycle detection. Returns parent with no ParentHabitId (breaks chain).
-    /// </summary>
-    private void SetupFindAsyncForCycleCheck(Habit parent)
+    private void SetupFindAsyncSingle(Habit habit)
     {
         _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
             Arg.Any<CancellationToken>()
-        ).Returns(new List<Habit> { parent }.AsReadOnly());
+        ).Returns([habit]);
     }
 
     private async Task<ToolResult> Execute(string json)

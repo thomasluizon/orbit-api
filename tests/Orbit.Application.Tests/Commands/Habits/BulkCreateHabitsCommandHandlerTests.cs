@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Calendar.Queries;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -49,11 +50,11 @@ public class BulkCreateHabitsCommandHandlerTests
         _suggestionRepo.FindAsync(Arg.Any<Expression<Func<GoogleCalendarSyncSuggestion, bool>>>(), Arg.Any<CancellationToken>())
             .Returns(new List<GoogleCalendarSyncSuggestion>().AsReadOnly());
         _unitOfWork.ExecuteInTransactionAsync(
-                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                var operation = call.ArgAt<Func<CancellationToken, Task>>(0);
+                var operation = call.ArgAt<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(0);
                 var ct = call.ArgAt<CancellationToken>(1);
                 return operation(ct);
             });
@@ -77,8 +78,11 @@ public class BulkCreateHabitsCommandHandlerTests
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
         await _habitRepo.Received(3).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            HabitCeilingLock.ForUser(UserId),
+            Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
-            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -106,10 +110,10 @@ public class BulkCreateHabitsCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_PayGateLimitReached_ReturnsPayGateFailure()
+    public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
     {
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Habit limit reached"));
+            .Returns(Result.Failure("Habit limit reached"));
 
         var items = new List<BulkHabitItem> { new("Habit", null, FrequencyUnit.Day, 1) };
         var command = new BulkCreateHabitsCommand(UserId, items);
@@ -117,7 +121,7 @@ public class BulkCreateHabitsCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 
@@ -232,7 +236,7 @@ public class BulkCreateHabitsCommandHandlerTests
         await _handler.Handle(command, CancellationToken.None);
 
         await _unitOfWork.Received(1).ExecuteInTransactionAsync(
-            Arg.Any<Func<CancellationToken, Task>>(),
+            Arg.Any<Func<CancellationToken, Task<Result<BulkCreateResult>>>>(),
             Arg.Any<CancellationToken>());
     }
 

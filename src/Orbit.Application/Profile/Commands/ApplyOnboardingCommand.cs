@@ -52,7 +52,7 @@ public record ApplyOnboardingCommand(
 
 /// <summary>
 /// Applies the buffer of answers a user built during pre-auth onboarding in a single transaction:
-/// creates the habits (trimmed to the free-plan allowance), an optional first log, an optional
+/// creates the habits (trimmed to the shared habit allowance), an optional first log, an optional
 /// goal, week-start/color preferences, and flips <c>HasCompletedOnboarding</c>. Idempotent
 /// by construction — an already-onboarded user is a no-op (<c>Applied:false</c>) — so the client can
 /// flush unconditionally after any successful auth and retry safely under the concurrency pipeline.
@@ -88,7 +88,7 @@ public class ApplyOnboardingCommandHandler(
     private async Task<Result<ApplyOnboardingResponse>> ApplyOnboardingTransactionAsync(
         ApplyOnboardingCommand request, CancellationToken ct)
     {
-        await unitOfWork.AcquireAdvisoryLockAsync($"onboarding-apply:{request.UserId}", ct);
+        await HabitCeilingLock.AcquireAsync(unitOfWork, request.UserId, ct);
 
         var user = await repos.Users.FindOneTrackedAsync(
             u => u.Id == request.UserId, cancellationToken: ct);
@@ -140,9 +140,6 @@ public class ApplyOnboardingCommandHandler(
     private async Task<IReadOnlyList<ApplyHabitInput>> TrimToAllowanceAsync(
         User user, IReadOnlyList<ApplyHabitInput> habits, CancellationToken cancellationToken)
     {
-        if (user.HasProAccess)
-            return habits;
-
         var maxHabits = await appConfig.GetAsync(
             AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, cancellationToken);
         var existingRoots = await repos.Habits.CountAsync(
