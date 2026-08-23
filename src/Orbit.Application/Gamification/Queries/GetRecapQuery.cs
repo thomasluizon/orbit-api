@@ -86,7 +86,7 @@ public class GetRecapQueryHandler(
             return await unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
             {
                 await unitOfWork.AcquireAdvisoryLockAsync(
-                    $"closed-month-recap:{request.UserId}:{request.DateFrom:yyyy-MM-dd}:{request.DateTo:yyyy-MM-dd}",
+                    ClosedMonthRecapLock.ForUser(request.UserId),
                     transactionToken);
 
                 var responseAfterLock = await closedMonthRecapStore.FindResponseJsonAsync(

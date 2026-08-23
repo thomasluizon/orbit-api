@@ -352,7 +352,7 @@ public class GetRecapQueryHandlerTests
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
-            $"closed-month-recap:{UserId}:2026-06-01:2026-06-30",
+            $"closed-month-recap:{UserId}",
             Arg.Any<CancellationToken>());
         await _mediator.Received(1).Send(
             Arg.Any<GetOrCreateReferralCodeCommand>(),
