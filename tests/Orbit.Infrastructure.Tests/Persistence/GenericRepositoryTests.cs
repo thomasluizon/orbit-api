@@ -154,6 +154,32 @@ public class GenericRepositoryTests
         (await verifyRepository.FindOneTrackedAsync(g => g.Id == deletedId)).Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task FindIgnoringFiltersAsync_ReturnsSoftDeletedRootWithIncludedNavigationsUntracked()
+    {
+        var databaseName = NewDatabaseName();
+        Guid goalId;
+        await using (var seed = CreateContext(databaseName))
+        {
+            var seededGoal = MakeGoal("Deleted with logs");
+            seed.Goals.Add(seededGoal);
+            seed.GoalProgressLogs.Add(GoalProgressLog.Create(seededGoal.Id, 0, 10));
+            seededGoal.SoftDelete();
+            await seed.SaveChangesAsync();
+            goalId = seededGoal.Id;
+        }
+
+        await using var context = CreateContext(databaseName);
+        var repository = new GenericRepository<Goal>(context);
+
+        var goal = (await repository.FindIgnoringFiltersAsync(
+            g => g.Id == goalId,
+            query => query.Include(g => g.ProgressLogs))).Single();
+
+        goal.ProgressLogs.Should().ContainSingle();
+        context.Entry(goal).State.Should().Be(EntityState.Detached);
+    }
+
     private static Goal MakeGoal(string title) =>
         Goal.Create(new Goal.CreateGoalParams(UserId, title, 100, "units")).Value;
 

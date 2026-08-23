@@ -80,6 +80,9 @@ public static class ErrorCodes
     public const string CalendarIdsRequired = "CALENDAR_IDS_REQUIRED";
     public const string NoHabitsForPeriod = "NO_HABITS_FOR_PERIOD";
     public const string InvalidPeriod = "INVALID_PERIOD";
+    public const string InvalidClosedMonthParameters = "INVALID_CLOSED_MONTH_PARAMETERS";
+    public const string RecapMonthNotClosed = "RECAP_MONTH_NOT_CLOSED";
+    public const string RecapMonthBeforeAccount = "RECAP_MONTH_BEFORE_ACCOUNT";
     public const string AiSummaryDisabled = "AI_SUMMARY_DISABLED";
     public const string NoActiveGoals = "NO_ACTIVE_GOALS";
     public const string NoGoalsData = "NO_GOALS_DATA";

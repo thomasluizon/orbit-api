@@ -70,6 +70,7 @@ public class OrbitDbContext : DbContext
     public DbSet<AccountabilityPair> AccountabilityPairs => Set<AccountabilityPair>();
     public DbSet<AccountabilityPairHabit> AccountabilityPairHabits => Set<AccountabilityPairHabit>();
     public DbSet<AccountabilityCheckIn> AccountabilityCheckIns => Set<AccountabilityCheckIn>();
+    public DbSet<ClosedMonthRecap> ClosedMonthRecaps => Set<ClosedMonthRecap>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -130,6 +131,17 @@ public class OrbitDbContext : DbContext
         ConfigureAccountabilityPairEntity(modelBuilder);
         ConfigureAccountabilityPairHabitEntity(modelBuilder);
         ConfigureAccountabilityCheckInEntity(modelBuilder);
+        ConfigureClosedMonthRecapEntity(modelBuilder);
+    }
+
+    private static void ConfigureClosedMonthRecapEntity(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ClosedMonthRecap>(entity =>
+        {
+            entity.HasIndex(recap => new { recap.UserId, recap.DateFrom, recap.DateTo }).IsUnique();
+            entity.Property(recap => recap.ResponseJson).HasColumnType(JsonbColumnType).IsRequired();
+            entity.HasOne<User>().WithMany().HasForeignKey(recap => recap.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     /// <summary>

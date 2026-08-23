@@ -79,6 +79,9 @@ public static class ErrorMessages
     public static readonly AppError CalendarIdsRequired = new(ErrorCodes.CalendarIdsRequired, "Calendar ids are required.");
     public static readonly AppError NoHabitsForPeriod = new(ErrorCodes.NoHabitsForPeriod, "No habits found for this period.");
     public static readonly AppError InvalidPeriod = new(ErrorCodes.InvalidPeriod, "Period must be one of: week, month, quarter, semester, year.");
+    public static readonly AppError InvalidClosedMonthParameters = new(ErrorCodes.InvalidClosedMonthParameters, "Year and month must be valid, provided together, and used only with the month period.");
+    public static readonly AppError RecapMonthNotClosed = new(ErrorCodes.RecapMonthNotClosed, "The requested recap month has not closed yet.");
+    public static readonly AppError RecapMonthBeforeAccount = new(ErrorCodes.RecapMonthBeforeAccount, "The requested recap month is before this account existed.");
     public static readonly AppError AiSummaryDisabled = new(ErrorCodes.AiSummaryDisabled, "AI summary is disabled.");
     public static readonly AppError NoActiveGoals = new(ErrorCodes.NoActiveGoals, "No active goals found.");
     public static readonly AppError NoGoalsData = new(ErrorCodes.NoGoalsData, "No goals data provided.");
