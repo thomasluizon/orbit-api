@@ -203,7 +203,8 @@ public class UserStreakService(
         {
             if (completionDateSet.Contains(date))
             {
-                currentStreak = lastActiveDate == date.AddDays(-1)
+                currentStreak = lastActiveDate.HasValue
+                    && lastActiveDate.Value.DayNumber == date.DayNumber - 1
                     ? currentStreak + 1
                     : 1;
                 lastActiveDate = date;
