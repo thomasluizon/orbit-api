@@ -414,8 +414,8 @@ public partial class GamificationService(
     /// <summary>
     /// Idempotently grants the requested achievements to the loaded user, reusing the audited
     /// persist + XP + level + notification funnel. Returns the ids newly granted this call (empty when the
-    /// user is missing or every id was already earned). Deliberately ungated on Pro — event-driven
-    /// social/sharing achievements are earned by free users, while the catalog display stays Pro-gated.
+    /// user is missing or every id was already earned). The shared grant funnel is available to free
+    /// and Pro users; callers remain responsible for requesting only achievements they have verified.
     /// </summary>
     private async Task<IReadOnlyList<string>> ComputeGrantAchievementsAsync(
         Guid userId, IReadOnlyList<string> achievementIds, List<PendingPush> pushes, CancellationToken ct)
@@ -450,7 +450,7 @@ public partial class GamificationService(
 
     /// <summary>
     /// Template method that handles the common gamification scaffold:
-    /// load user, check Pro, load earned achievements, run domain-specific checks,
+    /// load user, check gamification availability, load earned achievements, run domain-specific checks,
     /// persist achievements, update level, send notifications, save changes.
     /// </summary>
     private async Task ProcessGamificationEventAsync(

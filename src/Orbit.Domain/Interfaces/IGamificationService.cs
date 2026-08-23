@@ -16,8 +16,8 @@ public interface IGamificationService
     /// <summary>
     /// Idempotently grants the given achievements to a user, awarding each definition's XP through the
     /// audited funnel, advancing the level, and queuing achievement/level-up notifications. Already-earned
-    /// ids are skipped. Returns the ids that were newly granted (empty when all were already earned). No
-    /// Pro gate — event-driven social/sharing achievements are earned by free users (display stays gated).
+    /// ids are skipped. Returns the ids that were newly granted (empty when all were already earned).
+    /// The grant funnel is available to free and Pro users; callers decide which verified ids to request.
     /// </summary>
     Task<IReadOnlyList<string>> TryGrantAchievementsAsync(Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default);
 }
