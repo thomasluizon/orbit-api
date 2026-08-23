@@ -17,29 +17,36 @@ public readonly record struct EmailChallengeConfirmation(TimeSpan RemainingLifet
 
 public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeProvider)
 {
+    private const int LockStripeCount = 256;
     private static readonly TimeSpan ChallengeTtl = TimeSpan.FromMinutes(AppConstants.SensitiveOperationChallengeTtlMinutes);
     private static readonly TimeSpan RequestCooldown = TimeSpan.FromSeconds(AppConstants.SensitiveOperationChallengeCooldownSeconds);
+    private readonly object[] _challengeLocks = Enumerable.Range(0, LockStripeCount)
+        .Select(_ => new object())
+        .ToArray();
 
     public Result<string> Issue(EmailChallengeOperation operation, string email)
     {
         var normalizedEmail = email.ToLowerInvariant();
         var cacheKey = ChallengeCacheKey(operation, normalizedEmail);
-        var nowAtUtc = timeProvider.GetUtcNow().UtcDateTime;
-
-        if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) &&
-            existing is not null &&
-            nowAtUtc - existing.CreatedAt < RequestCooldown)
+        lock (ChallengeLock(cacheKey))
         {
-            return Result.Failure<string>(ErrorMessages.CodeRequestCooldown);
+            var nowAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+
+            if (cache.TryGetValue(cacheKey, out VerificationEntry? existing) &&
+                existing is not null &&
+                nowAtUtc - existing.CreatedAt < RequestCooldown)
+            {
+                return Result.Failure<string>(ErrorMessages.CodeRequestCooldown);
+            }
+
+            var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+            cache.Set(cacheKey, new VerificationEntry(code, 0, nowAtUtc), new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = ChallengeTtl,
+            });
+
+            return Result.Success(code);
         }
-
-        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-        cache.Set(cacheKey, new VerificationEntry(code, 0, nowAtUtc), new MemoryCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = ChallengeTtl,
-        });
-
-        return Result.Success(code);
     }
 
     public Result<EmailChallengeConfirmation> Confirm(
@@ -48,31 +55,34 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
         string code)
     {
         var normalizedEmail = email.ToLowerInvariant();
-        if (CountFailedAttempts(operation, normalizedEmail) >= AppConstants.MaxVerificationAttempts)
-            return Result.Failure<EmailChallengeConfirmation>(ErrorMessages.TooManyCodeAttempts);
-
         var cacheKey = ChallengeCacheKey(operation, normalizedEmail);
-        if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
-            return Result.Failure<EmailChallengeConfirmation>(ExpiredError(operation));
-
-        var remainingLifetime = ChallengeTtl - (timeProvider.GetUtcNow().UtcDateTime - entry.CreatedAt);
-        if (remainingLifetime <= TimeSpan.Zero)
+        lock (ChallengeLock(cacheKey))
         {
+            if (CountFailedAttempts(operation, normalizedEmail) >= AppConstants.MaxVerificationAttempts)
+                return Result.Failure<EmailChallengeConfirmation>(ErrorMessages.TooManyCodeAttempts);
+
+            if (!cache.TryGetValue(cacheKey, out VerificationEntry? entry) || entry is null)
+                return Result.Failure<EmailChallengeConfirmation>(ExpiredError(operation));
+
+            var remainingLifetime = ChallengeTtl - (timeProvider.GetUtcNow().UtcDateTime - entry.CreatedAt);
+            if (remainingLifetime <= TimeSpan.Zero)
+            {
+                cache.Remove(cacheKey);
+                return Result.Failure<EmailChallengeConfirmation>(ExpiredError(operation));
+            }
+
+            if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(entry.Code),
+                Encoding.UTF8.GetBytes(code)))
+            {
+                var attempts = RecordFailedAttempt(operation, normalizedEmail);
+                var attemptsRemaining = Math.Max(0, AppConstants.MaxVerificationAttempts - attempts);
+                return Result.Failure<EmailChallengeConfirmation>(InvalidCodeError(operation, attemptsRemaining));
+            }
+
             cache.Remove(cacheKey);
-            return Result.Failure<EmailChallengeConfirmation>(ExpiredError(operation));
+            return Result.Success(new EmailChallengeConfirmation(remainingLifetime));
         }
-
-        if (!CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(entry.Code),
-            Encoding.UTF8.GetBytes(code)))
-        {
-            var attempts = RecordFailedAttempt(operation, normalizedEmail);
-            var attemptsRemaining = Math.Max(0, AppConstants.MaxVerificationAttempts - attempts);
-            return Result.Failure<EmailChallengeConfirmation>(InvalidCodeError(operation, attemptsRemaining));
-        }
-
-        cache.Remove(cacheKey);
-        return Result.Success(new EmailChallengeConfirmation(remainingLifetime));
     }
 
     public void AuthorizeOnce(
@@ -147,6 +157,12 @@ public sealed class EmailChallengeService(IMemoryCache cache, TimeProvider timeP
 
     private static string GrantCacheKey(EmailChallengeOperation operation, Guid userId) =>
         $"email-challenge-grant:{operation}:{userId}";
+
+    private object ChallengeLock(string cacheKey)
+    {
+        var stripe = (uint)StringComparer.Ordinal.GetHashCode(cacheKey) % LockStripeCount;
+        return _challengeLocks[(int)stripe];
+    }
 
     private sealed class OneTimeGrant
     {

@@ -130,6 +130,42 @@ public class ApiKeyCreationChallengeFlowTests
     }
 
     [Fact]
+    public async Task Confirm_SameCodeConcurrently_AuthorizesOnlyOneCreation()
+    {
+        await RequestChallenge();
+        var code = CachedCode();
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<Result> ConfirmAfterStartAsync()
+        {
+            await start.Task;
+            return await _confirmHandler.Handle(
+                new ConfirmApiKeyCreationChallengeCommand(UserId, code),
+                CancellationToken.None);
+        }
+
+        var confirmationTasks = new[]
+        {
+            Task.Run(ConfirmAfterStartAsync),
+            Task.Run(ConfirmAfterStartAsync),
+        };
+        start.SetResult();
+        var confirmations = await Task.WhenAll(confirmationTasks);
+
+        var firstCreate = await _createHandler.Handle(
+            new CreateApiKeyCommand(UserId, "Concurrent grant one"),
+            CancellationToken.None);
+        var secondCreate = await _createHandler.Handle(
+            new CreateApiKeyCommand(UserId, "Concurrent grant two"),
+            CancellationToken.None);
+
+        confirmations.Count(result => result.IsSuccess).Should().Be(1);
+        confirmations.Count(result => result.IsFailure).Should().Be(1);
+        new[] { firstCreate, secondCreate }.Count(result => result.IsSuccess).Should().Be(1);
+        await _apiKeyRepository.Received(1).AddAsync(Arg.Any<ApiKey>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Request_TwiceWithinSixtySeconds_ReturnsCooldownAndSendsOneEmail()
     {
         var first = await RequestChallenge();
