@@ -23,7 +23,11 @@ public class PayGateServiceTests
     {
         _sut = new PayGateService(_habitRepo, _userRepo, _appConfig);
 
-        _appConfig.GetAsync("FreeMaxHabits", 10, Arg.Any<CancellationToken>()).Returns(10);
+        _appConfig.GetAsync(
+                AppConfigKeys.FreeMaxHabits,
+                AppConstants.DefaultFreeMaxHabits,
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
         _appConfig.GetAsync("SubHabitsProOnly", true, Arg.Any<CancellationToken>()).Returns(true);
         _appConfig.GetAsync("FreeAiMessagesPerMonth", 20, Arg.Any<CancellationToken>()).Returns(20);
         _appConfig.GetAsync("ProAiMessagesPerMonth", 500, Arg.Any<CancellationToken>()).Returns(500);
@@ -69,24 +73,30 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateHabits_ProUser_AlwaysSuccess()
+    public async Task CanCreateHabits_ProUserAtLimit_NeutralFailure()
     {
         var user = CreateProUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
 
         var result = await _sut.CanCreateHabits(UserId);
 
-        result.IsSuccess.Should().BeTrue();
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().BeNull();
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
     [Fact]
-    public async Task CanCreateHabits_FreeUser_UnderLimit_Success()
+    public async Task CanCreateHabits_FreeUserAt999_AllowsOneMore()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
         _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(0);
+            .Returns(AppConstants.DefaultFreeMaxHabits - 1);
 
         var result = await _sut.CanCreateHabits(UserId);
 
@@ -130,50 +140,55 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task CanCreateHabits_FreeUser_AtLimit_PayGateFailure()
+    public async Task CanCreateHabits_FreeUserAtLimit_NeutralFailureWithoutUpsell()
     {
         var user = CreateFreeUser();
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(10);
+            .Returns(AppConstants.DefaultFreeMaxHabits);
 
         var result = await _sut.CanCreateHabits(UserId);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        result.Error.Should().Be(
-            "You've reached the 10 habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+        result.ErrorCode.Should().BeNull();
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
     }
 
     [Fact]
-    public async Task UnlogCompletedTask_FreeUserAtLimit_RejectsWithoutChangingState()
+    public async Task CanCreateHabits_FreeUserAt998_CreatingFiveFails()
     {
-        ConfigureFreeUserAtHabitCap();
+        var user = CreateFreeUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _habitRepo.CountAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits - 2);
+
+        var result = await _sut.CanCreateHabits(UserId, 5);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().BeNull();
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
+    }
+
+    [Fact]
+    public void UnlogCompletedRoot_RequiresLiveRootAllowance()
+    {
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Finished task", null, null, ReactivationToday)).Value;
         habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
 
-        var result = await HabitReactivationAllowance.ExecuteAsync(
-            UserId,
-            HabitReactivationAllowance.IsRequiredForUnlog(habit),
-            _sut,
-            () => habit.Unlog(ReactivationToday),
-            CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        habit.IsCompleted.Should().BeTrue();
-        habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeFalse();
+        HabitLiveRootEntry.FromUnlog(habit).Should().BeTrue();
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task EndDateReactivation_FreeUserAtLimit_RejectsWithoutChangingState(bool clearEndDate)
+    public void EndDateReactivation_RequiresLiveRootAllowance(bool clearEndDate)
     {
-        ConfigureFreeUserAtHabitCap();
         var habit = Habit.Create(new HabitCreateParams(
             UserId,
             "Finished recurring habit",
@@ -182,36 +197,19 @@ public class PayGateServiceTests
             ReactivationToday,
             EndDate: ReactivationToday)).Value;
         habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
-        var originalDueDate = habit.DueDate;
         DateOnly? endDate = clearEndDate ? null : ReactivationToday.AddDays(7);
+        var update = new HabitUpdateParams(
+            "Changed title",
+            null,
+            FrequencyUnit.Day,
+            1,
+            null,
+            false,
+            null,
+            EndDate: endDate,
+            ClearEndDate: clearEndDate);
 
-        var result = await HabitReactivationAllowance.ExecuteAsync(
-            UserId,
-            HabitReactivationAllowance.IsRequiredForEndDateChange(
-                habit,
-                FrequencyUnit.Day,
-                dueDate: null,
-                endDate,
-                clearEndDate),
-            _sut,
-            () => habit.Update(new HabitUpdateParams(
-                "Changed title",
-                null,
-                FrequencyUnit.Day,
-                1,
-                null,
-                false,
-                null,
-                EndDate: endDate,
-                ClearEndDate: clearEndDate)),
-            CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        habit.Title.Should().Be("Finished recurring habit");
-        habit.IsCompleted.Should().BeTrue();
-        habit.DueDate.Should().Be(originalDueDate);
-        habit.EndDate.Should().Be(ReactivationToday);
+        HabitLiveRootEntry.FromUpdate(habit, update).Should().BeTrue();
     }
 
     [Fact]
@@ -223,17 +221,6 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
-    }
-
-    private void ConfigureFreeUserAtHabitCap()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _habitRepo.CountAsync(
-                Arg.Any<Expression<Func<Habit, bool>>>(),
-                Arg.Any<CancellationToken>())
-            .Returns(10);
     }
 
     [Fact]
@@ -638,22 +625,6 @@ public class PayGateServiceTests
         var limit = await _sut.GetAiMessageLimit(UserId);
 
         limit.Should().Be(25);
-    }
-
-    [Fact]
-    public async Task CanCreateHabits_FreeUser_BulkCreate_ExceedsLimit_PayGateFailure()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-
-        _habitRepo.CountAsync(Arg.Any<System.Linq.Expressions.Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
-            .Returns(8);
-
-        var result = await _sut.CanCreateHabits(UserId, 3);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
     }
 
     [Fact]

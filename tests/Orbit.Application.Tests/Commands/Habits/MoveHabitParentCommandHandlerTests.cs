@@ -1,6 +1,8 @@
 using FluentAssertions;
 using NSubstitute;
+using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -13,6 +15,7 @@ public class MoveHabitParentCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAppConfigService _appConfigService = Substitute.For<IAppConfigService>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly MoveHabitParentCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -20,7 +23,14 @@ public class MoveHabitParentCommandHandlerTests
 
     public MoveHabitParentCommandHandlerTests()
     {
-        _handler = new MoveHabitParentCommandHandler(_habitRepo, _unitOfWork, _appConfigService);
+        _handler = new MoveHabitParentCommandHandler(
+            _habitRepo, _unitOfWork, _appConfigService, _payGate);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>()).Returns(Result.Success());
         _appConfigService.GetAsync("MaxHabitDepth", 5, Arg.Any<CancellationToken>())
             .Returns(5);
     }
@@ -75,6 +85,57 @@ public class MoveHabitParentCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         habit.ParentHabitId.Should().BeNull();
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SequentialPromotions_SecondAtCeilingIsRefused()
+    {
+        var firstParentId = Guid.NewGuid();
+        var secondParentId = Guid.NewGuid();
+        var first = CreateTestHabit("First child");
+        var second = CreateTestHabit("Second child");
+        first.SetParentHabitId(firstParentId);
+        second.SetParentHabitId(secondParentId);
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(first, second);
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.Success(), Result.Failure("You've reached the 1000 habit limit."));
+
+        var firstResult = await _handler.Handle(
+            new MoveHabitParentCommand(UserId, first.Id, null), CancellationToken.None);
+        var secondResult = await _handler.Handle(
+            new MoveHabitParentCommand(UserId, second.Id, null), CancellationToken.None);
+
+        firstResult.IsSuccess.Should().BeTrue();
+        first.ParentHabitId.Should().BeNull();
+        secondResult.IsFailure.Should().BeTrue();
+        secondResult.Error.Should().Be("You've reached the 1000 habit limit.");
+        second.ParentHabitId.Should().Be(secondParentId);
+    }
+
+    [Fact]
+    public async Task Handle_CompletedChildPromotion_DoesNotConsumeLiveRootAllowance()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Completed child", null, null, DueDate: Today)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        habit.SetParentHabitId(Guid.NewGuid());
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                includes: Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+
+        var result = await _handler.Handle(
+            new MoveHabitParentCommand(UserId, habit.Id, null), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.ParentHabitId.Should().BeNull();
+        await _payGate.DidNotReceive().CanCreateHabits(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

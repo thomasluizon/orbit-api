@@ -20,7 +20,16 @@ public class DuplicateHabitCommandHandler(
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<DuplicateHabitCommand, Result<Guid>>
 {
-    public async Task<Result<Guid>> Handle(DuplicateHabitCommand request, CancellationToken cancellationToken)
+    public Task<Result<Guid>> Handle(DuplicateHabitCommand request, CancellationToken cancellationToken) =>
+        HabitCeilingLock.ExecuteAsync(
+            unitOfWork,
+            request.UserId,
+            ct => HandleLockedAsync(request, ct),
+            cancellationToken);
+
+    private async Task<Result<Guid>> HandleLockedAsync(
+        DuplicateHabitCommand request,
+        CancellationToken cancellationToken)
     {
         var allHabits = await habitRepository.FindTrackedAsync(
             h => h.UserId == request.UserId,

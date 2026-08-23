@@ -18,6 +18,8 @@ public class UpdateHabitToolTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly UpdateHabitTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -27,7 +29,10 @@ public class UpdateHabitToolTests
     {
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
-        _tool = new UpdateHabitTool(_habitRepo, _userDateService);
+        ConfigureTransaction(_unitOfWork);
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        _tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, _payGate);
     }
 
     [Fact]
@@ -50,7 +55,7 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.PayGateFailure("Habit limit reached"));
-        var tool = new UpdateHabitTool(_habitRepo, _userDateService, payGate);
+        var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
 
         var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
@@ -69,7 +74,7 @@ public class UpdateHabitToolTests
         var payGate = Substitute.For<IPayGateService>();
         payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        var tool = new UpdateHabitTool(_habitRepo, _userDateService, payGate);
+        var tool = new UpdateHabitTool(_habitRepo, _userDateService, _unitOfWork, payGate);
 
         var args = JsonDocument.Parse($$$"""{"habit_id": "{{{habit.Id}}}", "end_date": null}""").RootElement;
         var result = await tool.ExecuteAsync(args, UserId, CancellationToken.None);
@@ -596,7 +601,12 @@ public class UpdateHabitToolTests
         }
 
         await using var context = CreateContext(databaseName);
-        var tool = new UpdateHabitTool(new GenericRepository<Habit>(context), _userDateService);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        ConfigureTransaction(unitOfWork);
+        unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(call => context.SaveChangesAsync(call.Arg<CancellationToken>()));
+        var tool = new UpdateHabitTool(
+            new GenericRepository<Habit>(context), _userDateService, unitOfWork, _payGate);
 
         var attackerId = Guid.NewGuid();
         var attackerResult = await tool.ExecuteAsync(RenameArgs(habitId, "Hijacked"), attackerId, CancellationToken.None);
@@ -618,6 +628,15 @@ public class UpdateHabitToolTests
 
     private static JsonElement RenameArgs(Guid habitId, string title) =>
         JsonDocument.Parse($$"""{"habit_id":"{{habitId}}","title":"{{title}}"}""").RootElement;
+
+    private static void ConfigureTransaction(IUnitOfWork unitOfWork)
+    {
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<ToolResult>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<ToolResult>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+    }
 
     private static OrbitDbContext CreateContext(string databaseName) =>
         new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(databaseName).Options);

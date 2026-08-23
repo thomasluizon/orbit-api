@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -30,6 +31,14 @@ public class CreateHabitToolTests
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(Result.Success());
         _payGate.CanCreateSubHabits(UserId, Arg.Any<CancellationToken>()).Returns(Result.Success());
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<ToolResult>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task<ToolResult>>>(0);
+                return operation(call.ArgAt<CancellationToken>(1));
+            });
     }
 
     [Fact]
@@ -42,6 +51,9 @@ public class CreateHabitToolTests
         result.EntityId.Should().NotBeNullOrEmpty();
         await _habitRepo.Received(1).AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            HabitCeilingLock.ForUser(UserId),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -160,7 +172,7 @@ public class CreateHabitToolTests
     }
 
     [Fact]
-    public async Task PayGateFails_ReturnsError()
+    public async Task HabitLimitFailsWithoutEntitlementCode()
     {
         _payGate.CanCreateHabits(UserId, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("Habit limit reached."));
@@ -169,6 +181,7 @@ public class CreateHabitToolTests
 
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("Habit limit reached");
+        result.ErrorCode.Should().BeNull();
     }
 
     [Fact]
