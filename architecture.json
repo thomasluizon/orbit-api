@@ -7810,6 +7810,7 @@
         "testClass": "PushNotificationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/PushNotificationServiceTests.cs",
         "references": [
+          "Notification",
           "PushSubscription",
           "User"
         ]
