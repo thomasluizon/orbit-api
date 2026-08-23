@@ -12,18 +12,24 @@ public sealed partial class PostHogProductAnalytics(
     IPostHogClient postHogClient,
     ILogger<PostHogProductAnalytics> logger) : IProductAnalytics
 {
-    public void CaptureUserEvent(Guid userId, string eventName, string plan)
+    public void CaptureUserEvent(
+        Guid userId,
+        string eventName,
+        string plan,
+        IReadOnlyDictionary<string, object>? properties = null)
     {
         var distinctId = userId.ToString();
 
-        var enqueued = postHogClient.Capture(distinctId, eventName, new Dictionary<string, object>
+        var eventProperties = properties is null
+            ? new Dictionary<string, object>()
+            : new Dictionary<string, object>(properties);
+        eventProperties["$set"] = new Dictionary<string, object>
         {
-            ["$set"] = new Dictionary<string, object>
-            {
-                ["plan"] = plan
-            },
-            ["$unset"] = new[] { "isYearlyPro" }
-        });
+            ["plan"] = plan
+        };
+        eventProperties["$unset"] = new[] { "isYearlyPro" };
+
+        var enqueued = postHogClient.Capture(distinctId, eventName, eventProperties);
 
         LogCaptureEnqueued(logger, eventName, distinctId, enqueued);
     }
