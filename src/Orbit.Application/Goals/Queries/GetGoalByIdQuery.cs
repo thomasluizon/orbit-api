@@ -28,7 +28,8 @@ public record GoalDetailDto(
     DateTime? CompletedAtUtc,
     decimal ProgressPercentage,
     IReadOnlyList<GoalProgressEntryDto> ProgressHistory,
-    List<LinkedHabitDto> LinkedHabits);
+    List<LinkedHabitDto> LinkedHabits,
+    bool? IsProgressDerived = null);
 
 public record GetGoalByIdQuery(
     Guid UserId,

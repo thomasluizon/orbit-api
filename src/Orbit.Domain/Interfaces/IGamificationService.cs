@@ -10,7 +10,7 @@ public interface IGamificationService
     Task<IReadOnlyList<HabitLogGamificationResult>> ProcessHabitsLogged(Guid userId, IReadOnlyList<Guid> habitIds, CancellationToken ct = default);
     Task ProcessHabitCreated(Guid userId, CancellationToken ct = default);
     Task ProcessGoalCreated(Guid userId, CancellationToken ct = default);
-    Task ProcessGoalCompleted(Guid userId, CancellationToken ct = default);
+    Task ProcessGoalCompleted(Guid userId, Guid goalId, CancellationToken ct = default);
     Task ProcessOnboardingChecklistAsync(Guid userId, OnboardingChecklistSignal signal, CancellationToken ct = default);
 
     /// <summary>

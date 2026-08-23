@@ -32,12 +32,13 @@ public class GamificationServiceTests
     private readonly GamificationService _sut;
 
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly Guid GoalId = Guid.NewGuid();
     private static readonly DateOnly Today = new(2026, 3, 20);
 
     public GamificationServiceTests()
     {
         var repos = new GamificationRepositories(
-            _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo);
+            _userRepo, _habitRepo, _habitLogRepo, _goalRepo, _achievementRepo, _notificationRepo, _xpAwardLogRepo);
         _sut = new GamificationService(
             repos, new GamificationNotifiers(_pushService, _feedEmitter), _userDateService, new XpAwarder(_xpAwardLogRepo), _unitOfWork,
             _featureFlagService, Substitute.For<ILogger<GamificationService>>());
@@ -432,7 +433,7 @@ public class GamificationServiceTests
 
         SetupCompletedGoalCount(1);
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         user.TotalXp.Should().BeGreaterThan(initialXp);
         await _achievementRepo.Received().AddAsync(
@@ -449,7 +450,7 @@ public class GamificationServiceTests
 
         SetupCompletedGoalCount(5);
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         await _achievementRepo.Received().AddAsync(
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.Overachiever),
@@ -465,7 +466,7 @@ public class GamificationServiceTests
 
         SetupCompletedGoalCount(10);
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         await _achievementRepo.Received().AddAsync(
             Arg.Is<UserAchievement>(a => a.AchievementId == AchievementDefinitions.DreamMaker),
@@ -558,7 +559,7 @@ public class GamificationServiceTests
         var user = CreateFreeUser();
         SetupUserLookup(user);
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         await _achievementRepo.DidNotReceive().AddAsync(
             Arg.Any<UserAchievement>(),
@@ -853,9 +854,32 @@ public class GamificationServiceTests
 
         SetupCompletedGoalCount(0);
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         user.TotalXp.Should().Be(initialXp + 100);
+        await _xpAwardLogRepo.Received(1).AddAsync(
+            Arg.Is<XpAwardLog>(award =>
+                award.Source == XpAwardSource.GoalCompleted && award.SourceId == GoalId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessGoalCompleted_ExistingAwardForGoal_DoesNotAwardAgain()
+    {
+        var user = CreateProUser();
+        var initialXp = user.TotalXp;
+        SetupUserLookup(user);
+        _xpAwardLogRepo.AnyAsync(
+                Arg.Any<Expression<Func<XpAwardLog, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
+
+        user.TotalXp.Should().Be(initialXp);
+        await _xpAwardLogRepo.DidNotReceive().AddAsync(
+            Arg.Any<XpAwardLog>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -911,7 +935,7 @@ public class GamificationServiceTests
                     : Task.FromResult(1);
             });
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         saveAttempts.Should().Be(2);
         _unitOfWork.Received(1).ResetTracking();
@@ -934,7 +958,7 @@ public class GamificationServiceTests
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new DbUpdateConcurrencyException("simulated stale token"));
 
-        var act = async () => await _sut.ProcessGoalCompleted(UserId);
+        var act = async () => await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         await act.Should().ThrowAsync<DbUpdateConcurrencyException>();
         _unitOfWork.Received(2).ResetTracking();
@@ -1135,7 +1159,7 @@ public class GamificationServiceTests
         SetupNoEarnedAchievements();
         SetupCompletedGoalCount(1);
 
-        await _sut.ProcessGoalCompleted(UserId);
+        await _sut.ProcessGoalCompleted(UserId, GoalId);
 
         var achievementXp = AchievementDefinitions.All.Single(a => a.Id == AchievementDefinitions.GoalCrusher).XpReward;
         user.TotalXp.Should().Be(initialXp + 100 + achievementXp);

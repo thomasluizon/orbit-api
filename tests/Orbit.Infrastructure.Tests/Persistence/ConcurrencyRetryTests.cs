@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -344,17 +345,24 @@ public class ConcurrencyRetryTests
         return Goal.Create(new Goal.CreateGoalParams(userId, "Squat", targetValue, "kg")).Value;
     }
 
-    private static UpdateGoalProgressCommandHandler CreateGoalProgressHandler(OrbitDbContext context) =>
-        new(
+    private static UpdateGoalProgressCommandHandler CreateGoalProgressHandler(OrbitDbContext context)
+    {
+        var goalRepository = new GenericRepository<Goal>(context);
+        var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var completionService = new GoalCompletionService(
+            goalRepository,
+            Substitute.For<IGamificationService>(),
+            unitOfWork);
+        return new UpdateGoalProgressCommandHandler(
             new GoalRepositories(
-                new GenericRepository<Goal>(context),
+                goalRepository,
                 new GenericRepository<GoalProgressLog>(context)),
             PassingGoalGate(),
-            Substitute.For<IGamificationService>(),
-            new UnitOfWork(context, new DatabaseConnectionSettings()),
+            completionService,
+            unitOfWork,
             StubToday(new DateOnly(2026, 3, 20)),
-            new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<UpdateGoalProgressCommandHandler>.Instance);
+            new MemoryCache(new MemoryCacheOptions()));
+    }
 
     private static OrbitDbContext CreateContext(string dbName, ISaveChangesInterceptor? interceptor = null)
     {

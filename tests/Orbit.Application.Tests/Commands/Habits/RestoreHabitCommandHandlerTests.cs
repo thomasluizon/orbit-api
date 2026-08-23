@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,6 +15,7 @@ public class RestoreHabitCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
@@ -24,10 +26,23 @@ public class RestoreHabitCommandHandlerTests
 
     public RestoreHabitCommandHandlerTests()
     {
-        _handler = new RestoreHabitCommandHandler(_habitRepo, _userStreakService, _unitOfWork, _userDateService, _cache);
+        _handler = new RestoreHabitCommandHandler(
+            _habitRepo,
+            _userStreakService,
+            _goalCompletionService,
+            _unitOfWork,
+            _userDateService,
+            _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(0, 0, null));
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<GoalCompletionUpdate>>([]));
     }
 
     private static Habit CreateHabit(Guid? parentId = null)
@@ -39,7 +54,9 @@ public class RestoreHabitCommandHandlerTests
     private void SetupUserHabits(params Habit[] habits)
     {
         _habitRepo.FindTrackedIgnoringFiltersAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+            Arg.Any<CancellationToken>())
             .Returns(habits.ToList());
     }
 
@@ -98,5 +115,29 @@ public class RestoreHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be("Habit not found.");
+    }
+
+    [Fact]
+    public async Task Handle_LegacyHiddenGoalLink_PreservesAcceptedManualProgressDuringRestore()
+    {
+        var habit = CreateHabit();
+        var goal = Goal.Create(UserId, "Exercise", 10, "sessions").Value;
+        goal.AddHabit(habit);
+        habit.SoftDelete(new DateTime(2026, 3, 20, 10, 0, 0, DateTimeKind.Utc));
+        goal.IsProgressDerived.Should().BeFalse();
+        goal.UpdateProgress(4).IsSuccess.Should().BeTrue();
+        SetupUserHabits(habit);
+
+        var result = await _handler.Handle(new RestoreHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.IsProgressDerived.Should().BeTrue();
+        goal.CurrentValue.Should().Be(4);
+        await _goalCompletionService.DidNotReceive().SyncDerivedGoalsAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Arg.Any<DateOnly>(),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
     }
 }

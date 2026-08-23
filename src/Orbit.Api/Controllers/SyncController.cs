@@ -75,7 +75,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         DateTime CreatedAtUtc,
         DateTime UpdatedAtUtc,
         DateTime? CompletedAtUtc,
-        DateTime? StreakSyncedAtUtc);
+        DateTime? StreakSyncedAtUtc,
+        bool? IsProgressDerived = null);
 
     public record SyncGoalProgressLogDto(
         Guid Id,
@@ -162,6 +163,7 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
         var goals = await dbContext.Goals
             .IgnoreQueryFilters()
             .Where(g => g.UserId == userId && g.UpdatedAtUtc > sinceUtc)
+            .Include(g => g.Habits)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -372,7 +374,8 @@ public partial class SyncController(OrbitDbContext dbContext, ILogger<SyncContro
             goal.CreatedAtUtc,
             goal.UpdatedAtUtc,
             goal.CompletedAtUtc,
-            goal.StreakSyncedAtUtc);
+            goal.StreakSyncedAtUtc,
+            goal.IsProgressDerived);
     }
 
     private static SyncGoalProgressLogDto MapGoalProgressLog(GoalProgressLog goalProgressLog)

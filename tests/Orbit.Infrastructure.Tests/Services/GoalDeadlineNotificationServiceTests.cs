@@ -18,9 +18,9 @@ namespace Orbit.Infrastructure.Tests.Services;
 
 /// <summary>
 /// Tests the FormatDeadlineBody logic, NotifyDaysBefore constants, and the compute-only
-/// streak refresh that runs before deadline notifications fire (so bodies show live progress
-/// and goals already at target are excluded) without persisting the streak or completing the
-/// goal. The background service loop itself is an integration concern.
+/// derived progress refresh that runs before deadline notifications fire so bodies show live
+/// progress and goals already at target are excluded without persisting or completing the goal.
+/// The background service loop itself is an integration concern.
 /// </summary>
 public class GoalDeadlineNotificationServiceTests
 {
@@ -309,6 +309,51 @@ public class GoalDeadlineNotificationServiceTests
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
 
         var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        reloaded.Status.Should().Be(GoalStatus.Active);
+    }
+
+    [Fact]
+    public async Task CheckAndSendDeadlineNotifications_LinkedStandardGoal_NotifiesWithFreshProgressWithoutPersisting()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var pushService = Substitute.For<IPushNotificationService>();
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var goal = Goal.Create(new Goal.CreateGoalParams(
+            user.Id,
+            "Read books",
+            5,
+            "books",
+            Deadline: Today.AddDays(1))).Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            user.Id,
+            "Read",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+
+        dbContext.Users.Add(user);
+        dbContext.Habits.Add(habit);
+        dbContext.Goals.Add(goal);
+        await dbContext.SaveChangesAsync();
+
+        string? capturedBody = null;
+        pushService
+            .SendToUserAsync(
+                user.Id,
+                Arg.Any<string>(),
+                Arg.Do<string>(body => capturedBody = body),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var service = CreateService(dbContext, pushService);
+        await service.CheckAndSendDeadlineNotifications(CancellationToken.None);
+
+        capturedBody.Should().Contain("1/5 books");
+        var reloaded = await dbContext.Goals.AsNoTracking().SingleAsync(candidate => candidate.Id == goal.Id);
+        reloaded.CurrentValue.Should().Be(0);
         reloaded.Status.Should().Be(GoalStatus.Active);
     }
 

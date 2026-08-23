@@ -28,19 +28,17 @@ internal static class GoalDetailLoader
         CancellationToken cancellationToken)
     {
         var userToday = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
-
         var goals = await goalRepository.FindAsync(
             g => g.Id == goalId && g.UserId == userId,
             q => q.Include(g => g.ProgressLogs)
-                  .Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
+                  .Include(g => g.Habits).ThenInclude(h => h.Logs),
             cancellationToken);
         var goal = goals.Count > 0 ? goals[0] : null;
 
         if (goal is null)
             return null;
 
-        GoalStreakSyncService.ApplyReadValue(goal, userToday);
+        GoalProgressSyncService.ApplyReadValue(goal, userToday);
 
         var progressPercentage = goal.TargetValue > 0
             ? Math.Min(100, Math.Round(goal.CurrentValue / goal.TargetValue * 100, 1))
@@ -58,7 +56,8 @@ internal static class GoalDetailLoader
         var dto = new GoalDetailDto(
             goal.Id, goal.Title, goal.Description, goal.TargetValue, goal.CurrentValue,
             goal.Unit, goal.Status, goal.Type, goal.Deadline, goal.Position, goal.CreatedAtUtc,
-            goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits);
+            goal.CompletedAtUtc, progressPercentage, progressHistory, linkedHabits,
+            goal.IsProgressDerived);
 
         return new GoalDetailResult(goal, userToday, dto);
     }

@@ -89,6 +89,15 @@ public class GenericRepository<T>(OrbitDbContext context) : IGenericRepository<T
         return await _dbSet.IgnoreQueryFilters().Where(predicate).ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<T>> includes,
+        CancellationToken cancellationToken = default)
+    {
+        var query = includes(_dbSet.IgnoreQueryFilters().Where(predicate)).AsSplitQuery();
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task<T?> FindOneTrackedIgnoringFiltersAsync(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)

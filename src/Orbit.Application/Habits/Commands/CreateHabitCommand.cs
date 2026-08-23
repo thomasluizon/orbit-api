@@ -1,7 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -37,6 +39,7 @@ public partial class CreateHabitCommandHandler(
     IUserDateService userDateService,
     IPayGateService payGate,
     IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<CreateHabitCommandHandler> logger) : IRequestHandler<CreateHabitCommand, Result<Guid>>
@@ -95,19 +98,32 @@ public partial class CreateHabitCommandHandler(
         if (subResult.IsFailure)
             return subResult.PropagateError<Guid>();
 
-        var linkResult = await LinkTagsAndGoalsAsync(habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
+        var linkResult = await LinkTagsAndGoalsAsync(
+            habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
         if (linkResult.IsFailure)
             return linkResult.PropagateError<Guid>();
 
         await repos.HabitRepository.AddAsync(habit, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var habitId = habit.Id;
+        if (linkResult.Value.Count > 0)
+        {
+            await goalCompletionService.SyncDerivedGoalsAsync(
+                request.UserId,
+                linkResult.Value,
+                today,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitCreated, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
-        return Result.Success(habit.Id);
+        return Result.Success(habitId);
     }
 
     private async Task<Result> CheckCreationGatesAsync(
@@ -171,7 +187,7 @@ public partial class CreateHabitCommandHandler(
         return Result.Success();
     }
 
-    private async Task<Result> LinkTagsAndGoalsAsync(
+    private async Task<Result<IReadOnlyList<Guid>>> LinkTagsAndGoalsAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid>? tagIds,
         IReadOnlyList<Guid>? goalIds, CancellationToken cancellationToken)
     {
@@ -183,7 +199,7 @@ public partial class CreateHabitCommandHandler(
 
             var tagsResolved = OwnershipValidation.AllResolved(tagIds, tags, t => t.Id, ErrorMessages.TagNotFound);
             if (tagsResolved.IsFailure)
-                return tagsResolved;
+                return tagsResolved.PropagateError<IReadOnlyList<Guid>>();
 
             foreach (var tag in tags)
                 habit.AddTag(tag);
@@ -193,17 +209,20 @@ public partial class CreateHabitCommandHandler(
         {
             var goals = await repos.GoalRepository.FindTrackedAsync(
                 g => goalIds.Contains(g.Id) && g.UserId == userId,
+                q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
                 cancellationToken);
 
             var goalsResolved = OwnershipValidation.AllResolved(goalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);
             if (goalsResolved.IsFailure)
-                return goalsResolved;
+                return goalsResolved.PropagateError<IReadOnlyList<Guid>>();
 
             foreach (var goal in goals)
                 habit.AddGoal(goal);
+
+            return Result.Success<IReadOnlyList<Guid>>(goals.Select(g => g.Id).ToList());
         }
 
-        return Result.Success();
+        return Result.Success<IReadOnlyList<Guid>>([]);
     }
 
     private async Task ProcessGamificationSafeAsync(Guid userId, CancellationToken cancellationToken)

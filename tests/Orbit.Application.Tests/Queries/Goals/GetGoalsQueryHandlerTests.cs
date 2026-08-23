@@ -14,7 +14,7 @@ public class GetGoalsQueryHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IStreakGoalReadSyncer _streakGoalReadSyncer = Substitute.For<IStreakGoalReadSyncer>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly GetGoalsQueryHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -22,11 +22,11 @@ public class GetGoalsQueryHandlerTests
 
     public GetGoalsQueryHandlerTests()
     {
-        _handler = new GetGoalsQueryHandler(_goalRepo, _payGate, _userDateService, _streakGoalReadSyncer);
+        _handler = new GetGoalsQueryHandler(_goalRepo, _payGate, _userDateService, _goalProgressReadSyncer);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Orbit.Domain.Common.Result.Success());
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
-        _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
     }
 
@@ -171,7 +171,7 @@ public class GetGoalsQueryHandlerTests
     public async Task Handle_ComputesFreshStreakValuesBeforeReadingThem()
     {
         var computed = false;
-        _streakGoalReadSyncer
+        _goalProgressReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(_ => { computed = true; return new Dictionary<Guid, int>(); });
 
@@ -191,7 +191,7 @@ public class GetGoalsQueryHandlerTests
         var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public class GetGoalsQueryHandlerTests
         var goal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
-        _streakGoalReadSyncer
+        _goalProgressReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [goal.Id] = 5 });
         ArrangePage(new List<Goal> { goal }, 1);
@@ -209,6 +209,22 @@ public class GetGoalsQueryHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Items[0].CurrentValue.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task Handle_StatesWhetherProgressIsDerived()
+    {
+        var manualGoal = CreateTestGoal("Manual");
+        var derivedGoal = CreateTestGoal("Derived");
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        derivedGoal.AddHabit(habit);
+        ArrangePage(new List<Goal> { manualGoal, derivedGoal }, 2);
+
+        var result = await _handler.Handle(new GetGoalsQuery(UserId), CancellationToken.None);
+
+        result.Value.Items.Single(g => g.Id == manualGoal.Id).IsProgressDerived.Should().BeFalse();
+        result.Value.Items.Single(g => g.Id == derivedGoal.Id).IsProgressDerived.Should().BeTrue();
     }
 
     private async Task<Func<Goal, bool>> CapturePredicate(GetGoalsQuery query)

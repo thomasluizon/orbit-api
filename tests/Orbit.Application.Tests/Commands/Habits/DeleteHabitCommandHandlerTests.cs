@@ -43,6 +43,11 @@ public class DeleteHabitCommandHandlerTests
         var habit = CreateTestHabit();
         _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>())
             .Returns(habit);
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit });
 
         var command = new DeleteHabitCommand(UserId, habit.Id);
 
@@ -95,7 +100,10 @@ public class DeleteHabitCommandHandlerTests
             UserId, "Grandchild", FrequencyUnit.Day, 1, DueDate: Today, ParentHabitId: child.Id)).Value;
 
         _habitRepo.GetByIdAsync(parent.Id, Arg.Any<CancellationToken>()).Returns(parent);
-        _habitRepo.FindTrackedAsync(Arg.Any<Expression<Func<Habit, bool>>>(), Arg.Any<CancellationToken>())
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { parent, child, grandchild });
 
         var result = await _handler.Handle(new DeleteHabitCommand(UserId, parent.Id), CancellationToken.None);
@@ -106,5 +114,55 @@ public class DeleteHabitCommandHandlerTests
         grandchild.IsDeleted.Should().BeTrue();
         child.DeletedAtUtc.Should().Be(parent.DeletedAtUtc);
         grandchild.DeletedAtUtc.Should().Be(parent.DeletedAtUtc);
+    }
+
+    [Fact]
+    public async Task Handle_LastLinkedHabit_ClearsActiveDerivedGoalAndRestoresManualProgress()
+    {
+        var habit = CreateTestHabit();
+        var goal = Goal.Create(UserId, "Exercise", 10, "sessions").Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(3).IsSuccess.Should().BeTrue();
+        var updatedBeforeDelete = goal.UpdatedAtUtc;
+        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit });
+
+        var result = await _handler.Handle(new DeleteHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.Goals.Should().BeEmpty();
+        goal.Habits.Should().BeEmpty();
+        goal.CurrentValue.Should().Be(0);
+        goal.IsProgressDerived.Should().BeFalse();
+        goal.UpdatedAtUtc.Should().BeOnOrAfter(updatedBeforeDelete);
+        goal.UpdateProgress(1).IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_LastLinkedHabit_PreservesCompletedGoalStateWhileRestoringManualMode()
+    {
+        var habit = CreateTestHabit();
+        var goal = Goal.Create(UserId, "Exercise", 2, "sessions").Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(2).IsSuccess.Should().BeTrue();
+        var completedAtUtc = goal.CompletedAtUtc;
+        _habitRepo.GetByIdAsync(habit.Id, Arg.Any<CancellationToken>()).Returns(habit);
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit });
+
+        var result = await _handler.Handle(new DeleteHabitCommand(UserId, habit.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.IsProgressDerived.Should().BeFalse();
+        goal.CurrentValue.Should().Be(2);
+        goal.Status.Should().Be(GoalStatus.Completed);
+        goal.CompletedAtUtc.Should().Be(completedAtUtc);
     }
 }

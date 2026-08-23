@@ -1,8 +1,10 @@
 using System.Text.Json;
+using MediatR;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -18,13 +20,12 @@ public class ChatToolMetadataTests
         var userDateService = Substitute.For<IUserDateService>();
         var payGateService = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
-        var gamificationService = Substitute.For<IGamificationService>();
-        var streakGoalReadSyncer = Substitute.For<Orbit.Application.Goals.Services.IStreakGoalReadSyncer>();
-        var logger = Substitute.For<ILogger<UpdateGoalStatusTool>>();
+        var goalCompletionService = Substitute.For<IGoalCompletionService>();
+        var goalProgressReadSyncer = Substitute.For<Orbit.Application.Goals.Services.IGoalProgressReadSyncer>();
 
         var assignTagsTool = new AssignTagsTool(Repo<Habit>(), Repo<Tag>(), unitOfWork);
         var bulkUpdateHabitEmojisTool = new BulkUpdateHabitEmojisTool(Repo<Habit>());
-        var bulkLogHabitsTool = new BulkLogHabitsTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
+        var bulkLogHabitsTool = new BulkLogHabitsTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
         var bulkSkipHabitsTool = new BulkSkipHabitsTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var createGoalTool = new CreateGoalTool(Repo<Goal>(), unitOfWork);
         var createHabitTool = new CreateHabitTool(Repo<Habit>(), Repo<Tag>(), Repo<Goal>(), userDateService, payGateService, unitOfWork);
@@ -35,16 +36,17 @@ public class ChatToolMetadataTests
         var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);
         var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
         var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
-        var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService);
-        var linkHabitsTool = new LinkHabitsToGoalTool(Repo<Goal>(), Repo<Habit>(), unitOfWork);
-        var logHabitTool = new LogHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
+        var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
+        var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
+        var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
         var moveHabitTool = new MoveHabitTool(Repo<Habit>());
-        var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, streakGoalReadSyncer);
+        var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());
         var skipHabitTool = new SkipHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var suggestBreakdownTool = new SuggestBreakdownTool();
-        var updateGoalProgressTool = new UpdateGoalProgressTool(Repo<Goal>(), Repo<GoalProgressLog>(), unitOfWork);
-        var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), gamificationService, unitOfWork, logger);
+        var updateGoalProgressTool = new UpdateGoalProgressTool(
+            Repo<Goal>(), Repo<GoalProgressLog>(), goalCompletionService, unitOfWork);
+        var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
         var updateHabitTool = new UpdateHabitTool(Repo<Habit>(), userDateService);
         var listTagsTool = new ListTagsTool(mediator);

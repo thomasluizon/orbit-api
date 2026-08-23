@@ -12,15 +12,22 @@ namespace Orbit.Infrastructure.Tests.Persistence;
 internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
 {
     private int _commandCount;
+    private int _selectCommandCount;
 
     internal int CommandCount => Volatile.Read(ref _commandCount);
+    internal int SelectCommandCount => Volatile.Read(ref _selectCommandCount);
 
-    internal void Reset() => Interlocked.Exchange(ref _commandCount, 0);
+    internal void Reset()
+    {
+        Interlocked.Exchange(ref _commandCount, 0);
+        Interlocked.Exchange(ref _selectCommandCount, 0);
+    }
 
     public override InterceptionResult<DbDataReader> ReaderExecuting(
         DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
     {
         Interlocked.Increment(ref _commandCount);
+        CountSelect(command);
         return base.ReaderExecuting(command, eventData, result);
     }
 
@@ -31,6 +38,13 @@ internal sealed class CountingDbCommandInterceptor : DbCommandInterceptor
         CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _commandCount);
+        CountSelect(command);
         return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+    }
+
+    private void CountSelect(DbCommand command)
+    {
+        if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            Interlocked.Increment(ref _selectCommandCount);
     }
 }

@@ -4,7 +4,11 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
+using Orbit.Application.Gamification.Services;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
+using Orbit.Application.Social.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -18,9 +22,11 @@ public class BulkLogHabitsCommandHandlerTests
 {
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<HabitLog> _habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+    private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly BulkLogHabitsCommandHandler _handler;
@@ -32,7 +38,7 @@ public class BulkLogHabitsCommandHandlerTests
     {
         var services = new BulkLogServices(_userDateService, _userStreakService, _gamificationService);
         _handler = new BulkLogHabitsCommandHandler(
-            _habitRepo, _habitLogRepo, services, _unitOfWork, _cache,
+            _habitRepo, _habitLogRepo, services, _goalCompletionService, _unitOfWork, _cache,
             Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -48,6 +54,13 @@ public class BulkLogHabitsCommandHandlerTests
                 var ct = call.ArgAt<CancellationToken>(1);
                 return operation(ct);
             });
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<GoalCompletionUpdate>());
     }
 
     [Fact]
@@ -71,7 +84,7 @@ public class BulkLogHabitsCommandHandlerTests
         result.Value.Results.Should().HaveCount(2);
         result.Value.Results.Should().AllSatisfy(r => r.Status.Should().Be(BulkItemStatus.Success));
         await _habitLogRepo.Received(2).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -357,7 +370,7 @@ public class BulkLogHabitsCommandHandlerTests
         result.Value.Results[3].LogId.Should().NotBeNull();
 
         await _habitLogRepo.Received(2).AddAsync(Arg.Any<HabitLog>(), Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         habitA.Logs.Should().ContainSingle(l => l.Date == Today);
         habitB.Logs.Should().ContainSingle(l => l.Date == Today);
     }
@@ -418,6 +431,204 @@ public class BulkLogHabitsCommandHandlerTests
         taskResult.ErrorCode.Should().Be(DomainErrors.CannotLogCompletedHabit.Code);
 
         result.Value.Results.Single(r => r.HabitId == okHabit.Id).Status.Should().Be(BulkItemStatus.Success);
+    }
+
+    [Fact]
+    public async Task Handle_LinkedStandardGoal_DerivesProgressFromBulkCompletions()
+    {
+        var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
+        var first = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var second = Habit.Create(new HabitCreateParams(
+            UserId, "Stretch", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        goal.AddHabit(first);
+        goal.AddHabit(second);
+        SetupHabitsForUser([first, second]);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns([goal]);
+
+        var result = await _handler.Handle(
+            new BulkLogHabitsCommand(UserId, [new(first.Id), new(second.Id)]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        goal.IsProgressDerived.Should().BeTrue();
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { goal.Id })),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ThreeGoalsComplete_AwardsThreeHundredXpAndGoalCrusherOnlyOnce()
+    {
+        var user = User.Create("Bulk User", "bulk@example.com").Value;
+        user.SetStripeSubscription("sub_bulk", DateTime.UtcNow.AddDays(1));
+        var firstGoal = Goal.Create(user.Id, "First session", 1, "session").Value;
+        var secondGoal = Goal.Create(user.Id, "Second session", 1, "session").Value;
+        var thirdGoal = Goal.Create(user.Id, "Third session", 1, "session").Value;
+        var firstHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var secondHabit = Habit.Create(new HabitCreateParams(
+            user.Id, "Stretch", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        firstGoal.AddHabit(firstHabit);
+        secondGoal.AddHabit(secondHabit);
+        thirdGoal.AddHabit(secondHabit);
+        var habits = new List<Habit> { firstHabit, secondHabit };
+        var goals = new List<Goal> { firstGoal, secondGoal, thirdGoal };
+
+        var habitRepo = Substitute.For<IGenericRepository<Habit>>();
+        var habitLogRepo = Substitute.For<IGenericRepository<HabitLog>>();
+        var goalRepo = Substitute.For<IGenericRepository<Goal>>();
+        var userRepo = Substitute.For<IGenericRepository<User>>();
+        var achievementRepo = Substitute.For<IGenericRepository<UserAchievement>>();
+        var notificationRepo = Substitute.For<IGenericRepository<Notification>>();
+        var xpAwardRepo = Substitute.For<IGenericRepository<XpAwardLog>>();
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        var userDateService = Substitute.For<IUserDateService>();
+        var userStreakService = Substitute.For<IUserStreakService>();
+        var featureFlags = Substitute.For<IFeatureFlagService>();
+        var earnedAchievements = new List<UserAchievement>();
+        var xpAwards = new List<XpAwardLog>();
+
+        habitRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>()).Returns(habits);
+        goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns(goals);
+        goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns(goals);
+        goalRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns(
+                firstGoal, firstGoal,
+                secondGoal, secondGoal,
+                thirdGoal, thirdGoal);
+        goalRepo.CountAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(_ => goals.Count(g => g.Status == GoalStatus.Completed));
+        userRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+            Arg.Any<CancellationToken>()).Returns(user);
+        achievementRepo.FindAsync(
+            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
+            Arg.Any<CancellationToken>()).Returns(_ => earnedAchievements.ToList());
+        achievementRepo.AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                earnedAchievements.Add(call.ArgAt<UserAchievement>(0));
+                return Task.CompletedTask;
+            });
+        xpAwardRepo.AddAsync(
+            Arg.Any<XpAwardLog>(),
+            Arg.Any<CancellationToken>()).Returns(call =>
+            {
+                xpAwards.Add(call.ArgAt<XpAwardLog>(0));
+                return Task.CompletedTask;
+            });
+        userDateService.GetUserTodayAsync(user.Id, Arg.Any<CancellationToken>()).Returns(Today);
+        userStreakService.RecalculateAsync(user.Id, cancellationToken: Arg.Any<CancellationToken>())
+            .Returns(new UserStreakState(1, 1, Today));
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task>>(0)(call.ArgAt<CancellationToken>(1)));
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<IReadOnlyList<GoalCompletionUpdate>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<IReadOnlyList<GoalCompletionUpdate>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<GoalCompletionUpdate?>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<GoalCompletionUpdate?>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+
+        var realGamification = new GamificationService(
+            new GamificationRepositories(
+                userRepo, habitRepo, habitLogRepo, goalRepo, achievementRepo, notificationRepo, xpAwardRepo),
+            new GamificationNotifiers(
+                Substitute.For<IPushNotificationService>(),
+                Substitute.For<IFriendFeedEventEmitter>()),
+            userDateService,
+            new XpAwarder(xpAwardRepo),
+            unitOfWork,
+            featureFlags,
+            Substitute.For<ILogger<GamificationService>>());
+        var gamification = Substitute.For<IGamificationService>();
+        gamification.ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(call => realGamification.ProcessGoalCompleted(
+                call.ArgAt<Guid>(0), call.ArgAt<Guid>(1), call.ArgAt<CancellationToken>(2)));
+        gamification.ProcessHabitsLogged(
+            Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<HabitLogGamificationResult>());
+
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new BulkLogHabitsCommandHandler(
+            habitRepo,
+            habitLogRepo,
+            new BulkLogServices(userDateService, userStreakService, gamification),
+            new GoalCompletionService(goalRepo, gamification, unitOfWork),
+            unitOfWork,
+            cache,
+            Substitute.For<ILogger<BulkLogHabitsCommandHandler>>());
+        var command = new BulkLogHabitsCommand(
+            user.Id, [new(firstHabit.Id), new(secondHabit.Id)]);
+
+        var firstResult = await handler.Handle(command, CancellationToken.None);
+        var repeatResult = await handler.Handle(command, CancellationToken.None);
+
+        firstResult.IsSuccess.Should().BeTrue();
+        repeatResult.IsSuccess.Should().BeTrue();
+        xpAwards.Where(a => a.Source == XpAwardSource.GoalCompleted).Sum(a => a.Amount).Should().Be(300);
+        earnedAchievements.Count(a => a.AchievementId == AchievementDefinitions.GoalCrusher).Should().Be(1);
+        await gamification.Received(3).ProcessGoalCompleted(
+            user.Id, Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_GoalCompletionGamificationFails_PropagatesFromTransaction()
+    {
+        var goal = Goal.Create(UserId, "Complete a session", 1, "session").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        SetupHabitsForUser([habit]);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns([goal]);
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                UserId,
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Today,
+                false,
+                Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("award failed"));
+
+        var act = async () => await _handler.Handle(
+            new BulkLogHabitsCommand(UserId, [new(habit.Id)]),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("award failed");
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
     }
 
     private void SetupHabitsForUser(List<Habit> habits)

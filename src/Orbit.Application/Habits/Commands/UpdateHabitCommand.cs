@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -29,6 +30,7 @@ public class UpdateHabitCommandHandler(
     IGenericRepository<SentReminder> sentReminderRepository,
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
+    IGoalCompletionService goalCompletionService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>
@@ -110,14 +112,27 @@ public class UpdateHabitCommandHandler(
         if (opts.DueTime.HasValue)
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
+        IReadOnlyList<Guid> affectedGoalIds = [];
         if (request.GoalIds is not null)
         {
             var goalLinkResult = await SyncGoalLinksAsync(habit, request.UserId, request.GoalIds, cancellationToken);
             if (goalLinkResult.IsFailure)
-                return goalLinkResult;
+                return goalLinkResult.PropagateError();
+            affectedGoalIds = goalLinkResult.Value;
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (request.GoalIds is not null)
+        {
+            await goalCompletionService.SyncDerivedGoalsAsync(
+                request.UserId,
+                affectedGoalIds,
+                today,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
@@ -167,29 +182,25 @@ public class UpdateHabitCommandHandler(
             sentReminderRepository.Remove(r);
     }
 
-    private async Task<Result> SyncGoalLinksAsync(
+    private async Task<Result<IReadOnlyList<Guid>>> SyncGoalLinksAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid> goalIds, CancellationToken cancellationToken)
     {
-        if (goalIds.Count == 0)
-        {
-            foreach (var existingGoal in habit.Goals.ToList())
-                habit.RemoveGoal(existingGoal);
-            return Result.Success();
-        }
-
+        var affectedGoalIds = habit.Goals.Select(g => g.Id).Concat(goalIds).ToHashSet();
         var goals = await goalRepository.FindTrackedAsync(
-            g => goalIds.Contains(g.Id) && g.UserId == userId,
+            g => affectedGoalIds.Contains(g.Id) && g.UserId == userId,
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
             cancellationToken);
 
-        var goalsResolved = OwnershipValidation.AllResolved(goalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);
+        var requestedGoals = goals.Where(g => goalIds.Contains(g.Id)).ToList();
+        var goalsResolved = OwnershipValidation.AllResolved(goalIds, requestedGoals, g => g.Id, ErrorMessages.GoalNotFound);
         if (goalsResolved.IsFailure)
-            return goalsResolved;
+            return goalsResolved.PropagateError<IReadOnlyList<Guid>>();
 
         foreach (var existingGoal in habit.Goals.ToList())
             habit.RemoveGoal(existingGoal);
-        foreach (var goal in goals)
+        foreach (var goal in requestedGoals)
             habit.AddGoal(goal);
 
-        return Result.Success();
+        return Result.Success<IReadOnlyList<Guid>>(affectedGoalIds.ToList());
     }
 }

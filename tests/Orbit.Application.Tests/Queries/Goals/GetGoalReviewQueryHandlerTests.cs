@@ -17,6 +17,7 @@ public class GetGoalReviewQueryHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IGoalReviewService _reviewService = Substitute.For<IGoalReviewService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly GetGoalReviewQueryHandler _handler;
 
@@ -26,8 +27,15 @@ public class GetGoalReviewQueryHandlerTests
     public GetGoalReviewQueryHandlerTests()
     {
         _handler = new GetGoalReviewQueryHandler(
-            _goalRepo, _payGate, _reviewService, _userDateService, _cache);
+            _goalRepo,
+            _payGate,
+            _reviewService,
+            _userDateService,
+            _goalProgressReadSyncer,
+            _cache);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int>());
     }
 
     private static Goal CreateTestGoal()
@@ -78,6 +86,8 @@ public class GetGoalReviewQueryHandlerTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(_ => new List<Goal> { streakGoal }.AsReadOnly());
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
 
         string? capturedContext = null;
         _reviewService.GenerateReviewAsync(
