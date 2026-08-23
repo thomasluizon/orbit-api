@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823035534_AddSubscriptionLapseReason")]
+    partial class AddSubscriptionLapseReason
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -479,12 +482,6 @@ namespace Orbit.Infrastructure.Migrations
                             Key = "MinSupportedVersion",
                             Description = "Minimum supported client app version; clients below this receive HTTP 426",
                             Value = "0.0.0"
-                        },
-                        new
-                        {
-                            Key = "RequireApiKeyCreationStepUp",
-                            Description = "Require emailed code confirmation before creating an API key",
-                            Value = "true"
                         });
                 });
 
@@ -2035,9 +2032,6 @@ namespace Orbit.Infrastructure.Migrations
 
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("StripeSubscriptionEventCreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("StripeSubscriptionId")
                         .HasColumnType("text");

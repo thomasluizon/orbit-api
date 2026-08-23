@@ -14,7 +14,9 @@ public record SubscriptionStatusResponse(
     int AiMessagesLimit,
     bool IsLifetimePro,
     string? SubscriptionInterval,
-    string? Source);
+    string? Source,
+    string? LapseReason = null,
+    DateTime? SubscriptionEndedAtUtc = null);
 
 public record PlayVerifyResponse(
     bool HasProAccess,
