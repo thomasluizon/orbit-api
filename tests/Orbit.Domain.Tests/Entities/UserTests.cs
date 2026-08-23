@@ -480,6 +480,32 @@ public class UserTests
     }
 
     [Fact]
+    public void IncrementAiMessageCount_PreviousLocalDateAfterTimezoneChange_ResetsCounter()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(today.AddDays(1));
+
+        user.IncrementAiMessageCount(today);
+
+        user.AiMessagesUsedToday.Should().Be(1);
+        user.AiMessagesLocalDate.Should().Be(today);
+    }
+
+    [Fact]
+    public void GetAiMessagesUsedToday_StoredDateMismatch_ReturnsZero()
+    {
+        var user = CreateValidUser();
+        var today = new DateOnly(2026, 3, 1);
+        user.IncrementAiMessageCount(today.AddDays(-1));
+
+        var result = user.GetAiMessagesUsedToday(today);
+
+        result.Should().Be(0);
+    }
+
+    [Fact]
     public void IncrementAiMessageCount_NextLocalDate_ZeroesAdRewardBonus()
     {
         var user = CreateValidUser();

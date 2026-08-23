@@ -138,6 +138,23 @@ public class GetProfileQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_AfterLocalMidnight_ReturnsZeroDailyAiUsageBeforeNextSend()
+    {
+        var user = CreateFreeUser();
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(Today.AddDays(-1));
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(UserId, Arg.Any<CancellationToken>()).Returns(5);
+        StubFreezeRepoEmpty();
+
+        var result = await _handler.Handle(new GetProfileQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.AiMessagesUsed.Should().Be(0);
+        result.Value.AiMessagesLimit.Should().Be(5);
+    }
+
+    [Fact]
     public async Task Handle_UserFound_ReturnsCallerIdInDistinctIdFormat()
     {
         var user = CreateTestUser();

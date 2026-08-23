@@ -344,7 +344,7 @@ public partial class User : Entity
 
     public void IncrementAiMessageCount(DateOnly userToday)
     {
-        if (!AiMessagesLocalDate.HasValue || AiMessagesLocalDate.Value < userToday)
+        if (AiMessagesLocalDate != userToday)
         {
             AiMessagesUsedToday = 0;
             AdRewardBonusMessages = 0;
@@ -352,6 +352,9 @@ public partial class User : Entity
         }
         AiMessagesUsedToday++;
     }
+
+    public int GetAiMessagesUsedToday(DateOnly userToday) =>
+        AiMessagesLocalDate == userToday ? AiMessagesUsedToday : 0;
 
     public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
     {
@@ -609,8 +612,8 @@ public partial class User : Entity
 
     /// <summary>
     /// Resets progress and integration state (onboarding, gamification, calendar) to defaults while
-    /// preserving identity, preferences, subscription, and metered AI usage — the monthly message
-    /// quota and ad-reward allowances are kept so an account reset cannot refill the AI paygate.
+    /// preserving identity, preferences, subscription, and metered AI usage. The daily message
+    /// quota and ad reward allowances are kept so an account reset cannot refill the AI paygate.
     /// </summary>
     public void ResetAccount()
     {
