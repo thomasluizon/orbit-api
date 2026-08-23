@@ -49,6 +49,7 @@ public class BulkDeleteHabitsCommandHandlerTests
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit1, habit2 });
 
@@ -75,6 +76,7 @@ public class BulkDeleteHabitsCommandHandlerTests
 
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit1 });
 
@@ -94,6 +96,7 @@ public class BulkDeleteHabitsCommandHandlerTests
     {
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit>());
 
@@ -112,6 +115,7 @@ public class BulkDeleteHabitsCommandHandlerTests
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
         _habitRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit });
 
@@ -132,6 +136,7 @@ public class BulkDeleteHabitsCommandHandlerTests
         var habit2 = Habit.Create(new HabitCreateParams(UserId, "Habit 2", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit1, habit2 });
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -158,6 +163,7 @@ public class BulkDeleteHabitsCommandHandlerTests
         var habit = Habit.Create(new HabitCreateParams(UserId, "Habit", FrequencyUnit.Day, 1, DueDate: Today)).Value;
         _habitRepo.FindTrackedAsync(
                 Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new List<Habit> { habit });
 
@@ -192,5 +198,35 @@ public class BulkDeleteHabitsCommandHandlerTests
         saveObservedInsideTransaction.Should().NotBeEmpty().And.OnlyContain(observed => observed);
         recalcObservedInsideTransaction.Should().NotBeEmpty().And.OnlyContain(observed => observed);
         habit.IsDeleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_LastLinkedHabit_ClearsDerivedGoalInsideBatchTransaction()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Exercise",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today)).Value;
+        var goal = Goal.Create(UserId, "Exercise", 10, "sessions").Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(4).IsSuccess.Should().BeTrue();
+        _habitRepo.FindTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new List<Habit> { habit });
+
+        var result = await _handler.Handle(
+            new BulkDeleteHabitsCommand(UserId, [habit.Id]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        habit.IsDeleted.Should().BeTrue();
+        habit.Goals.Should().BeEmpty();
+        goal.Habits.Should().BeEmpty();
+        goal.CurrentValue.Should().Be(0);
+        goal.IsProgressDerived.Should().BeFalse();
     }
 }

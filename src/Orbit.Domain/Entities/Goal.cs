@@ -44,6 +44,7 @@ public class Goal : Entity, ITimestamped, ISoftDeletable
             return;
 
         habit.RemoveGoal(this);
+        UpdatedAtUtc = DateTime.UtcNow;
         if (_habits.Count != 0)
             return;
 

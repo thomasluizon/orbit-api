@@ -790,6 +790,25 @@ public class GoalTests
     }
 
     [Fact]
+    public void RemoveHabit_ExistingHabit_UpdatesGoalTimestampWhenValueIsAlreadyZero()
+    {
+        var goal = CreateValidGoal();
+        var habit = Habit.Create(new HabitCreateParams(
+            ValidUserId,
+            "Exercise",
+            FrequencyUnit.Day,
+            1,
+            DueDate: DateOnly.FromDateTime(DateTime.UtcNow))).Value;
+        goal.AddHabit(habit);
+        var previousUpdatedAtUtc = goal.UpdatedAtUtc;
+
+        goal.RemoveHabit(habit);
+
+        goal.UpdatedAtUtc.Should().BeOnOrAfter(previousUpdatedAtUtc);
+        goal.IsProgressDerived.Should().BeFalse();
+    }
+
+    [Fact]
     public void RemoveHabit_NonExistentHabit_NoOp()
     {
         var goal = CreateValidGoal();

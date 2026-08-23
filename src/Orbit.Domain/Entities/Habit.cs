@@ -509,4 +509,14 @@ public class Habit : Entity, ITimestamped, ISoftDeletable
 
         goal.RemoveHabit(this);
     }
+
+    /// <summary>
+    /// Removes every goal link through the bidirectional entity methods so each affected goal can
+    /// restore manual progress or preserve an earned completion according to its own invariants.
+    /// </summary>
+    public void RemoveAllGoals()
+    {
+        foreach (var goal in _goals.ToList())
+            RemoveGoal(goal);
+    }
 }

@@ -35,6 +35,10 @@ public interface IGenericRepository<T> where T : Entity
     /// queries hide; always constrain the predicate with the owner's id to keep the scope per-user.
     /// </summary>
     Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<T>> FindTrackedIgnoringFiltersAsync(
+        Expression<Func<T, bool>> predicate,
+        Func<IQueryable<T>, IQueryable<T>> includes,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads a single tracked entity matching <paramref name="predicate"/> with global query filters
