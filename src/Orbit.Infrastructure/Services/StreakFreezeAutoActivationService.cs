@@ -65,7 +65,6 @@ public partial class StreakFreezeAutoActivationService(
                 flag => flag.Key == FeatureFlagKeys.GamificationFreeTier && flag.Enabled,
                 cancellationToken);
 
-        var candidateIds = candidates.Select(user => user.Id).ToList();
         var repairBatch = await LoadRepairBatchAsync(
             candidates,
             dbContext,
@@ -94,11 +93,11 @@ public partial class StreakFreezeAutoActivationService(
 
         dbContext.ChangeTracker.Clear();
         await ActivatePerUserFallbackAsync(
-            candidateIds,
+            staged.Select(freeze => freeze.User.Id).ToList(),
             gamificationFreeTierEnabled,
             pushService,
-            repairBatch,
             dbContext,
+            userDateService,
             cancellationToken);
     }
 
@@ -267,13 +266,18 @@ public partial class StreakFreezeAutoActivationService(
         List<Guid> candidateIds,
         bool gamificationFreeTierEnabled,
         IPushNotificationService pushService,
-        RepairBatch repairBatch,
         OrbitDbContext dbContext,
+        IUserDateService userDateService,
         CancellationToken cancellationToken)
     {
         var users = await dbContext.Users
             .Where(user => candidateIds.Contains(user.Id))
             .ToListAsync(cancellationToken);
+        var repairBatch = await LoadRepairBatchAsync(
+            users,
+            dbContext,
+            userDateService,
+            cancellationToken);
 
         foreach (var user in users)
         {
