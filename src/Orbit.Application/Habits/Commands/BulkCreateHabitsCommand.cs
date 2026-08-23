@@ -67,6 +67,24 @@ public partial class BulkCreateHabitsCommandHandler(
 
     public async Task<Result<BulkCreateResult>> Handle(BulkCreateHabitsCommand request, CancellationToken cancellationToken)
     {
+        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var result = await HabitCeilingLock.ExecuteAsync(
+            unitOfWork,
+            request.UserId,
+            ct => HandleLockedAsync(request, userToday, ct),
+            cancellationToken);
+
+        if (result.IsSuccess)
+            CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
+
+        return result;
+    }
+
+    private async Task<Result<BulkCreateResult>> HandleLockedAsync(
+        BulkCreateHabitsCommand request,
+        DateOnly userToday,
+        CancellationToken cancellationToken)
+    {
         var parentCount = request.Habits.Count;
         var habitGate = await payGate.CanCreateHabits(request.UserId, parentCount, cancellationToken);
         if (habitGate.IsFailure)
@@ -80,7 +98,6 @@ public partial class BulkCreateHabitsCommandHandler(
                 return subGate.PropagateError<BulkCreateResult>();
         }
 
-        var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var results = new List<BulkCreateItemResult>();
 
         var existingRoots = await repos.Habits.FindAsync(
@@ -92,25 +109,26 @@ public partial class BulkCreateHabitsCommandHandler(
 
         var tagsByName = await LoadTagCacheAsync(request, cancellationToken);
 
-        await unitOfWork.ExecuteInTransactionAsync(async ct =>
+        for (int i = 0; i < request.Habits.Count; i++)
         {
-            for (int i = 0; i < request.Habits.Count; i++)
-            {
-                var itemResult = await CreateSingleHabit(
-                    request.UserId, request.Habits[i], i, userToday, rootPositionCursor + i, tagsByName, ct);
-                results.Add(itemResult);
-            }
+            var itemResult = await CreateSingleHabit(
+                request.UserId,
+                request.Habits[i],
+                i,
+                userToday,
+                rootPositionCursor + i,
+                tagsByName,
+                cancellationToken);
+            results.Add(itemResult);
+        }
 
-            await unitOfWork.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
-            if (request.FromSyncReview)
-            {
-                await MarkSyncSuggestionsImported(request.UserId, results, ct);
-                await unitOfWork.SaveChangesAsync(ct);
-            }
-        }, cancellationToken);
-
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, userToday);
+        if (request.FromSyncReview)
+        {
+            await MarkSyncSuggestionsImported(request.UserId, results, cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         return Result.Success(new BulkCreateResult(results));
     }

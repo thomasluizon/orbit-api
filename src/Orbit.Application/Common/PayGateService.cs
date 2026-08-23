@@ -16,15 +16,12 @@ public class PayGateService(
         if (user is null)
             return Result.Failure(ErrorMessages.UserNotFound);
 
-        if (user.HasProAccess)
-            return Result.Success();
-
         var maxHabits = await appConfig.GetAsync(AppConfigKeys.FreeMaxHabits, AppConstants.DefaultFreeMaxHabits, ct);
         var activeHabitCount = await habitRepository.CountAsync(
             h => h.UserId == userId && h.ParentHabitId == null && !h.IsCompleted, ct);
 
         if (activeHabitCount + count > maxHabits)
-            return Result.PayGateFailure($"You've reached the {maxHabits} habit limit on the free plan. Upgrade to Pro for unlimited habits.");
+            return Result.Failure($"You've reached the {maxHabits} habit limit.");
 
         return Result.Success();
     }
@@ -237,63 +234,4 @@ public class PayGateService(
             ? Result.Success()
             : Result.PayGateFailure(errorMessage);
     }
-}
-
-internal static class HabitReactivationAllowance
-{
-    public static bool IsRequiredForUnlog(Habit habit) =>
-        habit.IsCompleted && habit.ParentHabitId is null;
-
-    public static bool IsRequiredForEndDateChange(
-        Habit habit,
-        FrequencyUnit? frequencyUnit,
-        DateOnly? dueDate,
-        DateOnly? endDate,
-        bool clearEndDate)
-    {
-        if (!habit.IsCompleted || habit.ParentHabitId is not null || frequencyUnit is null)
-            return false;
-
-        if (clearEndDate)
-            return true;
-
-        return endDate.HasValue && (dueDate ?? habit.DueDate) <= endDate.Value;
-    }
-
-    public static async Task<Result<T>> ExecuteAsync<T>(
-        Guid userId,
-        bool requiresAllowance,
-        IPayGateService? payGate,
-        Func<Result<T>> transition,
-        CancellationToken cancellationToken)
-    {
-        if (requiresAllowance)
-        {
-            var allowanceGate = await GetPayGate(payGate).CanCreateHabits(userId, 1, cancellationToken);
-            if (allowanceGate.IsFailure)
-                return allowanceGate.PropagateError<T>();
-        }
-
-        return transition();
-    }
-
-    public static async Task<Result> ExecuteAsync(
-        Guid userId,
-        bool requiresAllowance,
-        IPayGateService? payGate,
-        Func<Result> transition,
-        CancellationToken cancellationToken)
-    {
-        if (requiresAllowance)
-        {
-            var allowanceGate = await GetPayGate(payGate).CanCreateHabits(userId, 1, cancellationToken);
-            if (allowanceGate.IsFailure)
-                return allowanceGate;
-        }
-
-        return transition();
-    }
-
-    private static IPayGateService GetPayGate(IPayGateService? payGate) =>
-        payGate ?? throw new InvalidOperationException("Habit reactivation allowance service is not configured.");
 }

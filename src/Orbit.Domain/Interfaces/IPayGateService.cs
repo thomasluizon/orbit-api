@@ -5,7 +5,7 @@ namespace Orbit.Domain.Interfaces;
 public interface IPayGateService
 {
     /// <summary>
-    /// Checks if the user can create more habits (free plan: max 10 active).
+    /// Checks whether the shared live top-level habit ceiling allows the requested count.
     /// </summary>
     Task<Result> CanCreateHabits(Guid userId, int count = 1, CancellationToken ct = default);
 

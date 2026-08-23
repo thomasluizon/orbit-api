@@ -53,6 +53,11 @@ public class LogHabitCommandHandlerTests
             _payGate);
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, _logger);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<LogHabitResponse>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<LogHabitResponse>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);

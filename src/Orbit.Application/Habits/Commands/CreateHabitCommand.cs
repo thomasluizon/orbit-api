@@ -44,7 +44,16 @@ public partial class CreateHabitCommandHandler(
     IMemoryCache cache,
     ILogger<CreateHabitCommandHandler> logger) : IRequestHandler<CreateHabitCommand, Result<Guid>>
 {
-    public async Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken)
+    public Task<Result<Guid>> Handle(CreateHabitCommand request, CancellationToken cancellationToken) =>
+        HabitCeilingLock.ExecuteAsync(
+            unitOfWork,
+            request.UserId,
+            ct => HandleLockedAsync(request, ct),
+            cancellationToken);
+
+    private async Task<Result<Guid>> HandleLockedAsync(
+        CreateHabitCommand request,
+        CancellationToken cancellationToken)
     {
         var opts = request.Options ?? new HabitCommandOptions();
 

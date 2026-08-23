@@ -40,6 +40,12 @@ public class ApplyOnboardingConcurrencyTests
         var interceptor = new ConflictOnceInterceptor();
         await using var context = CreateContext(dbName, interceptor);
         var unitOfWork = new UnitOfWork(context, new DatabaseConnectionSettings());
+        var appConfig = Substitute.For<IAppConfigService>();
+        appConfig.GetAsync(
+                AppConfigKeys.FreeMaxHabits,
+                AppConstants.DefaultFreeMaxHabits,
+                Arg.Any<CancellationToken>())
+            .Returns(AppConstants.DefaultFreeMaxHabits);
         var handler = new ApplyOnboardingCommandHandler(
             new ApplyOnboardingRepositories(
                 new GenericRepository<User>(context),
@@ -47,7 +53,7 @@ public class ApplyOnboardingConcurrencyTests
                 new GenericRepository<Goal>(context)),
             Substitute.For<IPayGateService>(),
             StubToday(new DateOnly(2026, 7, 5)),
-            Substitute.For<IAppConfigService>(),
+            appConfig,
             unitOfWork,
             new MemoryCache(new MemoryCacheOptions()));
 

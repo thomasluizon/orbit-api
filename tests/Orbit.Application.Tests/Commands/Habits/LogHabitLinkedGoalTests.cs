@@ -6,6 +6,7 @@ using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Challenges.Services;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -46,9 +47,15 @@ public class LogHabitLinkedGoalTests
             _gamificationService,
             _goalCompletionService,
             _challengeProgressService,
-            _mediator);
+            _mediator,
+            Substitute.For<IPayGateService>());
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, Substitute.For<ILogger<LogHabitCommandHandler>>());
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<LogHabitResponse>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<LogHabitResponse>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
