@@ -87,7 +87,7 @@ public class PayGateService(
                 if (!IsProductionSmokeAccount(user.Email))
                 {
                     var messageLimit = user.HasProAccess ? proLimit : freeLimit;
-                    if (user.AiMessagesLocalDate == userToday && user.AiMessagesUsedToday >= messageLimit)
+                    if (user.GetAiMessagesUsedForQuota(userToday) >= messageLimit)
                     {
                         var errorMessage = user.HasProAccess
                             ? $"You've reached your daily AI message limit ({messageLimit})."

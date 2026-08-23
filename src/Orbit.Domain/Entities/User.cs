@@ -344,7 +344,7 @@ public partial class User : Entity
 
     public void IncrementAiMessageCount(DateOnly userToday)
     {
-        if (AiMessagesLocalDate != userToday)
+        if (!AiMessagesLocalDate.HasValue || AiMessagesLocalDate.Value < userToday)
         {
             AiMessagesUsedToday = 0;
             AdRewardBonusMessages = 0;
@@ -355,6 +355,9 @@ public partial class User : Entity
 
     public int GetAiMessagesUsedToday(DateOnly userToday) =>
         AiMessagesLocalDate == userToday ? AiMessagesUsedToday : 0;
+
+    public int GetAiMessagesUsedForQuota(DateOnly userToday) =>
+        AiMessagesLocalDate >= userToday ? AiMessagesUsedToday : 0;
 
     public Result GrantAdReward(DateOnly userToday, int bonusMessages = 5, int dailyCap = 3)
     {

@@ -43,10 +43,53 @@ public class PayGateServiceExpiredCycleTests
         for (var i = 0; i < 6; i++)
             results.Add(await sut.TryConsumeAiMessage(userId, unitOfWork));
 
-        results.Count(result => result.IsSuccess).Should().Be(5);
-        results.Count(result => result.IsFailure && result.ErrorCode == "PAY_GATE").Should().Be(1);
+        results.Count(result => result.IsSuccess).Should().Be(0);
+        results.Count(result => result.IsFailure && result.ErrorCode == "PAY_GATE").Should().Be(6);
         user.AiMessagesUsedToday.Should().Be(5);
-        user.AiMessagesLocalDate.Should().Be(today);
+        user.AiMessagesLocalDate.Should().Be(today.AddDays(1));
+        await unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryConsumeAiMessage_AlternatingLocalDates_DoesNotMintThirdAllowance()
+    {
+        var userId = Guid.NewGuid();
+        var firstDate = new DateOnly(2026, 8, 5);
+        var secondDate = firstDate.AddDays(1);
+        var user = User.Create("Test User", "test@example.com").Value;
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        for (var i = 0; i < 5; i++)
+            user.IncrementAiMessageCount(firstDate);
+
+        var userRepository = Substitute.For<IGenericRepository<User>>();
+        userRepository.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<User, bool>>>(),
+                Arg.Any<Func<IQueryable<User>, IQueryable<User>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(user);
+        var appConfig = Substitute.For<IAppConfigService>();
+        appConfig.GetAsync("FreeAiMessagesPerDay", 5, Arg.Any<CancellationToken>()).Returns(5);
+        appConfig.GetAsync("ProAiMessagesPerDay", 50, Arg.Any<CancellationToken>()).Returns(50);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(secondDate, secondDate, secondDate, secondDate, secondDate, firstDate);
+        var unitOfWork = Substitute.For<IUnitOfWork>();
+        var sut = new PayGateService(
+            Substitute.For<IGenericRepository<Habit>>(),
+            userRepository,
+            appConfig,
+            userDateService);
+
+        var secondDateResults = new List<Result>();
+        for (var i = 0; i < 5; i++)
+            secondDateResults.Add(await sut.TryConsumeAiMessage(userId, unitOfWork));
+        var returnToFirstDate = await sut.TryConsumeAiMessage(userId, unitOfWork);
+
+        secondDateResults.Should().OnlyContain(result => result.IsSuccess);
+        returnToFirstDate.IsFailure.Should().BeTrue();
+        returnToFirstDate.ErrorCode.Should().Be("PAY_GATE");
+        user.AiMessagesUsedToday.Should().Be(5);
+        user.AiMessagesLocalDate.Should().Be(secondDate);
         await unitOfWork.Received(5).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
