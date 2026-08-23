@@ -13,7 +13,7 @@ namespace Orbit.Infrastructure.Migrations
             migrationBuilder.InsertData(
                 table: "AppConfigs",
                 columns: new[] { "Key", "Description", "Value" },
-                values: new object[] { "RequireApiKeyCreationStepUp", "Require emailed code confirmation before creating an API key", "true" });
+                values: new object[] { "RequireApiKeyCreationStepUp", "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet", "false" });
         }
 
         /// <inheritdoc />

@@ -46,7 +46,7 @@ public class ApiKeyCreationChallengeFlowTests
             .Returns(0);
         _appConfigService.GetAsync(
                 AppConfigKeys.RequireApiKeyCreationStepUp,
-                true,
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(true);
         _backgroundJobClient.Create(Arg.Do<Job>(job => _enqueuedJob = job), Arg.Any<IState>());

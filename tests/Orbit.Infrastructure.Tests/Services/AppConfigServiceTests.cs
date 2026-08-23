@@ -60,7 +60,7 @@ public class AppConfigServiceTests
     }
 
     [Fact]
-    public async Task ApiKeyCreationStepUp_SeedDefaultsOn()
+    public async Task ApiKeyCreationStepUp_SeedDefaultsOff()
     {
         await using var dbContext = NewDbContext();
         await dbContext.Database.EnsureCreatedAsync();
@@ -68,9 +68,9 @@ public class AppConfigServiceTests
 
         var value = await service.GetAsync(
             AppConfigKeys.RequireApiKeyCreationStepUp,
-            false);
+            true);
 
-        value.Should().BeTrue();
+        value.Should().BeFalse();
     }
 
     [Fact]

@@ -486,8 +486,8 @@ namespace Orbit.Infrastructure.Migrations
                         new
                         {
                             Key = "RequireApiKeyCreationStepUp",
-                            Description = "Require emailed code confirmation before creating an API key",
-                            Value = "true"
+                            Description = "Turn on once a client build carrying the API key creation challenge flow is live in the Play fleet",
+                            Value = "false"
                         });
                 });
 

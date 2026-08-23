@@ -39,7 +39,7 @@ public class CreateApiKeyCommandHandler(
     {
         var requiresStepUp = await appConfigService.GetAsync(
             AppConfigKeys.RequireApiKeyCreationStepUp,
-            true,
+            false,
             cancellationToken);
         if (requiresStepUp &&
             !challengeService.HasAuthorization(EmailChallengeOperation.ApiKeyCreation, request.UserId))

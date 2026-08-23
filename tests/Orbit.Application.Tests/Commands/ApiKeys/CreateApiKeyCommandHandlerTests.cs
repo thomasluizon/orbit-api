@@ -36,7 +36,7 @@ public class CreateApiKeyCommandHandlerTests
 
         _appConfigService.GetAsync(
                 AppConfigKeys.RequireApiKeyCreationStepUp,
-                true,
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(true);
         AuthorizeCreation();
@@ -152,7 +152,7 @@ public class CreateApiKeyCommandHandlerTests
     {
         _appConfigService.GetAsync(
                 AppConfigKeys.RequireApiKeyCreationStepUp,
-                true,
+                false,
                 Arg.Any<CancellationToken>())
             .Returns(false);
         _challengeService.TryConsumeAuthorization(EmailChallengeOperation.ApiKeyCreation, UserId);
