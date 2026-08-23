@@ -19,6 +19,7 @@ public class GetGoalReviewQueryHandler(
     IPayGateService payGate,
     IGoalReviewService goalReviewService,
     IUserDateService userDateService,
+    IGoalProgressReadSyncer goalProgressReadSyncer,
     IMemoryCache cache) : IRequestHandler<GetGoalReviewQuery, Result<GoalReviewResponse>>
 {
     public async Task<Result<GoalReviewResponse>> Handle(
@@ -35,6 +36,10 @@ public class GetGoalReviewQueryHandler(
             return Result.Success(new GoalReviewResponse(cached, FromCache: true));
 
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var freshValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(
+            request.UserId,
+            userToday,
+            cancellationToken);
         var streakWindowStart = userToday.AddDays(-AppConstants.MaxStreakLookbackDays);
 
         var goals = await goalRepository.FindAsync(
@@ -49,7 +54,8 @@ public class GetGoalReviewQueryHandler(
             return Result.Failure<GoalReviewResponse>(ErrorMessages.NoActiveGoals);
 
         foreach (var goal in goalList)
-            GoalStreakSyncService.ApplyReadValue(goal, userToday);
+            if (freshValues.TryGetValue(goal.Id, out var freshValue))
+                GoalProgressSyncService.ApplyReadValue(goal, freshValue);
 
         var goalsContext = BuildGoalsContext(goalList, userToday);
 

@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,6 +15,7 @@ public class GoalReviewToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly GoalReviewTool _tool;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -21,8 +23,10 @@ public class GoalReviewToolTests
 
     public GoalReviewToolTests()
     {
-        _tool = new GoalReviewTool(_goalRepo, _userDateService);
+        _tool = new GoalReviewTool(_goalRepo, _userDateService, _goalProgressReadSyncer);
         _userDateService.GetUserTodayAsync(UserId, Arg.Any<CancellationToken>()).Returns(Today);
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int>());
     }
 
     [Fact]
@@ -67,6 +71,28 @@ public class GoalReviewToolTests
         result.Success.Should().BeTrue();
         result.EntityName.Should().Contain("Read books");
         result.EntityName.Should().Contain("Save money");
+    }
+
+    [Fact]
+    public async Task LinkedStandardGoal_UsesFreshDerivedProgress()
+    {
+        var goal = Goal.Create(UserId, "Read books", 12, "books").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Read",
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        SetupGoals(goal);
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<Guid, int> { [goal.Id] = 2 });
+
+        var result = await Execute("{}");
+
+        result.Success.Should().BeTrue();
+        result.EntityName.Should().Contain("2/12 books");
+        goal.Status.Should().Be(GoalStatus.Active);
     }
 
     private void SetupGoals(params Goal[] goals)

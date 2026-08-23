@@ -36,7 +36,7 @@ public class ChatToolMetadataTests
         var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);
         var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
         var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
-        var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService);
+        var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
         var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
         var moveHabitTool = new MoveHabitTool(Repo<Habit>());
