@@ -2903,7 +2903,7 @@
       "Notifications": 16,
       "Profile": 38,
       "Referrals": 12,
-      "Social": 32,
+      "Social": 33,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -7758,6 +7758,9 @@
         "testClass": "StreakFreezeAutoActivationServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/StreakFreezeAutoActivationServiceTests.cs",
         "references": [
+          "Habit",
+          "HabitLog",
+          "StreakFreeze",
           "User"
         ]
       },

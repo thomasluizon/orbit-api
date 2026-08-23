@@ -123,8 +123,7 @@ public class ScheduledJobRegistryTests
         new StreakFreezeAutoActivationService(
             ScopeFactory(),
             NullLogger<StreakFreezeAutoActivationService>.Instance,
-            EmptyConfiguration,
-            TimeProvider.System),
+            EmptyConfiguration),
         new StreakGoalSyncService(ScopeFactory(), NullLogger<StreakGoalSyncService>.Instance, EmptyConfiguration),
         new SyncCleanupService(ScopeFactory(), NullLogger<SyncCleanupService>.Instance),
         new PlayNotificationCleanupService(ScopeFactory(), NullLogger<PlayNotificationCleanupService>.Instance),
