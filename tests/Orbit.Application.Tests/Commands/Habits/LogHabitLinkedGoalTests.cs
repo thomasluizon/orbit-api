@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Orbit.Application.Challenges.Services;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -26,6 +27,7 @@ public class LogHabitLinkedGoalTests
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IChallengeProgressService _challengeProgressService = Substitute.For<IChallengeProgressService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
@@ -37,8 +39,14 @@ public class LogHabitLinkedGoalTests
 
     public LogHabitLinkedGoalTests()
     {
-        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _goalRepo, _userRepo);
-        var services = new LogHabitServices(_userDateService, _userStreakService, _gamificationService, _challengeProgressService, _mediator);
+        var repos = new LogHabitRepositories(_habitRepo, _habitLogRepo, _userRepo);
+        var services = new LogHabitServices(
+            _userDateService,
+            _userStreakService,
+            _gamificationService,
+            _goalCompletionService,
+            _challengeProgressService,
+            _mediator);
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, Substitute.For<ILogger<LogHabitCommandHandler>>());
 
@@ -46,6 +54,13 @@ public class LogHabitLinkedGoalTests
             .Returns(Today);
         _userStreakService.RecalculateAsync(Arg.Any<Guid>(), cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(5, 5, Today));
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<Guid>>(),
+                Arg.Any<DateOnly>(),
+                Arg.Any<bool>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<GoalCompletionUpdate>());
 
         var user = User.Create("Test", "test@test.com").Value;
         _userRepo.FindOneTrackedAsync(
@@ -83,6 +98,12 @@ public class LogHabitLinkedGoalTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>())
+            .Returns(
+                [new GoalCompletionUpdate(goal.Id, goal.Title, 1, goal.TargetValue, false)],
+                [new GoalCompletionUpdate(goal.Id, goal.Title, 2, goal.TargetValue, false)]);
+
         var first = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
         var second = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
 
@@ -93,7 +114,6 @@ public class LogHabitLinkedGoalTests
         second.Value.LinkedGoalUpdates.Should().ContainSingle();
         second.Value.LinkedGoalUpdates![0].GoalId.Should().Be(goal.Id);
         second.Value.LinkedGoalUpdates[0].NewProgress.Should().Be(2);
-        goal.CurrentValue.Should().Be(2);
     }
 
     [Fact]
@@ -120,13 +140,14 @@ public class LogHabitLinkedGoalTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
-
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>())
+            .Returns([new GoalCompletionUpdate(goal.Id, goal.Title, 1, goal.TargetValue, false)]);
         var unlogged = await _handler.Handle(new LogHabitCommand(UserId, habit.Id, Today), CancellationToken.None);
 
         unlogged.IsSuccess.Should().BeTrue();
         unlogged.Value.LinkedGoalUpdates.Should().ContainSingle();
         unlogged.Value.LinkedGoalUpdates![0].NewProgress.Should().Be(1);
-        goal.CurrentValue.Should().Be(1);
     }
 
     [Fact]
@@ -173,13 +194,15 @@ public class LogHabitLinkedGoalTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>())
+            .Returns([new GoalCompletionUpdate(goal.Id, goal.Title, 2, goal.TargetValue, false)]);
 
         var result = await _handler.Handle(new LogHabitCommand(UserId, completedHabit.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.LinkedGoalUpdates.Should().ContainSingle();
         result.Value.LinkedGoalUpdates![0].NewProgress.Should().Be(2);
-        goal.CurrentValue.Should().Be(2);
     }
 
     [Fact]
@@ -203,6 +226,9 @@ public class LogHabitLinkedGoalTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>())
+            .Returns([new GoalCompletionUpdate(goal.Id, goal.Title, 1, goal.TargetValue, false)]);
 
         var command = new LogHabitCommand(UserId, habit.Id);
         var result = await _handler.Handle(command, CancellationToken.None);
@@ -236,12 +262,15 @@ public class LogHabitLinkedGoalTests
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
+        _goalCompletionService.SyncDerivedGoalsAsync(
+                UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>())
+            .Returns([new GoalCompletionUpdate(goal.Id, goal.Title, 3, goal.TargetValue, true)]);
 
         var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        goal.Status.Should().Be(GoalStatus.Completed);
-        await _gamificationService.Received(1).ProcessGoalCompleted(UserId, Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -274,7 +303,8 @@ public class LogHabitLinkedGoalTests
         var result = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _gamificationService.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]

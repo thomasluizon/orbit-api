@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -16,9 +16,8 @@ public class LinkGoalsToHabitCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
-    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly LinkGoalsToHabitCommandHandler _handler;
 
     private static readonly Guid UserId = Guid.NewGuid();
@@ -30,8 +29,7 @@ public class LinkGoalsToHabitCommandHandlerTests
             .Returns(Task.FromResult(Result.Success()));
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _handler = new LinkGoalsToHabitCommandHandler(
-            _habitRepo, _goalRepo, _payGate, _gamificationService, _userDateService,
-            _unitOfWork, Substitute.For<ILogger<LinkGoalsToHabitCommandHandler>>());
+            _habitRepo, _goalRepo, _payGate, _goalCompletionService, _userDateService);
     }
 
     private static Habit CreateTestHabit() =>
@@ -61,7 +59,8 @@ public class LinkGoalsToHabitCommandHandlerTests
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -102,7 +101,9 @@ public class LinkGoalsToHabitCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.GoalNotFound);
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.DidNotReceive().SyncDerivedGoalsAsync(
+            Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
+            Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

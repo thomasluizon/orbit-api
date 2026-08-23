@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -17,8 +18,7 @@ public class LinkHabitsToGoalCommandHandlerTests
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
-    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly LinkHabitsToGoalCommandHandler _handler;
@@ -30,8 +30,8 @@ public class LinkHabitsToGoalCommandHandlerTests
     public LinkHabitsToGoalCommandHandlerTests()
     {
         _handler = new LinkHabitsToGoalCommandHandler(
-            _goalRepo, _habitRepo, _payGate, _gamificationService, _unitOfWork,
-            _userDateService, _cache, Substitute.For<ILogger<LinkHabitsToGoalCommandHandler>>());
+            _goalRepo, _habitRepo, _payGate, _goalCompletionService,
+            _userDateService, _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
@@ -62,7 +62,8 @@ public class LinkHabitsToGoalCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         goal.Habits.Should().HaveCount(2);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -166,7 +167,9 @@ public class LinkHabitsToGoalCommandHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.DidNotReceive().SyncDerivedGoalsAsync(
+            Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
+            Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -195,7 +198,9 @@ public class LinkHabitsToGoalCommandHandlerTests
         result.IsFailure.Should().BeTrue();
         result.ErrorCode.Should().Be(ErrorCodes.HabitNotFound);
         goal.Habits.Should().ContainSingle();
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.DidNotReceive().SyncDerivedGoalsAsync(
+            Arg.Any<Guid>(), Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(),
+            Arg.Any<bool>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -220,8 +225,13 @@ public class LinkHabitsToGoalCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        goal.CurrentValue.Should().Be(1);
         goal.IsProgressDerived.Should().BeTrue();
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { goal.Id })),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -246,9 +256,12 @@ public class LinkHabitsToGoalCommandHandlerTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        goal.CurrentValue.Should().Be(1);
-        goal.Status.Should().Be(GoalStatus.Completed);
-        await _gamificationService.Received(1).ProcessGoalCompleted(UserId, Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { goal.Id })),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -15,14 +15,13 @@ public record UpdateGoalStatusCommand(
     Guid GoalId,
     GoalStatus NewStatus) : IRequest<Result>, IConcurrencyRetryable;
 
-public partial class UpdateGoalStatusCommandHandler(
+public class UpdateGoalStatusCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
-    IMemoryCache cache,
-    ILogger<UpdateGoalStatusCommandHandler> logger) : IRequestHandler<UpdateGoalStatusCommand, Result>
+    IMemoryCache cache) : IRequestHandler<UpdateGoalStatusCommand, Result>
 {
     public async Task<Result> Handle(UpdateGoalStatusCommand request, CancellationToken cancellationToken)
     {
@@ -47,19 +46,10 @@ public partial class UpdateGoalStatusCommandHandler(
 
         if (result.IsFailure) return result;
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
         if (request.NewStatus == GoalStatus.Completed)
-        {
-            try
-            {
-                await gamificationService.ProcessGoalCompleted(request.UserId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                LogGamificationGoalCompletionFailed(logger, ex, request.UserId);
-            }
-        }
+            await goalCompletionService.SaveCompletedGoalAsync(request.UserId, goal.Id, cancellationToken);
+        else
+            await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
@@ -67,6 +57,4 @@ public partial class UpdateGoalStatusCommandHandler(
         return Result.Success();
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

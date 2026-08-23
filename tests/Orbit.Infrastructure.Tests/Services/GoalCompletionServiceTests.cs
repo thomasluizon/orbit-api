@@ -1,0 +1,200 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using NSubstitute;
+using Orbit.Application.Common;
+using Orbit.Application.Goals.Commands;
+using Orbit.Application.Goals.Services;
+using Orbit.Application.Habits.Commands;
+using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
+using Orbit.Domain.Interfaces;
+using Orbit.Infrastructure.Configuration;
+using Orbit.Infrastructure.Persistence;
+using Orbit.Infrastructure.Tests.Persistence;
+
+namespace Orbit.Infrastructure.Tests.Services;
+
+public class GoalCompletionServiceTests
+{
+    private static readonly DateOnly Today = new(2026, 8, 23);
+
+    [Fact]
+    public async Task LinkGoalsToHabit_TwoGoalsComplete_PersistsEachBeforeItsAward()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Link User", "link-goals@example.com").Value;
+        var habit = CreateHabit(user.Id, "Exercise");
+        var firstGoal = Goal.Create(user.Id, "First goal", 1, "session").Value;
+        var secondGoal = Goal.Create(user.Id, "Second goal", 1, "session").Value;
+        habit.Log(Today);
+        dbContext.AddRange(user, habit, firstGoal, secondGoal);
+        await dbContext.SaveChangesAsync();
+
+        var awardCounts = new List<int>();
+        var gamification = Substitute.For<IGamificationService>();
+        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                awardCounts.Add(await dbContext.Goals.CountAsync(g => g.Status == GoalStatus.Completed));
+            });
+        var unitOfWork = CreateUnitOfWork(dbContext);
+        var handler = new LinkGoalsToHabitCommandHandler(
+            new GenericRepository<Habit>(dbContext),
+            new GenericRepository<Goal>(dbContext),
+            SuccessfulPayGate(),
+            CreateCompletionService(dbContext, gamification, unitOfWork),
+            StubToday(user.Id));
+
+        var result = await handler.Handle(
+            new LinkGoalsToHabitCommand(user.Id, habit.Id, [firstGoal.Id, secondGoal.Id]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var goals = await dbContext.Goals.AsNoTracking().OrderBy(g => g.Title).ToListAsync();
+        goals.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
+        awardCounts.Should().Equal(1, 2);
+        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task LinkHabitsToGoal_AwardFailure_RollsBackAndRetryCompletes()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Retry User", "link-habits@example.com").Value;
+        var habit = CreateHabit(user.Id, "Read");
+        var goal = Goal.Create(user.Id, "Read once", 1, "session").Value;
+        habit.Log(Today);
+        dbContext.AddRange(user, habit, goal);
+        await dbContext.SaveChangesAsync();
+
+        var attempts = 0;
+        var gamification = Substitute.For<IGamificationService>();
+        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+            .Returns(_ => ++attempts == 1
+                ? Task.FromException(new InvalidOperationException("Forced award failure"))
+                : Task.CompletedTask);
+        var unitOfWork = CreateUnitOfWork(dbContext);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var handler = new LinkHabitsToGoalCommandHandler(
+            new GenericRepository<Goal>(dbContext),
+            new GenericRepository<Habit>(dbContext),
+            SuccessfulPayGate(),
+            CreateCompletionService(dbContext, gamification, unitOfWork),
+            StubToday(user.Id),
+            cache);
+        var command = new LinkHabitsToGoalCommand(user.Id, goal.Id, [habit.Id]);
+
+        var firstAttempt = () => handler.Handle(command, CancellationToken.None);
+        await firstAttempt.Should().ThrowAsync<InvalidOperationException>();
+
+        var afterFailure = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        afterFailure.Status.Should().Be(GoalStatus.Active);
+        afterFailure.CurrentValue.Should().Be(0);
+        (await dbContext.Entry(afterFailure).Collection(g => g.Habits).Query().CountAsync()).Should().Be(0);
+
+        var retry = await handler.Handle(command, CancellationToken.None);
+
+        retry.IsSuccess.Should().BeTrue();
+        var afterRetry = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        afterRetry.Status.Should().Be(GoalStatus.Completed);
+        afterRetry.CurrentValue.Should().Be(1);
+        await gamification.Received(2).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SyncDerivedGoals_ConcurrencyRetryResetsTrackingMidLoop_CompletesEveryCandidate()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Reset User", "reset@example.com").Value;
+        var habit = CreateHabit(user.Id, "Train");
+        var goals = Enumerable.Range(1, 3)
+            .Select(index => Goal.Create(user.Id, $"Goal {index}", 1, "session").Value)
+            .ToList();
+        foreach (var goal in goals)
+            goal.AddHabit(habit);
+        habit.Log(Today);
+        dbContext.Add(user);
+        dbContext.Add(habit);
+        dbContext.AddRange(goals);
+        await dbContext.SaveChangesAsync();
+
+        var unitOfWork = CreateUnitOfWork(dbContext);
+        var retryUnitOfWork = Substitute.For<IUnitOfWork>();
+        var saveAttempts = 0;
+        retryUnitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => ++saveAttempts == 1
+                ? Task.FromException<int>(new DbUpdateConcurrencyException("Forced retry"))
+                : Task.FromResult(0));
+        retryUnitOfWork.When(x => x.ResetTracking()).Do(_ => unitOfWork.ResetTracking());
+
+        var awardAttempts = 0;
+        var gamification = Substitute.For<IGamificationService>();
+        gamification.ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                if (++awardAttempts == 1)
+                {
+                    await ConcurrencyRetry.SaveWithRetryAsync(
+                        retryUnitOfWork,
+                        _ => Task.CompletedTask,
+                        call.ArgAt<CancellationToken>(1),
+                        maxAttempts: 2);
+                }
+            });
+        var service = CreateCompletionService(dbContext, gamification, unitOfWork);
+
+        var updates = await service.SyncDerivedGoalsAsync(
+            user.Id,
+            goals.Select(g => g.Id).ToList(),
+            Today);
+
+        updates.Should().HaveCount(3).And.OnlyContain(update => update.JustCompleted);
+        var persistedGoals = await dbContext.Goals.AsNoTracking().ToListAsync();
+        persistedGoals.Should().OnlyContain(g => g.Status == GoalStatus.Completed);
+        retryUnitOfWork.Received(1).ResetTracking();
+        await gamification.Received(3).ProcessGoalCompleted(user.Id, Arg.Any<CancellationToken>());
+    }
+
+    private static Habit CreateHabit(Guid userId, string title)
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            userId,
+            title,
+            FrequencyUnit.Day,
+            1,
+            DueDate: Today,
+            IsFlexible: true)).Value;
+        return habit;
+    }
+
+    private static IGoalCompletionService CreateCompletionService(
+        OrbitDbContext dbContext,
+        IGamificationService gamification,
+        IUnitOfWork unitOfWork) =>
+        new GoalCompletionService(new GenericRepository<Goal>(dbContext), gamification, unitOfWork);
+
+    private static IUnitOfWork CreateUnitOfWork(OrbitDbContext dbContext) =>
+        new UnitOfWork(dbContext, new DatabaseConnectionSettings());
+
+    private static IPayGateService SuccessfulPayGate()
+    {
+        var payGate = Substitute.For<IPayGateService>();
+        payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
+        return payGate;
+    }
+
+    private static IUserDateService StubToday(Guid userId)
+    {
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(userId, Arg.Any<CancellationToken>()).Returns(Today);
+        return userDateService;
+    }
+}

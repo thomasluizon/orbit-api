@@ -117,13 +117,13 @@ public static partial class ServiceCollectionExtensions
             new Orbit.Application.Habits.Commands.LogHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>(),
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>()));
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.LogHabitServices>(sp =>
             new Orbit.Application.Habits.Commands.LogHabitServices(
                 sp.GetRequiredService<IUserDateService>(),
                 sp.GetRequiredService<IUserStreakService>(),
                 sp.GetRequiredService<IGamificationService>(),
+                sp.GetRequiredService<IGoalCompletionService>(),
                 sp.GetRequiredService<Orbit.Application.Challenges.Services.IChallengeProgressService>(),
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IPayGateService>()));

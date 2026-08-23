@@ -39,6 +39,7 @@ public partial class CreateHabitCommandHandler(
     IUserDateService userDateService,
     IPayGateService payGate,
     IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<CreateHabitCommandHandler> logger) : IRequestHandler<CreateHabitCommand, Result<Guid>>
@@ -98,21 +99,31 @@ public partial class CreateHabitCommandHandler(
             return subResult.PropagateError<Guid>();
 
         var linkResult = await LinkTagsAndGoalsAsync(
-            habit, request.UserId, today, request.TagIds, request.GoalIds, cancellationToken);
+            habit, request.UserId, request.TagIds, request.GoalIds, cancellationToken);
         if (linkResult.IsFailure)
             return linkResult.PropagateError<Guid>();
 
         await repos.HabitRepository.AddAsync(habit, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var habitId = habit.Id;
+        if (linkResult.Value.Count > 0)
+        {
+            await goalCompletionService.SyncDerivedGoalsAsync(
+                request.UserId,
+                linkResult.Value,
+                today,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         await ProcessGamificationSafeAsync(request.UserId, cancellationToken);
-        if (linkResult.Value)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
         await ProcessOnboardingChecklistSafeAsync(request.UserId, OnboardingChecklistSignal.HabitCreated, cancellationToken);
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
-        return Result.Success(habit.Id);
+        return Result.Success(habitId);
     }
 
     private async Task<Result> CheckCreationGatesAsync(
@@ -176,8 +187,8 @@ public partial class CreateHabitCommandHandler(
         return Result.Success();
     }
 
-    private async Task<Result<bool>> LinkTagsAndGoalsAsync(
-        Habit habit, Guid userId, DateOnly userToday, IReadOnlyList<Guid>? tagIds,
+    private async Task<Result<IReadOnlyList<Guid>>> LinkTagsAndGoalsAsync(
+        Habit habit, Guid userId, IReadOnlyList<Guid>? tagIds,
         IReadOnlyList<Guid>? goalIds, CancellationToken cancellationToken)
     {
         if (tagIds is { Count: > 0 })
@@ -188,7 +199,7 @@ public partial class CreateHabitCommandHandler(
 
             var tagsResolved = OwnershipValidation.AllResolved(tagIds, tags, t => t.Id, ErrorMessages.TagNotFound);
             if (tagsResolved.IsFailure)
-                return tagsResolved.PropagateError<bool>();
+                return tagsResolved.PropagateError<IReadOnlyList<Guid>>();
 
             foreach (var tag in tags)
                 habit.AddTag(tag);
@@ -203,20 +214,15 @@ public partial class CreateHabitCommandHandler(
 
             var goalsResolved = OwnershipValidation.AllResolved(goalIds, goals, g => g.Id, ErrorMessages.GoalNotFound);
             if (goalsResolved.IsFailure)
-                return goalsResolved.PropagateError<bool>();
+                return goalsResolved.PropagateError<IReadOnlyList<Guid>>();
 
-            var anyJustCompleted = false;
             foreach (var goal in goals)
-            {
                 habit.AddGoal(goal);
 
-                anyJustCompleted |= GoalProgressSyncService.SyncCurrentProgress(goal, userToday).JustCompleted;
-            }
-
-            return Result.Success(anyJustCompleted);
+            return Result.Success<IReadOnlyList<Guid>>(goals.Select(g => g.Id).ToList());
         }
 
-        return Result.Success(false);
+        return Result.Success<IReadOnlyList<Guid>>([]);
     }
 
     private async Task ProcessGamificationSafeAsync(Guid userId, CancellationToken cancellationToken)
@@ -228,18 +234,6 @@ public partial class CreateHabitCommandHandler(
         catch (Exception ex)
         {
             LogGamificationHabitCreationFailed(logger, ex, userId);
-        }
-    }
-
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
         }
     }
 
@@ -258,9 +252,6 @@ public partial class CreateHabitCommandHandler(
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for habit creation by user {UserId}")]
     private static partial void LogGamificationHabitCreationFailed(ILogger logger, Exception ex, Guid userId);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Onboarding checklist processing failed for user {UserId}")]
     private static partial void LogOnboardingChecklistFailed(ILogger logger, Exception ex, Guid userId);

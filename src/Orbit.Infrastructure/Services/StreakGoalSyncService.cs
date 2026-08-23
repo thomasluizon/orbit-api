@@ -3,9 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
-using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.BackgroundJobs;
@@ -69,75 +67,35 @@ public partial class StreakGoalSyncService(
     {
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<OrbitDbContext>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var gamificationService = scope.ServiceProvider.GetRequiredService<IGamificationService>();
+        var goalCompletionService = scope.ServiceProvider.GetRequiredService<IGoalCompletionService>();
+        var userDateService = scope.ServiceProvider.GetRequiredService<IUserDateService>();
 
         var goals = await dbContext.Goals
             .Where(g => g.Status == GoalStatus.Active
                         && !g.IsDeleted
                         && (g.Type == GoalType.Streak
                             || (g.Type == GoalType.Standard && g.Habits.Any())))
-            .Include(g => g.Habits).ThenInclude(h => h.Logs)
+            .Select(g => new { g.Id, g.UserId })
+            .AsNoTracking()
             .ToListAsync(ct);
 
         if (goals.Count == 0) return;
 
-        var userIds = goals.Select(g => g.UserId).Distinct().ToList();
-        var users = await dbContext.Users
-            .Where(u => userIds.Contains(u.Id))
-            .ToDictionaryAsync(u => u.Id, ct);
-
         var synced = 0;
-        foreach (var goal in goals)
+        foreach (var userGoals in goals.GroupBy(g => g.UserId))
         {
-            if (!users.TryGetValue(goal.UserId, out var user)) continue;
-
-            var tz = TimeZoneHelper.FindTimeZone(user.TimeZone, logger, user.Id);
-            var userToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
-
-            var outcome = goal.Type == GoalType.Streak
-                ? ToProgressOutcome(GoalStreakSyncService.SyncCurrentStreakIfNeeded(goal, userToday))
-                : GoalProgressSyncService.SyncCurrentProgress(goal, userToday);
-            if (!outcome.Synced) continue;
-
-            if (!await TrySaveGoalAsync(
-                    goal, outcome.JustCompleted, dbContext, unitOfWork, gamificationService, ct))
-                break;
-
-            synced++;
+            var userToday = await userDateService.GetUserTodayAsync(userGoals.Key, ct);
+            var updates = await goalCompletionService.SyncDerivedGoalsAsync(
+                userGoals.Key,
+                userGoals.Select(g => g.Id).ToList(),
+                userToday,
+                passiveSync: true,
+                cancellationToken: ct);
+            synced += updates.Count;
         }
 
         if (synced > 0 && logger.IsEnabled(LogLevel.Information))
             LogDerivedGoalsSynced(logger, synced);
-    }
-
-    private static GoalProgressSyncOutcome ToProgressOutcome(StreakSyncOutcome outcome) =>
-        new(outcome.Synced, outcome.JustCompleted);
-
-    private async Task<bool> TrySaveGoalAsync(
-        Goal goal,
-        bool justCompleted,
-        OrbitDbContext dbContext,
-        IUnitOfWork unitOfWork,
-        IGamificationService gamificationService,
-        CancellationToken ct)
-    {
-        try
-        {
-            await unitOfWork.ExecuteInTransactionAsync(async transactionCt =>
-            {
-                await dbContext.SaveChangesAsync(transactionCt);
-                if (justCompleted)
-                    await gamificationService.ProcessGoalCompleted(goal.UserId, transactionCt);
-            }, ct);
-            return true;
-        }
-        catch (Exception ex) when (ex is DbUpdateConcurrencyException || DbUniqueViolation.IsUniqueViolation(ex))
-        {
-            if (logger.IsEnabled(LogLevel.Debug))
-                LogGoalProgressSyncConflict(logger, goal.Id);
-            return false;
-        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "StreakGoalSyncService started")]
@@ -152,6 +110,4 @@ public partial class StreakGoalSyncService(
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Synced {Count} active derived goals")]
     private static partial void LogDerivedGoalsSynced(ILogger logger, int count);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Goal {GoalId} progress sync raced a concurrent writer; skipping")]
-    private static partial void LogGoalProgressSyncConflict(ILogger logger, Guid goalId);
 }

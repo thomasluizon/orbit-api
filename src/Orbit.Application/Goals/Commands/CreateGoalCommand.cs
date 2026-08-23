@@ -28,6 +28,7 @@ public partial class CreateGoalCommandHandler(
     IPayGateService payGate,
     IUserDateService userDateService,
     IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<CreateGoalCommandHandler> logger) : IRequestHandler<CreateGoalCommand, Result<Guid>>
@@ -56,7 +57,7 @@ public partial class CreateGoalCommandHandler(
             return goalResult.PropagateError<Guid>();
 
         var goal = goalResult.Value;
-        var justCompleted = false;
+        var hasLinkedHabits = false;
 
         if (request.HabitIds is { Count: > 0 } habitIds)
         {
@@ -75,11 +76,23 @@ public partial class CreateGoalCommandHandler(
             foreach (var habit in habits)
                 goal.AddHabit(habit);
 
-            justCompleted = GoalProgressSyncService.SyncCurrentProgress(goal, today).JustCompleted;
+            hasLinkedHabits = true;
         }
 
         await goalRepository.AddAsync(goal, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var goalId = goal.Id;
+        if (hasLinkedHabits)
+        {
+            await goalCompletionService.SyncDerivedGoalsAsync(
+                request.UserId,
+                [goalId],
+                today,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         try
         {
@@ -90,29 +103,12 @@ public partial class CreateGoalCommandHandler(
             LogGamificationGoalCreationFailed(logger, ex, request.UserId);
         }
 
-        if (justCompleted)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
-
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
-        return Result.Success(goal.Id);
-    }
-
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
+        return Result.Success(goalId);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal creation by user {UserId}")]
     private static partial void LogGamificationGoalCreationFailed(ILogger logger, Exception ex, Guid userId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

@@ -24,6 +24,7 @@ public class CreateGoalCommandHandlerTests
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly CreateGoalCommandHandler _handler;
@@ -34,7 +35,8 @@ public class CreateGoalCommandHandlerTests
     public CreateGoalCommandHandlerTests()
     {
         _handler = new CreateGoalCommandHandler(
-            _goalRepo, _habitRepo, _payGate, _userDateService, _gamificationService, _unitOfWork, _cache,
+            _goalRepo, _habitRepo, _payGate, _userDateService, _gamificationService,
+            _goalCompletionService, _unitOfWork, _cache,
             Substitute.For<ILogger<CreateGoalCommandHandler>>());
 
         _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -214,7 +216,8 @@ public class CreateGoalCommandHandlerTests
         await _goalRepo.Received(1).AddAsync(
             Arg.Is<Goal>(goal => goal.Habits.Count == 2 && goal.Habits.Contains(first) && goal.Habits.Contains(second)),
             Arg.Any<CancellationToken>());
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId, Arg.Any<IReadOnlyCollection<Guid>>(), Today, false, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -287,8 +290,12 @@ public class CreateGoalCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         createdGoal.Should().NotBeNull();
-        createdGoal!.CurrentValue.Should().Be(1);
-        createdGoal.StreakSyncedAtUtc.Should().NotBeNull();
+        await _goalCompletionService.Received(1).SyncDerivedGoalsAsync(
+            UserId,
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { createdGoal!.Id })),
+            Today,
+            false,
+            Arg.Any<CancellationToken>());
     }
 
     private static Habit CreateHabit(string title) =>

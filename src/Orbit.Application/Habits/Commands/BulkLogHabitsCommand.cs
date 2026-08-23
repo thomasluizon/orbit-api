@@ -1,5 +1,4 @@
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -38,8 +37,8 @@ public record BulkLogServices(
 public partial class BulkLogHabitsCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<HabitLog> habitLogRepository,
-    IGenericRepository<Goal> goalRepository,
     BulkLogServices services,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork,
     IMemoryCache cache,
     ILogger<BulkLogHabitsCommandHandler> logger) : IRequestHandler<BulkLogHabitsCommand, Result<BulkLogResult>>
@@ -84,24 +83,7 @@ public partial class BulkLogHabitsCommandHandler(
                 .SelectMany(h => h.Goals)
                 .Select(g => g.Id)
                 .ToHashSet();
-            if (goalIds.Count > 0)
-            {
-                var goals = await goalRepository.FindTrackedAsync(
-                    g => goalIds.Contains(g.Id),
-                    q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
-                    ct);
-                foreach (var goal in goals)
-                {
-                    var outcome = GoalProgressSyncService.SyncCurrentProgress(goal, today);
-                    if (!outcome.JustCompleted)
-                        continue;
-
-                    await unitOfWork.SaveChangesAsync(ct);
-                    await services.GamificationService.ProcessGoalCompleted(request.UserId, ct);
-                }
-            }
-
-            await unitOfWork.SaveChangesAsync(ct);
+            await goalCompletionService.SyncDerivedGoalsAsync(request.UserId, goalIds, today, cancellationToken: ct);
 
             var loggedHabitIds = changedHabitIds.ToList();
             if (loggedHabitIds.Count > 0)

@@ -7,6 +7,7 @@ using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Gamification;
 using Orbit.Application.Gamification.Services;
+using Orbit.Application.Goals.Services;
 using Orbit.Application.Social.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -152,7 +153,7 @@ public class StreakGoalSyncServiceTests
     }
 
     [Fact]
-    public async Task SyncActiveGoals_ConcurrencyConflict_StopsDetachedGoalsAndRetriesNextSweep()
+    public async Task SyncActiveGoals_ConcurrencyConflict_RollsBackAndRetriesNextSweep()
     {
         using var factory = new SqliteOrbitDbContextFactory();
         var dbContext = factory.Context;
@@ -182,7 +183,8 @@ public class StreakGoalSyncServiceTests
                 : Task.CompletedTask);
         var service = CreateService(dbContext, gamification);
 
-        await service.SyncActiveGoals(CancellationToken.None);
+        var firstSweep = () => service.SyncActiveGoals(CancellationToken.None);
+        await firstSweep.Should().ThrowAsync<DbUpdateConcurrencyException>();
 
         var afterConflict = await dbContext.Goals.AsNoTracking().ToListAsync();
         afterConflict.Should().OnlyContain(g => g.Status == GoalStatus.Active);
@@ -331,10 +333,18 @@ public class StreakGoalSyncServiceTests
         IUnitOfWork? unitOfWork = null)
     {
         unitOfWork ??= CreateUnitOfWork(dbContext);
+        var userDateService = Substitute.For<IUserDateService>();
+        userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        var goalCompletionService = new GoalCompletionService(
+            new GenericRepository<Goal>(dbContext),
+            gamificationService,
+            unitOfWork);
         var serviceProvider = new ServiceCollection()
             .AddSingleton(dbContext)
             .AddSingleton(gamificationService)
             .AddSingleton(unitOfWork)
+            .AddSingleton<IUserDateService>(userDateService)
+            .AddSingleton<IGoalCompletionService>(goalCompletionService)
             .BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         return new StreakGoalSyncService(

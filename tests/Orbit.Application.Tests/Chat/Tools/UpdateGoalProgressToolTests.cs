@@ -4,6 +4,7 @@ using FluentAssertions;
 using NSubstitute;
 using Orbit.Application.Chat.Tools;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -14,6 +15,7 @@ public class UpdateGoalProgressToolTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IGenericRepository<GoalProgressLog> _progressLogRepo = Substitute.For<IGenericRepository<GoalProgressLog>>();
+    private readonly IGoalCompletionService _goalCompletionService = Substitute.For<IGoalCompletionService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly UpdateGoalProgressTool _tool;
 
@@ -21,7 +23,7 @@ public class UpdateGoalProgressToolTests
 
     public UpdateGoalProgressToolTests()
     {
-        _tool = new UpdateGoalProgressTool(_goalRepo, _progressLogRepo, _unitOfWork);
+        _tool = new UpdateGoalProgressTool(_goalRepo, _progressLogRepo, _goalCompletionService, _unitOfWork);
     }
 
     [Fact]

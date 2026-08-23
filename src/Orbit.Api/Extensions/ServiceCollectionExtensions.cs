@@ -80,6 +80,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
         builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();
+        builder.Services.AddScoped<IGoalCompletionService, GoalCompletionService>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>
@@ -135,8 +136,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<Orbit.Application.Habits.Commands.SkipHabitRepositories>(sp =>
             new Orbit.Application.Habits.Commands.SkipHabitRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Habit>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>(),
-                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.Goal>>()));
+                sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.HabitLog>>()));
         builder.Services.AddScoped<Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories>(sp =>
             new Orbit.Application.Calendar.Queries.GetCalendarEventsRepositories(
                 sp.GetRequiredService<IGenericRepository<Orbit.Domain.Entities.User>>(),

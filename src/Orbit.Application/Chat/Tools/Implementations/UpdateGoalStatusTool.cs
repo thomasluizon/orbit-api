@@ -1,6 +1,6 @@
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -9,9 +9,8 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 
 public class UpdateGoalStatusTool(
     IGenericRepository<Goal> goalRepository,
-    IGamificationService gamificationService,
-    IUnitOfWork unitOfWork,
-    ILogger<UpdateGoalStatusTool> logger) : IAiTool, IConcurrencyRetryableTool
+    IGoalCompletionService goalCompletionService,
+    IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "update_goal_status";
 
@@ -56,6 +55,7 @@ public class UpdateGoalStatusTool(
         if (goal is null)
             return new ToolResult(false, Error: $"Goal {goalId} not found.");
 
+        var goalTitle = goal.Title;
         var result = status switch
         {
             GoalStatus.Completed => goal.MarkCompleted(),
@@ -67,20 +67,11 @@ public class UpdateGoalStatusTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        await unitOfWork.SaveChangesAsync(ct);
-
         if (status == GoalStatus.Completed)
-        {
-            try
-            {
-                await gamificationService.ProcessGoalCompleted(userId, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Gamification processing failed for goal completion by user {UserId}", userId);
-            }
-        }
+            await goalCompletionService.SaveCompletedGoalAsync(userId, goalId, ct);
+        else
+            await unitOfWork.SaveChangesAsync(ct);
 
-        return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
+        return new ToolResult(true, EntityId: goalId.ToString(), EntityName: goalTitle);
     }
 }

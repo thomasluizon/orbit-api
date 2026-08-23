@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
@@ -14,14 +13,12 @@ public record LinkGoalsToHabitCommand(
     Guid HabitId,
     IReadOnlyList<Guid> GoalIds) : IRequest<Result>;
 
-public partial class LinkGoalsToHabitCommandHandler(
+public class LinkGoalsToHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IGamificationService gamificationService,
-    IUserDateService userDateService,
-    IUnitOfWork unitOfWork,
-    ILogger<LinkGoalsToHabitCommandHandler> logger) : IRequestHandler<LinkGoalsToHabitCommand, Result>
+    IGoalCompletionService goalCompletionService,
+    IUserDateService userDateService) : IRequestHandler<LinkGoalsToHabitCommand, Result>
 {
     public async Task<Result> Handle(LinkGoalsToHabitCommand request, CancellationToken cancellationToken)
     {
@@ -55,29 +52,12 @@ public partial class LinkGoalsToHabitCommandHandler(
             habit.AddGoal(goal);
 
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
-        var anyJustCompleted = false;
-        foreach (var goal in goals)
-            anyJustCompleted |= GoalProgressSyncService.SyncCurrentProgress(goal, today).JustCompleted;
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        if (anyJustCompleted)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+        await goalCompletionService.SyncDerivedGoalsAsync(
+            request.UserId,
+            affectedGoalIds,
+            today,
+            cancellationToken: cancellationToken);
 
         return Result.Success();
     }
-
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

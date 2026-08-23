@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -8,6 +9,7 @@ namespace Orbit.Application.Chat.Tools.Implementations;
 public class UpdateGoalProgressTool(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<GoalProgressLog> progressLogRepository,
+    IGoalCompletionService goalCompletionService,
     IUnitOfWork unitOfWork) : IAiTool, IConcurrencyRetryableTool
 {
     public string Name => "update_goal_progress";
@@ -36,14 +38,19 @@ public class UpdateGoalProgressTool(
         var (goal, error) = await ResolveGoalAsync(args, userId, ct);
         if (goal is null) return new ToolResult(false, Error: error);
 
+        var goalId = goal.Id;
+        var goalTitle = goal.Title;
         var previousValue = goal.CurrentValue;
         var result = goal.UpdateProgress(valueEl.GetDecimal());
         if (result.IsFailure) return ToolResult.FromFailure(result);
 
         var progressLog = GoalProgressLog.Create(goal.Id, previousValue, valueEl.GetDecimal(), note);
         await progressLogRepository.AddAsync(progressLog, ct);
-        await unitOfWork.SaveChangesAsync(ct);
-        return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
+        if (result.Value)
+            await goalCompletionService.SaveCompletedGoalAsync(userId, goalId, ct);
+        else
+            await unitOfWork.SaveChangesAsync(ct);
+        return new ToolResult(true, EntityId: goalId.ToString(), EntityName: goalTitle);
     }
 
     private async Task<(Goal? Goal, string? Error)> ResolveGoalAsync(JsonElement args, Guid userId, CancellationToken ct)

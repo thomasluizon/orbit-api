@@ -1,6 +1,5 @@
 using MediatR;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
@@ -26,16 +25,15 @@ public record UpdateHabitCommand(
     IReadOnlyList<Guid>? GoalIds = null,
     string? Emoji = null) : IRequest<Result>;
 
-public partial class UpdateHabitCommandHandler(
+public class UpdateHabitCommandHandler(
     IGenericRepository<Habit> habitRepository,
     IGenericRepository<SentReminder> sentReminderRepository,
     IGenericRepository<Goal> goalRepository,
     IPayGateService payGate,
-    IGamificationService gamificationService,
+    IGoalCompletionService goalCompletionService,
     IUserDateService userDateService,
     IUnitOfWork unitOfWork,
-    IMemoryCache cache,
-    ILogger<UpdateHabitCommandHandler> logger) : IRequestHandler<UpdateHabitCommand, Result>
+    IMemoryCache cache) : IRequestHandler<UpdateHabitCommand, Result>
 {
     public async Task<Result> Handle(UpdateHabitCommand request, CancellationToken cancellationToken)
     {
@@ -114,19 +112,27 @@ public partial class UpdateHabitCommandHandler(
         if (opts.DueTime.HasValue)
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
-        var anyGoalJustCompleted = false;
+        IReadOnlyList<Guid> affectedGoalIds = [];
         if (request.GoalIds is not null)
         {
             var goalLinkResult = await SyncGoalLinksAsync(habit, request.UserId, request.GoalIds, cancellationToken);
             if (goalLinkResult.IsFailure)
                 return goalLinkResult.PropagateError();
-            anyGoalJustCompleted = goalLinkResult.Value;
+            affectedGoalIds = goalLinkResult.Value;
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        if (anyGoalJustCompleted)
-            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+        if (request.GoalIds is not null)
+        {
+            await goalCompletionService.SyncDerivedGoalsAsync(
+                request.UserId,
+                affectedGoalIds,
+                today,
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
@@ -176,7 +182,7 @@ public partial class UpdateHabitCommandHandler(
             sentReminderRepository.Remove(r);
     }
 
-    private async Task<Result<bool>> SyncGoalLinksAsync(
+    private async Task<Result<IReadOnlyList<Guid>>> SyncGoalLinksAsync(
         Habit habit, Guid userId, IReadOnlyList<Guid> goalIds, CancellationToken cancellationToken)
     {
         var affectedGoalIds = habit.Goals.Select(g => g.Id).Concat(goalIds).ToHashSet();
@@ -188,33 +194,13 @@ public partial class UpdateHabitCommandHandler(
         var requestedGoals = goals.Where(g => goalIds.Contains(g.Id)).ToList();
         var goalsResolved = OwnershipValidation.AllResolved(goalIds, requestedGoals, g => g.Id, ErrorMessages.GoalNotFound);
         if (goalsResolved.IsFailure)
-            return goalsResolved.PropagateError<bool>();
+            return goalsResolved.PropagateError<IReadOnlyList<Guid>>();
 
         foreach (var existingGoal in habit.Goals.ToList())
             habit.RemoveGoal(existingGoal);
         foreach (var goal in requestedGoals)
             habit.AddGoal(goal);
 
-        var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var anyJustCompleted = false;
-        foreach (var goal in goals)
-            anyJustCompleted |= GoalProgressSyncService.SyncCurrentProgress(goal, today).JustCompleted;
-
-        return Result.Success(anyJustCompleted);
+        return Result.Success<IReadOnlyList<Guid>>(affectedGoalIds.ToList());
     }
-
-    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogGamificationGoalCompletionFailed(logger, ex, userId);
-        }
-    }
-
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
-    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

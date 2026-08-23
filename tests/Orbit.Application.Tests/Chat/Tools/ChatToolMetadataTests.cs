@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Chat.Tools.Implementations;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -19,9 +20,8 @@ public class ChatToolMetadataTests
         var userDateService = Substitute.For<IUserDateService>();
         var payGateService = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
-        var gamificationService = Substitute.For<IGamificationService>();
+        var goalCompletionService = Substitute.For<IGoalCompletionService>();
         var goalProgressReadSyncer = Substitute.For<Orbit.Application.Goals.Services.IGoalProgressReadSyncer>();
-        var logger = Substitute.For<ILogger<UpdateGoalStatusTool>>();
 
         var assignTagsTool = new AssignTagsTool(Repo<Habit>(), Repo<Tag>(), unitOfWork);
         var bulkUpdateHabitEmojisTool = new BulkUpdateHabitEmojisTool(Repo<Habit>());
@@ -44,8 +44,9 @@ public class ChatToolMetadataTests
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());
         var skipHabitTool = new SkipHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var suggestBreakdownTool = new SuggestBreakdownTool();
-        var updateGoalProgressTool = new UpdateGoalProgressTool(Repo<Goal>(), Repo<GoalProgressLog>(), unitOfWork);
-        var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), gamificationService, unitOfWork, logger);
+        var updateGoalProgressTool = new UpdateGoalProgressTool(
+            Repo<Goal>(), Repo<GoalProgressLog>(), goalCompletionService, unitOfWork);
+        var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
         var updateHabitTool = new UpdateHabitTool(Repo<Habit>(), userDateService);
         var listTagsTool = new ListTagsTool(mediator);
