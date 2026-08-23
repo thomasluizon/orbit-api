@@ -31,10 +31,6 @@ public class MoveHabitTool(
         if (!HabitToolHelpers.TryParseHabitId(args, out var habitId))
             return HabitToolHelpers.InvalidHabitIdResult();
 
-        var habit = await HabitToolHelpers.FindHabitAsync(habitRepository, habitId, userId, ct);
-        if (habit is null)
-            return HabitToolHelpers.HabitNotFoundResult(habitId);
-
         Guid? newParentId = null;
         if (args.TryGetProperty("new_parent_id", out var parentEl)
             && parentEl.ValueKind == JsonValueKind.String
@@ -46,6 +42,11 @@ public class MoveHabitTool(
         if (result.IsFailure)
             return ToolResult.FromFailure(result);
 
-        return new ToolResult(true, EntityId: habit.Id.ToString(), EntityName: habit.Title);
+        var habits = await habitRepository.FindAsync(
+            habit => habit.Id == habitId && habit.UserId == userId, ct);
+        return new ToolResult(
+            true,
+            EntityId: habitId.ToString(),
+            EntityName: habits.FirstOrDefault()?.Title);
     }
 }

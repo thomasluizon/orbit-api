@@ -34,7 +34,7 @@ public class MoveHabitToolTests
     {
         var child = CreateHabit("Floss");
         var parent = CreateHabit("Before Bed");
-        SetupFindOneTrackedSingle(child);
+        SetupFindAsyncSingle(child);
 
         var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}", "new_parent_id": "{{{parent.Id}}}"}""");
 
@@ -53,7 +53,7 @@ public class MoveHabitToolTests
     {
         var child = CreateHabit("Floss");
         child.SetParentHabitId(Guid.NewGuid());
-        SetupFindOneTrackedSingle(child);
+        SetupFindAsyncSingle(child);
 
         var result = await Execute($$$"""{"habit_id": "{{{child.Id}}}"}""");
 
@@ -67,11 +67,8 @@ public class MoveHabitToolTests
     public async Task HabitNotFound_ReturnsError()
     {
         var id = Guid.NewGuid();
-        _habitRepo.FindOneTrackedAsync(
-            Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-            Arg.Any<CancellationToken>()
-        ).Returns((Habit?)null);
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Habit not found."));
 
         var result = await Execute($$$"""{"habit_id": "{{{id}}}"}""");
 
@@ -85,7 +82,6 @@ public class MoveHabitToolTests
         var child = CreateHabit("Floss");
         var missingParentId = Guid.NewGuid();
 
-        SetupFindOneTrackedSingle(child);
         _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("Target parent habit not found."));
 
@@ -99,8 +95,6 @@ public class MoveHabitToolTests
     public async Task SelfReference_ReturnsError()
     {
         var habit = CreateHabit("Water");
-        SetupFindOneTrackedSingle(habit);
-
         _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result.Failure("A habit cannot be its own parent."));
 
@@ -120,24 +114,25 @@ public class MoveHabitToolTests
     }
 
     [Fact]
-    public async Task WrongUser_CannotDispatchMove()
+    public async Task WrongUser_CommandFailurePreventsDisplayLookup()
     {
         var child = CreateHabit("Owner child");
-        SetupFindOneTrackedSingle(child);
         var attackerId = Guid.NewGuid();
-        _habitRepo.FindOneTrackedAsync(
-                Arg.Any<Expression<Func<Habit, bool>>>(),
-                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
-                Arg.Any<CancellationToken>())
-            .Returns((Habit?)null);
+        _mediator.Send(Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("Habit not found."));
 
         var attackerResult = await _tool.ExecuteAsync(
             PromoteArgs(child.Id), attackerId, CancellationToken.None);
 
         attackerResult.Success.Should().BeFalse();
         attackerResult.Error.Should().Contain("not found");
-        await _mediator.DidNotReceive().Send(
-            Arg.Any<MoveHabitParentCommand>(), Arg.Any<CancellationToken>());
+        await _mediator.Received(1).Send(
+            Arg.Is<MoveHabitParentCommand>(command =>
+                command.UserId == attackerId && command.HabitId == child.Id),
+            Arg.Any<CancellationToken>());
+        await _habitRepo.DidNotReceive().FindAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -146,7 +141,6 @@ public class MoveHabitToolTests
         var parentId = Guid.NewGuid();
         var child = CreateHabit("Floss");
         child.SetParentHabitId(parentId);
-        SetupFindOneTrackedSingle(child);
         _mediator.Send(
                 Arg.Is<MoveHabitParentCommand>(command => command.ParentId == null),
                 Arg.Any<CancellationToken>())
@@ -168,13 +162,12 @@ public class MoveHabitToolTests
         return Habit.Create(new HabitCreateParams(UserId, title, FrequencyUnit.Day, 1, DueDate: Today)).Value;
     }
 
-    private void SetupFindOneTrackedSingle(Habit habit)
+    private void SetupFindAsyncSingle(Habit habit)
     {
-        _habitRepo.FindOneTrackedAsync(
+        _habitRepo.FindAsync(
             Arg.Any<Expression<Func<Habit, bool>>>(),
-            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
             Arg.Any<CancellationToken>()
-        ).Returns(habit);
+        ).Returns([habit]);
     }
 
     private async Task<ToolResult> Execute(string json)
