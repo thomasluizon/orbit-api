@@ -1,5 +1,6 @@
 using MediatR;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification.Backfill;
 using Orbit.Application.Gamification.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
@@ -42,6 +43,7 @@ public class GetGamificationProfileQueryHandler(
     IGenericRepository<User> userRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IFeatureFlagService featureFlagService,
+    IAchievementReconciliationState reconciliationState,
     IAchievementProgressService progressService) : IRequestHandler<GetGamificationProfileQuery, Result<GamificationProfileResponse>>
 {
     public async Task<Result<GamificationProfileResponse>> Handle(GetGamificationProfileQuery request, CancellationToken cancellationToken)
@@ -51,7 +53,8 @@ public class GetGamificationProfileQueryHandler(
             return Result.Failure<GamificationProfileResponse>(ErrorMessages.UserNotFound);
 
         var enabledFlags = await featureFlagService.GetEnabledKeysForUserAsync(request.UserId, cancellationToken);
-        var unlocked = user.HasProAccess || enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier);
+        var unlocked = user.HasProAccess
+            || (reconciliationState.IsComplete && enabledFlags.Contains(FeatureFlagKeys.GamificationFreeTier));
         if (!unlocked)
             return Result.PayGateFailure<GamificationProfileResponse>("Gamification is a Pro feature. Upgrade to unlock!");
 

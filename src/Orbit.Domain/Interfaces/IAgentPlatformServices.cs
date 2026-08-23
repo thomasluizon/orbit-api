@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Orbit.Domain.Common;
+using Orbit.Domain.Entities;
 using Orbit.Domain.Models;
 
 namespace Orbit.Domain.Interfaces;
@@ -145,5 +146,10 @@ public interface IFeatureFlagService
 {
     Task<IReadOnlyList<string>> GetEnabledKeysForUserAsync(
         Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlySet<Guid>> GetUserIdsWithEnabledKeyAsync(
+        string key,
+        IReadOnlyCollection<User> users,
         CancellationToken cancellationToken = default);
 }

@@ -20,6 +20,7 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
     private readonly IAchievementEligibilityReconciliationService _reconciliationService =
         Substitute.For<IAchievementEligibilityReconciliationService>();
     private readonly RecordingLogger _logger = new();
+    private readonly AchievementReconciliationState _reconciliationState = new();
     private readonly ServiceProvider _provider;
     private readonly IServiceScopeFactory _scopeFactory;
 
@@ -46,8 +47,10 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
             await seed.SaveChangesAsync();
         }
 
-        await CreateSut().RunReconciliationAsync(CancellationToken.None);
+        var result = await CreateSut().RunReconciliationAsync(CancellationToken.None);
 
+        result.Should().Be(ReconciliationRunStatus.Complete);
+        _reconciliationState.IsComplete.Should().BeTrue();
         await _reconciliationService.DidNotReceive().ReconcileAllAsync(Arg.Any<CancellationToken>());
         _logger.Entries.Should().ContainSingle()
             .Which.Should().Match<LogEntry>(entry => entry.Level == LogLevel.Information && entry.EventId == 1);
@@ -59,7 +62,8 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
         var completed = await CreateSut().RunReconciliationAsync(CancellationToken.None);
 
         await using var verify = CreateContext(_dbName);
-        completed.Should().BeTrue();
+        completed.Should().Be(ReconciliationRunStatus.Complete);
+        _reconciliationState.IsComplete.Should().BeTrue();
         (await verify.AppConfigs.CountAsync(config => config.Key == CompletionKey)).Should().Be(1);
         await _reconciliationService.Received(1).ReconcileAllAsync(Arg.Any<CancellationToken>());
         var completion = _logger.Entries.Should()
@@ -75,10 +79,11 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
 
         var completed = await CreateSut().RunReconciliationAsync(CancellationToken.None);
 
-        completed.Should().BeFalse();
+        completed.Should().Be(ReconciliationRunStatus.Failed);
+        _reconciliationState.IsComplete.Should().BeFalse();
         await using var verify = CreateContext(_dbName);
         (await verify.AppConfigs.AnyAsync(config => config.Key == CompletionKey)).Should().BeFalse();
-        _logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error && entry.EventId == 3);
+        _logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error && entry.EventId == 4);
     }
 
     [Fact]
@@ -101,12 +106,56 @@ public sealed class AchievementEligibilityReconciliationHostedServiceTests : IDi
         attempts.Should().Be(2);
         await using var verify = CreateContext(_dbName);
         (await verify.AppConfigs.CountAsync(config => config.Key == CompletionKey)).Should().Be(1);
-        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Error && entry.EventId == 3);
+        _reconciliationState.IsComplete.Should().BeTrue();
+        _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Error && entry.EventId == 4);
         _logger.Entries.Should().Contain(entry => entry.Level == LogLevel.Information && entry.EventId == 2);
     }
 
-    private AchievementEligibilityReconciliationHostedService CreateSut() =>
-        new(_scopeFactory, _logger);
+    [Fact]
+    public async Task RunReconciliationAsync_DeferredAccounts_LeavesMarkerAndStateUnset()
+    {
+        _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
+            .Returns(new AchievementEligibilityReconciliationResult(1, 2, 3));
+
+        var result = await CreateSut().RunReconciliationAsync(CancellationToken.None);
+
+        result.Should().Be(ReconciliationRunStatus.Deferred);
+        _reconciliationState.IsComplete.Should().BeFalse();
+        await using var verify = CreateContext(_dbName);
+        (await verify.AppConfigs.AnyAsync(config => config.Key == CompletionKey)).Should().BeFalse();
+        _logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Debug && entry.EventId == 3)
+            .Which.Message.Should().Contain("3");
+    }
+
+    [Fact]
+    public async Task StartAsync_DeferredAccounts_RetriesInBackgroundAndCompletes()
+    {
+        var attempts = 0;
+        _reconciliationService.ReconcileAllAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                attempts++;
+                return Task.FromResult(attempts == 1
+                    ? new AchievementEligibilityReconciliationResult(0, 0, 1)
+                    : new AchievementEligibilityReconciliationResult(1, 2));
+            });
+        var sut = CreateSut(TimeSpan.FromMilliseconds(10));
+
+        await sut.StartAsync(CancellationToken.None);
+        await sut.DeferredRetryTask!;
+
+        attempts.Should().Be(2);
+        _reconciliationState.IsComplete.Should().BeTrue();
+        await using var verify = CreateContext(_dbName);
+        (await verify.AppConfigs.CountAsync(config => config.Key == CompletionKey)).Should().Be(1);
+        await sut.StopAsync(CancellationToken.None);
+    }
+
+    private AchievementEligibilityReconciliationHostedService CreateSut(TimeSpan? retryDelay = null) =>
+        new(_scopeFactory, _reconciliationState, _logger)
+        {
+            RetryDelay = retryDelay ?? TimeSpan.Zero
+        };
 
     private static OrbitDbContext CreateContext(string dbName) =>
         new(new DbContextOptionsBuilder<OrbitDbContext>().UseInMemoryDatabase(dbName).Options);

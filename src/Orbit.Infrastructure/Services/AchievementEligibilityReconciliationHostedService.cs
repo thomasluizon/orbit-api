@@ -9,25 +9,61 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Services;
 
 /// <summary>
-/// Completes the one-time achievement eligibility reconciliation before the host accepts requests.
-/// Failed attempts retry in-process, and the completion marker is written only after a full sweep.
+/// Reconciles achievement eligibility before free users can read the achievement payload. Failures retry
+/// before startup, while feature-locked accounts are deferred to background retries until they unlock.
 /// </summary>
 public sealed partial class AchievementEligibilityReconciliationHostedService(
     IServiceScopeFactory scopeFactory,
+    IAchievementReconciliationState reconciliationState,
     ILogger<AchievementEligibilityReconciliationHostedService> logger) : IHostedService
 {
     private const string CompletionKey = "AchievementEligibilityReconciliationComplete";
-    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
+    private CancellationTokenSource? _retryCancellation;
+    private Task? _retryTask;
+
+    internal TimeSpan RetryDelay { get; init; } = TimeSpan.FromSeconds(30);
+
+    internal Task? DeferredRetryTask => _retryTask;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        while (!await RunReconciliationAsync(cancellationToken))
+        var status = await RunReconciliationAsync(cancellationToken);
+        while (status == ReconciliationRunStatus.Failed)
+        {
             await Task.Delay(RetryDelay, cancellationToken);
+            status = await RunReconciliationAsync(cancellationToken);
+        }
+
+        if (status == ReconciliationRunStatus.Deferred)
+        {
+            _retryCancellation = new CancellationTokenSource();
+            _retryTask = RetryDeferredAccountsAsync(_retryCancellation.Token);
+        }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_retryCancellation is null || _retryTask is null)
+            return;
 
-    internal async Task<bool> RunReconciliationAsync(CancellationToken stoppingToken)
+        await _retryCancellation.CancelAsync();
+        try
+        {
+            await _retryTask;
+        }
+        catch (OperationCanceledException) when (_retryCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        finally
+        {
+            _retryCancellation.Dispose();
+            _retryCancellation = null;
+            _retryTask = null;
+        }
+    }
+
+    internal async Task<ReconciliationRunStatus> RunReconciliationAsync(CancellationToken stoppingToken)
     {
         try
         {
@@ -36,12 +72,18 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
 
             if (await db.AppConfigs.AnyAsync(config => config.Key == CompletionKey, stoppingToken))
             {
+                reconciliationState.MarkComplete();
                 LogAlreadyComplete(logger);
-                return true;
+                return ReconciliationRunStatus.Complete;
             }
 
             var service = scope.ServiceProvider.GetRequiredService<IAchievementEligibilityReconciliationService>();
             var result = await service.ReconcileAllAsync(stoppingToken);
+            if (result.AccountsDeferred > 0)
+            {
+                LogDeferred(logger, result.AccountsDeferred);
+                return ReconciliationRunStatus.Deferred;
+            }
 
             db.AppConfigs.Add(AppConfig.Create(
                 CompletionKey,
@@ -49,13 +91,25 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
                 "Set automatically after the one-time achievement eligibility reconciliation"));
             await db.SaveChangesAsync(stoppingToken);
 
+            reconciliationState.MarkComplete();
             LogCompleted(logger, result.AccountsGranted, result.AchievementsGranted);
-            return true;
+            return ReconciliationRunStatus.Complete;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogFailed(logger, ex);
-            return false;
+            return ReconciliationRunStatus.Failed;
+        }
+    }
+
+    private async Task RetryDeferredAccountsAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            await Task.Delay(RetryDelay, cancellationToken);
+            var status = await RunReconciliationAsync(cancellationToken);
+            if (status == ReconciliationRunStatus.Complete)
+                return;
         }
     }
 
@@ -65,6 +119,16 @@ public sealed partial class AchievementEligibilityReconciliationHostedService(
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Achievement eligibility reconciliation granted {AchievementCount} achievements across {AccountCount} accounts")]
     private static partial void LogCompleted(ILogger logger, int accountCount, int achievementCount);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "Achievement eligibility reconciliation failed; retrying before startup completes")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Achievement eligibility reconciliation deferred for {AccountCount} feature-locked accounts")]
+    private static partial void LogDeferred(ILogger logger, int accountCount);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Error, Message = "Achievement eligibility reconciliation failed; retrying")]
     private static partial void LogFailed(ILogger logger, Exception ex);
+}
+
+internal enum ReconciliationRunStatus
+{
+    Complete,
+    Deferred,
+    Failed
 }

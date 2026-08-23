@@ -6,7 +6,8 @@ namespace Orbit.Application.Gamification.Backfill;
 
 public sealed record AchievementEligibilityReconciliationResult(
     int AccountsGranted,
-    int AchievementsGranted);
+    int AchievementsGranted,
+    int AccountsDeferred = 0);
 
 public interface IAchievementEligibilityReconciliationService
 {
@@ -25,7 +26,8 @@ public sealed class AchievementEligibilityReconciliationService(
     IGenericRepository<HabitLog> habitLogRepository,
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<UserAchievement> achievementRepository,
-    IGamificationService gamificationService) : IAchievementEligibilityReconciliationService
+    IGamificationService gamificationService,
+    IFeatureFlagService featureFlagService) : IAchievementEligibilityReconciliationService
 {
     private static readonly string[] ReconciledAchievementIds =
     [
@@ -39,10 +41,19 @@ public sealed class AchievementEligibilityReconciliationService(
     public async Task<AchievementEligibilityReconciliationResult> ReconcileAllAsync(
         CancellationToken cancellationToken = default)
     {
-        var users = (await userRepository.GetAllAsync(cancellationToken)).ToList();
+        var activeUsers = await userRepository.GetAllAsync(cancellationToken);
+        var freeUsers = activeUsers.Where(user => !user.HasProAccess).ToList();
+        var unlockedFreeUserIds = await featureFlagService.GetUserIdsWithEnabledKeyAsync(
+            Common.FeatureFlagKeys.GamificationFreeTier,
+            freeUsers,
+            cancellationToken);
+        var users = activeUsers
+            .Where(user => user.HasProAccess || unlockedFreeUserIds.Contains(user.Id))
+            .ToList();
+        var accountsDeferred = freeUsers.Count - unlockedFreeUserIds.Count;
 
         if (users.Count == 0)
-            return new AchievementEligibilityReconciliationResult(0, 0);
+            return new AchievementEligibilityReconciliationResult(0, 0, accountsDeferred);
 
         var userIds = users.Select(user => user.Id).ToList();
         var habits = await habitRepository.FindTrackedIgnoringFiltersAsync(
@@ -118,7 +129,10 @@ public sealed class AchievementEligibilityReconciliationService(
             achievementsGranted += granted.Count;
         }
 
-        return new AchievementEligibilityReconciliationResult(accountsGranted, achievementsGranted);
+        return new AchievementEligibilityReconciliationResult(
+            accountsGranted,
+            achievementsGranted,
+            accountsDeferred);
     }
 
     private static IReadOnlyList<string> BuildEligibleAchievementIds(
