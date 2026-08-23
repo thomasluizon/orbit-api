@@ -503,6 +503,10 @@ public class BulkLogHabitsCommandHandlerTests
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()).Returns(goals);
+        goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>()).Returns(goals);
         goalRepo.FindOneTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
@@ -545,6 +549,11 @@ public class BulkLogHabitsCommandHandlerTests
                 Arg.Any<Func<CancellationToken, Task<IReadOnlyList<GoalCompletionUpdate>>>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call => call.ArgAt<Func<CancellationToken, Task<IReadOnlyList<GoalCompletionUpdate>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<GoalCompletionUpdate?>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<GoalCompletionUpdate?>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
 
         var realGamification = new GamificationService(

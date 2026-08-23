@@ -293,6 +293,16 @@ public class StreakGoalSyncServiceTests
         await gamification.DidNotReceive().ProcessGoalCompleted(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task SyncActiveGoals_QueryCount_IsInvariantToCandidateVolume()
+    {
+        var small = await CountSweepQueriesAsync(candidateCount: 2);
+        var large = await CountSweepQueriesAsync(candidateCount: 25);
+
+        large.Should().Be(small);
+        large.Should().BeLessThanOrEqualTo(4);
+    }
+
     private static Habit CreateDailyHabitLoggedLastDays(Guid userId, int days)
     {
         var startDate = Today.AddDays(-(days - 1));
@@ -311,6 +321,33 @@ public class StreakGoalSyncServiceTests
     private static Habit CreateStandardHabit(Guid userId) =>
         Habit.Create(new HabitCreateParams(
             userId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+
+    private static async Task<int> CountSweepQueriesAsync(int candidateCount)
+    {
+        var counter = new CountingDbCommandInterceptor();
+        using var factory = new SqliteOrbitDbContextFactory(counter);
+        var dbContext = factory.Context;
+        var user = User.Create("Query User", "query@example.com").Value;
+        dbContext.Users.Add(user);
+
+        for (var index = 0; index < candidateCount; index++)
+        {
+            var habit = CreateStandardHabit(user.Id);
+            var goal = CreateStreakGoal(user.Id, target: 10);
+            goal.AddHabit(habit);
+            goal.SyncStreakProgress(1).IsSuccess.Should().BeTrue();
+            dbContext.Habits.Add(habit);
+            dbContext.Goals.Add(goal);
+        }
+
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+        var service = CreateService(dbContext, Substitute.For<IGamificationService>());
+
+        counter.Reset();
+        await service.SyncActiveGoals(CancellationToken.None);
+        return counter.CommandCount;
+    }
 
     private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
     {
