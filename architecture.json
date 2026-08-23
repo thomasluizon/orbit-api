@@ -2720,7 +2720,7 @@
       "Challenges": 15,
       "Chat": 80,
       "ChecklistTemplates": 5,
-      "Common": 35,
+      "Common": 36,
       "Gamification": 31,
       "Goals": 35,
       "Habits": 74,
@@ -2929,10 +2929,10 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 179,
+      "Common": 185,
       "Gamification": 38,
       "Goals": 54,
-      "Habits": 86,
+      "Habits": 87,
       "Marketing": 6,
       "Notifications": 19,
       "Profile": 40,
@@ -3610,7 +3610,8 @@
         "testClass": "MoveHabitToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/MoveHabitToolTests.cs",
         "references": [
-          "Habit"
+          "Habit",
+          "MoveHabitParentCommand"
         ]
       },
       {
@@ -4824,6 +4825,13 @@
         "references": []
       },
       {
+        "testClass": "HabitCeilingLockTests",
+        "file": "tests/Orbit.Application.Tests/Common/HabitCeilingLockTests.cs",
+        "references": [
+          "Habit"
+        ]
+      },
+      {
         "testClass": "LocaleHelperTests",
         "file": "tests/Orbit.Application.Tests/Common/LocaleHelperTests.cs",
         "references": []
@@ -4840,6 +4848,7 @@
         "testClass": "PayGateServiceTests",
         "file": "tests/Orbit.Application.Tests/Common/PayGateServiceTests.cs",
         "references": [
+          "Goal",
           "Habit",
           "User"
         ]
@@ -7491,7 +7500,6 @@
         "references": [
           "ApiKey",
           "AppFeatureFlag",
-          "Goal",
           "User"
         ]
       },

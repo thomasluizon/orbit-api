@@ -13,7 +13,6 @@ namespace Orbit.Application.Tests.Commands.Goals;
 public class ReorderGoalsCommandHandlerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
@@ -24,10 +23,8 @@ public class ReorderGoalsCommandHandlerTests
 
     public ReorderGoalsCommandHandlerTests()
     {
-        _handler = new ReorderGoalsCommandHandler(_goalRepo, _payGate, _unitOfWork, _userDateService, _cache);
+        _handler = new ReorderGoalsCommandHandler(_goalRepo, _unitOfWork, _userDateService, _cache);
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
     }
 
     private void SetupGoalsForUser(params Goal[] goals)
@@ -122,21 +119,6 @@ public class ReorderGoalsCommandHandlerTests
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_PaywalledUser_ReturnsPayGateFailure()
-    {
-        _payGate.CanAccessGoals(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Goals are a Pro feature"));
-
-        var command = new ReorderGoalsCommand(UserId, new List<GoalPositionUpdate>());
-
-        var result = await _handler.Handle(command, CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be(Result.PayGateErrorCode);
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

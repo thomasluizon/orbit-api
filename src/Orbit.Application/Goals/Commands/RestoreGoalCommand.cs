@@ -14,17 +14,12 @@ public record RestoreGoalCommand(
 
 public class RestoreGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
     IMemoryCache cache) : IRequestHandler<RestoreGoalCommand, Result>
 {
     public async Task<Result> Handle(RestoreGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck;
-
         var goals = await goalRepository.FindTrackedIgnoringFiltersAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
             cancellationToken);

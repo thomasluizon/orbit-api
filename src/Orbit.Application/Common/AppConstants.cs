@@ -17,7 +17,7 @@ public static class AppConstants
     public const int HabitLogsLookbackDays = 365;
     public const int MaxHabitLogsReturned = 1000;
     public const int DefaultReminderMinutes = 15;
-    public const int DefaultFreeMaxHabits = 10;
+    public const int DefaultFreeMaxHabits = 1000;
     public const int DefaultFreeAiMessages = 5;
     public const int DefaultProAiMessages = 50;
     public const int MaxBulkOperationSize = 100;

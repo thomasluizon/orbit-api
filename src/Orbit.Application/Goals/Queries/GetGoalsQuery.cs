@@ -38,16 +38,11 @@ public record GetGoalsQuery(
 
 public class GetGoalsQueryHandler(
     IGenericRepository<Goal> goalRepository,
-    IPayGateService payGate,
     IUserDateService userDateService,
     IGoalProgressReadSyncer goalProgressReadSyncer) : IRequestHandler<GetGoalsQuery, Result<PaginatedResponse<GoalDto>>>
 {
     public async Task<Result<PaginatedResponse<GoalDto>>> Handle(GetGoalsQuery request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<PaginatedResponse<GoalDto>>();
-
         var userToday = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var freshProgressValues = await goalProgressReadSyncer.ComputeFreshValuesAsync(request.UserId, userToday, cancellationToken);
 

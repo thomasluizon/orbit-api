@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using Orbit.Application.Common;
 using Orbit.Application.Goals.Services;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
@@ -40,12 +41,18 @@ public class CreateHabitCommandHandlerTests
             .Returns(Result.Success());
         _payGate.CanCreateSubHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
-        _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Result.Success());
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<Guid>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var operation = call.ArgAt<Func<CancellationToken, Task<Result<Guid>>>>(0);
+                return operation(call.ArgAt<CancellationToken>(1));
+            });
     }
 
     [Fact]
@@ -62,6 +69,9 @@ public class CreateHabitCommandHandlerTests
             Arg.Is<Habit>(h => h.Title == "Read 30 minutes" && h.UserId == UserId),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).AcquireAdvisoryLockAsync(
+            HabitCeilingLock.ForUser(UserId),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -161,17 +171,17 @@ public class CreateHabitCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_PayGateLimitReached_ReturnsPayGateFailure()
+    public async Task Handle_HabitLimitReached_ReturnsNeutralFailure()
     {
         _payGate.CanCreateHabits(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns(Result.PayGateFailure("Habit limit reached"));
+            .Returns(Result.Failure("Habit limit reached"));
 
         var command = new CreateHabitCommand(UserId, "New habit", null, FrequencyUnit.Day, 1);
 
         var result = await _handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
+        result.ErrorCode.Should().BeNull();
         await _habitRepo.DidNotReceive().AddAsync(Arg.Any<Habit>(), Arg.Any<CancellationToken>());
     }
 

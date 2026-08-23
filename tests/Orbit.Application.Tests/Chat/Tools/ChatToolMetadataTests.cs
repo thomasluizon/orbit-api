@@ -36,10 +36,10 @@ public class ChatToolMetadataTests
         var getDailySummaryTool = new GetDailySummaryTool(mediator, userDateService);
         var getRetrospectiveTool = new GetRetrospectiveTool(mediator, userDateService);
         var getHabitMetricsTool = new GetHabitMetricsTool(mediator);
-        var goalReviewTool = new GoalReviewTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
+        var goalReviewTool = new GoalReviewTool(Repo<Goal>(), payGateService, userDateService, goalProgressReadSyncer);
         var linkHabitsTool = new LinkHabitsToGoalTool(Substitute.For<IMediator>(), Repo<Goal>());
         var logHabitTool = new LogHabitTool(Substitute.For<IMediator>(), Repo<Habit>(), userDateService);
-        var moveHabitTool = new MoveHabitTool(Repo<Habit>());
+        var moveHabitTool = new MoveHabitTool(mediator, Repo<Habit>());
         var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());
         var skipHabitTool = new SkipHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
@@ -48,7 +48,8 @@ public class ChatToolMetadataTests
             Repo<Goal>(), Repo<GoalProgressLog>(), goalCompletionService, unitOfWork);
         var updateGoalStatusTool = new UpdateGoalStatusTool(Repo<Goal>(), goalCompletionService, unitOfWork);
         var updateGoalTool = new UpdateGoalTool(Repo<Goal>(), unitOfWork);
-        var updateHabitTool = new UpdateHabitTool(Repo<Habit>(), userDateService);
+        var updateHabitTool = new UpdateHabitTool(
+            Repo<Habit>(), userDateService, unitOfWork, Substitute.For<IPayGateService>());
         var listTagsTool = new ListTagsTool(mediator);
         var createTagTool = new CreateTagTool(mediator);
         var updateTagTool = new UpdateTagTool(mediator);

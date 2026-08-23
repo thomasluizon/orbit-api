@@ -36,6 +36,19 @@ public class AppConfigServiceTests
     }
 
     [Fact]
+    public async Task FreeMaxHabits_MissingRow_ReturnsAbuseGuardDefault()
+    {
+        await using var dbContext = NewDbContext();
+        var service = Create(dbContext);
+
+        var value = await service.GetAsync(
+            AppConfigKeys.FreeMaxHabits,
+            AppConstants.DefaultFreeMaxHabits);
+
+        value.Should().Be(1000);
+    }
+
+    [Fact]
     public async Task GetAsync_IntValue_ParsesFromStore()
     {
         await using var dbContext = NewDbContext();

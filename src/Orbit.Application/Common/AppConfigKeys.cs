@@ -14,7 +14,6 @@ public static class AppConfigKeys
     public const string DailySummaryProOnly = "DailySummaryProOnly";
     public const string SmartRescheduleProOnly = "SmartRescheduleProOnly";
     public const string RetrospectiveProOnly = "RetrospectiveProOnly";
-    public const string GoalsProOnly = "GoalsProOnly";
     public const string MinSupportedVersion = "MinSupportedVersion";
     public const string RequireApiKeyCreationStepUp = "RequireApiKeyCreationStepUp";
 }

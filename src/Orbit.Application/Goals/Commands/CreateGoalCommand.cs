@@ -25,7 +25,6 @@ public record CreateGoalCommand(
 public partial class CreateGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
-    IPayGateService payGate,
     IUserDateService userDateService,
     IGamificationService gamificationService,
     IGoalCompletionService goalCompletionService,
@@ -35,10 +34,6 @@ public partial class CreateGoalCommandHandler(
 {
     public async Task<Result<Guid>> Handle(CreateGoalCommand request, CancellationToken cancellationToken)
     {
-        var gateCheck = await payGate.CanAccessGoals(request.UserId, cancellationToken);
-        if (gateCheck.IsFailure)
-            return gateCheck.PropagateError<Guid>();
-
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         if (request.Deadline is { } deadline && deadline < today)
             return Result.Failure<Guid>(ErrorMessages.DeadlineInPast);

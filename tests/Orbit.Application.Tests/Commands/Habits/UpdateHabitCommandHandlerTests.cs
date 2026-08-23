@@ -28,13 +28,16 @@ public class UpdateHabitCommandHandlerTests
 
     public UpdateHabitCommandHandlerTests()
     {
-        _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(Result.Success()));
         _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new UpdateHabitCommandHandler(
             _habitRepo, _sentReminderRepo, _goalRepo, _payGate, _goalCompletionService,
             _userDateService, _unitOfWork, _cache);
+        _unitOfWork.ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -45,6 +48,41 @@ public class UpdateHabitCommandHandlerTests
         return Habit.Create(new HabitCreateParams(
             userId ?? UserId, "Original Title", FrequencyUnit.Day, 1,
             DueDate: Today)).Value;
+    }
+
+    [Fact]
+    public async Task Handle_IsGeneralReactivationAtCeiling_IsRefusedWithoutMutation()
+    {
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Completed task", null, null, DueDate: Today)).Value;
+        habit.Log(Today).IsSuccess.Should().BeTrue();
+        _habitRepo.FindOneTrackedAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _habitRepo.FindAsync(
+                Arg.Any<Expression<Func<Habit, bool>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Habit>());
+        _payGate.CanCreateHabits(UserId, 1, Arg.Any<CancellationToken>())
+            .Returns(Result.Failure("You've reached the 1000 habit limit."));
+        var command = new UpdateHabitCommand(
+            UserId,
+            habit.Id,
+            habit.Title,
+            habit.Description,
+            habit.FrequencyUnit,
+            habit.FrequencyQuantity,
+            IsGeneral: true);
+
+        var result = await _handler.Handle(command, CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be("You've reached the 1000 habit limit.");
+        habit.IsCompleted.Should().BeTrue();
+        habit.IsGeneral.Should().BeFalse();
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

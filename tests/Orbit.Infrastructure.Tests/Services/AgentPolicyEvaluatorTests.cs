@@ -236,13 +236,8 @@ public class AgentPolicyEvaluatorTests : IDisposable
     }
 
     [Fact]
-    public void Evaluate_GoalsDelete_OnChatSurface_RequiresConfirmation()
+    public void Evaluate_GoalsDelete_FreeUserRequiresConfirmation()
     {
-        var proUser = _dbContext.Users.First(item => item.Id == _userId);
-        proUser.StartTrial(DateTime.UtcNow.AddDays(7));
-        _dbContext.AppFeatureFlags.Add(AppFeatureFlag.Create("goal_tracking", true, "Pro", "Goal tracking"));
-        _dbContext.SaveChanges();
-
         var decision = _policyEvaluator.Evaluate(new AgentPolicyEvaluationContext(
             AgentCapabilityIds.GoalsDelete,
             _userId,
@@ -254,6 +249,7 @@ public class AgentPolicyEvaluatorTests : IDisposable
             OperationFingerprint: "delete_goal:{\"goalId\":\"123\"}"));
 
         decision.Status.Should().Be(AgentPolicyDecisionStatus.ConfirmationRequired);
+        decision.Reason.Should().Be("confirmation_required");
         decision.PendingOperation.Should().NotBeNull();
     }
 
