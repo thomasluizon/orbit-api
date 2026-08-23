@@ -53,16 +53,16 @@ public class PostHogProductAnalyticsTests
     }
 
     [Fact]
-    public void CaptureUserEvent_IncludesEventPropertiesAlongsidePersonProperties()
+    public void CaptureUserEvent_IncludesEventPropertiesBesidePersonProperties()
     {
         _analytics.CaptureUserEvent(
             Guid.NewGuid(),
-            "achievements_viewed",
+            "chat_metrics_card_emitted",
             "Free",
             new Dictionary<string, object>
             {
-                ["isPro"] = false,
-                ["earnedCount"] = 4
+                ["platform"] = "android",
+                ["chip_present"] = true
             });
 
         var arguments = _postHogClient.ReceivedCalls()
@@ -70,8 +70,7 @@ public class PostHogProductAnalyticsTests
             .GetArguments();
         var properties = arguments[2].Should().BeAssignableTo<Dictionary<string, object>>().Subject;
 
-        properties["isPro"].Should().Be(false);
-        properties["earnedCount"].Should().Be(4);
-        properties["$set"].Should().BeAssignableTo<Dictionary<string, object>>();
+        properties["platform"].Should().Be("android");
+        properties["chip_present"].Should().Be(true);
     }
 }

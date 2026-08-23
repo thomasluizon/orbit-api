@@ -50,6 +50,9 @@ public partial class ProcessUserChatCommandHandler
         if (request.ClientContext?.SupportsGoalListCard == true)
             systemPrompt = string.Join(Environment.NewLine, systemPrompt, GoalListCardBuilder.PromptInstruction);
 
+        if (request.ClientContext?.SupportsMetricsCard == true)
+            systemPrompt = string.Join(Environment.NewLine, systemPrompt, MetricsCardBuilder.PromptInstruction);
+
         var activeToolNames = ChatToolGroups.ResolveActiveToolNames(
             ai.ToolRegistry.GetAll().Select(t => t.Name),
             BuildConversationText(request));
@@ -153,14 +156,72 @@ public partial class ProcessUserChatCommandHandler
             ClientContext: clientContext);
     }
 
-    private static Func<AiStreamEvent, Task>? BuildAiStreamSink(Func<ChatStreamEvent, Task>? streamSink)
+    private static MetricsDirectiveStreamFilter? BuildAiStreamFilter(Func<ChatStreamEvent, Task>? streamSink)
     {
         if (streamSink is null)
             return null;
 
-        return aiEvent => streamSink(aiEvent.Kind == AiStreamEventKind.Delta
-            ? ChatStreamEvent.Delta(aiEvent.Text ?? "")
-            : ChatStreamEvent.Reset());
+        return new MetricsDirectiveStreamFilter(streamSink);
+    }
+
+    private sealed class MetricsDirectiveStreamFilter(Func<ChatStreamEvent, Task> streamSink)
+    {
+        private string _pending = string.Empty;
+
+        public async Task HandleAsync(AiStreamEvent aiEvent)
+        {
+            if (aiEvent.Kind == AiStreamEventKind.Reset)
+            {
+                _pending = string.Empty;
+                await streamSink(ChatStreamEvent.Reset());
+                return;
+            }
+
+            _pending += aiEvent.Text ?? string.Empty;
+            await DrainAsync(flush: false);
+        }
+
+        public Task FlushAsync() => DrainAsync(flush: true);
+
+        private async Task DrainAsync(bool flush)
+        {
+            while (_pending.Length > 0)
+            {
+                var directiveIndex = _pending.IndexOf(MetricsCardBuilder.Directive, StringComparison.OrdinalIgnoreCase);
+                if (directiveIndex >= 0)
+                {
+                    await EmitAsync(_pending[..directiveIndex]);
+                    _pending = _pending[(directiveIndex + MetricsCardBuilder.Directive.Length)..];
+                    continue;
+                }
+
+                var retainedCharacters = flush ? 0 : DirectivePrefixSuffixLength(_pending);
+                var emittedLength = _pending.Length - retainedCharacters;
+                if (emittedLength == 0)
+                    return;
+
+                await EmitAsync(_pending[..emittedLength]);
+                _pending = _pending[emittedLength..];
+            }
+        }
+
+        private async Task EmitAsync(string text)
+        {
+            if (text.Length > 0)
+                await streamSink(ChatStreamEvent.Delta(text));
+        }
+
+        private static int DirectivePrefixSuffixLength(string text)
+        {
+            var maximumLength = Math.Min(text.Length, MetricsCardBuilder.Directive.Length - 1);
+            for (var length = maximumLength; length > 0; length--)
+            {
+                if (text.EndsWith(MetricsCardBuilder.Directive[..length], StringComparison.OrdinalIgnoreCase))
+                    return length;
+            }
+
+            return 0;
+        }
     }
 
     /// <summary>

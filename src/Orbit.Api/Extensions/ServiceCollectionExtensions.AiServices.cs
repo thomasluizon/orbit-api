@@ -180,6 +180,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IAgentOperationExecutor>(),
                 sp.GetRequiredService<IPendingClarificationStore>(),
                 sp.GetRequiredService<IStreakGoalReadSyncer>(),
-                sp.GetRequiredService<IGamificationService>()));
+                sp.GetRequiredService<IGamificationService>(),
+                sp.GetRequiredService<MediatR.IMediator>(),
+                sp.GetRequiredService<IProductAnalytics>()));
     }
 }

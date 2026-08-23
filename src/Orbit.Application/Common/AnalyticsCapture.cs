@@ -16,15 +16,24 @@ internal static partial class AnalyticsCapture
         ILogger logger,
         User user,
         string eventName,
+        IReadOnlyDictionary<string, object>? properties = null) =>
+        SafeCaptureUserEvent(analytics, logger, user.Id, user.Plan.ToString(), eventName, properties);
+
+    public static void SafeCaptureUserEvent(
+        IProductAnalytics analytics,
+        ILogger logger,
+        Guid userId,
+        string plan,
+        string eventName,
         IReadOnlyDictionary<string, object>? properties = null)
     {
         try
         {
-            analytics.CaptureUserEvent(user.Id, eventName, user.Plan.ToString(), properties);
+            analytics.CaptureUserEvent(userId, eventName, plan, properties);
         }
         catch (Exception ex)
         {
-            LogCaptureFailed(logger, ex, eventName, user.Id);
+            LogCaptureFailed(logger, ex, eventName, userId);
         }
     }
 

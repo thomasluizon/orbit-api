@@ -19,8 +19,10 @@ public sealed partial class PostHogProductAnalytics(
         IReadOnlyDictionary<string, object>? properties = null)
     {
         var distinctId = userId.ToString();
-        var eventProperties = properties?.ToDictionary(pair => pair.Key, pair => pair.Value)
-            ?? new Dictionary<string, object>();
+
+        var eventProperties = properties is null
+            ? new Dictionary<string, object>()
+            : new Dictionary<string, object>(properties);
         eventProperties["$set"] = new Dictionary<string, object>
         {
             ["plan"] = plan
