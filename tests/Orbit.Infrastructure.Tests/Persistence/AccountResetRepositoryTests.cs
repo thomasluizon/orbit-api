@@ -174,6 +174,12 @@ public class AccountResetRepositoryTests : IDisposable
         _dbContext.StreakFreezes.Add(StreakFreeze.Create(userId, DateOnly.FromDateTime(DateTime.UtcNow)));
         _dbContext.ApiKeys.Add(
             ApiKey.Create(userId, "key", ["habits:read"]).Value.Entity);
+        _dbContext.ClosedMonthRecaps.Add(
+            ClosedMonthRecap.Create(
+                userId,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 30),
+                "{\"period\":\"month\"}").Value);
 
         await Task.CompletedTask;
     }
@@ -206,6 +212,7 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.PushSubscriptions.CountAsync(p => p.UserId == _userId)).Should().Be(0);
         (await _dbContext.StreakFreezes.CountAsync(sf => sf.UserId == _userId)).Should().Be(0);
         (await _dbContext.ApiKeys.CountAsync(k => k.UserId == _userId)).Should().Be(0);
+        (await _dbContext.ClosedMonthRecaps.CountAsync(recap => recap.UserId == _userId)).Should().Be(0);
 
         (await _dbContext.Database.SqlQueryRaw<int>(
             "SELECT COUNT(*) AS Value FROM \"HabitTags\"").ToListAsync()).Single().Should().Be(1);
@@ -216,6 +223,7 @@ public class AccountResetRepositoryTests : IDisposable
         (await _dbContext.Goals.IgnoreQueryFilters().CountAsync(g => g.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.Tags.IgnoreQueryFilters().CountAsync(t => t.UserId == _otherUserId)).Should().Be(1);
         (await _dbContext.Notifications.IgnoreQueryFilters().CountAsync(n => n.UserId == _otherUserId)).Should().Be(2);
+        (await _dbContext.ClosedMonthRecaps.CountAsync(recap => recap.UserId == _otherUserId)).Should().Be(1);
     }
 
     [Fact]

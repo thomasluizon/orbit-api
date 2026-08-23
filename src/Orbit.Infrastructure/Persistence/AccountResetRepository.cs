@@ -107,6 +107,10 @@ public class AccountResetRepository(OrbitDbContext context) : IAccountResetRepos
             .Where(r => r.UserId == userId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        await context.ClosedMonthRecaps
+            .Where(recap => recap.UserId == userId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         await context.Referrals
             .Where(r => r.ReferrerId == userId || r.ReferredUserId == userId)
             .ExecuteDeleteAsync(cancellationToken);

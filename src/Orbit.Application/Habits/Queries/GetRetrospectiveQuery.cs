@@ -18,6 +18,8 @@ public record RetrospectiveHabitStat(
     int ScheduledCount,
     bool IsOneTime = false);
 
+/// <summary>Structured habit metrics for a retrospective or recap.</summary>
+/// <param name="WeeklyConsistency">Seven weekday percentages ordered Monday through Sunday.</param>
 public record RetrospectiveMetrics(
     int CompletionRate,
     int TotalCompletions,

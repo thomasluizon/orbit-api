@@ -150,6 +150,45 @@ public class UserStreakServiceTests
     }
 
     [Fact]
+    public async Task RecalculateAsync_StartedHabitChangesCadence_KeepsLiveStreakOnCurrentDueDateAnchor()
+    {
+        var startedOn = new DateOnly(2026, 6, 1);
+        var today = new DateOnly(2026, 6, 3);
+        var user = User.Create("Thomas", "thomas@test.com").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId,
+            "Run",
+            FrequencyUnit.Day,
+            1,
+            DueDate: startedOn)).Value;
+        BackdateCreation(habit, startedOn);
+        habit.Log(today, advanceDueDate: false);
+        SetupUser(user, today);
+        SetupHabits([habit]);
+        SetupFreezes([]);
+
+        var beforeCadenceChange = await _sut.RecalculateAsync(
+            UserId,
+            cancellationToken: CancellationToken.None);
+        var updateResult = habit.Update(new HabitUpdateParams(
+            habit.Title,
+            habit.Description,
+            FrequencyUnit.Week,
+            1,
+            null,
+            habit.IsBadHabit,
+            today,
+            UserToday: today));
+        var afterCadenceChange = await _sut.RecalculateAsync(
+            UserId,
+            cancellationToken: CancellationToken.None);
+
+        updateResult.IsSuccess.Should().BeTrue();
+        beforeCadenceChange!.CurrentStreak.Should().Be(1);
+        afterCadenceChange!.CurrentStreak.Should().Be(beforeCadenceChange.CurrentStreak);
+    }
+
+    [Fact]
     public async Task CalculateAsync_DailyHabit_ReturnsFreshStateWithoutMutatingUserOrEmittingEvent()
     {
         var user = User.Create("Thomas", "thomas@test.com").Value;
@@ -205,7 +244,12 @@ public class UserStreakServiceTests
             DueDate: new DateOnly(2026, 4, 6))).Value;
         BackdateCreation(habit, new DateOnly(2026, 4, 6));
 
-        habit.Log(new DateOnly(2026, 4, 6), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 7), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 8), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 9), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 10), advanceDueDate: false);        habit.Log(new DateOnly(2026, 4, 13), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 4, 6), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 4, 7), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 4, 8), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 4, 9), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 4, 10), advanceDueDate: false);
+        habit.Log(new DateOnly(2026, 4, 13), advanceDueDate: false);
         SetupUser(user, new DateOnly(2026, 4, 13));
         SetupHabits(new List<Habit> { habit });
         SetupFreezes(new List<StreakFreeze>());
@@ -236,7 +280,8 @@ public class UserStreakServiceTests
         var result = await _sut.RecalculateAsync(UserId, cancellationToken: CancellationToken.None);
 
         result.Should().NotBeNull();
-        result!.CurrentStreak.Should().Be(2);        result.LongestStreak.Should().Be(2);
+        result!.CurrentStreak.Should().Be(2);
+        result.LongestStreak.Should().Be(2);
     }
 
     [Fact]

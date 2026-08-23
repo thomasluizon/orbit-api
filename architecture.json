@@ -2691,7 +2691,7 @@
       "Chat": 80,
       "ChecklistTemplates": 5,
       "Common": 35,
-      "Gamification": 28,
+      "Gamification": 31,
       "Goals": 33,
       "Habits": 74,
       "Marketing": 4,
@@ -2771,6 +2771,10 @@
     {
       "entity": "Cheer",
       "file": "src/Orbit.Domain/Entities/Cheer.cs"
+    },
+    {
+      "entity": "ClosedMonthRecap",
+      "file": "src/Orbit.Domain/Entities/ClosedMonthRecap.cs"
     },
     {
       "entity": "ContentBlock",
@@ -2895,14 +2899,14 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 169,
-      "Gamification": 36,
+      "Common": 171,
+      "Gamification": 38,
       "Goals": 38,
       "Habits": 83,
       "Marketing": 6,
       "Notifications": 16,
-      "Profile": 38,
-      "Referrals": 12,
+      "Profile": 39,
+      "Referrals": 13,
       "Social": 32,
       "Subscriptions": 18,
       "Support": 4,
@@ -4962,6 +4966,26 @@
         ]
       },
       {
+        "testClass": "ClosedMonthPeriodRangeTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedMonthPeriodRangeTests.cs",
+        "references": []
+      },
+      {
+        "testClass": "ClosedMonthRecapResetRaceTests",
+        "file": "tests/Orbit.Application.Tests/Queries/Gamification/ClosedMonthRecapResetRaceTests.cs",
+        "references": [
+          "ClosedMonthRecap",
+          "GetOrCreateReferralCodeCommand",
+          "GetRecapQuery",
+          "GetRecapQueryHandler",
+          "Goal",
+          "Habit",
+          "ResetAccountCommand",
+          "ResetAccountCommandHandler",
+          "User"
+        ]
+      },
+      {
         "testClass": "GetAchievementsQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Gamification/GetAchievementsQueryHandlerTests.cs",
         "references": [
@@ -4985,10 +5009,13 @@
         "testClass": "GetRecapQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Gamification/GetRecapQueryHandlerTests.cs",
         "references": [
+          "ClosedMonthRecap",
           "GetOrCreateReferralCodeCommand",
           "GetRecapQuery",
           "GetRecapQueryHandler",
-          "Habit"
+          "Goal",
+          "Habit",
+          "User"
         ]
       },
       {
@@ -6360,6 +6387,13 @@
         ]
       },
       {
+        "testClass": "ClosedMonthRecapTests",
+        "file": "tests/Orbit.Domain.Tests/Entities/ClosedMonthRecapTests.cs",
+        "references": [
+          "ClosedMonthRecap"
+        ]
+      },
+      {
         "testClass": "ContentBlockTests",
         "file": "tests/Orbit.Domain.Tests/Entities/ContentBlockTests.cs",
         "references": [
@@ -7110,6 +7144,7 @@
           "BlockedUser",
           "ChecklistTemplate",
           "Cheer",
+          "ClosedMonthRecap",
           "FriendFeedEvent",
           "Friendship",
           "Goal",
@@ -7137,6 +7172,14 @@
           "ApplyOnboardingCommandHandler",
           "Goal",
           "Habit",
+          "User"
+        ]
+      },
+      {
+        "testClass": "ClosedMonthRecapStoreTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Persistence/ClosedMonthRecapStoreTests.cs",
+        "references": [
+          "ClosedMonthRecap",
           "User"
         ]
       },
@@ -7215,6 +7258,7 @@
           "ChallengeParticipantHabit",
           "ChecklistTemplate",
           "Cheer",
+          "ClosedMonthRecap",
           "ContentBlock",
           "DistributedRateLimitBucket",
           "FriendFeedEvent",
