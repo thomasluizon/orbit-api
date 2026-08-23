@@ -2929,7 +2929,7 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 178,
+      "Common": 179,
       "Gamification": 38,
       "Goals": 54,
       "Habits": 86,
@@ -7581,14 +7581,16 @@
         "testClass": "AiUsageSummaryServiceGenerationTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiUsageSummaryServiceGenerationTests.cs",
         "references": [
-          "AiUsageDaily"
+          "AiUsageDaily",
+          "User"
         ]
       },
       {
         "testClass": "AiUsageSummaryServiceTests",
         "file": "tests/Orbit.Infrastructure.Tests/Services/AiUsageSummaryServiceTests.cs",
         "references": [
-          "AiUsageDaily"
+          "AiUsageDaily",
+          "User"
         ]
       },
       {
