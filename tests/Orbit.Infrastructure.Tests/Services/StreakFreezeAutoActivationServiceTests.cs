@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
+using Orbit.Application.Notifications;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
@@ -62,7 +63,7 @@ public class StreakFreezeAutoActivationServiceTests
             UserId,
             Arg.Any<string>(),
             Arg.Any<string>(),
-            "/streak",
+            NotificationUrls.Progress,
             Arg.Any<CancellationToken>());
     }
 
@@ -265,7 +266,7 @@ public class StreakFreezeAutoActivationServiceTests
             UserId,
             Arg.Any<string>(),
             Arg.Any<string>(),
-            "/streak",
+            NotificationUrls.Progress,
             Arg.Any<CancellationToken>());
     }
 

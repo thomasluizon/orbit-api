@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Orbit.Application.Notifications;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Services;
 using Orbit.Domain.Entities;
@@ -153,7 +154,7 @@ public partial class SlipAlertSchedulerService(
         sentWeeks.Add(weekStart);
         ctx.SentWeeksByHabit[habit.Id] = sentWeeks;
 
-        await ctx.PushService.SendToUserAsync(habit.UserId, title, body, "/", ct);
+        await ctx.PushService.SendToUserAsync(habit.UserId, title, body, NotificationUrls.Home, ct);
 
         if (logger.IsEnabled(LogLevel.Debug))
             LogSentSlipAlert(logger, habit.Id, habit.UserId);
@@ -184,7 +185,7 @@ public partial class SlipAlertSchedulerService(
     {
         await dbContext.SentSlipAlerts.AddAsync(SentSlipAlert.Create(habit.Id, weekStart), ct);
         await dbContext.Notifications.AddAsync(
-            Notification.Create(habit.UserId, title, body, "/", habit.Id), ct);
+            Notification.Create(habit.UserId, title, body, NotificationUrls.Home, habit.Id), ct);
 
         try
         {

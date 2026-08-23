@@ -654,7 +654,7 @@ public partial class GamificationService(
             : $"Achievement Unlocked: {name}";
         var body = $"{description} (+{achievement.XpReward} XP)";
 
-        var notification = Notification.Create(userId, title, body);
+        var notification = Notification.Create(userId, title, body, null);
         await repos.NotificationRepository.AddAsync(notification, ct);
 
         pushes.Add(new PendingPush(userId, title, body));
@@ -673,7 +673,7 @@ public partial class GamificationService(
             ? $"Você alcançou {levelTitle}! Continue assim!"
             : $"You've reached {newLevel.Title}! Keep going!";
 
-        var notification = Notification.Create(userId, title, body);
+        var notification = Notification.Create(userId, title, body, null);
         await repos.NotificationRepository.AddAsync(notification, ct);
 
         pushes.Add(new PendingPush(userId, title, body));

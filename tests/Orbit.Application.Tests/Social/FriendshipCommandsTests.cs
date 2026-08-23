@@ -63,10 +63,10 @@ public class FriendshipCommandsTests
             Arg.Is<Friendship>(f => f.RequesterId == caller.Id && f.AddresseeId == target.Id && f.Status == FriendshipStatus.Pending),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == target.Id && n.Url == "/social?tab=friends"),
+            Arg.Is<Notification>(n => n.UserId == target.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _pushNotificationService.Received(1).SendToUserAsync(
-            target.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=friends", Arg.Any<CancellationToken>());
+            target.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -194,10 +194,10 @@ public class FriendshipCommandsTests
         friendship.Status.Should().Be(FriendshipStatus.Accepted);
         friendship.RespondedAtUtc.Should().NotBeNull();
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == requester.Id && n.Url == "/social?tab=friends"),
+            Arg.Is<Notification>(n => n.UserId == requester.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _pushNotificationService.Received(1).SendToUserAsync(
-            requester.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=friends", Arg.Any<CancellationToken>());
+            requester.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
     }
 
     [Fact]

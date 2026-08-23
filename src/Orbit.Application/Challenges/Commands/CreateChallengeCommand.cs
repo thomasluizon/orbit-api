@@ -114,7 +114,8 @@ public partial class CreateChallengeCommandHandler(
 
             using var scope = scopeFactory.CreateScope();
             var pushNotificationService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
-            await pushNotificationService.SendToUserAsync(user.Id, title, body, cancellationToken: cancellationToken);
+            await pushNotificationService.SendToUserAsync(
+                user.Id, title, body, url: null, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

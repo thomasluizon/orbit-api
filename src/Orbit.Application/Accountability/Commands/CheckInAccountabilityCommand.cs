@@ -21,8 +21,6 @@ public partial class CheckInAccountabilityCommandHandler(
     IUnitOfWork unitOfWork,
     ILogger<CheckInAccountabilityCommandHandler> logger) : IRequestHandler<CheckInAccountabilityCommand, Result<Guid>>
 {
-    private const string BuddyNotificationUrl = "/social?tab=buddies";
-
     public async Task<Result<Guid>> Handle(CheckInAccountabilityCommand request, CancellationToken cancellationToken)
     {
         var access = await social.AccessGuard.EnsureEnabledAsync(request.UserId, cancellationToken);
@@ -104,7 +102,7 @@ public partial class CheckInAccountabilityCommandHandler(
             ? $"{checker.Name} fez check-in com você."
             : $"{checker.Name} checked in with you.";
 
-        return Notification.Create(buddy.Id, title, body, BuddyNotificationUrl);
+        return Notification.Create(buddy.Id, title, body, null);
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Check-in note moderation unavailable for user {UserId}; allowing note (fail open)")]

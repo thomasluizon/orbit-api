@@ -280,6 +280,7 @@ public class OrbitDbContext : DbContext
             entity.HasIndex(n => new { n.UserId, n.IsRead });
             entity.HasIndex(n => new { n.UserId, n.CreatedAtUtc }).IsDescending(false, true);
             entity.HasIndex(n => n.Url).HasFilter("\"Url\" IS NOT NULL");
+            entity.HasIndex(n => n.DedupeKey).IsUnique().HasFilter("\"DedupeKey\" IS NOT NULL");
             entity.HasIndex(n => new { n.UserId, n.IsDeleted });
             entity.HasIndex(n => new { n.UserId, n.UpdatedAtUtc });
             entity.HasQueryFilter(n => !n.IsDeleted);

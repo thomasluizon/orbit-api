@@ -77,10 +77,10 @@ public class InviteAccountabilityBuddyCommandTests
             Arg.Is<AccountabilityPairHabit>(ph => ph.UserId == _caller.Id && ph.HabitId == _habitId),
             Arg.Any<CancellationToken>());
         await _notificationRepository.Received(1).AddAsync(
-            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == "/social?tab=buddies"),
+            Arg.Is<Notification>(n => n.UserId == _buddy.Id && n.Url == null),
             Arg.Any<CancellationToken>());
         await _push.Received(1).SendToUserAsync(
-            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), "/social?tab=buddies", Arg.Any<CancellationToken>());
+            _buddy.Id, Arg.Any<string>(), Arg.Any<string>(), null, Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
