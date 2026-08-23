@@ -1,8 +1,10 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -14,13 +16,15 @@ public record LinkHabitsToGoalCommand(
     Guid GoalId,
     IReadOnlyList<Guid> HabitIds) : IRequest<Result>, IConcurrencyRetryable;
 
-public class LinkHabitsToGoalCommandHandler(
+public partial class LinkHabitsToGoalCommandHandler(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<Habit> habitRepository,
     IPayGateService payGate,
+    IGamificationService gamificationService,
     IUnitOfWork unitOfWork,
     IUserDateService userDateService,
-    IMemoryCache cache) : IRequestHandler<LinkHabitsToGoalCommand, Result>
+    IMemoryCache cache,
+    ILogger<LinkHabitsToGoalCommandHandler> logger) : IRequestHandler<LinkHabitsToGoalCommand, Result>
 {
     public async Task<Result> Handle(LinkHabitsToGoalCommand request, CancellationToken cancellationToken)
     {
@@ -31,9 +35,10 @@ public class LinkHabitsToGoalCommandHandler(
         if (request.HabitIds.Count > AppConstants.MaxHabitsPerGoal)
             return Result.Failure(ErrorMessages.MaxHabitsPerGoal.Format(AppConstants.MaxHabitsPerGoal));
 
+        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
         var goal = await goalRepository.FindOneTrackedAsync(
             g => g.Id == request.GoalId && g.UserId == request.UserId,
-            q => q.Include(g => g.Habits),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs),
             cancellationToken);
 
         if (goal is null)
@@ -41,6 +46,7 @@ public class LinkHabitsToGoalCommandHandler(
 
         var habits = await habitRepository.FindTrackedAsync(
             h => request.HabitIds.Contains(h.Id) && h.UserId == request.UserId,
+            q => q.Include(h => h.Logs),
             cancellationToken);
 
         var habitsResolved = OwnershipValidation.AllResolved(request.HabitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
@@ -53,11 +59,29 @@ public class LinkHabitsToGoalCommandHandler(
         foreach (var habit in habits)
             goal.AddHabit(habit);
 
+        var syncOutcome = GoalProgressSyncService.SyncCurrentProgress(goal, today);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        if (syncOutcome.JustCompleted)
+            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success();
     }
+
+    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogGamificationGoalCompletionFailed(logger, ex, userId);
+        }
+    }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
+    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

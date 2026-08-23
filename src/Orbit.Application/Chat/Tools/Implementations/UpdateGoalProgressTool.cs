@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
 
@@ -36,12 +37,11 @@ public class UpdateGoalProgressTool(
         if (goal is null) return new ToolResult(false, Error: error);
 
         var previousValue = goal.CurrentValue;
-        var progressLog = GoalProgressLog.Create(goal.Id, previousValue, valueEl.GetDecimal(), note);
-        await progressLogRepository.AddAsync(progressLog, ct);
-
         var result = goal.UpdateProgress(valueEl.GetDecimal());
         if (result.IsFailure) return ToolResult.FromFailure(result);
 
+        var progressLog = GoalProgressLog.Create(goal.Id, previousValue, valueEl.GetDecimal(), note);
+        await progressLogRepository.AddAsync(progressLog, ct);
         await unitOfWork.SaveChangesAsync(ct);
         return new ToolResult(true, EntityId: goal.Id.ToString(), EntityName: goal.Title);
     }
@@ -51,7 +51,9 @@ public class UpdateGoalProgressTool(
         if (args.TryGetProperty("goal_id", out var idEl) && Guid.TryParse(idEl.GetString(), out var goalId))
         {
             var byId = await goalRepository.FindOneTrackedAsync(
-                g => g.Id == goalId && g.UserId == userId, cancellationToken: ct);
+                g => g.Id == goalId && g.UserId == userId,
+                q => q.Include(g => g.Habits),
+                ct);
             return byId is null ? (null, $"Goal {goalId} not found.") : (byId, null);
         }
 
@@ -59,7 +61,10 @@ public class UpdateGoalProgressTool(
             return (null, "Provide either goal_id or goal_name.");
 
         var goalName = nameEl.GetString() ?? string.Empty;
-        var goals = await goalRepository.FindTrackedAsync(g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Active, ct);
+        var goals = await goalRepository.FindTrackedAsync(
+            g => g.UserId == userId && g.Status == Domain.Enums.GoalStatus.Active,
+            q => q.Include(g => g.Habits),
+            ct);
         var goal = goals.FirstOrDefault(g => g.Title.Equals(goalName, StringComparison.OrdinalIgnoreCase))
             ?? goals.FirstOrDefault(g => g.Title.Contains(goalName, StringComparison.OrdinalIgnoreCase));
 

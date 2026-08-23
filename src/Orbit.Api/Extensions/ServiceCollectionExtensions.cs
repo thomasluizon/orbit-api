@@ -79,7 +79,7 @@ public static partial class ServiceCollectionExtensions
         builder.Services.AddScoped<IAppConfigService, AppConfigService>();
         builder.Services.AddScoped<IUserDateService, UserDateService>();
         builder.Services.AddScoped<IUserStreakService, UserStreakService>();
-        builder.Services.AddScoped<IStreakGoalReadSyncer, StreakGoalReadSyncer>();
+        builder.Services.AddScoped<IGoalProgressReadSyncer, GoalProgressReadSyncer>();
         builder.Services.AddScoped<IPayGateService, PayGateService>();
         builder.Services.AddScoped<IFeatureFlagService, FeatureFlagService>();
         builder.Services.AddScoped<GamificationRepositories>(sp =>

@@ -1,4 +1,5 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
@@ -35,7 +36,9 @@ public partial class UpdateGoalProgressCommandHandler(
             repos.Goals,
             unitOfWork,
             ct => repos.Goals.FindOneTrackedAsync(
-                g => g.Id == request.GoalId && g.UserId == request.UserId, cancellationToken: ct),
+                g => g.Id == request.GoalId && g.UserId == request.UserId,
+                q => q.Include(g => g.Habits),
+                ct),
             async goal =>
             {
                 var previousValue = goal.CurrentValue;

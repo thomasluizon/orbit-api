@@ -8,17 +8,17 @@ using System.Linq.Expressions;
 
 namespace Orbit.Application.Tests.Services.Goals;
 
-public class StreakGoalReadSyncerTests
+public class GoalProgressReadSyncerTests
 {
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
-    private readonly StreakGoalReadSyncer _syncer;
+    private readonly GoalProgressReadSyncer _syncer;
 
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-    public StreakGoalReadSyncerTests()
+    public GoalProgressReadSyncerTests()
     {
-        _syncer = new StreakGoalReadSyncer(_goalRepo);
+        _syncer = new GoalProgressReadSyncer(_goalRepo);
     }
 
     private static Goal CreateBadHabitStreakGoal(decimal target)
@@ -31,12 +31,15 @@ public class StreakGoalReadSyncerTests
             IsBadHabit: true, DueDate: Today.AddDays(-1))).Value;
 
         badHabit.AddGoal(goal);
-        goal.AddHabit(badHabit);
         return goal;
     }
 
     private void ArrangeGoals(params Goal[] goals)
     {
+        _goalRepo.FindAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(goals.ToList().AsReadOnly());
         _goalRepo.FindAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
@@ -80,6 +83,24 @@ public class StreakGoalReadSyncerTests
         var fresh = await _syncer.ComputeFreshValuesAsync(UserId, Today, CancellationToken.None);
 
         fresh[goal.Id].Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ComputeFreshValuesAsync_LinkedStandardGoal_ReturnsCompletionsSinceGoalStarted()
+    {
+        var goal = Goal.Create(UserId, "Complete 10 sessions", 10, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        habit.Log(Today);
+        habit.Log(Today);
+        goal.AddHabit(habit);
+        ArrangeGoals(goal);
+
+        var fresh = await _syncer.ComputeFreshValuesAsync(UserId, Today, CancellationToken.None);
+
+        fresh[goal.Id].Should().Be(2);
+        goal.Status.Should().Be(GoalStatus.Active);
+        _goalRepo.DidNotReceive().Update(Arg.Any<Goal>());
     }
 
     [Fact]

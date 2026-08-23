@@ -90,7 +90,7 @@ public record ChatExecutionDependencies(
     IServiceScopeFactory ServiceScopeFactory,
     IAgentOperationExecutor OperationExecutor,
     IPendingClarificationStore PendingClarificationStore,
-    IStreakGoalReadSyncer StreakGoalReadSyncer,
+    IGoalProgressReadSyncer GoalProgressReadSyncer,
     IGamificationService GamificationService,
     IMediator Mediator,
     IProductAnalytics ProductAnalytics);

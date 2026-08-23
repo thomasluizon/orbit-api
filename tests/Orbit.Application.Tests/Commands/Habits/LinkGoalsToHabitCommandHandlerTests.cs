@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Application.Habits.Commands;
@@ -15,6 +16,8 @@ public class LinkGoalsToHabitCommandHandlerTests
     private readonly IGenericRepository<Habit> _habitRepo = Substitute.For<IGenericRepository<Habit>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
+    private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly LinkGoalsToHabitCommandHandler _handler;
 
@@ -25,7 +28,10 @@ public class LinkGoalsToHabitCommandHandlerTests
     {
         _payGate.CanLinkGoalsToHabits(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
-        _handler = new LinkGoalsToHabitCommandHandler(_habitRepo, _goalRepo, _payGate, _unitOfWork);
+        _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(Today);
+        _handler = new LinkGoalsToHabitCommandHandler(
+            _habitRepo, _goalRepo, _payGate, _gamificationService, _userDateService,
+            _unitOfWork, Substitute.For<ILogger<LinkGoalsToHabitCommandHandler>>());
     }
 
     private static Habit CreateTestHabit() =>
@@ -48,6 +54,7 @@ public class LinkGoalsToHabitCommandHandlerTests
 
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()).Returns(new List<Goal> { goal1, goal2 });
 
         var command = new LinkGoalsToHabitCommand(UserId, habit.Id, [goal1.Id, goal2.Id]);
@@ -87,6 +94,7 @@ public class LinkGoalsToHabitCommandHandlerTests
 
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()).Returns(new List<Goal>());
 
         var command = new LinkGoalsToHabitCommand(UserId, habit.Id, [Guid.NewGuid()]);
@@ -110,6 +118,7 @@ public class LinkGoalsToHabitCommandHandlerTests
 
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>()).Returns(new List<Goal> { ownedGoal });
 
         var command = new LinkGoalsToHabitCommand(UserId, habit.Id, [ownedGoal.Id, Guid.NewGuid()]);

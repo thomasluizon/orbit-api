@@ -179,7 +179,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<IAgentOperationExecutor>(),
                 sp.GetRequiredService<IPendingClarificationStore>(),
-                sp.GetRequiredService<IStreakGoalReadSyncer>(),
+                sp.GetRequiredService<IGoalProgressReadSyncer>(),
                 sp.GetRequiredService<IGamificationService>(),
                 sp.GetRequiredService<MediatR.IMediator>(),
                 sp.GetRequiredService<IProductAnalytics>()));

@@ -19,7 +19,7 @@ public class ChatToolMetadataTests
         var payGateService = Substitute.For<IPayGateService>();
         var unitOfWork = Substitute.For<IUnitOfWork>();
         var gamificationService = Substitute.For<IGamificationService>();
-        var streakGoalReadSyncer = Substitute.For<Orbit.Application.Goals.Services.IStreakGoalReadSyncer>();
+        var goalProgressReadSyncer = Substitute.For<Orbit.Application.Goals.Services.IGoalProgressReadSyncer>();
         var logger = Substitute.For<ILogger<UpdateGoalStatusTool>>();
 
         var assignTagsTool = new AssignTagsTool(Repo<Habit>(), Repo<Tag>(), unitOfWork);
@@ -39,7 +39,7 @@ public class ChatToolMetadataTests
         var linkHabitsTool = new LinkHabitsToGoalTool(Repo<Goal>(), Repo<Habit>(), unitOfWork);
         var logHabitTool = new LogHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var moveHabitTool = new MoveHabitTool(Repo<Habit>());
-        var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, streakGoalReadSyncer);
+        var queryGoalsTool = new QueryGoalsTool(Repo<Goal>(), userDateService, goalProgressReadSyncer);
         var queryHabitsTool = new QueryHabitsTool(Repo<Habit>(), Repo<User>());
         var skipHabitTool = new SkipHabitTool(Repo<Habit>(), Repo<HabitLog>(), userDateService);
         var suggestBreakdownTool = new SuggestBreakdownTool();

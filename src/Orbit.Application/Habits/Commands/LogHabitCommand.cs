@@ -124,7 +124,7 @@ public partial class LogHabitCommandHandler(
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;
 
-            goalSync = await UpdateLinkedGoalProgress(habit, -1, today, cancellationToken);
+            goalSync = await UpdateLinkedGoalProgress(habit, today, cancellationToken);
 
             try
             {
@@ -180,7 +180,7 @@ public partial class LogHabitCommandHandler(
 
             await repos.HabitLogRepository.AddAsync(logEntity, cancellationToken);
 
-            goalSync = await UpdateLinkedGoalProgress(habit, 1, today, cancellationToken);
+            goalSync = await UpdateLinkedGoalProgress(habit, today, cancellationToken);
 
             try
             {
@@ -339,37 +339,37 @@ public partial class LogHabitCommandHandler(
         }
     }
 
-    private async Task<LinkedGoalSyncResult> UpdateLinkedGoalProgress(Habit habit, decimal delta, DateOnly today, CancellationToken ct)
+    private async Task<LinkedGoalSyncResult> UpdateLinkedGoalProgress(Habit habit, DateOnly today, CancellationToken ct)
     {
         if (habit.Goals.Count == 0) return LinkedGoalSyncResult.None;
 
         var goalIds = habit.Goals.Select(g => g.Id).ToHashSet();
         var streakWindowStart = today.AddDays(-AppConstants.MaxStreakLookbackDays);
+        var standardWindowStart = habit.Goals
+            .Where(g => g.Type == GoalType.Standard)
+            .Select(g => g.CreatedAtUtc)
+            .DefaultIfEmpty(DateTime.MaxValue)
+            .Min();
 
         var trackedGoals = await repos.GoalRepository.FindTrackedAsync(
             g => goalIds.Contains(g.Id),
-            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l => l.Date >= streakWindowStart)),
+            q => q.Include(g => g.Habits).ThenInclude(h => h.Logs.Where(l =>
+                l.Date >= streakWindowStart || l.CreatedAtUtc >= standardWindowStart)),
             ct);
 
         var updates = new List<LinkedGoalUpdate>();
         var anyJustCompleted = false;
         foreach (var trackedGoal in trackedGoals)
         {
-            if (trackedGoal.Type == GoalType.Streak && trackedGoal.Status == GoalStatus.Active)
+            var outcome = GoalProgressSyncService.SyncCurrentProgress(trackedGoal, today);
+            if (outcome.Synced)
             {
-                var outcome = GoalStreakSyncService.SyncCurrentStreak(trackedGoal, today);
-                if (outcome.Synced)
-                {
-                    anyJustCompleted |= outcome.JustCompleted;
-                    updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, trackedGoal.CurrentValue, trackedGoal.TargetValue));
-                }
-            }
-            else if (trackedGoal.Status == GoalStatus.Active)
-            {
-                var newValue = Math.Max(0, trackedGoal.CurrentValue + delta);
-                var progressResult = trackedGoal.UpdateProgress(newValue);
-                anyJustCompleted |= progressResult.IsSuccess && progressResult.Value;
-                updates.Add(new LinkedGoalUpdate(trackedGoal.Id, trackedGoal.Title, newValue, trackedGoal.TargetValue));
+                anyJustCompleted |= outcome.JustCompleted;
+                updates.Add(new LinkedGoalUpdate(
+                    trackedGoal.Id,
+                    trackedGoal.Title,
+                    trackedGoal.CurrentValue,
+                    trackedGoal.TargetValue));
             }
         }
 

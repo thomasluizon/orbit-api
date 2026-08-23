@@ -156,6 +156,28 @@ public class UpdateGoalProgressCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_LinkedStandardGoal_ReturnsDerivedErrorWithoutWritingProgress()
+    {
+        var goal = Goal.Create(UserId, "Complete sessions", 10, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", Domain.Enums.FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        goal.AddHabit(habit);
+        goal.SyncStandardProgress(3);
+        SetupGoalFound(goal);
+
+        var result = await _handler.Handle(
+            new UpdateGoalProgressCommand(UserId, GoalId, 8, "manual override"),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.ErrorCode.Should().Be(DomainErrors.GoalProgressDerived.Code);
+        goal.CurrentValue.Should().Be(3);
+        await _progressLogRepo.DidNotReceive().AddAsync(
+            Arg.Any<GoalProgressLog>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_GoalProgressDoesNotTouchUserStreakState()
     {
         var goal = Goal.Create(UserId, "Goal", 100, "km").Value;

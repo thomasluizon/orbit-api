@@ -1,7 +1,9 @@
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Orbit.Application.Common;
+using Orbit.Application.Goals.Services;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Enums;
@@ -54,6 +56,7 @@ public partial class CreateGoalCommandHandler(
             return goalResult.PropagateError<Guid>();
 
         var goal = goalResult.Value;
+        var justCompleted = false;
 
         if (request.HabitIds is { Count: > 0 } habitIds)
         {
@@ -62,6 +65,7 @@ public partial class CreateGoalCommandHandler(
 
             var habits = await habitRepository.FindTrackedAsync(
                 h => habitIds.Contains(h.Id) && h.UserId == request.UserId,
+                q => q.Include(h => h.Logs),
                 cancellationToken);
 
             var habitsResolved = OwnershipValidation.AllResolved(habitIds, habits, h => h.Id, ErrorMessages.HabitNotFound);
@@ -70,6 +74,8 @@ public partial class CreateGoalCommandHandler(
 
             foreach (var habit in habits)
                 goal.AddHabit(habit);
+
+            justCompleted = GoalProgressSyncService.SyncCurrentProgress(goal, today).JustCompleted;
         }
 
         await goalRepository.AddAsync(goal, cancellationToken);
@@ -84,11 +90,29 @@ public partial class CreateGoalCommandHandler(
             LogGamificationGoalCreationFailed(logger, ex, request.UserId);
         }
 
+        if (justCompleted)
+            await ProcessGoalCompletionSafeAsync(request.UserId, cancellationToken);
+
         CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
 
         return Result.Success(goal.Id);
     }
 
+    private async Task ProcessGoalCompletionSafeAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await gamificationService.ProcessGoalCompleted(userId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogGamificationGoalCompletionFailed(logger, ex, userId);
+        }
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Gamification processing failed for goal creation by user {UserId}")]
     private static partial void LogGamificationGoalCreationFailed(ILogger logger, Exception ex, Guid userId);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Gamification processing failed for linked goal completion by user {UserId}")]
+    private static partial void LogGamificationGoalCompletionFailed(ILogger logger, Exception ex, Guid userId);
 }

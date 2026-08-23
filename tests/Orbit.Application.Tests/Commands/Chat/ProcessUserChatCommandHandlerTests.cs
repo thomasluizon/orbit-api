@@ -38,7 +38,7 @@ public class ProcessUserChatCommandHandlerTests
     private readonly IUserStreakService _userStreakService = Substitute.For<IUserStreakService>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IStreakGoalReadSyncer _streakGoalReadSyncer = Substitute.For<IStreakGoalReadSyncer>();
+    private readonly IGoalProgressReadSyncer _goalProgressReadSyncer = Substitute.For<IGoalProgressReadSyncer>();
     private readonly IServiceScopeFactory _scopeFactory = Substitute.For<IServiceScopeFactory>();
     private readonly IAgentCatalogService _catalogService = Substitute.For<IAgentCatalogService>();
     private readonly IAgentOperationExecutor _operationExecutor = Substitute.For<IAgentOperationExecutor>();
@@ -93,7 +93,7 @@ public class ProcessUserChatCommandHandlerTests
         var dataDeps = new ChatDataDependencies(_habitRepo, _goalRepo, userRepository, _userFactRepo, _tagRepo, _checklistTemplateRepo, _featureFlagService);
         var executionDeps = new ChatExecutionDependencies(
             _userDateService, _userStreakService, payGate, unitOfWork, _scopeFactory, _operationExecutor,
-            _pendingClarificationStore, _streakGoalReadSyncer, _gamificationService, _mediator, _productAnalytics);
+            _pendingClarificationStore, _goalProgressReadSyncer, _gamificationService, _mediator, _productAnalytics);
 
         return new ProcessUserChatCommandHandler(
             dataDeps, aiDeps, executionDeps, _logger);
@@ -114,7 +114,7 @@ public class ProcessUserChatCommandHandlerTests
         _userDateService.GetUserWeekStartDayAsync(UserId, Arg.Any<CancellationToken>()).Returns(1);
         _userStreakService.RecalculateAsync(UserId, cancellationToken: Arg.Any<CancellationToken>())
             .Returns(new UserStreakState(1, 1, Today));
-        _streakGoalReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _goalProgressReadSyncer.ComputeFreshValuesAsync(Arg.Any<Guid>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int>());
         _promptBuilder.BuildStatic(Arg.Any<PromptBuildRequest>()).Returns("static prompt");
         _promptBuilder.BuildDynamic(Arg.Any<PromptBuildRequest>()).Returns("dynamic prompt");
@@ -706,7 +706,7 @@ public class ProcessUserChatCommandHandlerTests
         var streakGoal = Goal.Create(new Goal.CreateGoalParams(
             UserId, "Avoid doom scrolling", 7, "days", Type: GoalType.Streak)).Value;
 
-        _streakGoalReadSyncer
+        _goalProgressReadSyncer
             .ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, int> { [streakGoal.Id] = 4 });
 
@@ -722,7 +722,7 @@ public class ProcessUserChatCommandHandlerTests
         var result = await handler.Handle(new ProcessUserChatCommand(UserId, "How am I doing?"), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        await _streakGoalReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
+        await _goalProgressReadSyncer.Received(1).ComputeFreshValuesAsync(UserId, Today, Arg.Any<CancellationToken>());
         _promptBuilder.Received(1).BuildDynamic(Arg.Is<PromptBuildRequest>(request =>
             request.ActiveGoals != null &&
             request.ActiveGoals.Count == 1 &&

@@ -166,4 +166,24 @@ public class GetGoalByIdQueryHandlerTests
         result.Value.CurrentValue.Should().Be(2);
         goal.Status.Should().Be(GoalStatus.Active);
     }
+
+    [Fact]
+    public async Task Handle_LinkedStandardAtTarget_RefreshesValueWithoutPersistingCompletion()
+    {
+        var goal = Goal.Create(UserId, "Exercise twice", 2, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        habit.Log(Today);
+        habit.Log(Today);
+        goal.AddHabit(habit);
+        ArrangeGoal(goal);
+
+        var result = await _handler.Handle(new GetGoalByIdQuery(UserId, GoalId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CurrentValue.Should().Be(2);
+        result.Value.IsProgressDerived.Should().BeTrue();
+        goal.Status.Should().Be(GoalStatus.Active);
+        goal.CompletedAtUtc.Should().BeNull();
+    }
 }

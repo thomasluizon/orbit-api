@@ -63,13 +63,12 @@ public class LogHabitLinkedGoalTests
     }
 
     [Fact]
-    public async Task Handle_WithLinkedStandardGoal_UpdatesGoalProgress()
+    public async Task Handle_WithLinkedStandardGoal_DerivesProgressFromEveryCompletion()
     {
         var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;
-        goal.UpdateProgress(3);
 
         var habit = Habit.Create(new HabitCreateParams(
-            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+            UserId, "Exercise", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
         habit.AddGoal(goal);
 
         _habitRepo.FindOneTrackedAsync(
@@ -84,14 +83,50 @@ public class LogHabitLinkedGoalTests
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
-        var command = new LogHabitCommand(UserId, habit.Id);
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var first = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
+        var second = await _handler.Handle(new LogHabitCommand(UserId, habit.Id), CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.LinkedGoalUpdates.Should().NotBeNull();
-        result.Value.LinkedGoalUpdates!.Count.Should().Be(1);
-        result.Value.LinkedGoalUpdates[0].GoalId.Should().Be(goal.Id);
-        result.Value.LinkedGoalUpdates[0].NewProgress.Should().Be(4);
+        first.IsSuccess.Should().BeTrue();
+        first.Value.LinkedGoalUpdates.Should().ContainSingle();
+        first.Value.LinkedGoalUpdates![0].NewProgress.Should().Be(1);
+        second.IsSuccess.Should().BeTrue();
+        second.Value.LinkedGoalUpdates.Should().ContainSingle();
+        second.Value.LinkedGoalUpdates![0].GoalId.Should().Be(goal.Id);
+        second.Value.LinkedGoalUpdates[0].NewProgress.Should().Be(2);
+        goal.CurrentValue.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Handle_UnlogLinkedStandardGoal_RecomputesProgressDownward()
+    {
+        var goal = Goal.Create(UserId, "Exercise 10 times", 10, "sessions").Value;
+        var habit = Habit.Create(new HabitCreateParams(
+            UserId, "Exercise", FrequencyUnit.Day, 1, DueDate: Today)).Value;
+        var otherHabit = Habit.Create(new HabitCreateParams(
+            UserId, "Stretch", FrequencyUnit.Day, 2, DueDate: Today, IsFlexible: true)).Value;
+        habit.Log(Today, advanceDueDate: false);
+        otherHabit.Log(Today, advanceDueDate: false);
+        habit.AddGoal(goal);
+        otherHabit.AddGoal(goal);
+        goal.SyncStandardProgress(2);
+
+        _habitRepo.FindOneTrackedAsync(
+            Arg.Any<Expression<Func<Habit, bool>>>(),
+            Arg.Any<Func<IQueryable<Habit>, IQueryable<Habit>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(habit);
+        _goalRepo.FindTrackedAsync(
+            Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new List<Goal> { goal });
+
+        var unlogged = await _handler.Handle(new LogHabitCommand(UserId, habit.Id, Today), CancellationToken.None);
+
+        unlogged.IsSuccess.Should().BeTrue();
+        unlogged.Value.LinkedGoalUpdates.Should().ContainSingle();
+        unlogged.Value.LinkedGoalUpdates![0].NewProgress.Should().Be(1);
+        goal.CurrentValue.Should().Be(1);
     }
 
     [Fact]

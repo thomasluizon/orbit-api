@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Orbit.Application.Habits.Commands;
 using Orbit.Domain.Common;
@@ -19,6 +20,7 @@ public class UpdateHabitGoalSyncTests
     private readonly IGenericRepository<SentReminder> _sentReminderRepo = Substitute.For<IGenericRepository<SentReminder>>();
     private readonly IGenericRepository<Goal> _goalRepo = Substitute.For<IGenericRepository<Goal>>();
     private readonly IPayGateService _payGate = Substitute.For<IPayGateService>();
+    private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IUserDateService _userDateService = Substitute.For<IUserDateService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly MemoryCache _cache = new(new MemoryCacheOptions());
@@ -34,7 +36,8 @@ public class UpdateHabitGoalSyncTests
         _payGate.CanUseSlipAlerts(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(Result.Success()));
         _handler = new UpdateHabitCommandHandler(
-            _habitRepo, _sentReminderRepo, _goalRepo, _payGate, _userDateService, _unitOfWork, _cache);
+            _habitRepo, _sentReminderRepo, _goalRepo, _payGate, _gamificationService,
+            _userDateService, _unitOfWork, _cache, Substitute.For<ILogger<UpdateHabitCommandHandler>>());
 
         _userDateService.GetUserTodayAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Today);
@@ -55,6 +58,7 @@ public class UpdateHabitGoalSyncTests
 
         _goalRepo.FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>())
             .Returns(new List<Goal> { goal });
 
@@ -67,6 +71,7 @@ public class UpdateHabitGoalSyncTests
         result.IsSuccess.Should().BeTrue();
         await _goalRepo.Received(1).FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
@@ -112,6 +117,7 @@ public class UpdateHabitGoalSyncTests
         result.IsSuccess.Should().BeTrue();
         await _goalRepo.DidNotReceive().FindTrackedAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
+            Arg.Any<Func<IQueryable<Goal>, IQueryable<Goal>>?>(),
             Arg.Any<CancellationToken>());
     }
 
