@@ -2677,7 +2677,7 @@
       "ChecklistTemplates": 5,
       "Common": 34,
       "Gamification": 26,
-      "Goals": 33,
+      "Goals": 34,
       "Habits": 74,
       "Marketing": 4,
       "Notifications": 12,
@@ -2886,8 +2886,8 @@
       "ChecklistTemplates": 9,
       "Common": 167,
       "Gamification": 34,
-      "Goals": 38,
-      "Habits": 83,
+      "Goals": 39,
+      "Habits": 85,
       "Marketing": 6,
       "Notifications": 16,
       "Profile": 38,
@@ -3372,8 +3372,8 @@
         "testClass": "BulkLogHabitsToolTests",
         "file": "tests/Orbit.Application.Tests/Chat/Tools/BulkLogHabitsToolTests.cs",
         "references": [
-          "Habit",
-          "HabitLog"
+          "BulkLogHabitsCommand",
+          "Habit"
         ]
       },
       {
@@ -3538,7 +3538,8 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/LinkHabitsToGoalToolTests.cs",
         "references": [
           "Goal",
-          "Habit"
+          "Habit",
+          "LinkHabitsToGoalCommand"
         ]
       },
       {
@@ -3546,7 +3547,7 @@
         "file": "tests/Orbit.Application.Tests/Chat/Tools/LogHabitToolTests.cs",
         "references": [
           "Habit",
-          "HabitLog"
+          "LogHabitCommand"
         ]
       },
       {
@@ -4018,6 +4019,7 @@
         "references": [
           "Goal",
           "GoalProgressLog",
+          "Habit",
           "UpdateGoalProgressCommand",
           "UpdateGoalProgressCommandHandler"
         ]
@@ -4057,6 +4059,7 @@
         "references": [
           "BulkLogHabitsCommand",
           "BulkLogHabitsCommandHandler",
+          "Goal",
           "Habit",
           "HabitLog"
         ]
@@ -5060,7 +5063,8 @@
         "references": [
           "GetGoalsQuery",
           "GetGoalsQueryHandler",
-          "Goal"
+          "Goal",
+          "Habit"
         ]
       },
       {
@@ -5384,7 +5388,7 @@
         ]
       },
       {
-        "testClass": "StreakGoalReadSyncerTests",
+        "testClass": "GoalProgressReadSyncerTests",
         "file": "tests/Orbit.Application.Tests/Services/Goals/StreakGoalReadSyncerTests.cs",
         "references": [
           "Goal",
