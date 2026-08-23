@@ -51,6 +51,20 @@ public class UpdateHabitCommandHandler(
                 return slipAlertGate;
         }
 
+        return await HabitCeilingLock.ExecuteEntryAsync(
+            unitOfWork,
+            request.UserId,
+            payGate,
+            ct => PrepareUpdateAsync(request, ct),
+            state => HabitLiveRootEntry.FromUpdate(state.Habit, state.Update),
+            (state, ct) => ApplyUpdateAsync(request, state, ct),
+            cancellationToken);
+    }
+
+    private async Task<Result<UpdateState>> PrepareUpdateAsync(
+        UpdateHabitCommand request,
+        CancellationToken cancellationToken)
+    {
         var habit = request.GoalIds is not null
             ? await habitRepository.FindOneTrackedAsync(
                 h => h.Id == request.HabitId && h.UserId == request.UserId,
@@ -61,55 +75,55 @@ public class UpdateHabitCommandHandler(
                 cancellationToken: cancellationToken);
 
         if (habit is null)
-            return Result.Failure(ErrorMessages.HabitNotFound);
+            return Result.Failure<UpdateState>(ErrorMessages.HabitNotFound);
 
         if (request.IsGeneral.HasValue)
         {
             var generalMismatch = await ValidateGeneralAgainstRelativesAsync(
                 habit, request.IsGeneral.Value, request.UserId, cancellationToken);
             if (generalMismatch.IsFailure)
-                return generalMismatch;
+                return generalMismatch.PropagateError<UpdateState>();
         }
 
         var opts = request.Options ?? new UpdateHabitCommandOptions();
         var today = await userDateService.GetUserTodayAsync(request.UserId, cancellationToken);
+        var update = new HabitUpdateParams(
+            request.Title,
+            request.Description,
+            request.FrequencyUnit,
+            request.FrequencyQuantity,
+            opts.Days,
+            request.IsBadHabit,
+            request.DueDate,
+            DueTime: opts.DueTime,
+            DueEndTime: opts.DueEndTime,
+            ReminderEnabled: opts.ReminderEnabled,
+            ReminderTimes: opts.ReminderTimes,
+            SlipAlertEnabled: opts.SlipAlertEnabled,
+            ChecklistItems: opts.ChecklistItems,
+            IsGeneral: request.IsGeneral,
+            IsFlexible: opts.IsFlexible,
+            EndDate: opts.EndDate,
+            ClearEndDate: request.ClearEndDate,
+            ScheduledReminders: opts.ScheduledReminders,
+            Emoji: request.Emoji,
+            UserToday: today);
 
-        var result = await HabitReactivationAllowance.ExecuteAsync(
-            request.UserId,
-            HabitReactivationAllowance.IsRequiredForEndDateChange(
-                habit,
-                request.FrequencyUnit,
-                request.DueDate,
-                opts.EndDate,
-                request.ClearEndDate == true),
-            payGate,
-            () => habit.Update(new HabitUpdateParams(
-                request.Title,
-                request.Description,
-                request.FrequencyUnit,
-                request.FrequencyQuantity,
-                opts.Days,
-                request.IsBadHabit,
-                request.DueDate,
-                DueTime: opts.DueTime,
-                DueEndTime: opts.DueEndTime,
-                ReminderEnabled: opts.ReminderEnabled,
-                ReminderTimes: opts.ReminderTimes,
-                SlipAlertEnabled: opts.SlipAlertEnabled,
-                ChecklistItems: opts.ChecklistItems,
-                IsGeneral: request.IsGeneral,
-                IsFlexible: opts.IsFlexible,
-                EndDate: opts.EndDate,
-                ClearEndDate: request.ClearEndDate,
-                ScheduledReminders: opts.ScheduledReminders,
-                Emoji: request.Emoji,
-                UserToday: today)),
-            cancellationToken);
+        return Result.Success(new UpdateState(habit, update, opts, today));
+    }
+
+    private async Task<Result> ApplyUpdateAsync(
+        UpdateHabitCommand request,
+        UpdateState state,
+        CancellationToken cancellationToken)
+    {
+        var habit = state.Habit;
+        var result = habit.Update(state.Update);
 
         if (result.IsFailure)
             return result;
 
-        if (opts.DueTime.HasValue)
+        if (state.Options.DueTime.HasValue)
             await ClearTodaySentRemindersAsync(request.UserId, request.HabitId, cancellationToken);
 
         IReadOnlyList<Guid> affectedGoalIds = [];
@@ -126,7 +140,7 @@ public class UpdateHabitCommandHandler(
             await goalCompletionService.SyncDerivedGoalsAsync(
                 request.UserId,
                 affectedGoalIds,
-                today,
+                state.Today,
                 cancellationToken: cancellationToken);
         }
         else
@@ -134,10 +148,16 @@ public class UpdateHabitCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
-        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, today);
+        CacheInvalidationHelper.InvalidateUserAiCaches(cache, request.UserId, state.Today);
 
         return Result.Success();
     }
+
+    private sealed record UpdateState(
+        Habit Habit,
+        HabitUpdateParams Update,
+        UpdateHabitCommandOptions Options,
+        DateOnly Today);
 
     /// <summary>
     /// Rejects an <c>IsGeneral</c> change that would break the invariant that a habit's

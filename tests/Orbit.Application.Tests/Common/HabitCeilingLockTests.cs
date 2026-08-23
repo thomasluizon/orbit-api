@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using FluentAssertions;
+using NSubstitute;
 using Orbit.Application.Common;
 using Orbit.Domain.Common;
 using Orbit.Domain.Interfaces;
@@ -50,6 +51,65 @@ public class HabitCeilingLockTests
         liveHabitCount.Should().Be(ceiling);
         results.Should().ContainSingle(result => result.IsSuccess);
         results.Should().ContainSingle(result => result.IsFailure);
+    }
+
+    [Fact]
+    public async Task LockedCreationOverlappingCompletedRootReactivation_RefusesReactivationAtCeiling()
+    {
+        const int ceiling = 1000;
+        var liveHabitCount = 999;
+        var reactivated = false;
+        var unitOfWork = new SerializingUnitOfWork();
+        var payGate = Substitute.For<IPayGateService>();
+        var creationGateCompleted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCreation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        payGate.CanCreateHabits(Guid.Empty, 1, Arg.Any<CancellationToken>())
+            .Returns(_ => liveHabitCount < ceiling
+                ? Result.Success()
+                : Result.Failure("You've reached the 1000 habit limit."));
+
+        var creation = HabitCeilingLock.ExecuteAsync(
+            unitOfWork,
+            Guid.Empty,
+            async cancellationToken =>
+            {
+                var allowance = await payGate.CanCreateHabits(Guid.Empty, 1, cancellationToken);
+                creationGateCompleted.TrySetResult(true);
+                await releaseCreation.Task.WaitAsync(cancellationToken);
+                if (allowance.IsFailure)
+                    return allowance;
+
+                liveHabitCount++;
+                return Result.Success();
+            },
+            CancellationToken.None);
+
+        await creationGateCompleted.Task;
+        var reactivation = HabitCeilingLock.ExecuteEntryAsync(
+            unitOfWork,
+            Guid.Empty,
+            payGate,
+            _ => Task.FromResult(Result.Success(true)),
+            entersLiveRootSet: _ => true,
+            (_, _) =>
+            {
+                reactivated = true;
+                liveHabitCount++;
+                return Task.FromResult(Result.Success());
+            },
+            CancellationToken.None);
+
+        await unitOfWork.SecondLockRequested.Task;
+        reactivation.IsCompleted.Should().BeFalse();
+        releaseCreation.TrySetResult(true);
+        var creationResult = await creation;
+        var reactivationResult = await reactivation;
+
+        creationResult.IsSuccess.Should().BeTrue();
+        reactivationResult.IsFailure.Should().BeTrue();
+        reactivationResult.Error.Should().Be("You've reached the 1000 habit limit.");
+        reactivated.Should().BeFalse();
+        liveHabitCount.Should().Be(ceiling);
     }
 
     private sealed class SerializingUnitOfWork : IUnitOfWork

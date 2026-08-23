@@ -175,32 +175,20 @@ public class PayGateServiceTests
     }
 
     [Fact]
-    public async Task UnlogCompletedTask_FreeUserAtLimit_RejectsWithoutChangingState()
+    public void UnlogCompletedRoot_RequiresLiveRootAllowance()
     {
-        ConfigureFreeUserAtHabitCap();
         var habit = Habit.Create(new HabitCreateParams(
             UserId, "Finished task", null, null, ReactivationToday)).Value;
         habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
 
-        var result = await HabitReactivationAllowance.ExecuteAsync(
-            UserId,
-            HabitReactivationAllowance.IsRequiredForUnlog(habit),
-            _sut,
-            () => habit.Unlog(ReactivationToday),
-            CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
-        habit.IsCompleted.Should().BeTrue();
-        habit.Logs.Should().ContainSingle().Which.IsDeleted.Should().BeFalse();
+        HabitLiveRootEntry.FromUnlog(habit).Should().BeTrue();
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task EndDateReactivation_FreeUserAtLimit_RejectsWithoutChangingState(bool clearEndDate)
+    public void EndDateReactivation_RequiresLiveRootAllowance(bool clearEndDate)
     {
-        ConfigureFreeUserAtHabitCap();
         var habit = Habit.Create(new HabitCreateParams(
             UserId,
             "Finished recurring habit",
@@ -209,36 +197,19 @@ public class PayGateServiceTests
             ReactivationToday,
             EndDate: ReactivationToday)).Value;
         habit.Log(ReactivationToday).IsSuccess.Should().BeTrue();
-        var originalDueDate = habit.DueDate;
         DateOnly? endDate = clearEndDate ? null : ReactivationToday.AddDays(7);
+        var update = new HabitUpdateParams(
+            "Changed title",
+            null,
+            FrequencyUnit.Day,
+            1,
+            null,
+            false,
+            null,
+            EndDate: endDate,
+            ClearEndDate: clearEndDate);
 
-        var result = await HabitReactivationAllowance.ExecuteAsync(
-            UserId,
-            HabitReactivationAllowance.IsRequiredForEndDateChange(
-                habit,
-                FrequencyUnit.Day,
-                dueDate: null,
-                endDate,
-                clearEndDate),
-            _sut,
-            () => habit.Update(new HabitUpdateParams(
-                "Changed title",
-                null,
-                FrequencyUnit.Day,
-                1,
-                null,
-                false,
-                null,
-                EndDate: endDate,
-                ClearEndDate: clearEndDate)),
-            CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().BeNull();
-        habit.Title.Should().Be("Finished recurring habit");
-        habit.IsCompleted.Should().BeTrue();
-        habit.DueDate.Should().Be(originalDueDate);
-        habit.EndDate.Should().Be(ReactivationToday);
+        HabitLiveRootEntry.FromUpdate(habit, update).Should().BeTrue();
     }
 
     [Fact]
@@ -250,17 +221,6 @@ public class PayGateServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Contain("User not found");
-    }
-
-    private void ConfigureFreeUserAtHabitCap()
-    {
-        var user = CreateFreeUser();
-        user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
-        _habitRepo.CountAsync(
-                Arg.Any<Expression<Func<Habit, bool>>>(),
-                Arg.Any<CancellationToken>())
-            .Returns(AppConstants.DefaultFreeMaxHabits);
     }
 
     [Fact]

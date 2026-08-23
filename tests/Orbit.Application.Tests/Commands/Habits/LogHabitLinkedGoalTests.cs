@@ -46,7 +46,8 @@ public class LogHabitLinkedGoalTests
             _gamificationService,
             _goalCompletionService,
             _challengeProgressService,
-            _mediator);
+            _mediator,
+            Substitute.For<IPayGateService>());
         _handler = new LogHabitCommandHandler(
             repos, services, _unitOfWork, _cache, Substitute.For<ILogger<LogHabitCommandHandler>>());
 

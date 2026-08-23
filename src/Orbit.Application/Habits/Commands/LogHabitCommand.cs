@@ -49,7 +49,7 @@ public record LogHabitServices(
     IGoalCompletionService GoalCompletionService,
     IChallengeProgressService ChallengeProgressService,
     IMediator Mediator,
-    IPayGateService? PayGate = null);
+    IPayGateService PayGate);
 
 public partial class LogHabitCommandHandler(
     LogHabitRepositories repos,
@@ -82,9 +82,33 @@ public partial class LogHabitCommandHandler(
 
         var existingLog = habit.Logs.FirstOrDefault(l => l.Date == targetDate && l.Value > 0);
         if (existingLog is not null && !habit.IsFlexible && !habit.IsBadHabit)
-            return await HandleUnlogAsync(habit, targetDate, today, cancellationToken);
+        {
+            return await HabitCeilingLock.ExecuteEntryAsync<Habit, LogHabitResponse>(
+                unitOfWork,
+                request.UserId,
+                services.PayGate,
+                ct => PrepareUnlogAsync(request, today, ct),
+                HabitLiveRootEntry.FromUnlog,
+                (lockedHabit, ct) => HandleUnlogAsync(lockedHabit, targetDate, today, ct),
+                cancellationToken);
+        }
 
         return await HandleLogAsync(habit, request, targetDate, today, user, cancellationToken);
+    }
+
+    private async Task<Result<Habit>> PrepareUnlogAsync(
+        LogHabitCommand request,
+        DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        var habit = await LoadLoggableHabitAsync(request.HabitId, today, cancellationToken);
+        if (habit is null)
+            return Result.Failure<Habit>(ErrorMessages.HabitNotFound);
+
+        if (habit.UserId != request.UserId)
+            return Result.Failure<Habit>(ErrorMessages.HabitNotOwned);
+
+        return Result.Success(habit);
     }
 
     private static Result ValidateTargetDate(Habit habit, DateOnly targetDate, DateOnly today)
@@ -114,12 +138,7 @@ public partial class LogHabitCommandHandler(
         var attempt = 1;
         while (true)
         {
-            var unlogResult = await HabitReactivationAllowance.ExecuteAsync(
-                habit.UserId,
-                HabitReactivationAllowance.IsRequiredForUnlog(habit),
-                services.PayGate,
-                () => habit.Unlog(targetDate),
-                cancellationToken);
+            var unlogResult = habit.Unlog(targetDate);
             if (unlogResult.IsFailure)
                 return unlogResult.PropagateError<LogHabitResponse>();
             unlogEntity = unlogResult.Value;
