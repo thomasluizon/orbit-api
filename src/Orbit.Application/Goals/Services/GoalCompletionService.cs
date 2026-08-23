@@ -32,7 +32,9 @@ public interface IGoalCompletionService
 /// in one untracked split-query batch, then retained as value snapshots because gamification
 /// concurrency retries can reset the shared change tracker. Each candidate is resolved from its
 /// identifier inside its own retryable transaction, so a reset cannot detach a later goal that the
-/// operation still intends to save.
+/// operation still intends to save. The snapshot's goal update timestamp rejects a source mutation
+/// that committed before that reload, while the goal's persistence concurrency token rejects one
+/// that commits after it.
 /// </summary>
 public sealed class GoalCompletionService(
     IGenericRepository<Goal> goalRepository,
@@ -112,7 +114,8 @@ public sealed class GoalCompletionService(
         Guid GoalId,
         GoalType Type,
         decimal CurrentValue,
-        bool ResetStreak);
+        bool ResetStreak,
+        DateTime GoalUpdatedAtUtc);
 
     private static DerivedGoalSnapshot? CreateSnapshot(Goal goal, DateOnly userToday, bool passiveSync)
     {
@@ -127,7 +130,8 @@ public sealed class GoalCompletionService(
                     goal.Id,
                     goal.Type,
                     GoalProgressSyncService.CalculateStandardCompletions(goal),
-                    ResetStreak: false);
+                    ResetStreak: false,
+                    goal.UpdatedAtUtc);
         }
 
         if (passiveSync && !GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
@@ -137,13 +141,23 @@ public sealed class GoalCompletionService(
         {
             var shouldReset = goal.CurrentValue != 0 || (!passiveSync && goal.StreakSyncedAtUtc is not null);
             return shouldReset
-                ? new DerivedGoalSnapshot(goal.Id, goal.Type, CurrentValue: 0, ResetStreak: true)
+                ? new DerivedGoalSnapshot(
+                    goal.Id,
+                    goal.Type,
+                    CurrentValue: 0,
+                    ResetStreak: true,
+                    goal.UpdatedAtUtc)
                 : null;
         }
 
         var currentStreak = GoalStreakSyncService.CalculateCurrentStreak(goal, userToday);
         return currentStreak.HasValue
-            ? new DerivedGoalSnapshot(goal.Id, goal.Type, currentStreak.Value, ResetStreak: false)
+            ? new DerivedGoalSnapshot(
+                goal.Id,
+                goal.Type,
+                currentStreak.Value,
+                ResetStreak: false,
+                goal.UpdatedAtUtc)
             : null;
     }
 
@@ -159,6 +173,9 @@ public sealed class GoalCompletionService(
                 snapshot.Type == GoalType.Standard ? query => query.Include(candidate => candidate.Habits) : null,
                 transactionToken);
             if (goal is null)
+                return null;
+
+            if (goal.UpdatedAtUtc != snapshot.GoalUpdatedAtUtc)
                 return null;
 
             if (goal.Status == GoalStatus.Completed)

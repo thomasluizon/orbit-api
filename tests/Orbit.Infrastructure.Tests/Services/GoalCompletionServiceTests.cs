@@ -43,6 +43,43 @@ public class GoalCompletionServiceTests
     }
 
     [Fact]
+    public async Task SyncDerivedGoals_SourceLogRemovedAfterBatchRead_SkipsStaleSnapshot()
+    {
+        using var factory = new SqliteOrbitDbContextFactory();
+        var dbContext = factory.Context;
+        var user = User.Create("Concurrent User", "concurrent@example.com").Value;
+        var habit = CreateHabit(user.Id, "Exercise");
+        var goal = Goal.Create(user.Id, "Exercise once", 1, "session").Value;
+        goal.AddHabit(habit);
+        habit.Log(Today);
+        dbContext.AddRange(user, habit, goal);
+        await dbContext.SaveChangesAsync();
+        dbContext.ChangeTracker.Clear();
+
+        var gamification = Substitute.For<IGamificationService>();
+        var unitOfWork = new SourceLogRemovalUnitOfWork(
+            CreateUnitOfWork(dbContext),
+            dbContext,
+            user.Id,
+            goal.Id);
+        var service = CreateCompletionService(dbContext, gamification, unitOfWork);
+
+        var updates = await service.SyncDerivedGoalsAsync(
+            user.Id,
+            [goal.Id],
+            Today,
+            passiveSync: true);
+
+        updates.Should().BeEmpty();
+        var persistedGoal = await dbContext.Goals.AsNoTracking().SingleAsync(g => g.Id == goal.Id);
+        persistedGoal.Status.Should().Be(GoalStatus.Active);
+        persistedGoal.CurrentValue.Should().Be(0);
+        await gamification.DidNotReceive().ProcessGoalCompleted(
+            Arg.Any<Guid>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task LinkGoalsToHabit_TwoGoalsComplete_PersistsEachBeforeItsAward()
     {
         using var factory = new SqliteOrbitDbContextFactory();
@@ -238,6 +275,55 @@ public class GoalCompletionServiceTests
             Func<CancellationToken, Task<T>> operation,
             CancellationToken cancellationToken = default) =>
             inner.ExecuteInTransactionAsync(operation, cancellationToken);
+
+        public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
+            inner.AcquireAdvisoryLockAsync(key, cancellationToken);
+
+        public void DiscardChanges() => inner.DiscardChanges();
+
+        public void ResetTracking() => inner.ResetTracking();
+
+        public void Dispose() => inner.Dispose();
+    }
+
+    private sealed class SourceLogRemovalUnitOfWork(
+        IUnitOfWork inner,
+        OrbitDbContext dbContext,
+        Guid userId,
+        Guid goalId) : IUnitOfWork
+    {
+        private bool _sourceRemoved;
+
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+            inner.SaveChangesAsync(cancellationToken);
+
+        public Task ExecuteInTransactionAsync(
+            Func<CancellationToken, Task> operation,
+            CancellationToken cancellationToken = default) =>
+            inner.ExecuteInTransactionAsync(operation, cancellationToken);
+
+        public async Task<T> ExecuteInTransactionAsync<T>(
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default)
+        {
+            if (!_sourceRemoved)
+            {
+                _sourceRemoved = true;
+                var goal = await dbContext.Goals
+                    .Include(candidate => candidate.Habits)
+                    .ThenInclude(habit => habit.Logs)
+                    .SingleAsync(
+                        candidate => candidate.Id == goalId && candidate.UserId == userId,
+                        cancellationToken);
+                var habit = goal.Habits.Single();
+                habit.Unlog(Today).IsSuccess.Should().BeTrue();
+                GoalProgressSyncService.SyncCurrentProgress(goal, Today).Synced.Should().BeTrue();
+                await dbContext.SaveChangesAsync(cancellationToken);
+                dbContext.ChangeTracker.Clear();
+            }
+
+            return await inner.ExecuteInTransactionAsync(operation, cancellationToken);
+        }
 
         public Task AcquireAdvisoryLockAsync(string key, CancellationToken cancellationToken = default) =>
             inner.AcquireAdvisoryLockAsync(key, cancellationToken);
