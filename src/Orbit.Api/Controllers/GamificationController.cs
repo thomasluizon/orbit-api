@@ -58,17 +58,37 @@ public class GamificationController(IMediator mediator, IUserDateService userDat
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetRecap(
         [FromQuery] string period,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] int? year = null,
+        [FromQuery] int? month = null)
     {
         if (!RetrospectivePeriodRange.IsKnownPeriod(period))
             return BadRequest(ErrorMessages.InvalidPeriod.ToErrorBody());
 
         var userId = HttpContext.GetUserId();
         var today = await userDateService.GetUserTodayAsync(userId, cancellationToken);
-        var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
-        var (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
+        DateOnly dateFrom;
+        DateOnly dateTo;
 
-        var query = new GetRecapQuery(userId, dateFrom, dateTo, period);
+        if (year.HasValue || month.HasValue)
+        {
+            if (!year.HasValue || !month.HasValue || !period.Equals("month", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(ErrorMessages.InvalidClosedMonthParameters.ToErrorBody());
+
+            var closedMonth = ClosedMonthPeriodRange.Resolve(year.Value, month.Value, today);
+            if (closedMonth.IsFailure)
+                return closedMonth.ToErrorResult();
+
+            dateFrom = closedMonth.Value.DateFrom;
+            dateTo = closedMonth.Value.DateTo;
+        }
+        else
+        {
+            var weekStartDay = await userDateService.GetUserWeekStartDayAsync(userId, cancellationToken);
+            (dateFrom, dateTo) = RetrospectivePeriodRange.Resolve(period, today, weekStartDay);
+        }
+
+        var query = new GetRecapQuery(userId, dateFrom, dateTo, period, year, month);
         var result = await mediator.Send(query, cancellationToken);
 
         return result.ToPayGateAwareResult(v => Ok(v));
