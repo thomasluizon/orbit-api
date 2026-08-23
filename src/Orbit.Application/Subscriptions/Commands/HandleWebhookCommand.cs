@@ -72,6 +72,10 @@ public partial class HandleWebhookCommandHandler(
                     await HandleInvoicePaid(stripeEvent, cancellationToken);
                     break;
 
+                case "invoice.payment_failed":
+                    await HandleInvoicePaymentFailed(stripeEvent, cancellationToken);
+                    break;
+
                 case "customer.subscription.deleted":
                     await HandleSubscriptionDeleted(stripeEvent, cancellationToken);
                     break;
@@ -178,7 +182,7 @@ public partial class HandleWebhookCommandHandler(
         if (user is null)
             return;
 
-        user.CancelStripeSubscription();
+        user.CancelStripeSubscription(GetDeletedSubscriptionLapseReason(subscription, user));
         await unitOfWork.SaveChangesAsync(ct);
         LogUserDowngraded(logger, user.Id);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_canceled");
@@ -204,14 +208,49 @@ public partial class HandleWebhookCommandHandler(
             var periodEnd = GetPeriodEnd(subscription, interval);
             user.SetStripeSubscription(subscription.Id, periodEnd, interval);
         }
-        else if (subscription.Status is "canceled" or "unpaid")
+        else if (subscription.Status == "canceled")
         {
-            user.CancelStripeSubscription();
+            user.CancelStripeSubscription(GetCanceledSubscriptionLapseReason(subscription));
+        }
+        else if (subscription.Status == "unpaid")
+        {
+            user.CancelStripeSubscription(SubscriptionLapseReason.PaymentFailed);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_updated");
     }
+
+    private async Task HandleInvoicePaymentFailed(Event stripeEvent, CancellationToken ct)
+    {
+        var invoice = stripeEvent.Data.Object as Invoice;
+        var subscriptionId = invoice?.Parent?.SubscriptionDetails?.SubscriptionId;
+
+        if (subscriptionId is null)
+            return;
+
+        var user = await userRepository.FindOneTrackedIgnoringFiltersAsync(
+            u => u.StripeSubscriptionId == subscriptionId, ct);
+
+        if (user is null)
+            return;
+
+        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.PaymentFailed);
+        await unitOfWork.SaveChangesAsync(ct);
+    }
+
+    private static SubscriptionLapseReason GetCanceledSubscriptionLapseReason(Subscription subscription) =>
+        subscription.CancellationDetails?.Reason is "payment_failed" or "payment_disputed"
+            ? SubscriptionLapseReason.PaymentFailed
+            : SubscriptionLapseReason.Canceled;
+
+    private static SubscriptionLapseReason GetDeletedSubscriptionLapseReason(Subscription subscription, User user) =>
+        subscription.CancellationDetails?.Reason switch
+        {
+            "payment_failed" or "payment_disputed" => SubscriptionLapseReason.PaymentFailed,
+            "cancellation_requested" => SubscriptionLapseReason.Canceled,
+            _ => user.SubscriptionLapseReason ?? SubscriptionLapseReason.Expired,
+        };
 
     private static DateTime GetPeriodEnd(Subscription subscription, SubscriptionInterval interval)
     {

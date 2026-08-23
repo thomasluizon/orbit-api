@@ -14,6 +14,7 @@ using Orbit.Application.Common;
 using Orbit.Application.Subscriptions.Commands;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
+using Orbit.Domain.Enums;
 using Orbit.Domain.Interfaces;
 using Orbit.Infrastructure.Services;
 using Stripe;
@@ -193,6 +194,8 @@ public class HandleWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.StripeSubscriptionId.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Expired);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
@@ -254,6 +257,8 @@ public class HandleWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.StripeSubscriptionId.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
     }
 
     [Fact]
@@ -275,6 +280,8 @@ public class HandleWebhookCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         user.StripeSubscriptionId.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
     }
 
     [Fact]
@@ -544,7 +551,7 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_InvoicePaymentFailed_DoesNotDowngradeProUser()
+    public async Task Handle_InvoicePaymentFailed_RecordsReasonWithoutDowngradingProUser()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
@@ -562,7 +569,9 @@ public class HandleWebhookCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.IsPro.Should().BeTrue();
         user.StripeSubscriptionId.Should().Be("sub_test");
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+        await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

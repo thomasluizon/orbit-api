@@ -124,9 +124,42 @@ public class HandlePlayNotificationCommandHandlerTests
         result.IsSuccess.Should().BeTrue();
         user.Plan.Should().Be(UserPlan.Free);
         user.PlayPurchaseToken.Should().BeNull();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Expired);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
         _referralConsumer.DidNotReceive().ConsumeOnNewPurchase(
             Arg.Any<User>(), Arg.Any<PlaySubscriptionState>(), Arg.Any<string>());
         await _unitOfWork.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_AccountHold_RecordsPaymentFailureReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(5, "tok_old", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.PaymentFailed);
+        user.SubscriptionEndedAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Handle_CanceledWhileEntitled_RecordsPendingCanceledReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(true, DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly, true, "orbit_pro", null, null));
+
+        var result = await _handler.Handle(new HandlePlayNotificationCommand(BuildPushBody(3, "tok_old", "orbit_pro")), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.IsPro.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().Be(SubscriptionLapseReason.Canceled);
+        user.SubscriptionEndedAtUtc.Should().BeNull();
     }
 
     [Fact]

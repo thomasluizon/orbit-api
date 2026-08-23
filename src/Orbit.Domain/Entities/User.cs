@@ -36,6 +36,8 @@ public partial class User : Entity
     public DateTime? AiMessagesResetAt { get; private set; }
     public SubscriptionInterval? SubscriptionInterval { get; private set; }
     public SubscriptionSource? SubscriptionSource { get; private set; }
+    public SubscriptionLapseReason? SubscriptionLapseReason { get; private set; }
+    public DateTime? SubscriptionEndedAtUtc { get; private set; }
     public string? PlayPurchaseToken { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
@@ -229,6 +231,8 @@ public partial class User : Entity
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.Stripe;
+        SubscriptionLapseReason = null;
+        SubscriptionEndedAtUtc = null;
         PlayPurchaseToken = null;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
@@ -240,32 +244,50 @@ public partial class User : Entity
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
         SubscriptionSource = Enums.SubscriptionSource.GooglePlay;
+        SubscriptionLapseReason = null;
+        SubscriptionEndedAtUtc = null;
         if (interval.HasValue)
             SubscriptionInterval = interval.Value;
     }
 
     public void LinkPlayPurchaseToken(string purchaseToken) => PlayPurchaseToken = purchaseToken;
 
-    public void CancelStripeSubscription()
+    public void CancelStripeSubscription(SubscriptionLapseReason reason)
     {
+        EnsureValidLapseReason(reason);
         StripeSubscriptionId = null;
         if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
-            ClearEntitlement();
+            ClearEntitlement(reason);
     }
 
-    public void CancelPlaySubscription()
+    public void CancelPlaySubscription(SubscriptionLapseReason reason)
     {
+        EnsureValidLapseReason(reason);
         PlayPurchaseToken = null;
         if (SubscriptionSource == Enums.SubscriptionSource.GooglePlay)
-            ClearEntitlement();
+            ClearEntitlement(reason);
     }
 
-    private void ClearEntitlement()
+    public void RecordSubscriptionLapseReason(SubscriptionLapseReason reason)
+    {
+        EnsureValidLapseReason(reason);
+        SubscriptionLapseReason = reason;
+    }
+
+    private void ClearEntitlement(SubscriptionLapseReason reason)
     {
         Plan = UserPlan.Free;
         PlanExpiresAt = null;
         SubscriptionInterval = null;
         SubscriptionSource = null;
+        SubscriptionLapseReason = reason;
+        SubscriptionEndedAtUtc = DateTime.UtcNow;
+    }
+
+    private static void EnsureValidLapseReason(SubscriptionLapseReason reason)
+    {
+        if (!Enum.IsDefined(reason))
+            throw new ArgumentOutOfRangeException(nameof(reason));
     }
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;
