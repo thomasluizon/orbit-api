@@ -2930,7 +2930,7 @@
       "Chat": 61,
       "ChecklistTemplates": 9,
       "Common": 177,
-      "Gamification": 36,
+      "Gamification": 37,
       "Goals": 54,
       "Habits": 86,
       "Marketing": 6,
@@ -7222,7 +7222,8 @@
           "Tag",
           "User",
           "UserAchievement",
-          "UserFact"
+          "UserFact",
+          "XpAwardLog"
         ]
       },
       {
@@ -7266,6 +7267,17 @@
           "Goal",
           "GoalProgressLog",
           "Notification"
+        ]
+      },
+      {
+        "testClass": "FoundingAchievementReaderTests",
+        "file": "tests/Orbit.Infrastructure.Tests/Persistence/FoundingAchievementReaderTests.cs",
+        "references": [
+          "Goal",
+          "Habit",
+          "User",
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
