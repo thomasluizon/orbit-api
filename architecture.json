@@ -2895,7 +2895,7 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 170,
+      "Common": 171,
       "Gamification": 34,
       "Goals": 38,
       "Habits": 83,
@@ -2903,7 +2903,7 @@
       "Notifications": 16,
       "Profile": 38,
       "Referrals": 12,
-      "Social": 31,
+      "Social": 32,
       "Subscriptions": 18,
       "Support": 4,
       "Tags": 14,
@@ -7127,8 +7127,10 @@
           "Goal",
           "Habit",
           "HabitLog",
+          "Notification",
           "User",
-          "UserAchievement"
+          "UserAchievement",
+          "XpAwardLog"
         ]
       },
       {
