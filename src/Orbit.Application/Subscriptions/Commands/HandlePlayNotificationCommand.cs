@@ -148,7 +148,8 @@ public partial class HandlePlayNotificationCommandHandler(
         }
 
         if (notificationType == 3)
-            user.RecordSubscriptionLapseReason(SubscriptionLapseReason.Canceled);
+            user.RecordSubscriptionLapseReason(
+                SubscriptionSource.GooglePlay, SubscriptionLapseReason.Canceled);
 
         return consumedCouponId;
     }

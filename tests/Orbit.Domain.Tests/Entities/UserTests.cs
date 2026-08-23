@@ -420,7 +420,8 @@ public class UserTests
     {
         var user = CreateValidUser();
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
-        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.PaymentFailed);
+        user.RecordSubscriptionLapseReason(
+            SubscriptionSource.Stripe, SubscriptionLapseReason.PaymentFailed);
 
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddDays(30));
 

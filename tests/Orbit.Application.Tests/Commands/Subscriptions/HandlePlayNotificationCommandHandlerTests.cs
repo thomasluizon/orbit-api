@@ -163,11 +163,38 @@ public class HandlePlayNotificationCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PlayCanceledWhileStripeOwnsEntitlement_DoesNotRecordPlayReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(2));
+        user.LinkPlayPurchaseToken("tok_old");
+        StubUser(user);
+        StubVerify(new PlaySubscriptionState(
+            true,
+            DateTime.UtcNow.AddMonths(1),
+            SubscriptionInterval.Monthly,
+            true,
+            "orbit_pro",
+            null,
+            null));
+
+        var result = await _handler.Handle(
+            new HandlePlayNotificationCommand(BuildPushBody(3, "tok_old", "orbit_pro")),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionSource.Should().Be(SubscriptionSource.Stripe);
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_CanceledAfterPaymentFailure_PreservesPaymentFailureReason()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
-        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.PaymentFailed);
+        user.RecordSubscriptionLapseReason(
+            SubscriptionSource.GooglePlay, SubscriptionLapseReason.PaymentFailed);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
 
@@ -182,7 +209,8 @@ public class HandlePlayNotificationCommandHandlerTests
     {
         var user = User.Create("Thomas", "test@example.com").Value;
         user.SetPlaySubscription("tok_old", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
-        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.Canceled);
+        user.RecordSubscriptionLapseReason(
+            SubscriptionSource.GooglePlay, SubscriptionLapseReason.Canceled);
         StubUser(user);
         StubVerify(new PlaySubscriptionState(false, DateTime.UtcNow, null, true, "orbit_pro", null, null));
 

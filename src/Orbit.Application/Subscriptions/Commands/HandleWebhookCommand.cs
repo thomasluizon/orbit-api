@@ -131,7 +131,7 @@ public partial class HandleWebhookCommandHandler(
         var periodEnd = GetPeriodEnd(subscription, interval);
 
         user.SetStripeCustomerId(session.CustomerId ?? session.Customer?.Id ?? "");
-        user.SetStripeSubscription(subscriptionId, periodEnd, interval);
+        user.SetStripeSubscription(subscriptionId, periodEnd, interval, stripeEvent.Created);
 
         if (!string.IsNullOrEmpty(user.ReferralCouponId))
         {
@@ -162,7 +162,7 @@ public partial class HandleWebhookCommandHandler(
         var subscription = await subscriptionService.GetAsync(invoiceSubId, cancellationToken: ct);
         var interval = GetSubscriptionInterval(subscription);
         var periodEnd = GetPeriodEnd(subscription, interval);
-        user.SetStripeSubscription(invoiceSubId, periodEnd, interval);
+        user.SetStripeSubscription(invoiceSubId, periodEnd, interval, stripeEvent.Created);
         await unitOfWork.SaveChangesAsync(ct);
         LogSubscriptionRenewed(logger, user.Id, periodEnd);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_renewed");
@@ -182,7 +182,8 @@ public partial class HandleWebhookCommandHandler(
         if (user is null)
             return;
 
-        user.CancelStripeSubscription(GetDeletedSubscriptionLapseReason(subscription, user));
+        user.CancelStripeSubscription(
+            GetDeletedSubscriptionLapseReason(subscription, user), stripeEvent.Created);
         await unitOfWork.SaveChangesAsync(ct);
         LogUserDowngraded(logger, user.Id);
         AnalyticsCapture.SafeCaptureUserEvent(productAnalytics, logger, user, "subscription_canceled");
@@ -206,15 +207,17 @@ public partial class HandleWebhookCommandHandler(
         {
             var interval = GetSubscriptionInterval(subscription);
             var periodEnd = GetPeriodEnd(subscription, interval);
-            user.SetStripeSubscription(subscription.Id, periodEnd, interval);
+            user.SetStripeSubscription(subscription.Id, periodEnd, interval, stripeEvent.Created);
         }
         else if (subscription.Status == "canceled")
         {
-            user.CancelStripeSubscription(GetCanceledSubscriptionLapseReason(subscription));
+            user.CancelStripeSubscription(
+                GetCanceledSubscriptionLapseReason(subscription), stripeEvent.Created);
         }
         else if (subscription.Status == "unpaid")
         {
-            user.CancelStripeSubscription(SubscriptionLapseReason.PaymentFailed);
+            user.CancelStripeSubscription(
+                SubscriptionLapseReason.PaymentFailed, stripeEvent.Created);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -235,7 +238,10 @@ public partial class HandleWebhookCommandHandler(
         if (user is null)
             return;
 
-        user.RecordSubscriptionLapseReason(SubscriptionLapseReason.PaymentFailed);
+        user.RecordSubscriptionLapseReason(
+            SubscriptionSource.Stripe,
+            SubscriptionLapseReason.PaymentFailed,
+            stripeEvent.Created);
         await unitOfWork.SaveChangesAsync(ct);
     }
 

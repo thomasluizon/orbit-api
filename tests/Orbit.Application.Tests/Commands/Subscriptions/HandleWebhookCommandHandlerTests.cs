@@ -619,6 +619,62 @@ public class HandleWebhookCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_InvoicePaymentFailed_WhenPlayOwnsEntitlement_DoesNotRecordStripeReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+        user.SetPlaySubscription("tok_play", DateTime.UtcNow.AddMonths(2), SubscriptionInterval.Monthly);
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+
+        var (json, signature) = BuildSignedEvent(
+            "invoice.payment_failed", BuildInvoiceJson("sub_test"));
+
+        var result = await _handler.Handle(
+            new HandleWebhookCommand(json, signature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionSource.Should().Be(SubscriptionSource.GooglePlay);
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.SubscriptionEndedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_OlderInvoicePaymentFailedAfterPaid_DoesNotRestoreReason()
+    {
+        var user = User.Create("Thomas", "test@example.com").Value;
+        user.SetStripeSubscription("sub_test", DateTime.UtcNow.AddMonths(1));
+        _userRepo.FindOneTrackedIgnoringFiltersAsync(
+            Arg.Any<Expression<Func<User, bool>>>(),
+            Arg.Any<CancellationToken>())
+            .Returns(user);
+        _subscriptionService.GetAsync(
+            "sub_test",
+            Arg.Any<SubscriptionGetOptions>(),
+            Arg.Any<RequestOptions>(),
+            Arg.Any<CancellationToken>())
+            .Returns(CreateMockSubscription("sub_test"));
+        var paidAt = DateTimeOffset.UtcNow;
+        var failedAt = paidAt.AddMinutes(-1);
+        var (paidJson, paidSignature) = BuildSignedEvent(
+            "invoice.paid", BuildInvoiceJson("sub_test"), paidAt);
+        var (failedJson, failedSignature) = BuildSignedEvent(
+            "invoice.payment_failed", BuildInvoiceJson("sub_test"), failedAt);
+
+        await _handler.Handle(
+            new HandleWebhookCommand(paidJson, paidSignature), CancellationToken.None);
+        var result = await _handler.Handle(
+            new HandleWebhookCommand(failedJson, failedSignature), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        user.SubscriptionLapseReason.Should().BeNull();
+        user.StripeSubscriptionEventCreatedAtUtc.Should().Be(
+            DateTimeOffset.FromUnixTimeSeconds(paidAt.ToUnixTimeSeconds()).UtcDateTime);
+    }
+
+    [Fact]
     public async Task Handle_CheckoutSessionCompleted_StripeApiErrorFetchingSubscription_ReturnsStripeApiFailure()
     {
         var user = User.Create("Thomas", "test@example.com").Value;
@@ -1104,19 +1160,21 @@ public class HandleWebhookCommandHandlerTests
         """;
     }
 
-    private static (string Json, string Signature) BuildSignedEvent(string eventType, string dataObjectJson)
+    private static (string Json, string Signature) BuildSignedEvent(
+        string eventType, string dataObjectJson, DateTimeOffset? createdAt = null)
     {
-        var eventJson = BuildEventJson(eventType, dataObjectJson);
+        var eventJson = BuildEventJson(eventType, dataObjectJson, createdAt);
         return (eventJson, SignPayload(eventJson, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
     }
 
-    private static string BuildEventJson(string eventType, string dataObjectJson) => $$"""
+    private static string BuildEventJson(
+        string eventType, string dataObjectJson, DateTimeOffset? createdAt = null) => $$"""
         {
             "id": "evt_test_{{Guid.NewGuid():N}}",
             "object": "event",
             "api_version": "{{StripeConfiguration.ApiVersion}}",
             "type": "{{eventType}}",
-            "created": {{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}},
+            "created": {{(createdAt ?? DateTimeOffset.UtcNow).ToUnixTimeSeconds()}},
             "livemode": false,
             "pending_webhooks": 0,
             "request": {

@@ -38,6 +38,7 @@ public partial class User : Entity
     public SubscriptionSource? SubscriptionSource { get; private set; }
     public SubscriptionLapseReason? SubscriptionLapseReason { get; private set; }
     public DateTime? SubscriptionEndedAtUtc { get; private set; }
+    public DateTime? StripeSubscriptionEventCreatedAtUtc { get; private set; }
     public string? PlayPurchaseToken { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
     public bool HasImportedCalendar { get; private set; } = false;
@@ -225,8 +226,15 @@ public partial class User : Entity
 
     public void SetStripeCustomerId(string customerId) => StripeCustomerId = customerId;
 
-    public void SetStripeSubscription(string subscriptionId, DateTime expiresAt, SubscriptionInterval? interval = null)
+    public void SetStripeSubscription(
+        string subscriptionId,
+        DateTime expiresAt,
+        SubscriptionInterval? interval = null,
+        DateTime? eventCreatedAtUtc = null)
     {
+        if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
+            return;
+
         StripeSubscriptionId = subscriptionId;
         PlanExpiresAt = expiresAt;
         Plan = UserPlan.Pro;
@@ -252,9 +260,14 @@ public partial class User : Entity
 
     public void LinkPlayPurchaseToken(string purchaseToken) => PlayPurchaseToken = purchaseToken;
 
-    public void CancelStripeSubscription(SubscriptionLapseReason reason)
+    public void CancelStripeSubscription(
+        SubscriptionLapseReason reason,
+        DateTime? eventCreatedAtUtc = null)
     {
         EnsureValidLapseReason(reason);
+        if (!TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: true))
+            return;
+
         StripeSubscriptionId = null;
         if (SubscriptionSource == Enums.SubscriptionSource.Stripe)
             ClearEntitlement(reason);
@@ -268,9 +281,21 @@ public partial class User : Entity
             ClearEntitlement(reason);
     }
 
-    public void RecordSubscriptionLapseReason(SubscriptionLapseReason reason)
+    public void RecordSubscriptionLapseReason(
+        SubscriptionSource source,
+        SubscriptionLapseReason reason,
+        DateTime? eventCreatedAtUtc = null)
     {
+        EnsureValidSubscriptionSource(source);
         EnsureValidLapseReason(reason);
+
+        if (SubscriptionSource != source)
+            return;
+
+        if (source == Enums.SubscriptionSource.Stripe
+            && !TryAcceptStripeEvent(eventCreatedAtUtc, acceptEqualTimestamp: false))
+            return;
+
         SubscriptionLapseReason = reason;
     }
 
@@ -288,6 +313,30 @@ public partial class User : Entity
     {
         if (!Enum.IsDefined(reason))
             throw new ArgumentOutOfRangeException(nameof(reason));
+    }
+
+    private static void EnsureValidSubscriptionSource(SubscriptionSource source)
+    {
+        if (!Enum.IsDefined(source))
+            throw new ArgumentOutOfRangeException(nameof(source));
+    }
+
+    private bool TryAcceptStripeEvent(DateTime? eventCreatedAtUtc, bool acceptEqualTimestamp)
+    {
+        if (!eventCreatedAtUtc.HasValue)
+            return true;
+
+        if (eventCreatedAtUtc.Value.Kind != DateTimeKind.Utc)
+            throw new ArgumentException("Stripe event time must be UTC.", nameof(eventCreatedAtUtc));
+
+        if (StripeSubscriptionEventCreatedAtUtc.HasValue
+            && (acceptEqualTimestamp
+                ? eventCreatedAtUtc.Value < StripeSubscriptionEventCreatedAtUtc.Value
+                : eventCreatedAtUtc.Value <= StripeSubscriptionEventCreatedAtUtc.Value))
+            return false;
+
+        StripeSubscriptionEventCreatedAtUtc = eventCreatedAtUtc.Value;
+        return true;
     }
 
     public void StartTrial(DateTime endsAt) => TrialEndsAt = endsAt;
