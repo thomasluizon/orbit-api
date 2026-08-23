@@ -100,7 +100,16 @@ public sealed class GoalCompletionService(
             .ToList();
 
         var updates = new List<GoalCompletionUpdate>(snapshots.Count);
-        foreach (var snapshot in snapshots)
+        var progressOnlySnapshots = snapshots.Where(snapshot => !snapshot.WillComplete).ToList();
+        if (progressOnlySnapshots.Count > 0)
+        {
+            updates.AddRange(await SyncProgressOnlyBatchAsync(
+                userId,
+                progressOnlySnapshots,
+                cancellationToken));
+        }
+
+        foreach (var snapshot in snapshots.Where(snapshot => snapshot.WillComplete))
         {
             var update = await SyncCandidateAsync(userId, snapshot, cancellationToken);
             if (update.HasValue)
@@ -115,6 +124,7 @@ public sealed class GoalCompletionService(
         GoalType Type,
         decimal CurrentValue,
         bool ResetStreak,
+        bool WillComplete,
         DateTime GoalUpdatedAtUtc);
 
     private static DerivedGoalSnapshot? CreateSnapshot(Goal goal, DateOnly userToday, bool passiveSync)
@@ -124,14 +134,17 @@ public sealed class GoalCompletionService(
 
         if (goal.Type == GoalType.Standard)
         {
-            return goal.Habits.Count == 0
-                ? null
-                : new DerivedGoalSnapshot(
-                    goal.Id,
-                    goal.Type,
-                    GoalProgressSyncService.CalculateStandardCompletions(goal),
-                    ResetStreak: false,
-                    goal.UpdatedAtUtc);
+            if (goal.Habits.Count == 0)
+                return null;
+
+            var completionCount = GoalProgressSyncService.CalculateStandardCompletions(goal);
+            return new DerivedGoalSnapshot(
+                goal.Id,
+                goal.Type,
+                completionCount,
+                ResetStreak: false,
+                WillComplete: completionCount >= goal.TargetValue,
+                goal.UpdatedAtUtc);
         }
 
         if (passiveSync && !GoalStreakSyncService.NeedsPassiveSync(goal, userToday))
@@ -146,6 +159,7 @@ public sealed class GoalCompletionService(
                     goal.Type,
                     CurrentValue: 0,
                     ResetStreak: true,
+                    WillComplete: false,
                     goal.UpdatedAtUtc)
                 : null;
         }
@@ -157,8 +171,49 @@ public sealed class GoalCompletionService(
                 goal.Type,
                 currentStreak.Value,
                 ResetStreak: false,
+                WillComplete: currentStreak.Value >= goal.TargetValue,
                 goal.UpdatedAtUtc)
             : null;
+    }
+
+    private Task<IReadOnlyList<GoalCompletionUpdate>> SyncProgressOnlyBatchAsync(
+        Guid userId,
+        IReadOnlyCollection<DerivedGoalSnapshot> snapshots,
+        CancellationToken cancellationToken)
+    {
+        return unitOfWork.ExecuteInTransactionAsync<IReadOnlyList<GoalCompletionUpdate>>(async transactionToken =>
+        {
+            var snapshotById = snapshots.ToDictionary(snapshot => snapshot.GoalId);
+            var goalIds = snapshotById.Keys.ToList();
+            var goals = await goalRepository.FindTrackedAsync(
+                goal => goalIds.Contains(goal.Id) && goal.UserId == userId,
+                query => query.Include(goal => goal.Habits),
+                transactionToken);
+            var updates = new List<GoalCompletionUpdate>(goals.Count);
+
+            foreach (var goal in goals)
+            {
+                var snapshot = snapshotById[goal.Id];
+                if (goal.Status != GoalStatus.Active || goal.UpdatedAtUtc != snapshot.GoalUpdatedAtUtc)
+                    continue;
+
+                var outcome = ApplySnapshot(goal, snapshot);
+                if (!outcome.Synced)
+                    continue;
+
+                updates.Add(new GoalCompletionUpdate(
+                    goal.Id,
+                    goal.Title,
+                    goal.CurrentValue,
+                    goal.TargetValue,
+                    outcome.JustCompleted));
+            }
+
+            if (updates.Count > 0)
+                await unitOfWork.SaveChangesAsync(transactionToken);
+
+            return updates;
+        }, cancellationToken);
     }
 
     private Task<GoalCompletionUpdate?> SyncCandidateAsync(

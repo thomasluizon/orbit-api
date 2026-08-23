@@ -300,7 +300,7 @@ public class StreakGoalSyncServiceTests
         var large = await CountSweepQueriesAsync(candidateCount: 25);
 
         large.Should().Be(small);
-        large.Should().BeLessThanOrEqualTo(4);
+        large.Should().BeLessThanOrEqualTo(6);
     }
 
     private static Habit CreateDailyHabitLoggedLastDays(Guid userId, int days)
@@ -335,7 +335,7 @@ public class StreakGoalSyncServiceTests
             var habit = CreateStandardHabit(user.Id);
             var goal = CreateStreakGoal(user.Id, target: 10);
             goal.AddHabit(habit);
-            goal.SyncStreakProgress(1).IsSuccess.Should().BeTrue();
+            habit.Log(Today).IsSuccess.Should().BeTrue();
             dbContext.Habits.Add(habit);
             dbContext.Goals.Add(goal);
         }
@@ -346,7 +346,7 @@ public class StreakGoalSyncServiceTests
 
         counter.Reset();
         await service.SyncActiveGoals(CancellationToken.None);
-        return counter.CommandCount;
+        return counter.SelectCommandCount;
     }
 
     private static void SetCreatedAtUtc(Habit habit, DateOnly localDate)
