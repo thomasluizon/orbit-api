@@ -2895,7 +2895,7 @@
       "Challenges": 14,
       "Chat": 61,
       "ChecklistTemplates": 9,
-      "Common": 167,
+      "Common": 168,
       "Gamification": 36,
       "Goals": 38,
       "Habits": 83,
@@ -5189,6 +5189,8 @@
         "testClass": "GetHabitWidgetQueryHandlerTests",
         "file": "tests/Orbit.Application.Tests/Queries/Habits/GetHabitWidgetQueryHandlerTests.cs",
         "references": [
+          "GetHabitScheduleQuery",
+          "GetHabitScheduleQueryHandler",
           "GetHabitWidgetQuery",
           "GetHabitWidgetQueryHandler",
           "Habit",
