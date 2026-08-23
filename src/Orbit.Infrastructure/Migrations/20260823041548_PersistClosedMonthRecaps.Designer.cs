@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Orbit.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Orbit.Infrastructure.Persistence;
 namespace Orbit.Infrastructure.Migrations
 {
     [DbContext(typeof(OrbitDbContext))]
-    partial class OrbitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823041548_PersistClosedMonthRecaps")]
+    partial class PersistClosedMonthRecaps
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1881,9 +1884,6 @@ namespace Orbit.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("AchievementEligibilityReconciledAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("AdRewardBonusMessages")
                         .HasColumnType("integer");
 
@@ -2063,21 +2063,11 @@ namespace Orbit.Infrastructure.Migrations
                     b.Property<string>("StripeCustomerId")
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("StripeSubscriptionEventCreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("StripeSubscriptionId")
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("SubscriptionEndedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int?>("SubscriptionInterval")
                         .HasColumnType("integer");
-
-                    b.Property<string>("SubscriptionLapseReason")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<int?>("SubscriptionSource")
                         .HasColumnType("integer");
@@ -2106,9 +2096,6 @@ namespace Orbit.Infrastructure.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AchievementEligibilityReconciledAtUtc")
-                        .HasFilter("\"AchievementEligibilityReconciledAtUtc\" IS NULL");
 
                     b.HasIndex("Email")
                         .IsUnique();

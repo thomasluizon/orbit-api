@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Caching.Memory;
 using Orbit.Application.Behaviors;
 using Orbit.Application.Common;
+using Orbit.Application.Gamification;
 using Orbit.Domain.Common;
 using Orbit.Domain.Entities;
 using Orbit.Domain.Interfaces;
@@ -28,6 +29,7 @@ public class ResetAccountCommandHandler(
 
         await unitOfWork.ExecuteInTransactionAsync(async ct =>
         {
+            await unitOfWork.AcquireAdvisoryLockAsync(ClosedMonthRecapLock.ForUser(request.UserId), ct);
             await accountResetRepository.DeleteAllUserDataAsync(request.UserId, ct);
 
             user.ResetAccount();
