@@ -42,6 +42,8 @@ public class GetSubscriptionStatusQueryHandlerTests
         result.Value.IsTrialActive.Should().BeTrue();
         result.Value.AiMessagesUsed.Should().Be(0);
         result.Value.AiMessagesLimit.Should().Be(500);
+        result.Value.LapseReason.Should().BeNull();
+        result.Value.SubscriptionEndedAtUtc.Should().BeNull();
     }
 
     [Fact]
@@ -88,5 +90,23 @@ public class GetSubscriptionStatusQueryHandlerTests
         result.Value.IsTrialActive.Should().BeTrue();
         result.Value.HasProAccess.Should().BeTrue();
         result.Value.Plan.Should().Be("pro");
+    }
+
+    [Fact]
+    public async Task Handle_LapsedSubscription_ReturnsReasonAndEndingDate()
+    {
+        var user = CreateTestUser();
+        user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddMonths(1), SubscriptionInterval.Monthly);
+        user.CancelStripeSubscription(SubscriptionLapseReason.PaymentFailed);
+        _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
+        _payGate.GetAiMessageLimit(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(10);
+
+        var result = await _handler.Handle(new GetSubscriptionStatusQuery(UserId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Plan.Should().Be("free");
+        result.Value.LapseReason.Should().Be("payment_failed");
+        result.Value.SubscriptionEndedAtUtc.Should().Be(user.SubscriptionEndedAtUtc);
     }
 }
