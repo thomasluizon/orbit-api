@@ -44,6 +44,8 @@ public partial class GamificationService(
 
     private sealed record HabitsLoggedOutcome(IReadOnlyList<HabitLogGamificationResult> Results, bool ShouldSave);
 
+    private sealed record GrantAchievementsOutcome(IReadOnlyList<string> GrantedIds, bool ShouldSave);
+
     public async Task<HabitLogGamificationResult?> ProcessHabitLogged(Guid userId, Guid habitId, CancellationToken ct = default)
     {
         var results = await ProcessHabitsLogged(userId, [habitId], ct);
@@ -384,6 +386,17 @@ public partial class GamificationService(
 
     public async Task<IReadOnlyList<string>> TryGrantAchievementsAsync(
         Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default)
+        => await GrantAchievementsAsync(userId, achievementIds, markEligibilityReconciled: false, ct);
+
+    public async Task<IReadOnlyList<string>> ReconcileAchievementEligibilityAsync(
+        Guid userId, IReadOnlyList<string> achievementIds, CancellationToken ct = default)
+        => await GrantAchievementsAsync(userId, achievementIds, markEligibilityReconciled: true, ct);
+
+    private async Task<IReadOnlyList<string>> GrantAchievementsAsync(
+        Guid userId,
+        IReadOnlyList<string> achievementIds,
+        bool markEligibilityReconciled,
+        CancellationToken ct)
     {
         var attempt = 1;
         while (true)
@@ -392,9 +405,14 @@ public partial class GamificationService(
                 unitOfWork.ResetTracking();
 
             var pushes = new List<PendingPush>();
-            var granted = await ComputeGrantAchievementsAsync(userId, achievementIds, pushes, ct);
-            if (granted.Count == 0)
-                return granted;
+            var outcome = await ComputeGrantAchievementsAsync(
+                userId,
+                achievementIds,
+                markEligibilityReconciled,
+                pushes,
+                ct);
+            if (!outcome.ShouldSave)
+                return outcome.GrantedIds;
 
             try
             {
@@ -407,21 +425,24 @@ public partial class GamificationService(
             }
 
             await FlushPushesAsync(pushes, ct);
-            return granted;
+            return outcome.GrantedIds;
         }
     }
 
     /// <summary>
-    /// Idempotently grants the requested achievements to the loaded user, reusing the audited
-    /// persist + XP + level + notification funnel. Returns the ids newly granted this call (empty when the
-    /// user is missing or every id was already earned). The shared grant funnel is available to free
-    /// and Pro users; callers remain responsible for requesting only achievements they have verified.
+    /// Computes an idempotent achievement grant through the audited XP, level, and notification funnel.
+    /// The outcome says whether the caller must save, including reconciliation calls with no new grant.
     /// </summary>
-    private async Task<IReadOnlyList<string>> ComputeGrantAchievementsAsync(
-        Guid userId, IReadOnlyList<string> achievementIds, List<PendingPush> pushes, CancellationToken ct)
+    private async Task<GrantAchievementsOutcome> ComputeGrantAchievementsAsync(
+        Guid userId,
+        IReadOnlyList<string> achievementIds,
+        bool markEligibilityReconciled,
+        List<PendingPush> pushes,
+        CancellationToken ct)
     {
         var user = await repos.UserRepository.FindOneTrackedAsync(u => u.Id == userId, cancellationToken: ct);
-        if (user is null) return [];
+        if (user is null)
+            return new GrantAchievementsOutcome([], ShouldSave: false);
 
         var earned = await LoadEarnedAchievementIds(userId, ct);
         var newAchievements = new List<(UserAchievement Entity, AchievementDefinition Definition)>();
@@ -430,9 +451,12 @@ public partial class GamificationService(
         foreach (var achievementId in achievementIds)
             AchievementChecks.TryGrant(achievementId, user, earned, newAchievements);
 
-        if (newAchievements.Count == 0) return [];
+        if (newAchievements.Count == 0 && !markEligibilityReconciled)
+            return new GrantAchievementsOutcome([], ShouldSave: false);
 
         await PersistNewAchievementsAsync(user, newAchievements, ct);
+        if (markEligibilityReconciled)
+            user.MarkAchievementEligibilityReconciled();
 
         LevelDefinitions.SyncLevel(user);
 
@@ -445,7 +469,9 @@ public partial class GamificationService(
             await QueueLevelUpNotification(userId, newLevel, user.Language, pushes, ct);
         }
 
-        return newAchievements.Select(a => a.Definition.Id).ToList();
+        return new GrantAchievementsOutcome(
+            newAchievements.Select(a => a.Definition.Id).ToList(),
+            ShouldSave: true);
     }
 
     /// <summary>

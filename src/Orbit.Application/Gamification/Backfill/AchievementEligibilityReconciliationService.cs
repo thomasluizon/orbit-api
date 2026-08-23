@@ -18,7 +18,7 @@ public interface IAchievementEligibilityReconciliationService
 /// <summary>
 /// Reconciles active one-time achievements that existing users could satisfy while achievement earning
 /// was unavailable to free accounts. Eligibility is derived from persisted state, and only missing
-/// achievement ids are sent through <see cref="IGamificationService.TryGrantAchievementsAsync"/>.
+/// achievement ids are sent through <see cref="IGamificationService.ReconcileAchievementEligibilityAsync"/>.
 /// </summary>
 public sealed class AchievementEligibilityReconciliationService(
     IGenericRepository<User> userRepository,
@@ -27,8 +27,7 @@ public sealed class AchievementEligibilityReconciliationService(
     IGenericRepository<Goal> goalRepository,
     IGenericRepository<UserAchievement> achievementRepository,
     IGamificationService gamificationService,
-    IFeatureFlagService featureFlagService,
-    IUnitOfWork unitOfWork) : IAchievementEligibilityReconciliationService
+    IFeatureFlagService featureFlagService) : IAchievementEligibilityReconciliationService
 {
     private static readonly string[] ReconciledAchievementIds =
     [
@@ -120,24 +119,17 @@ public sealed class AchievementEligibilityReconciliationService(
                 completedGoalOwnerIds.Contains(user.Id));
             var missing = eligible.Where(id => !earned.Contains(id)).ToList();
 
-            if (missing.Count > 0)
+            var granted = await gamificationService.ReconcileAchievementEligibilityAsync(
+                user.Id,
+                missing,
+                cancellationToken);
+
+            if (granted.Count > 0)
             {
-                var granted = await gamificationService.TryGrantAchievementsAsync(
-                    user.Id,
-                    missing,
-                    cancellationToken);
-
-                if (granted.Count > 0)
-                {
-                    accountsGranted++;
-                    achievementsGranted += granted.Count;
-                }
+                accountsGranted++;
+                achievementsGranted += granted.Count;
             }
-
-            user.MarkAchievementEligibilityReconciled();
         }
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AchievementEligibilityReconciliationResult(
             accountsGranted,

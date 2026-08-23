@@ -45,12 +45,10 @@ public class GetAchievementsQueryHandlerTests
         return user;
     }
 
-    private static User CreateFreeUser(bool reconciled = true)
+    private static User CreateFreeUser()
     {
         var user = User.Create("Test User", "test@example.com").Value;
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
-        if (reconciled)
-            user.MarkAchievementEligibilityReconciled();
         return user;
     }
 
@@ -200,23 +198,15 @@ public class GetAchievementsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_FreeUser_BeforeReconciliationCompletes_ReturnsPayGateFailure()
+    public async Task Handle_NewFreeUserWithFlagEnabled_ReturnsAchievements()
     {
-        var user = CreateFreeUser(reconciled: false);
+        var user = CreateFreeUser();
         _userRepo.GetByIdAsync(UserId, Arg.Any<CancellationToken>()).Returns(user);
 
         var result = await _handler.Handle(new GetAchievementsQuery(UserId), CancellationToken.None);
 
-        result.IsFailure.Should().BeTrue();
-        result.ErrorCode.Should().Be("PAY_GATE");
-        await _achievementRepo.DidNotReceive().FindAsync(
-            Arg.Any<Expression<Func<UserAchievement, bool>>>(),
-            Arg.Any<CancellationToken>());
-        _productAnalytics.DidNotReceive().CaptureUserEvent(
-            Arg.Any<Guid>(),
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            Arg.Any<IReadOnlyDictionary<string, object>?>());
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Achievements.Should().HaveCount(32);
     }
 
     [Fact]

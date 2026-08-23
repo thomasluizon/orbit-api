@@ -1177,4 +1177,23 @@ public class GamificationServiceTests
         await _achievementRepo.DidNotReceive().AddAsync(Arg.Any<UserAchievement>(), Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ReconcileAchievementEligibilityAsync_NoMissingAchievement_StampsAndSaves()
+    {
+        var user = CreateFreeUser();
+        typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
+            .SetValue(user, null);
+        SetupUserLookup(user);
+        SetupNoEarnedAchievements();
+
+        var granted = await _sut.ReconcileAchievementEligibilityAsync(UserId, []);
+
+        granted.Should().BeEmpty();
+        user.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
+        await _achievementRepo.DidNotReceive().AddAsync(
+            Arg.Any<UserAchievement>(),
+            Arg.Any<CancellationToken>());
+        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }

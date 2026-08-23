@@ -99,6 +99,18 @@ public class UserTests
     }
 
     [Fact]
+    public void Create_MarksHistoricalAchievementEligibilityReconciled()
+    {
+        var before = DateTime.UtcNow;
+
+        var user = CreateValidUser();
+
+        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrAfter(before);
+        user.AchievementEligibilityReconciledAtUtc.Should().BeOnOrBefore(DateTime.UtcNow);
+        user.AchievementEligibilityReconciledAtUtc!.Value.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
     public void IsPro_LifetimePro_ReturnsTrue()
     {
         var user = CreateValidUser();

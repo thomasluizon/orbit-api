@@ -21,8 +21,8 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     private readonly IGenericRepository<UserAchievement> _achievementRepository = Substitute.For<IGenericRepository<UserAchievement>>();
     private readonly IGamificationService _gamificationService = Substitute.For<IGamificationService>();
     private readonly IFeatureFlagService _featureFlagService = Substitute.For<IFeatureFlagService>();
-    private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly AchievementEligibilityReconciliationService _sut;
+    private IReadOnlyCollection<User> _persistedUsers = [];
 
     public AchievementEligibilityReconciliationServiceTests()
     {
@@ -33,8 +33,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             _goalRepository,
             _achievementRepository,
             _gamificationService,
-            _featureFlagService,
-            _unitOfWork);
+            _featureFlagService);
 
         ArrangePersistedState([], [], [], [], []);
         _featureFlagService.GetUserIdsWithEnabledKeyAsync(
@@ -44,12 +43,14 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             .Returns(call => call.ArgAt<IReadOnlyCollection<User>>(1)
                 .Select(user => user.Id)
                 .ToHashSet());
-        _gamificationService.TryGrantAchievementsAsync(
+        _gamificationService.ReconcileAchievementEligibilityAsync(
                 Arg.Any<Guid>(),
                 Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult<IReadOnlyList<string>>(
-                call.ArgAt<IReadOnlyList<string>>(1).ToList()));
+                MarkReconciledAndReturnGranted(
+                    call.ArgAt<Guid>(0),
+                    call.ArgAt<IReadOnlyList<string>>(1))));
     }
 
     [Fact]
@@ -66,7 +67,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(1, 5));
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[]
             {
@@ -93,7 +94,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(1, 4));
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.Count == 4 && !ids.Contains(AchievementDefinitions.Liftoff)),
             Arg.Any<CancellationToken>());
@@ -109,13 +110,14 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         ArrangePersistedState([user], [habit], habit.Logs, [], earned);
         var awardedXp = 0;
 
-        _gamificationService.TryGrantAchievementsAsync(
+        _gamificationService.ReconcileAchievementEligibilityAsync(
                 user.Id,
                 Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var ids = call.ArgAt<IReadOnlyList<string>>(1).ToList();
+                user.MarkAchievementEligibilityReconciled();
                 foreach (var id in ids)
                 {
                     earned.Add(UserAchievement.Create(user.Id, id));
@@ -133,7 +135,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         second.Should().Be(new AchievementEligibilityReconciliationResult(0, 0));
         awardedXp.Should().Be(xpAfterFirstRun);
         user.AchievementEligibilityReconciledAtUtc.Should().NotBeNull();
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<CancellationToken>());
@@ -148,7 +150,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
 
         await _sut.ReconcileAllAsync();
 
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.FirstOrbit })),
             Arg.Any<CancellationToken>());
@@ -165,7 +167,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
 
         await _sut.ReconcileAllAsync();
 
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.Liftoff })),
             Arg.Any<CancellationToken>());
@@ -180,9 +182,9 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(0, 0));
-        await _gamificationService.DidNotReceive().TryGrantAchievementsAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<IReadOnlyList<string>>(),
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
+            user.Id,
+            Arg.Is<IReadOnlyList<string>>(ids => ids.Count == 0),
             Arg.Any<CancellationToken>());
     }
 
@@ -195,7 +197,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
 
         await _sut.ReconcileAllAsync();
 
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.MissionControl })),
             Arg.Any<CancellationToken>());
@@ -210,7 +212,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
 
         await _sut.ReconcileAllAsync();
 
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => !ids.Contains(AchievementDefinitions.OnboardingComplete)),
             Arg.Any<CancellationToken>());
@@ -219,7 +221,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     [Fact]
     public async Task ReconcileAll_ProAccountWithCompletedChecklist_ReconcilesPersistedEligibility()
     {
-        var user = User.Create("Pro User", "pro@example.com").Value;
+        var user = CreateUnreconciledUser("Pro User", "pro@example.com");
         user.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
         user.CompleteOnboardingChecklist();
         ArrangePersistedState([user], [], [], [], []);
@@ -227,7 +229,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(1, 1));
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.OnboardingComplete })),
             Arg.Any<CancellationToken>());
@@ -255,7 +257,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         await _goalRepository.DidNotReceive().FindTrackedIgnoringFiltersAsync(
             Arg.Any<Expression<Func<Goal, bool>>>(),
             Arg.Any<CancellationToken>());
-        await _gamificationService.DidNotReceive().TryGrantAchievementsAsync(
+        await _gamificationService.DidNotReceive().ReconcileAchievementEligibilityAsync(
             Arg.Any<Guid>(),
             Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<CancellationToken>());
@@ -287,7 +289,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         await _featureFlagService.DidNotReceive().GetEnabledKeysForUserAsync(
             Arg.Any<Guid>(),
             Arg.Any<CancellationToken>());
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             unlockedUser.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.OnboardingComplete })),
             Arg.Any<CancellationToken>());
@@ -296,7 +298,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
     [Fact]
     public async Task ReconcileAll_UnlockedProIdAndLockedFreeAccount_CountsOnlyLockedFreeAccountAsDeferred()
     {
-        var proUser = User.Create("Pro User", "pro@example.com").Value;
+        var proUser = CreateUnreconciledUser("Pro User", "pro@example.com");
         proUser.SetStripeSubscription("sub_123", DateTime.UtcNow.AddYears(1));
         var lockedFreeUser = CreateFreeUser();
         ArrangePersistedState([proUser, lockedFreeUser], [], [], [], []);
@@ -313,9 +315,9 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             FeatureFlagKeys.GamificationFreeTier,
             Arg.Is<IReadOnlyCollection<User>>(users => users.Count == 1 && users.Single().Id == lockedFreeUser.Id),
             Arg.Any<CancellationToken>());
-        await _gamificationService.DidNotReceive().TryGrantAchievementsAsync(
-            Arg.Any<Guid>(),
-            Arg.Any<IReadOnlyList<string>>(),
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
+            proUser.Id,
+            Arg.Is<IReadOnlyList<string>>(ids => ids.Count == 0),
             Arg.Any<CancellationToken>());
     }
 
@@ -352,7 +354,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         await _featureFlagService.DidNotReceive().GetEnabledKeysForUserAsync(
             Arg.Any<Guid>(),
             Arg.Any<CancellationToken>());
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[] { AchievementDefinitions.OnboardingComplete })),
             Arg.Any<CancellationToken>());
@@ -372,7 +374,6 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             Arg.Any<string>(),
             Arg.Any<IReadOnlyCollection<User>>(),
             Arg.Any<CancellationToken>());
-        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -391,7 +392,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         var result = await _sut.ReconcileAllAsync();
 
         result.Should().Be(new AchievementEligibilityReconciliationResult(1, 4));
-        await _gamificationService.Received(1).TryGrantAchievementsAsync(
+        await _gamificationService.Received(1).ReconcileAchievementEligibilityAsync(
             user.Id,
             Arg.Is<IReadOnlyList<string>>(ids => ids.SequenceEqual(new[]
             {
@@ -419,6 +420,7 @@ public sealed class AchievementEligibilityReconciliationServiceTests
         IReadOnlyCollection<Goal> goals,
         IReadOnlyCollection<UserAchievement> achievements)
     {
+        _persistedUsers = users;
         _userRepository.FindTrackedAsync(
                 Arg.Any<Expression<Func<User, bool>>>(),
                 Arg.Any<CancellationToken>())
@@ -443,10 +445,27 @@ public sealed class AchievementEligibilityReconciliationServiceTests
             .Returns(_ => achievements.ToList());
     }
 
+    private IReadOnlyList<string> MarkReconciledAndReturnGranted(
+        Guid userId,
+        IReadOnlyList<string> achievementIds)
+    {
+        _persistedUsers.Single(user => user.Id == userId)
+            .MarkAchievementEligibilityReconciled();
+        return achievementIds.ToList();
+    }
+
     private static User CreateFreeUser()
     {
-        var user = User.Create("Free User", $"{Guid.NewGuid():N}@example.com").Value;
+        var user = CreateUnreconciledUser("Free User", $"{Guid.NewGuid():N}@example.com");
         user.StartTrial(DateTime.UtcNow.AddDays(-1));
+        return user;
+    }
+
+    private static User CreateUnreconciledUser(string name, string email)
+    {
+        var user = User.Create(name, email).Value;
+        typeof(User).GetProperty(nameof(User.AchievementEligibilityReconciledAtUtc))!
+            .SetValue(user, null);
         return user;
     }
 
